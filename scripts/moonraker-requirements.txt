@@ -1,0 +1,3 @@
+# Python dependencies for Moonraker
+tornado==6.0.4
+pyserial==3.4

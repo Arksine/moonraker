@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="/js/main.js?v=0.1.16" type="module"></script>
+</head>
+<body>
+<h3>Klippy Web API Test</h3>
+<div id="term" style="width: 60em; height: 20em; overflow:auto; border: 1px solid black">
+</div>
+<br/>
+<input id="cbxAuto" type="checkbox" name="Autoscroll" checked="true"/> Autoscroll
+<input id="cbxSub" type="checkbox" name="AutoSub" checked="true"/> Subscribe on Ready
+<input id="cbxFileTransfer" type="checkbox" checked="true" name="FileEnable"/> Allow File Operations While Printing
+<br/><br/>
+<input type="radio" name="test_type" value="http" checked="true">Test HTTP API
+<input type="radio" name="test_type" value="websocket">Test Websocket API
+<br/><br/>
+<form id="gcform">
+<input type="text" />
+<input type="submit" value="Send GCode"/>
+</form>
+<br/>
+<form id="apiform">
+    <input type="text" style="width: 30em" value="/printer/objects/list"
+    title="Should be a url for a http request, ie: /printer/objects/list, or a json-rpc registered
+    method name."/>
+    <input type="submit" value="Send API Command"/>
+    <span id="apimethod">
+    <input type="radio" name="api_cmd_type" value="get" checked="true">GET
+    <input type="radio" name="api_cmd_type" value="post">POST
+    <input type="radio" name="api_cmd_type" value="delete">DELETE
+    </span>
+</form>
+<br/>
+<div style="display: flex">
+<input type="file" style="display:none" id="upload-file" />
+<div style="width: 10em">
+<button id="btnupload" class="toggleable" style="width: 9em">Upload GCode</button><br/><br/>
+<button id="btndownload" class="toggleable" style="width: 9em">Download Gcode</button><br/><br/>
+<button id="btndelete" class="toggleable" style="width: 9em">Delete Gcode</button><br/><br/>
+<button id="btngetmetadata" style="width: 9em">Get Metadata</button>
+<a id="hidden_link" href="#" hidden>hidden</a>
+</div>
+<div style="width: 10em">
+  <button id="btnstartprint"  style="width: 9em">Start Print</button><br/><br/>
+  <button id="btnpauseresume" style="width: 9em">Pause Print</button><br/><br/>
+  <button id="btncancelprint" style="width: 9em">Cancel Print</button>
+</div>
+<div>
+<select id="filelist" size="8"></select>
+</div>
+</div>
+<br/>
+Progress: <progress id="progressbar" value="0" max="100"></progress>
+<span id="upload_progress">0%</span><br/><br/>
+<button id="btnqueryendstops" style="width: 9em">Query Endstops</button>
+<button id="btnsubscribe" style="width: 9em">Post Subscription</button>
+<button id="btngetsub" style="width: 9em">Get Subscription</button>
+<button id="btngethelp" style="width: 9em">Get Gcode Help</button>
+<button id="btngetobjs" style="width: 9em">Get Object List</button>
+<button id="btnsendbatch" class="reqws" style="width: 9em">Test GC Batch</button>
+<button id="btnsendmacro" class="reqws" style="width: 9em">Test GC Macro</button>
+<br/><br/>
+<button id="btnestop" style="width: 9em">E-Stop</button>
+<button id="btnrestart" style="width: 9em">Restart</button>
+<button id="btnfirmwarerestart" style="width: 9em">Firmware Restart</button>
+<button id="btnreboot" style="width: 9em">Reboot OS</button>
+<button id="btnshutdown" style="width: 9em">Shutdown OS</button>
+<button id="btngetlog" style="width: 9em">Klippy Log</button>
+<button id="btnmoonlog" style="width: 9em">Moonraker Log</button>
+
+<br/><br/>
+<span id="filename" hidden></span></br>
+<div id="streamdiv">
+</div>
+</body>
+</html>
