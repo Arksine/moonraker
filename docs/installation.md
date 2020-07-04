@@ -43,13 +43,13 @@ git clone https://github.com/Arksine/moonraker.git
 If you have an older version of moonraker installed, it must be removed:
 ```
 cd ~/moonraker/scripts
-./uninstall_moonraker.sh
+./uninstall-moonraker.sh
 ```
 
 Finally, run moonraker's install script:
 ```
 cd ~/moonraker/scripts
-./install_moonraker.sh
+./install-moonraker.sh
 ```
 
 When the script completes it should start both Moonraker and Klipper. In
