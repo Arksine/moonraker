@@ -138,7 +138,7 @@ class WebsocketManager:
             self.rpc.register_method(cmd, rpc_cb)
 
     def remove_handler(self, ws_method):
-        for prefix in ["get", "post"]:
+        for prefix in ["get", "post", "delete"]:
             self.rpc.remove_method(prefix + "_" + ws_method)
 
     def _generate_callback(self, endpoint, request_method):

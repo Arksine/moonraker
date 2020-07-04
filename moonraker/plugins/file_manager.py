@@ -30,8 +30,8 @@ class FileManager:
             "/server/files/metadata", "file_metadata", ['GET'],
             self._handle_metadata_request)
         self.server.register_endpoint(
-            "/server/files/directory", None, ['GET', 'POST', 'DELETE'],
-            self._handle_directory_request, http_only=True)
+            "/server/files/directory", "directory", ['GET', 'POST', 'DELETE'],
+            self._handle_directory_request)
 
     def _register_static_files(self, gcode_path):
         self.server.register_static_file_handler(
@@ -93,7 +93,10 @@ class FileManager:
             if not os.path.isdir(dir_path):
                 raise self.server.error(
                     "Directory does not exist (%s)" % (directory))
-            if args.get('force', "false").lower() == "true":
+            force = args.get('force', False)
+            if isinstance(force, str):
+                force = force.lower() == "true"
+            if force:
                 # Make sure that the directory does not contain a file
                 # loaded by the virtual_sdcard
                 await self._handle_operation_check(dir_path)

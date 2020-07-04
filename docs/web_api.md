@@ -297,9 +297,10 @@ that uses promises to return responses and errors (see json-rcp.js).
 
 ## File Operations
 
-While all file transfer operations are available via the HTTP API, only
-"get_file_list" and "get_metadata" are available over the websocket.  Aside from
-the log files, currently the only root available is "gcodes" (at `http:\\host\server\files\gcodes\*`), however support for other "root"
+Most file operations are available over both APIs, however file upload,
+file download, and file delete are currently only available via HTTP APIs.
+Aside from the log files, currently the only root available is "gcodes"
+(at `http:\\host\server\files\gcodes\*`), however support for other "root"
 directories may be added in the future.  File upload, file delete, and
 directory manipulation(mkdir and rmdir) will only be available on the "gcodes"
 root.
@@ -385,7 +386,11 @@ subdirectories.
   the "gcodes" file list by default.
 
 - Websocket command:\
-  Not Available
+  `{jsonrpc: "2.0", method: "get_directory", params: {path: "gcodes/my_subdir"}
+  , id: <request id>}`
+
+  If the "params" are omitted then the command will return
+  the "gcodes" file list by default.
 
 - Returns:\
   An object containing file and subdirectory information in the
@@ -416,7 +421,8 @@ Creates a new directory at the specified path.
   `POST /server/files/directory?path=gcodes/my_new_dir`
 
 - Websocket command:\
-  Not Available
+  `{jsonrpc: "2.0", method: "post_directory", params:
+   {path: "gcodes/my_new_dir"}, id: <request id>}`
 
 Returns:\
 `ok` if successful
@@ -428,12 +434,17 @@ Deletes a directory at the specified path.
   `DELETE /server/files/directory?path=gcodes/my_subdir`
 
 - Websocket command:\
-  Not Available
+  `{jsonrpc: "2.0", method: "delete_directory", params: {path: "gcodes/my_subdir"}
+  , id: <request id>}`
 
   If the specified directory contains files then the delete request
   will fail, however it is possible to "force" deletion of the directory
   and all files in it with and additional argument in the query string:\
   `DELETE /server/files/directory?path=gcodes/my_subdir&force=true`
+
+  OR to the JSON-RPC params:\
+  `{jsonrpc: "2.0", method: "get_directory", params:
+   {path: "gcodes/my_subdir", force: True}, id: <request id>}`
 
   Note that a forced deletion will still check in with Klippy to be sure
   that a file in the requested directory is not loaded by the virtual_sdcard.
