@@ -90,6 +90,9 @@ class FileManager:
                 raise self.server.error(str(e))
         elif method == 'DELETE' and base == "gcodes":
             # Remove a directory
+            if directory == base:
+                raise self.server.error(
+                    "Cannot delete root directory")
             if not os.path.isdir(dir_path):
                 raise self.server.error(
                     "Directory does not exist (%s)" % (directory))
