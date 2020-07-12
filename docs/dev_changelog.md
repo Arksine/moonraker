@@ -18,7 +18,7 @@
   They should instead use the new API which exposes this functionality.
 - New APIs:
   - `POST /printer/emergency_stop` - `post_printer_emergency_stop`
-  - `GET /server/files/metadata` - `get_metadata`
+  - `GET /server/files/metadata` - `get_file_metadata`
   - `GET /server/files/directory`
   - `POST /server/files/directory`
   - `DELETE /server/files/directory`

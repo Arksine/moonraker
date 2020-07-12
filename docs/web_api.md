@@ -344,7 +344,7 @@ path relative to the specified "root".  Note that if the query st
   `GET /server/files/metadata?filename=<filename>`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_metadata", params: {filename: "filename"}
+  `{jsonrpc: "2.0", method: "get_file_metadata", params: {filename: "filename"}
   , id: <request id>}`
 
 - Returns:\
