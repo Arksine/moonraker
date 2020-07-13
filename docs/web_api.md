@@ -452,6 +452,41 @@ Deletes a directory at the specified path.
 - Returns:\
 `ok` if successful
 
+### Move a file or directory
+Moves a file or directory from one location to another. Note that the following
+conditions must be met for a move successful move:
+- The source must exist
+- The user (typically "Pi") must have the appropriate file permissions
+- Neither the source nor destination can be loaded by the virtual_sdcard.
+  If the source or destination is a directory, it cannot contain a file
+  loaded by the virtual_sdcard.
+
+When specifying the `source` and `dest`, the "root" directory should be prefixed.
+Currently the only supported root is "gcodes/".
+
+This API may also be used to rename a file or directory.   Be aware that an attempt
+to rename a directory to a directory that already exists will result in *moving* the
+source directory to the destination directory.
+
+- HTTP command:\
+  `POST /server/files/move?source=gcodes/my_file.gcode&dest=gcodes/subdir/my_file.gcode`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "post_file_move", params: {source: "gcodes/my_file.gcode",
+   dest: "gcodes/subdir/my_file.gcode"}, id: <request id>}`
+
+### Copy a file or directory
+Copies a file or directory from one location to another.  A successful copy has
+the pre-requesites as a move with one exception, a copy may complete if the
+source file/directory is loaded by the virtual_sdcard.  As with the move API, the
+source and destination should have the root prefixed.
+
+- HTTP command:\
+  `POST /server/files/copy?source=gcodes/my_file.gcode&dest=gcodes/subdir/my_file.gcode`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "post_file_copy", params: {source: "gcodes/my_file.gcode",
+    dest: "gcodes/subdir/my_file.gcode"}, id: <request id>}`
 
 ### Gcode File Download
 - HTTP command:\

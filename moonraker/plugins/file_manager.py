@@ -32,6 +32,12 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/directory", "directory", ['GET', 'POST', 'DELETE'],
             self._handle_directory_request)
+        self.server.register_endpoint(
+            "/server/files/move", "file_move", ['POST'],
+            self._handle_file_move_copy)
+        self.server.register_endpoint(
+            "/server/files/copy", "file_copy", ['POST'],
+            self._handle_file_move_copy)
 
     def _register_static_files(self, gcode_path):
         self.server.register_static_file_handler(
@@ -70,14 +76,8 @@ class FileManager:
         return metadata
 
     async def _handle_directory_request(self, path, method, args):
-        directory = args.get('path', "gcodes").strip('/')
-        dir_parts = directory.split("/")
-        base = dir_parts[0]
-        target = "/".join(dir_parts[1:])
-        if base not in self.file_paths:
-            raise self.server.error("Invalid base path (%s)" % (base))
-        root_path = self.file_paths[base]
-        dir_path = os.path.join(root_path, target)
+        directory = args.get('path', "gcodes")
+        base, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
             # Get list of files and subdirectories for this target
@@ -90,7 +90,7 @@ class FileManager:
                 raise self.server.error(str(e))
         elif method == 'DELETE' and base == "gcodes":
             # Remove a directory
-            if directory == base:
+            if directory.strip("/") == base:
                 raise self.server.error(
                     "Cannot delete root directory")
             if not os.path.isdir(dir_path):
@@ -104,6 +104,10 @@ class FileManager:
                 # loaded by the virtual_sdcard
                 await self._handle_operation_check(dir_path)
                 shutil.rmtree(dir_path)
+                # since it is possible that the directory contains
+                # files, send a notification to clients
+                self.server.notify_filelist_changed(
+                    directory, "delete_directory")
             else:
                 try:
                     os.rmdir(dir_path)
@@ -132,6 +136,57 @@ class FileManager:
             raise self.server.error("File currently in use", 403)
         ongoing = vsd.get('total_duration', 0.) > 0.
         return ongoing
+
+    def _convert_path(self, url_path):
+        parts = url_path.strip("/").split("/")
+        if not parts:
+            raise self.server.error("Invalid path: " % (url_path))
+        base = parts[0]
+        if base not in self.file_paths:
+            raise self.server.error("Invalid base path (%s)" % (base))
+        root_path = local_path = self.file_paths[base]
+        if len(parts) > 1:
+            target = "/".join(parts[1:])
+            local_path = os.path.join(root_path, target)
+        return base, local_path
+
+    async def _handle_file_move_copy(self, path, method, args):
+        source = args.get("source")
+        destination = args.get("dest")
+        if source is None:
+            raise self.server.error("File move/copy request issing source")
+        if destination is None:
+            raise self.server.error("File move/copy request missing destination")
+        source_base, source_path = self._convert_path(source)
+        dest_base, dest_path = self._convert_path(destination)
+        if source_base != "gcodes" or dest_base != "gcodes":
+            raise self.server.error(
+                "Unsupported root directory: source=%s base=%s" %
+                (source_base, dest_base))
+        if not os.path.exists(source_path):
+            raise self.server.error("File %s does not exist" % (source_path))
+        # make sure the destination is not in use
+        if os.path.exists(dest_path):
+            await self._handle_operation_check(dest_path)
+        if path == "/server/files/move":
+            # if moving the file, make sure the source is not in use
+            await self._handle_operation_check(source_path)
+            try:
+                shutil.move(source_path, dest_path)
+            except Exception as e:
+                raise self.server.error(str(e))
+            action = "file_move"
+        elif path == "/server/files/copy":
+            try:
+                if os.path.isdir(source_path):
+                    shutil.copytree(source_path, dest_path)
+                else:
+                    shutil.copy2(source_path, dest_path)
+            except Exception as e:
+                raise self.server.error(str(e))
+            action = "file_copy"
+        self.server.notify_filelist_changed(destination, action)
+        return "ok"
 
     def _list_directory(self, path):
         if not os.path.isdir(path):
