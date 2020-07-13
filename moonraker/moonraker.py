@@ -281,10 +281,10 @@ class Server:
             if name not in valid_plugins:
                 if hasattr(plugin, "close"):
                     await plugin.close()
-                self.plugins.pop(name)
+                self.plugins.pop(name, None)
 
     def _handle_klippy_response(self, request_id, response):
-        req = self.pending_requests.pop(request_id)
+        req = self.pending_requests.pop(request_id, None)
         if req is not None:
             if isinstance(response, dict) and 'error' in response:
                 response = ServerError(response['message'], 400)
@@ -321,7 +321,7 @@ class Server:
         self.pending_requests[base_request.id] = base_request
         ret = self.klippy_send(base_request.to_dict())
         if not ret:
-            self.pending_requests.pop(base_request.id)
+            self.pending_requests.pop(base_request.id, None)
             base_request.notify(
                 ServerError("Klippy Host not connected", 503))
         return base_request

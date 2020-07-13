@@ -96,12 +96,12 @@ class Authorization:
             if cur_time - access_time > CONNECTION_TIMEOUT:
                 expired_conns.append(ip)
         for ip in expired_conns:
-            self.trusted_connections.pop(ip)
+            self.trusted_connections.pop(ip, None)
             logging.info(
                 "Trusted Connection Expired, IP: %s" % (ip))
 
     def _token_expire_handler(self, token):
-        self.access_tokens.pop(token)
+        self.access_tokens.pop(token, None)
 
     def is_enabled(self):
         return self.auth_enabled
@@ -129,7 +129,7 @@ class Authorization:
 
     def _check_access_token(self, token):
         if token in self.access_tokens:
-            token_handler = self.access_tokens.pop(token)
+            token_handler = self.access_tokens.pop(token, None)
             IOLoop.current().remove_timeout(token_handler)
             return True
         else:

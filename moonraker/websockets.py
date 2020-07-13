@@ -19,7 +19,7 @@ class JsonRPC:
         self.methods[name] = method
 
     def remove_method(self, name):
-        self.methods.pop(name)
+        self.methods.pop(name, None)
 
     async def dispatch(self, data):
         response = None
@@ -183,7 +183,7 @@ class WebsocketManager:
                 try:
                     ws.write_message(notification)
                 except WebSocketClosedError:
-                    self.websockets.pop(ws.uid)
+                    self.websockets.pop(ws.uid, None)
                     logging.info("Websocket Removed: %d" % ws.uid)
                 except Exception:
                     logging.exception(

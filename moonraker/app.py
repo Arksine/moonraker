@@ -72,7 +72,7 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
         self.rules.append(new_rule)
 
     def remove_handler(self, pattern):
-        rule = self.pattern_to_rule.pop(pattern)
+        rule = self.pattern_to_rule.pop(pattern, None)
         if rule is not None:
             try:
                 self.rules.remove(rule)
