@@ -214,6 +214,7 @@ class FileManager:
             proc_resp = json.loads(result.strip())
         except Exception:
             logging.exception("file_manager: unable to load metadata")
+            logging.debug(result)
             return
         proc_log = proc_resp.get('log', [])
         for log_msg in proc_log:
