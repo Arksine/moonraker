@@ -352,11 +352,17 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
     async def post(self):
         start_print = False
+        dir_path = ""
         print_args = self.request.arguments.get('print', [])
+        path_args = self.request.arguments.get('path', [])
         if print_args:
-            start_print = print_args[0].lower() == "true"
+            start_print = print_args[0].decode().lower() == "true"
+        if path_args:
+            dir_path = path_args[0].decode().lstrip("/")
         upload = self.get_file()
-        filename = "_".join(upload['filename'].strip().split())
+        filename = "_".join(upload['filename'].strip().split()).lstrip("/")
+        if dir_path:
+            filename = os.path.join(dir_path, filename)
         full_path = os.path.join(self.file_path, filename)
         # Make sure the file isn't currently loaded
         ongoing = False
@@ -375,6 +381,8 @@ class FileUploadHandler(AuthorizedRequestHandler):
         # Don't start if another print is currently in progress
         start_print = start_print and not ongoing
         try:
+            if dir_path:
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, 'wb') as fh:
                 fh.write(upload['body'])
             self.server.notify_filelist_changed(filename, 'added')
