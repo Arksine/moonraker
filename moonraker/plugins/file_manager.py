@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os
+import sys
 import shutil
 import time
 import logging
@@ -12,7 +13,6 @@ from tornado.ioloop import IOLoop
 from tornado.locks import Lock
 
 VALID_GCODE_EXTS = ['gcode', 'g', 'gco']
-PYTHON_BIN = os.path.expanduser("~/moonraker-env/bin/python")
 METADATA_SCRIPT = os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py")
 
@@ -239,7 +239,7 @@ class FileManager:
                     update_list.append(fname)
             self.gcode_metadata = exisiting_data
             for fname in update_list:
-                cmd = " ".join([PYTHON_BIN, METADATA_SCRIPT, "-p",
+                cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
                                 gc_path, "-f", fname])
                 shell_command = self.server.lookup_plugin('shell_command')
                 scmd = shell_command.build_shell_command(
