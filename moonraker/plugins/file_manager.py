@@ -240,7 +240,7 @@ class FileManager:
             self.gcode_metadata = exisiting_data
             for fname in update_list:
                 cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
-                                gc_path, "-f", fname])
+                                gc_path, "-f", "'" + fname + "'"])
                 shell_command = self.server.lookup_plugin('shell_command')
                 scmd = shell_command.build_shell_command(
                     cmd, self._shell_proc_callback)
