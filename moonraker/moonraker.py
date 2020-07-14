@@ -434,7 +434,10 @@ def main():
     file_hdlr = logging.handlers.TimedRotatingFileHandler(
         log_file, when='midnight', backupCount=2)
     root_logger.addHandler(file_hdlr)
-    root_logger.setLevel(logging.INFO)
+    if DEBUG:
+        root_logger.setLevel(logging.DEBUG)
+    else:
+        root_logger.setLevel(logging.INFO)
     logging.info("="*25 + "Starting Moonraker..." + "="*25)
     formatter = logging.Formatter(
         '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
