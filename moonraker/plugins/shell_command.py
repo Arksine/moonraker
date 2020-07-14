@@ -74,10 +74,10 @@ class ShellCommand:
                 self.output_cb(self.partial_output)
                 self.partial_output = b""
             if complete:
-                msg = "Command {%s} finished\n" % (self.name)
+                msg = "Command {%s} finished" % (self.name)
             else:
                 msg = "Command {%s} timed out" % (self.name)
-                logging.info("shell_command: " + msg)
+            logging.info(msg)
             self.io_loop.remove_handler(fd)
 
 class ShellCommandFactory:
