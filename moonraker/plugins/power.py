@@ -26,7 +26,6 @@
 #     fi
 #     echo "Printer is off"
 #     exit 1
-
 #
 #
 #
@@ -50,14 +49,20 @@ class PrinterPower:
             self._handle_machine_request)
         
         self.printer_status = "unknown"
+        
+        self.cmds = {
+            "status":   "/usr/local/bin/printer_status",
+            "on":       "/usr/local/bin/printer_on",
+            "off":      "/usr/local/bin/printer_off"
+        }
 
     async def _handle_machine_request(self, path, method, args):
         if path == "/printer/power/status":
-            cmd = "/usr/local/bin/printer_status"
+            cmd = self.cmds["status"]
         elif path == "/printer/power/on":
-            cmd = "/usr/local/bin/printer_on"
+            cmd = self.cmds["on"]
         elif path == "/printer/power/off":
-            cmd = "/usr/local/bin/printer_off"
+            cmd = self.cmds["off"]
         else:
             raise self.server.error("Unsupported machine request")
         shell_command = self.server.lookup_plugin('shell_command')
