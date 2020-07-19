@@ -1,0 +1,84 @@
+# Printer power manipulations
+#
+# Add [moonraker_plugin power] to printer.cfg
+#
+# This file may be distributed under the terms of the GNU GPLv3 license.
+#
+#   Sample printer_on script for pi:
+#     #!/bin/bash
+#     gpio export 23 out
+#     gpio -g write 23 0
+#     sleep 1
+#     sudo service klipper restart
+#
+#   Sample printer_on script:
+#     #!/bin/bash
+#     gpio export 23 out
+#     gpio -g write 23 1
+#
+#
+#     #!/bin/bash
+#     status=$(cat /sys/class/gpio/gpiochip0/subsystem/gpio23/value)
+#     if [ $status -eq 0 ]
+#     then
+#             echo "Printer is on"
+#             exit 0
+#     fi
+#     echo "Printer is off"
+#     exit 1
+
+#
+#
+#
+
+
+
+
+import logging
+
+class PrinterPower:
+    def __init__(self, server):
+        self.server = server
+        self.server.register_endpoint(
+            "/printer/power/status", "power_status", ['GET'],
+            self._handle_machine_request)
+        self.server.register_endpoint(
+            "/printer/power/on", "power_on", ['POST'],
+            self._handle_machine_request)
+        self.server.register_endpoint(
+            "/printer/power/off", "power_off", ['POST'],
+            self._handle_machine_request)
+        
+        self.printer_status = "unknown"
+
+    async def _handle_machine_request(self, path, method, args):
+        if path == "/printer/power/status":
+            cmd = "/usr/local/bin/printer_status"
+        elif path == "/printer/power/on":
+            cmd = "/usr/local/bin/printer_on"
+        elif path == "/printer/power/off":
+            cmd = "/usr/local/bin/printer_off"
+        else:
+            raise self.server.error("Unsupported machine request")
+        shell_command = self.server.lookup_plugin('shell_command')
+        scmd = shell_command.build_shell_command(cmd, self.get_cmd_output)
+        try:
+            await scmd.run()
+        except Exception:
+            logging.exception("Error running cmd '%s'" % (cmd))
+        
+        if path == "/printer/power/status":
+            return {"printer_power": self.printer_status}
+        else:
+            return "ok"
+    
+    def get_cmd_output(self, partial_output):
+        if "on" in str(partial_output):
+            self.printer_status = "on"
+        elif "off" in str(partial_output):
+            self.printer_status = "off"
+        else:
+            self.printer_status = "unknown"
+
+def load_plugin(server):
+    return PrinterPower(server)
