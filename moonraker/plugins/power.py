@@ -1,6 +1,10 @@
 # Printer power manipulations
 #
-# Add [moonraker_plugin power] to printer.cfg
+# Add to printer.cfg:
+#   [moonraker_plugin power]
+#   cmd_status: /script/to/power/status
+#   cmd_off: /script/to/power/off
+#   cmd_on: /script/to/power/on
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
@@ -49,12 +53,7 @@ class PrinterPower:
             self._handle_machine_request)
         
         self.printer_status = "unknown"
-        
-        self.cmds = {
-            "status":   "/usr/local/bin/printer_status",
-            "on":       "/usr/local/bin/printer_on",
-            "off":      "/usr/local/bin/printer_off"
-        }
+        self.cmds = {}
 
     async def _handle_machine_request(self, path, method, args):
         if path == "/printer/power/status":
@@ -65,6 +64,10 @@ class PrinterPower:
             cmd = self.cmds["off"]
         else:
             raise self.server.error("Unsupported machine request")
+        
+        if cmd == None:
+            raise self.server.error("Command not configured in printer.cfg under [moonraker_plugins power]")
+        
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, self.get_cmd_output)
         try:
@@ -84,6 +87,17 @@ class PrinterPower:
             self.printer_status = "off"
         else:
             self.printer_status = "unknown"
+     
+    def load_config(self, config):
+        logging.info("Config: " + str(config))
+        
+        keys = [ "status", "off", "on"]
+        
+        for key in keys:
+          self.cmds[key] = config["cmd_" + key] if key in config else None
+        
+        logging.info("Config: " + str(self.cmds))
+        
 
 def load_plugin(server):
     return PrinterPower(server)
