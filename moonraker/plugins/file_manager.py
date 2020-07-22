@@ -42,19 +42,35 @@ class FileManager:
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
 
-    def _register_static_files(self, gcode_path):
-        self.server.register_static_file_handler(
-            '/server/files/gcodes/', gcode_path, can_delete=True,
-            op_check_cb=self._handle_operation_check)
-
     def load_config(self, config):
+        # Gcode Files
         sd = config.get('sd_path', None)
         if sd is not None:
             sd = os.path.normpath(os.path.expanduser(sd))
             if sd != self.file_paths.get('gcodes', ""):
                 self.file_paths['gcodes'] = sd
                 self._update_file_list()
-                self._register_static_files(sd)
+                self.server.register_static_file_handler(
+                    '/server/files/gcodes/', sd, can_delete=True,
+                    op_check_cb=self._handle_operation_check)
+        # Main configuration file
+        main_cfg = config.get('printer_config_main', None)
+        if main_cfg is not None:
+            main_cfg = os.path.normpath(os.path.expanduser(main_cfg))
+            if main_cfg != self.file_paths.get("printer.cfg", ""):
+                self.file_paths['printer.cfg'] = main_cfg
+                self.server.register_static_file_handler(
+                    '/server/files/config/printer.cfg', main_cfg)
+        # "Included" configuration files
+        included_cfg = config.get('printer_config_path', None)
+        if included_cfg is not None:
+            included_cfg = os.path.normpath(os.path.expanduser(included_cfg))
+            if included_cfg != self.file_paths.get('config', ""):
+                self.file_paths['config'] = included_cfg
+                self._update_file_list(base='config')
+                self.server.register_static_file_handler(
+                    "/server/files/config/include/", included_cfg,
+                    can_delete=True)
 
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
