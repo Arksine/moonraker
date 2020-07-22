@@ -250,10 +250,15 @@ class FileManager:
 
     def _update_file_list(self, base='gcodes'):
         # Use os.walk find files in sd path and subdirs
-        path = self.file_paths.get(base, "")
+        path = self.file_paths.get(base, None)
         if path is None:
-            logging.info("No sd_path set, cannot update")
-            return
+            msg = "No known path for root: %s" % (base)
+            logging.info(msg)
+            raise self.server.error(msg)
+        elif not os.path.isdir(path):
+            msg = "Cannot generate file list for root: %s" % (base)
+            logging.info(msg)
+            raise self.server.error(msg)
         logging.info("Updating File List...")
         new_list = {}
         for root, dirs, files in os.walk(path, followlinks=True):
@@ -299,10 +304,17 @@ class FileManager:
             raise self.server.error(
                 400, "Bad Request, can only process a single file upload")
         upload = f_list[0]
-        filename = "_".join(upload['filename'].strip().split()).lstrip("/")
-        if dir_path:
-            filename = os.path.join(dir_path, filename)
-        full_path = os.path.join(file_path, filename)
+        if os.path.isfile(file_path):
+            # If the root path points to a file, write directly to it.  This
+            # is the case for printer.cfg
+            filename = root
+            full_path = file_path
+            dir_path = ""
+        else:
+            filename = "_".join(upload['filename'].strip().split()).lstrip("/")
+            if dir_path:
+                filename = os.path.join(dir_path, filename)
+            full_path = os.path.join(file_path, filename)
         # Verify that the operation can be done if attempting to upload a gcode
         if root == 'gcodes':
             try:
