@@ -38,16 +38,13 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/copy", "file_copy", ['POST'],
             self._handle_file_move_copy)
+        # Register APIs to handle file uploads
+        self.server.register_upload_handler("/server/files/upload")
+        self.server.register_upload_handler("/api/files/local")
 
     def _register_static_files(self, gcode_path):
         self.server.register_static_file_handler(
             '/server/files/gcodes/', gcode_path, can_delete=True,
-            op_check_cb=self._handle_operation_check)
-        self.server.register_upload_handler(
-            '/server/files/upload', gcode_path,
-            op_check_cb=self._handle_operation_check)
-        self.server.register_upload_handler(
-            '/api/files/local', gcode_path,
             op_check_cb=self._handle_operation_check)
 
     def load_config(self, config):
@@ -156,7 +153,8 @@ class FileManager:
         if source is None:
             raise self.server.error("File move/copy request issing source")
         if destination is None:
-            raise self.server.error("File move/copy request missing destination")
+            raise self.server.error(
+                "File move/copy request missing destination")
         source_base, source_path = self._convert_path(source)
         dest_base, dest_path = self._convert_path(destination)
         if source_base != "gcodes" or dest_base != "gcodes":
@@ -168,6 +166,7 @@ class FileManager:
         # make sure the destination is not in use
         if os.path.exists(dest_path):
             await self._handle_operation_check(dest_path)
+        action = ""
         if path == "/server/files/move":
             # if moving the file, make sure the source is not in use
             await self._handle_operation_check(source_path)
@@ -272,6 +271,74 @@ class FileManager:
             ioloop = IOLoop.current()
             ioloop.spawn_callback(self._update_metadata)
         return dict(new_list)
+
+    async def process_file_upload(self, request):
+        start_print = print_ongoing = False
+        dir_path = ""
+        # lookup root file path
+        root_args = request.arguments.get('root', ['gcodes'])
+        root = root_args[0].strip()
+        file_path = self.file_paths.get(root, None)
+        if file_path is None:
+            raise self.server.error(400, "Unknown root path")
+        # check relative path
+        path_args = request.arguments.get('path', [])
+        if path_args:
+            dir_path = path_args[0].decode().lstrip("/")
+        # check if print should be started after a "gcodes" upload
+        if root == "gcodes":
+            print_args = request.arguments.get('print', [])
+            if print_args:
+                start_print = print_args[0].decode().lower() == "true"
+        # fetch the upload from the request
+        if len(request.files) != 1:
+            raise self.server.error(
+                400, "Bad Request, can only process a single file upload")
+        f_list = list(request.files.values())[0]
+        if len(f_list) != 1:
+            raise self.server.error(
+                400, "Bad Request, can only process a single file upload")
+        upload = f_list[0]
+        filename = "_".join(upload['filename'].strip().split()).lstrip("/")
+        if dir_path:
+            filename = os.path.join(dir_path, filename)
+        full_path = os.path.join(file_path, filename)
+        # Verify that the operation can be done if attempting to upload a gcode
+        if root == 'gcodes':
+            try:
+                print_ongoing = await self._handle_operation_check(full_path)
+            except self.server.error as e:
+                if e.status_code == 403:
+                    raise self.server.error(
+                        403, "File is loaded, upload not permitted")
+                else:
+                    # Couldn't reach Klippy, so it should be safe
+                    # to permit the upload but not start
+                    start_print = False
+
+        # Don't start if another print is currently in progress
+        start_print = start_print and not print_ongoing
+        try:
+            if dir_path:
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, 'wb') as fh:
+                fh.write(upload['body'])
+        except Exception:
+            raise self.server.error(500, "Unable to save file")
+        if start_print:
+            # Make a Klippy Request to "Start Print"
+            gcode_apis = self.server.lookup_plugin('gcode_apis')
+            try:
+                await gcode_apis.gcode_start_print(
+                    request.path, 'POST', {'filename': filename})
+            except self.server.error:
+                # Attempt to start print failed
+                start_print = False
+        if root == 'gcodes':
+            self.server.notify_filelist_changed(filename, 'added')
+            return {'result': filename, 'print_started': start_print}
+        else:
+            return {'result': filename}
 
     def get_file_list(self, format_list=False, base='gcodes'):
         try:
