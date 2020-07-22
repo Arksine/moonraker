@@ -202,10 +202,8 @@ class MoonrakerApp:
             'path': file_path, 'methods': methods, 'op_check_cb': op_check_cb}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
-    def register_upload_handler(self, pattern, upload_path, op_check_cb=None):
-        params = {
-            'server': self.server, 'auth': self.auth,
-            'path': upload_path, 'op_check_cb': op_check_cb}
+    def register_upload_handler(self, pattern):
+        params = {'server': self.server, 'auth': self.auth}
         self.mutable_router.add_handler(pattern, FileUploadHandler, params)
 
     def remove_handler(self, endpoint):
@@ -345,70 +343,18 @@ class FileRequestHandler(AuthorizedFileHandler):
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):
-    def initialize(self, server, auth, path, op_check_cb=None,):
+    def initialize(self, server, auth):
         super(FileUploadHandler, self).initialize(server, auth)
-        self.op_check_cb = op_check_cb
-        self.file_path = path
 
     async def post(self):
-        start_print = False
-        dir_path = ""
-        print_args = self.request.arguments.get('print', [])
-        path_args = self.request.arguments.get('path', [])
-        if print_args:
-            start_print = print_args[0].decode().lower() == "true"
-        if path_args:
-            dir_path = path_args[0].decode().lstrip("/")
-        upload = self.get_file()
-        filename = "_".join(upload['filename'].strip().split()).lstrip("/")
-        if dir_path:
-            filename = os.path.join(dir_path, filename)
-        full_path = os.path.join(self.file_path, filename)
-        # Make sure the file isn't currently loaded
-        ongoing = False
-        if self.op_check_cb is not None:
-            try:
-                ongoing = await self.op_check_cb(full_path)
-            except ServerError as e:
-                if e.status_code == 403:
-                    raise tornado.web.HTTPError(
-                        403, "File is loaded, upload not permitted")
-                else:
-                    # Couldn't reach Klippy, so it should be safe
-                    # to permit the upload but not start
-                    start_print = False
-
-        # Don't start if another print is currently in progress
-        start_print = start_print and not ongoing
+        file_manager = self.server.lookup_plugin('file_manager')
         try:
-            if dir_path:
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, 'wb') as fh:
-                fh.write(upload['body'])
-            self.server.notify_filelist_changed(filename, 'added')
-        except Exception:
-            raise tornado.web.HTTPError(500, "Unable to save file")
-        if start_print:
-            # Make a Klippy Request to "Start Print"
-            gcode_apis = self.server.lookup_plugin('gcode_apis')
-            try:
-                await gcode_apis.gcode_start_print(
-                    self.request.path, 'POST', {'filename': filename})
-            except ServerError:
-                # Attempt to start print failed
-                start_print = False
-        self.finish({'result': filename, 'print_started': start_print})
+            result = await file_manager.process_file_upload(self.request)
+        except ServerError as e:
+            raise tornado.web.HTTPError(
+                e.status_code, str(e))
+        self.finish(result)
 
-    def get_file(self):
-        # File uploads must have a single file request
-        if len(self.request.files) != 1:
-            raise tornado.web.HTTPError(
-                400, "Bad Request, can only process a single file upload")
-        f_list = list(self.request.files.values())[0]
-        if len(f_list) != 1:
-            raise tornado.web.HTTPError(
-                400, "Bad Request, can only process a single file upload")
-        return f_list[0]
 
 class EmulateOctoprintHandler(AuthorizedRequestHandler):
     def get(self):
