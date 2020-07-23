@@ -804,6 +804,7 @@ window.onload = () => {
             'disabled', (api_type == 'websocket' || disable_transfer));
         $('.reqws').prop('disabled', (api_type == 'http'));
         $('#apimethod').prop('hidden', (api_type == "websocket"));
+        $('#apiargs').prop('hidden', (api_type == "http"));
     });
 
     $('#cbxFileTransfer').on('change', function () {
@@ -845,7 +846,7 @@ window.onload = () => {
         // Send to a user defined endpoint and log the response
         if (api_type == 'http') {
             let sendtype = $("input[type=radio][name=api_cmd_type]:checked").val();
-            let url = $('#apiform [type=text]').val();
+            let url = $('#apirequest').val();
             let settings = {url: url}
             if (apikey != null)
                 settings.headers = {"X-Api-Key": apikey};
@@ -868,12 +869,14 @@ window.onload = () => {
                 $.ajax(settings);
             }
         } else {
-            let cmd = $('#apiform [type=text]').val().split(',', 2);
-            let method = cmd[0].trim();
-            if (cmd.length > 1) {
-                let args = cmd[1].trim();
-                if (args.startsWith("{")) {
-                    args = JSON.parse(args);
+            let method = $('#apirequest').val().trim();
+            let args = $('#apiargs').val();
+            if (args != "") {
+                try {
+                    args = JSON.parse("{" + args + "}");
+                } catch (error) {
+                    console.log("Unable to parse arguments");
+                    return
                 }
                 json_rpc.call_method_with_kwargs(method, args)
                 .then((result) => {
