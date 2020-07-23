@@ -299,8 +299,8 @@ class FileManager:
         # lookup root file path
         root_args = request.arguments.get('root', ['gcodes'])
         root = root_args[0].strip()
-        file_path = self.file_paths.get(root, None)
-        if file_path is None:
+        base_path = self.file_paths.get(root, None)
+        if base_path is None:
             raise self.server.error(400, "Unknown root path")
         # check relative path
         path_args = request.arguments.get('path', [])
@@ -320,17 +320,21 @@ class FileManager:
             raise self.server.error(
                 400, "Bad Request, can only process a single file upload")
         upload = f_list[0]
-        if os.path.isfile(file_path):
+        if os.path.isfile(base_path):
             # If the root path points to a file, write directly to it.  This
             # is the case for printer.cfg
             filename = root
-            full_path = file_path
+            full_path = base_path
             dir_path = ""
         else:
             filename = "_".join(upload['filename'].strip().split()).lstrip("/")
             if dir_path:
                 filename = os.path.join(dir_path, filename)
-            full_path = os.path.join(file_path, filename)
+            full_path = os.path.normpath(os.path.join(base_path, filename))
+            # Validate the path.  Don't allow uploads to a parent of the root
+            if not full_path.startswith(base_path):
+                raise self.server.error(
+                    "Cannot write to path: %s" % (full_path))
         # Verify that the operation can be done if attempting to upload a gcode
         if root == 'gcodes':
             try:
