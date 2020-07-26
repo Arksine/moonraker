@@ -39,24 +39,31 @@
 <div style="display: flex">
 <input type="file" style="display:none" id="upload-file" />
 <div style="width: 10em">
-<button id="btnupload" class="toggleable" style="width: 9em">Upload GCode</button><br/><br/>
-<button id="btndownload" class="toggleable" style="width: 9em">Download Gcode</button><br/><br/>
-<button id="btndelete" class="toggleable" style="width: 9em">Delete Gcode</button><br/><br/>
-<button id="btngetmetadata" style="width: 9em">Get Metadata</button>
+  <button id="btnupload" class="toggleable" style="width: 9em">Upload File</button><br/><br/>
+  <button id="btndownload" class="toggleable" style="width: 9em">Download File</button><br/><br/>
+  <button id="btndelete" class="toggleable" style="width: 9em">Delete File</button><br/><br/>
+  <button id="btngetfiles" style="width: 9em">Refresh List</button>
 <a id="hidden_link" href="#" hidden>hidden</a>
 </div>
 <div style="width: 10em">
   <button id="btnstartprint"  style="width: 9em">Start Print</button><br/><br/>
   <button id="btnpauseresume" style="width: 9em">Pause Print</button><br/><br/>
-  <button id="btncancelprint" style="width: 9em">Cancel Print</button>
+  <button id="btncancelprint" style="width: 9em">Cancel Print</button><br/><br/>
+  <button id="btngetmetadata" style="width: 9em">Get Metadata</button>
 </div>
 <div>
 <select id="filelist" size="8"></select>
+</div>
+<div id=filetype>
+  <input type="radio" name="file_type" value="gcodes" checked="true">GCodes<br/>
+  <input type="radio" name="file_type" value="config">Config Files
 </div>
 </div>
 <br/>
 Progress: <progress id="progressbar" value="0" max="100"></progress>
 <span id="upload_progress">0%</span><br/><br/>
+<button id="btnwritecfg" class="toggleable" style="width: 12em">Upload printer.cfg</button>
+<button id="btngetcfg" class="toggleable" style="width: 12em">Download printer.cfg</button><br/><br/>
 <button id="btnqueryendstops" style="width: 9em">Query Endstops</button>
 <button id="btnsubscribe" style="width: 9em">Post Subscription</button>
 <button id="btngetsub" style="width: 9em">Get Subscription</button>
