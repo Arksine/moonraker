@@ -4,9 +4,9 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-
 import logging
-import RPi.GPIO as GPIO
+import os
+import time
 
 class PrinterPower:
     def __init__(self, server):
@@ -49,36 +49,22 @@ class PrinterPower:
                 result[dev] = "device_not_found"
                 continue
 
-            if path == "/printer/power/status":
-                # Update device status
-                self.devices[dev]["status"] = self.is_pin_on(dev)
-            elif path == "/printer/power/on":
-                self.set_pin_level(dev, True)
+            GPIO.verify_pin(self.devices[dev]["pin"], self.devices[dev]["active_low"])
+            if path == "/printer/power/on":
+                GPIO.set_pin_value(self.devices[dev]["pin"], 1)
             elif path == "/printer/power/off":
-                self.set_pin_level(dev, False)
-            else:
+                GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+            elif path != "/printer/power/status":
                 raise self.server.error("Unsupported power request")
+
+            self.devices[dev]["status"] = GPIO.is_pin_on(self.devices[dev]["pin"])
 
             result[dev] = self.devices[dev]["status"]
         return result
 
-    def is_pin_on(self, dev):
-        value = GPIO.input(self.devices[dev]["pin"])
-        if (value == 1 and self.devices[dev]["active_high"] == True) or (value == 0 and self.devices[dev]["active_high"] == False):
-            return "on"
-        return "off"
-
-    def set_pin_level(self, dev, active):
-        value = 1 if (active == True and self.devices[dev]["active_high"] == True) or (active == False and self.devices[dev]["active_high"] == False) else 0
-        GPIO.output(self.devices[dev]["pin"], value)
-        self.devices[dev]["status"] = self.is_pin_on(dev)
-
     def load_config(self, config):
         if "devices" not in config.keys():
             return
-
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False) #Ignore if other things are controlling GPIO pins
 
         devices = config["devices"].split(',')
         logging.info("Power plugin loading devices: " + str(devices))
@@ -92,17 +78,89 @@ class PrinterPower:
             self.devices[dev] = {
                 "name": config[dev + "_name"] if dev + "_name" in config.keys() else dev,
                 "pin": int(config[dev + "_pin"]),
-                "active_high": False if dev+"_activehigh" in config.keys() and config[dev+"_activehigh"] == "False" else True,
+                "active_low": 1 if dev+"_active_low" in config.keys() and config[dev+"_active_low"] == "True" else 0,
                 "status": None
             }
 
             try:
-                GPIO.setup(self.devices[dev]["pin"], GPIO.OUT)
-                self.devices[dev]["status"] = self.is_pin_on(dev)
+                logging.debug("Attempting to configure pin GPIO" + str(self.devices[dev]["pin"]))
+                GPIO.setup_pin(self.devices[dev]["pin"], self.devices[dev]["active_low"])
+                self.devices[dev]["status"] = GPIO.is_pin_on(self.devices[dev]["pin"])
             except:
                 logging.info("Power plugin: ERR Problem configuring the output pin for device " + dev + ". Removing device")
                 self.devices.pop(dev, None)
                 continue
+
+class GPIO:
+    gpio_root = "/sys/class/gpio"
+
+    @staticmethod
+    def _set_gpio_option(gpio, option, value):
+        GPIO._write(
+            os.path.join(GPIO.gpio_root, "gpio"+str(gpio), option),
+            value
+        )
+
+    def _get_gpio_option(pin, option):
+        return GPIO._read(
+            os.path.join(GPIO.gpio_root, "gpio"+str(pin), option)
+        )
+
+    @staticmethod
+    def _write(file, data):
+        with open(file, 'w') as f:
+            f.write(str(data))
+            f.flush()
+
+    @staticmethod
+    def _read(file):
+        with open(file, 'r') as f:
+            f.seek(0)
+            return f.read().strip()
+
+    @staticmethod
+    def verify_pin(pin, active_low=1):
+        gpiopath = os.path.join(GPIO.gpio_root, "gpio"+str(pin))
+        if not os.path.exists(gpiopath):
+            logging.info("Re-intializing GPIO"+str(pin))
+            GPIO.setup_pin(pin, active_low)
+            return
+
+        if GPIO._get_gpio_option(pin, "active_low").strip() != str(active_low):
+            GPIO._set_gpio_option(pin, "active_low", active_low)
+
+        if GPIO._get_gpio_option(pin, "direction").strip() != "out":
+            GPIO._set_gpio_option(pin, "direction", "out")
+
+    @staticmethod
+    def setup_pin(pin, active_low=1):
+        pin = int(pin)
+        active_low = 1 if active_low == 1 else 0
+
+        gpiopath = os.path.join(GPIO.gpio_root, "gpio"+str(pin))
+        if not os.path.exists(gpiopath):
+            GPIO._write(
+                os.path.join(GPIO.gpio_root, "export"),
+                pin)
+            logging.info("Waiting for GPIO"+str(pin)+" to initialize")
+            while os.stat(os.path.join(GPIO.gpio_root, "gpio"+str(pin),"active_low")).st_gid == 0:
+                time.sleep(.1)
+
+        if GPIO._get_gpio_option(pin, "active_low").strip() != str(active_low):
+            GPIO._set_gpio_option(pin, "active_low", active_low)
+            
+        if GPIO._get_gpio_option(pin, "direction").strip() != "out":
+            GPIO._set_gpio_option(pin, "direction", "out")
+
+
+    @staticmethod
+    def is_pin_on(pin):
+        return "on" if int(GPIO._get_gpio_option(pin, "value")) else "off"
+
+    @staticmethod
+    def set_pin_value(pin, active):
+        value = 1 if (active == 1) else 0
+        GPIO._set_gpio_option(pin, "value", value)
 
 
 def load_plugin(server):

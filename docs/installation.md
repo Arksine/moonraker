@@ -222,9 +222,9 @@ devices: printer, led
 {dev}_pin: 23
 #  This option is required.
 #  The GPIO Pin number you wish to control
-#{dev}_activehigh: True
+#{dev}_active_low: False
 #  If you have a device that needs a low or 0 signal to be turned on, set this
-#  option to False.
+#  option to True.
 ```
 
 Define the devices you wish to control under _devices_ with a comma separated
