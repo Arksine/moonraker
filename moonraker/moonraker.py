@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 import argparse
+import sys
 import importlib
 import os
 import time
@@ -442,6 +443,13 @@ def main():
     formatter = logging.Formatter(
         '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
     file_hdlr.setFormatter(formatter)
+
+    if sys.version_info < (3, 7):
+        msg = "Moonraker requires Python 3.7 or above.  Detected Version: %s" \
+            % (sys.version)
+        logging.info(msg)
+        print(msg)
+        exit(1)
 
     # Start IOLoop and Server
     io_loop = IOLoop.current()

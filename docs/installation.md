@@ -2,7 +2,9 @@
 
 This document provides a guide on how to install Moonraker on a Raspberry
 Pi running Raspian/Rasperry Pi OS.  Other SBCs and/or linux distributions
-may work, however they may need a custom install script.
+may work, however they may need a custom install script.  Moonraker
+requires Python 3.7 or greater, verify that your distribution's
+Python 3 packages meet this requirement.
 
 Klipper should be installed prior to installing Moonraker.  Please see
 [Klipper's Documention](https://github.com/KevinOConnor/klipper/blob/master/docs/Installation.md)
