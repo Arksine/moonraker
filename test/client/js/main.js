@@ -610,8 +610,10 @@ json_rpc.register_method("notify_klippy_state_changed", handle_klippy_state);
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed
     // a gcode file.
-    if (file_list_type == "gcodes")
-        update_filelist(file_info.filelist);
+    if (file_list_type == file_info.root)
+        get_file_list(file_info.root);
+    console.log("Filelist Changed:");
+    console.log(file_info);
 }
 json_rpc.register_method("notify_filelist_changed", handle_file_list_changed);
 
