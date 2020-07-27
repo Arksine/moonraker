@@ -165,6 +165,12 @@ Below is a detailed explanation of all options currently available:
 #  This is the base interval used for status tier 1.  All other status tiers
 #  are calculated using the value defined by tick_time (See below for more
 #  information).  Default is 250ms.
+#config_include_path: ~/klipper_config
+#  The path of a directory in which "included" configuration files reside.
+#  If specified, moonraker will serve this path allowing file and directory
+#  manipuation within it.  Note that this should not be the same directory
+#  in which printer.cfg is located (the home directory for most installations).
+#  The default is None, in which no included config files will be served.
 ```
 
 The "status tiers" are used to determine how fast each klippy object is allowed
