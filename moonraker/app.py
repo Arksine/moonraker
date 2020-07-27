@@ -103,6 +103,7 @@ class MoonrakerApp:
 
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
+        mimetypes.add_type('text/plain', '.cfg')
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
