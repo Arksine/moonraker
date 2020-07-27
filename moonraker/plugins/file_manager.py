@@ -49,10 +49,13 @@ class FileManager:
             sd = os.path.normpath(os.path.expanduser(sd))
             if sd != self.file_paths.get('gcodes', ""):
                 self.file_paths['gcodes'] = sd
-                self._update_file_list()
                 self.server.register_static_file_handler(
                     '/server/files/gcodes/', sd, can_delete=True,
                     op_check_cb=self._handle_operation_check)
+            try:
+                self._update_file_list()
+            except Exception:
+                logging.exception("Unable to initialize gcode file list")
         # Main configuration file
         main_cfg = config.get('printer_config_main', None)
         if main_cfg is not None:
@@ -67,10 +70,26 @@ class FileManager:
             included_cfg = os.path.normpath(os.path.expanduser(included_cfg))
             if included_cfg != self.file_paths.get('config', ""):
                 self.file_paths['config'] = included_cfg
-                self._update_file_list(base='config')
                 self.server.register_static_file_handler(
                     "/server/files/config/include/", included_cfg,
                     can_delete=True)
+            try:
+                self._update_file_list(base='config')
+            except Exception:
+                logging.exception("Unable to initialize config file list")
+        # Register path for example configs
+        klipper_path = config.get('klipper_path', None)
+        if klipper_path is not None:
+            example_cfg_path = os.path.join(klipper_path, "config")
+            if example_cfg_path != self.file_paths.get("config_examples", ""):
+                self.file_paths['config_examples'] = example_cfg_path
+                self.server.register_static_file_handler(
+                    "/server/files/config/examples/", example_cfg_path)
+            try:
+                self._update_file_list(base='config_examples')
+            except Exception:
+                logging.exception(
+                    "Unable to initialize config_examples file list")
 
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
@@ -275,7 +294,7 @@ class FileManager:
             msg = "Cannot generate file list for root: %s" % (base)
             logging.info(msg)
             raise self.server.error(msg)
-        logging.info("Updating File List...")
+        logging.info("Updating File List <%s>..." % (base))
         new_list = {}
         for root, dirs, files in os.walk(path, followlinks=True):
             for name in files:
