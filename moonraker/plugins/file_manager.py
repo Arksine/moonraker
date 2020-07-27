@@ -90,18 +90,19 @@ class FileManager:
 
     async def _handle_directory_request(self, path, method, args):
         directory = args.get('path', "gcodes")
-        base, dir_path = self._convert_path(directory)
+        base, url_path, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
             # Get list of files and subdirectories for this target
             return self._list_directory(dir_path)
-        elif method == 'POST' and base == "gcodes":
+        elif method == 'POST' and base in ["gcodes", "config"]:
             # Create a new directory
             try:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-        elif method == 'DELETE' and base == "gcodes":
+            self.notify_filelist_changed(url_path, "add_directory", base)
+        elif method == 'DELETE' and base in ["gcodes", "config"]:
             # Remove a directory
             if directory.strip("/") == base:
                 raise self.server.error(
@@ -117,15 +118,12 @@ class FileManager:
                 # loaded by the virtual_sdcard
                 await self._handle_operation_check(dir_path)
                 shutil.rmtree(dir_path)
-                # since it is possible that the directory contains
-                # files, send a notification to clients
-                self.server.notify_filelist_changed(
-                    directory, "delete_directory")
             else:
                 try:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
+            self.notify_filelist_changed(url_path, "delete_directory", base)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -158,10 +156,11 @@ class FileManager:
         if base not in self.file_paths:
             raise self.server.error("Invalid base path (%s)" % (base))
         root_path = local_path = self.file_paths[base]
+        url_path = ""
         if len(parts) > 1:
-            target = "/".join(parts[1:])
-            local_path = os.path.join(root_path, target)
-        return base, local_path
+            url_path = "/".join(parts[1:])
+            local_path = os.path.join(root_path, url_path)
+        return base, url_path, local_path
 
     async def _handle_file_move_copy(self, path, method, args):
         source = args.get("source")
@@ -171,9 +170,9 @@ class FileManager:
         if destination is None:
             raise self.server.error(
                 "File move/copy request missing destination")
-        source_base, source_path = self._convert_path(source)
-        dest_base, dest_path = self._convert_path(destination)
-        if source_base != "gcodes" or dest_base != "gcodes":
+        source_base, src_url_path, source_path = self._convert_path(source)
+        dest_base, dst_url_path, dest_path = self._convert_path(destination)
+        if source_base != dest_base or source_base not in ["gcodes", "config"]:
             raise self.server.error(
                 "Unsupported root directory: source=%s base=%s" %
                 (source_base, dest_base))
@@ -200,7 +199,8 @@ class FileManager:
             except Exception as e:
                 raise self.server.error(str(e))
             action = "file_copy"
-        self.server.notify_filelist_changed(destination, action)
+        self.notify_filelist_changed(
+            dst_url_path, action, dest_base, {'prev_file': src_url_path})
         return "ok"
 
     def _list_directory(self, path):
@@ -335,7 +335,7 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        self.server.notify_filelist_changed(upload['filename'], 'added')
+        self.notify_filelist_changed(upload['filename'], 'added', "gcodes")
         return {'result': upload['filename'], 'print_started': start_print}
 
     def _do_config_upload(self, request):
@@ -348,6 +348,9 @@ class FileManager:
                 "Printer configuration location on disk not set")
         upload = self._get_upload_info(request, cfg_path)
         self._write_file(upload)
+        if cfg_base == "config":
+            self.notify_filelist_changed(
+                upload['filename'], 'added', "config")
         return {'result': upload['filename']}
 
     def _get_argument(self, request, name, default=None):
@@ -465,6 +468,13 @@ class FileManager:
         if not os.path.isfile(full_path):
             raise self.server.error("Invalid file path: %s" % (path))
         os.remove(full_path)
+
+    def notify_filelist_changed(self, fname, action, base, params={}):
+        self._update_file_list(base)
+        result = {'filename': fname, 'action': action, 'root': base}
+        if params:
+            result.update(params)
+        self.server.send_event("file_manager:filelist_changed", result)
 
 def load_plugin(server):
     return FileManager(server)

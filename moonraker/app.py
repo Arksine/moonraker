@@ -338,8 +338,10 @@ class FileRequestHandler(AuthorizedFileHandler):
                         403, "File is loaded, DELETE not permitted")
 
         os.remove(self.absolute_path)
-        filename = os.path.basename(self.absolute_path)
-        self.server.notify_filelist_changed(filename, 'removed')
+        base = self.request.path.lstrip("/").split("/")[2]
+        filename = self.path.lstrip("/")
+        file_manager = self.server.lookup_plugin('file_manager')
+        file_manager.notify_filelist_changed(filename, 'removed', base)
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):

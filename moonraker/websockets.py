@@ -110,7 +110,7 @@ class WebsocketManager:
         self.server.register_event_handler(
             "server:status_update", self._handle_status_update)
         self.server.register_event_handler(
-            "server:filelist_changed", self._handle_filelist_changed)
+            "file_manager:filelist_changed", self._handle_filelist_changed)
 
     async def _handle_klippy_state_changed(self, state):
         await self.notify_websockets("klippy_state_changed", state)
