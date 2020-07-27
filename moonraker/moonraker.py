@@ -336,16 +336,6 @@ class Server:
                 ServerError("Klippy Host not connected", 503))
         return base_request
 
-    def notify_filelist_changed(self, filename, action):
-        file_manager = self.lookup_plugin('file_manager')
-        try:
-            filelist = file_manager.get_file_list(format_list=True)
-        except ServerError:
-            filelist = []
-        result = {'filename': filename, 'action': action,
-                  'filelist': filelist}
-        self.send_event("server:filelist_changed", result)
-
     async def _kill_server(self):
         # XXX - Currently this function is not used.
         # Should I expose functionality to shutdown
