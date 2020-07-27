@@ -19,7 +19,7 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.util import TimeoutError
 from tornado.locks import Event
 from app import MoonrakerApp
-from utils import ServerError, DEBUG
+from utils import ServerError, DEBUG, MoonrakerLoggingHandler
 
 INIT_MS = 1000
 
@@ -432,14 +432,13 @@ def main():
     log_file = os.path.normpath(os.path.expanduser(cmd_line_args.logfile))
     cmd_line_args.logfile = log_file
     root_logger = logging.getLogger()
-    file_hdlr = logging.handlers.TimedRotatingFileHandler(
+    file_hdlr = MoonrakerLoggingHandler(
         log_file, when='midnight', backupCount=2)
     root_logger.addHandler(file_hdlr)
     if DEBUG:
         root_logger.setLevel(logging.DEBUG)
     else:
         root_logger.setLevel(logging.INFO)
-    logging.info("="*25 + "Starting Moonraker..." + "="*25)
     formatter = logging.Formatter(
         '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
     file_hdlr.setFormatter(formatter)
