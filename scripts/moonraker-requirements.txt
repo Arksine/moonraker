@@ -1,3 +1,4 @@
 # Python dependencies for Moonraker
 tornado==6.0.4
 pyserial==3.4
+RPi.GPIO==0.7.0
