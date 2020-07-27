@@ -299,11 +299,23 @@ that uses promises to return responses and errors (see json-rcp.js).
 
 Most file operations are available over both APIs, however file upload,
 file download, and file delete are currently only available via HTTP APIs.
-Aside from the log files, currently the only root available is "gcodes"
-(at `http:\\host\server\files\gcodes\*`), however support for other "root"
-directories may be added in the future.  File upload, file delete, and
-directory manipulation(mkdir and rmdir) will only be available on the "gcodes"
-root.
+
+Moonraker organizes different local directories into "roots".  For example,
+gcodes are located at `http:\\host\server\files\gcodes\*`, otherwise known
+as the "gcodes" root.  The following roots are available:
+- gcodes
+- config
+- config_examples (read-only)
+
+Write operations (upload, delete, make directory, remove directory) are
+only available on the gcodes and config roots.  Note that the config root
+is only available if user has specified a folder in which "included" config
+files reside.  If the user is not using "include" functionality, or if they
+have not specified the folder in moonraker's configuration, then the "config"
+root will not exist.  Also note that while `printer.cfg` is part of the
+"config" root for the purposes of uploading, it should not reside in the
+same folder as included files, thus it will not show up for file list or
+directory queries.
 
 ### List Available Files
 Walks through a directory and fetches all files.  All file names include a
@@ -434,8 +446,8 @@ Deletes a directory at the specified path.
   `DELETE /server/files/directory?path=gcodes/my_subdir`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "delete_directory", params: {path: "gcodes/my_subdir"}
-  , id: <request id>}`
+  `{jsonrpc: "2.0", method: "delete_directory", params:
+   {path: "gcodes/my_subdir"} , id: <request id>}`
 
   If the specified directory contains files then the delete request
   will fail, however it is possible to "force" deletion of the directory
@@ -456,37 +468,42 @@ Deletes a directory at the specified path.
 Moves a file or directory from one location to another. Note that the following
 conditions must be met for a move successful move:
 - The source must exist
+- The source and destinations must have the same "root" directory
 - The user (typically "Pi") must have the appropriate file permissions
 - Neither the source nor destination can be loaded by the virtual_sdcard.
   If the source or destination is a directory, it cannot contain a file
   loaded by the virtual_sdcard.
 
-When specifying the `source` and `dest`, the "root" directory should be prefixed.
-Currently the only supported root is "gcodes/".
+When specifying the `source` and `dest`, the "root" directory should be
+prefixed. Currently the only supported roots are "gcodes/" and "config/".
 
-This API may also be used to rename a file or directory.   Be aware that an attempt
-to rename a directory to a directory that already exists will result in *moving* the
-source directory to the destination directory.
+This API may also be used to rename a file or directory.   Be aware that an
+attempt to rename a directory to a directory that already exists will result
+in *moving* the source directory to the destination directory.
 
 - HTTP command:\
-  `POST /server/files/move?source=gcodes/my_file.gcode&dest=gcodes/subdir/my_file.gcode`
+  `POST /server/files/move?source=gcodes/my_file.gcode
+  &dest=gcodes/subdir/my_file.gcode`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_file_move", params: {source: "gcodes/my_file.gcode",
+  `{jsonrpc: "2.0", method: "post_file_move", params:
+   {source: "gcodes/my_file.gcode",
    dest: "gcodes/subdir/my_file.gcode"}, id: <request id>}`
 
 ### Copy a file or directory
 Copies a file or directory from one location to another.  A successful copy has
 the pre-requesites as a move with one exception, a copy may complete if the
-source file/directory is loaded by the virtual_sdcard.  As with the move API, the
-source and destination should have the root prefixed.
+source file/directory is loaded by the virtual_sdcard.  As with the move API,
+the source and destination should have the root prefixed.
 
 - HTTP command:\
-  `POST /server/files/copy?source=gcodes/my_file.gcode&dest=gcodes/subdir/my_file.gcode`
+  `POST /server/files/copy?source=gcodes/my_file.gcode
+   &dest=gcodes/subdir/my_file.gcode`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_file_copy", params: {source: "gcodes/my_file.gcode",
-    dest: "gcodes/subdir/my_file.gcode"}, id: <request id>}`
+  `{jsonrpc: "2.0", method: "post_file_copy", params:
+   {source: "gcodes/my_file.gcode", dest: "gcodes/subdir/my_file.gcode"},
+   id: <request id>}`
 
 ### Gcode File Download
 - HTTP command:\
@@ -499,25 +516,47 @@ source and destination should have the root prefixed.
   The requested file
 
 ### File Upload
-Upload a file to the "gcodes" root.  A relative path may be added to the file
-to upload to a subdirectory.
+Upload a file.  Currently files may be uploaded to the "gcodes" or "config"
+root, with "gcodes" being the default location.  If one wishes to upload
+to a subdirectory, the path may be added to the upload's file name
+(relative to the root). If the directory does not exist an error will be
+returned.  Alternatively, the "path" argument may be set, as explained
+below.
 
 - HTTP command:\
   `POST /server/files/upload`
 
   The file to be uploaded should be added to the FormData per the XHR spec.
-  Optionally, a "print" attribute may be added to the form data.  If set
-  to "true", Klippy will attempt to start the print after uploading.  Note that
-  this value should be a string type, not boolean. This provides compatibility
-  with Octoprint's legacy upload API.
+  The following arguments may be added to the form:
+  - root: The root location in which to upload the file.  Currently this may
+    be "gcodes" or "config".  If not specified the default is "gcodes".
+  - path: This argument may contain a path (relative to the root) indicating
+    a subdirectory to which the file is written. If a "path" is present, the
+    server will attempt to create any subdirectories that do not exist.
+  Arguments available only for the "gcodes" root:
+  - print: If set to "true", Klippy will attempt to start the print after
+    uploading.  Note that this value should be a string type, not boolean. This
+    provides compatibility with Octoprint's legacy upload API.
+  Arguments available only for "config" root:
+  - primary_config:  If set to "true", this indications that the attached file
+    should overwrite printer.cfg.  As with the "print" argument above, this
+    should be a string type.
 
 - Websocket command:\
   Not Available
 
 - Returns:\
-  The HTTP API returns the file name along with a successful response.
+  The file name along with a successful response.
+  ```json
+  {'result': "file_name"}
+  ```
+  If the supplied root is "gcodes", a "print_started" attribute is also
+   returned.
+  ```json
+  {'result': "file_name", 'print_started': <boolean>}
+  ```
 
-### GCode File Delete
+### Gcode File Delete
 Delete a file in the "gcodes" root.  A relative path may be added to the file
 to delete a file in a subdirectory.
 - HTTP command:\
@@ -528,6 +567,48 @@ to delete a file in a subdirectory.
 
 - Returns:\
   The HTTP request returns the name of the deleted file.
+
+### Download printer.cfg
+- HTTP command:\
+  `GET /server/files/config/printer.cfg`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  printer.cfg
+
+### Download included config file
+- HTTP command:\
+  `GET /server/files/config/include/<file_name>`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  The requested file
+
+### Delete included config file
+Delete a file in the "config" root.  A relative path may be added to the file
+to delete a file in a subdirectory.
+- HTTP command:\
+  `DELETE /server/files/config/include/<file_name>`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  The HTTP request returns the name of the deleted file.
+
+### Download a config example
+- HTTP command:\
+  `GET /server/files/config/examples/<file_name>`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  The requested file
 
 ### Download klippy.log
 - HTTP command:\
@@ -644,7 +725,12 @@ clients of the change:
 The <file changed info> param is an object in the following format:
 
 ```json
-{action: "<action>", filename: "<file_name>", filelist: [<file_list>]}
+{action: "<action>", filename: "<file_name>", root: "<root_name>"}
+```
+Note that file move/copy actions also include the name of the previous file:
+```json
+{action: "<action>", filename: "<file_name>", root: "<root_name>",
+ prev_file: "<previous file name>"}
 ```
 
 The `action` is the operation that resulted in a file list change, the `filename`
