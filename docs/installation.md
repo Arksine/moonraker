@@ -122,13 +122,14 @@ Below is a detailed explanation of all options currently available:
 #  Enables CORS support.  If serving static files from a different http
 #  server then CORS  will need to be enabled.
 #trusted_clients:
-#  A list of new line separated ip addresses, or ip ranges, that are trusted.
-#  Trusted clients are given full access to the API.  Note that ranges must
-#  be expressed in 24-bit CIDR notation, where the last segment is zero:
-#  192.168.1.0/24
-#  The above example will allow 192.168.1.1 - 192.168.1-254.  Note attempting
-#  to use a non-zero value for the last IP segement or different bit value will
-#  result in a configuration error.
+#  A list of new line separated ip addresses and/or ip ranges that are trusted.
+#  Trusted clients are given full access to the API.  Both IPv4 and IPv6
+#  addresses and ranges are supported. Ranges must be expressed in CIDR
+#  notation (see http://ip.sb/cidr for more info).  For example an entry of
+#  192.168.1.0/24 will authorize IPs in the range of 192.168.1.1 -
+#  192.168.1.254.  Note that when specifying IPv4 ranges the last segment
+#  of the ip address must be 0.
+#  The default is no clients or ranges are trusted.
 #request_timeout: 5.
 #  The amount of time (in seconds) a client request has to process before the
 #  server returns an error.  This timeout does NOT apply to gcode requests.
