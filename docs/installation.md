@@ -215,7 +215,7 @@ gcode:
 ### Power Control Plugin
 ```
 [moonraker_plugin power]
-devices: printer, led           
+devices: printer, led
 #  A comma separated list of devices you wish to control. Do not use spaces in
 #  the device's name here
 #{dev}_name: Friendly Name
