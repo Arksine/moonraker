@@ -6,7 +6,8 @@
 
 import logging
 import os
-import time
+from tornado.ioloop import IOLoop
+from tornado import gen
 
 class PrinterPower:
     def __init__(self, server):
@@ -49,8 +50,8 @@ class PrinterPower:
                 result[dev] = "device_not_found"
                 continue
 
-            GPIO.verify_pin(self.devices[dev]["pin"],
-                            self.devices[dev]["active_low"])
+            await GPIO.verify_pin(self.devices[dev]["pin"],
+                                  self.devices[dev]["active_low"])
             if path == "/printer/power/on":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 1)
             elif path == "/printer/power/off":
@@ -65,44 +66,48 @@ class PrinterPower:
         return result
 
     def load_config(self, config):
-        if "devices" not in config.keys():
+        if "devices" not in config:
             return
 
         devices = config["devices"].split(',')
         logging.info("Power plugin loading devices: " + str(devices))
 
+        parsed_devices = {}
         for dev in devices:
             dev = dev.strip()
-            if dev + "_pin" not in config.keys():
+            pin = config.get(dev + "_pin", "")
+            if not pin.isdigit():
                 logging.info(
-                    "Power plugin: ERR " + dev + " does not have a pin defined")
+                    "Power plugin: ERR %s does not have a pin defined" % (dev))
                 continue
 
-            name = config[dev + "_name"] if dev + "_name" in config.keys() \
-                else dev
-            active_low = 1 if dev+"_active_low" in config.keys() and \
-                config[dev+"_active_low"] == "True" else 0
-            self.devices[dev] = {
+            name = config.get(dev + "_name", dev)
+            active_low = int(config.get(
+                dev + "_active_low", "false").lower() == "true")
+            parsed_devices[dev] = {
                 "name": name,
-                "pin": int(config[dev + "_pin"]),
+                "pin": int(pin),
                 "active_low": active_low,
                 "status": None
             }
+        ioloop = IOLoop.current()
+        ioloop.spawn_callback(self.initialize_devices, parsed_devices)
 
+    async def initialize_devices(self, devices):
+        for name, device in devices.items():
             try:
                 logging.debug(
                     "Attempting to configure pin GPIO%d"
-                    % (self.devices[dev]["pin"]))
-                GPIO.setup_pin(
-                    self.devices[dev]["pin"], self.devices[dev]["active_low"])
-                self.devices[dev]["status"] = GPIO.is_pin_on(
-                    self.devices[dev]["pin"])
+                    % (device["pin"]))
+                await GPIO.setup_pin(device["pin"], device["active_low"])
+                device["status"] = GPIO.is_pin_on(device["pin"])
             except Exception:
-                logging.info(
+                logging.exception(
                     "Power plugin: ERR Problem configuring the output pin for"
-                    " device %s. Removing device" % (dev))
-                self.devices.pop(dev, None)
+                    " device %s. Removing device" % (name))
+                self.devices.pop(name, None)
                 continue
+            self.devices[name] = device
 
 class GPIO:
     gpio_root = "/sys/class/gpio"
@@ -133,11 +138,11 @@ class GPIO:
             return f.read().strip()
 
     @staticmethod
-    def verify_pin(pin, active_low=1):
+    async def verify_pin(pin, active_low=1):
         gpiopath = os.path.join(GPIO.gpio_root, "gpio%d" % (pin))
         if not os.path.exists(gpiopath):
             logging.info("Re-intializing GPIO%d" % (pin))
-            GPIO.setup_pin(pin, active_low)
+            await GPIO.setup_pin(pin, active_low)
             return
 
         if GPIO._get_gpio_option(pin, "active_low").strip() != str(active_low):
@@ -147,7 +152,7 @@ class GPIO:
             GPIO._set_gpio_option(pin, "direction", "out")
 
     @staticmethod
-    def setup_pin(pin, active_low=1):
+    async def setup_pin(pin, active_low=1):
         pin = int(pin)
         active_low = 1 if active_low == 1 else 0
 
@@ -158,8 +163,9 @@ class GPIO:
                 pin)
             logging.info("Waiting for GPIO%d to initialize" % (pin))
             while os.stat(os.path.join(
-                    GPIO.gpio_root, "gpio%dactive_low") % (pin)).st_gid == 0:
-                time.sleep(.1)
+                    GPIO.gpio_root, "gpio%d" % (pin),
+                    "active_low")).st_gid == 0:
+                await gen.sleep(.1)
 
         if GPIO._get_gpio_option(pin, "active_low").strip() != str(active_low):
             GPIO._set_gpio_option(pin, "active_low", active_low)
