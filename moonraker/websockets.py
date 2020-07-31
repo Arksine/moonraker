@@ -9,7 +9,7 @@ import tornado
 import json
 from tornado.ioloop import IOLoop
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
-from utils import ServerError, DEBUG
+from utils import ServerError
 
 class JsonRPC:
     def __init__(self):
@@ -30,8 +30,7 @@ class JsonRPC:
             logging.exception(msg)
             response = self.build_error(-32700, "Parse error")
             return json.dumps(response)
-        if DEBUG:
-            logging.info("Websocket Request::" + data)
+        logging.debug("Websocket Request::" + data)
         if isinstance(request, list):
             response = []
             for req in request:
@@ -44,7 +43,7 @@ class JsonRPC:
             response = await self.process_request(request)
         if response is not None:
             response = json.dumps(response)
-            logging.info("Websocket Response::" + response)
+            logging.debug("Websocket Response::" + response)
         return response
 
     async def process_request(self, request):

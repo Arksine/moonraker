@@ -19,7 +19,7 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.util import TimeoutError
 from tornado.locks import Event
 from app import MoonrakerApp
-from utils import ServerError, DEBUG, MoonrakerLoggingHandler
+from utils import ServerError, MoonrakerLoggingHandler
 
 INIT_MS = 1000
 
@@ -426,6 +426,9 @@ def main():
     parser.add_argument(
         "-k", "--apikey", default="~/.moonraker_api_key",
         metavar='<apikeyfile>', help="API Key file location")
+    parser.add_argument(
+        "-d", "--debug", action='store_true',
+        help="Enable Debug Logging")
     cmd_line_args = parser.parse_args()
 
     # Setup Logging
@@ -435,7 +438,7 @@ def main():
     file_hdlr = MoonrakerLoggingHandler(
         log_file, when='midnight', backupCount=2)
     root_logger.addHandler(file_hdlr)
-    if DEBUG:
+    if cmd_line_args.debug:
         root_logger.setLevel(logging.DEBUG)
     else:
         root_logger.setLevel(logging.INFO)

@@ -7,8 +7,6 @@ import logging
 import os
 import subprocess
 
-DEBUG = True
-
 class ServerError(Exception):
     def __init__(self, message, status_code=400):
         Exception.__init__(self, message)

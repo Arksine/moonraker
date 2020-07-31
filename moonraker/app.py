@@ -10,7 +10,7 @@ import logging
 import tornado
 from inspect import isclass
 from tornado.routing import Rule, PathMatches, AnyMatches
-from utils import DEBUG, ServerError
+from utils import ServerError
 from websockets import WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from authorization import Authorization
@@ -115,7 +115,7 @@ class MoonrakerApp:
 
         self.app = tornado.web.Application(
             app_handlers,
-            serve_traceback=DEBUG,
+            serve_traceback=args.debug,
             websocket_ping_interval=10,
             websocket_ping_timeout=30,
             enable_cors=False)
