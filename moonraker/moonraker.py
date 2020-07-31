@@ -241,6 +241,11 @@ class Server:
         if not isinstance(result, ServerError):
             self._load_config(result)
             self.server_configured = True
+        else:
+            logging.info(
+                "\nError receiving configuration.  This indicates a potential\n"
+                "configuration issue in printer.cfg.  Please check klippy.log\n"
+                "for more information")
 
     async def _request_ready(self):
         request = self.make_request(
@@ -250,6 +255,11 @@ class Server:
             is_ready = result.get("is_ready", False)
             if is_ready:
                 self._set_klippy_ready()
+        if not self.is_klippy_ready:
+            logging.info(
+                "\nKlippy not ready.  This indicates a that Klippy may have\n"
+                "experienced an error during startup.  Please check\n"
+                "klippy.log for more information")
 
     def _load_config(self, config):
         self.request_timeout = config.get(
