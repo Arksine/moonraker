@@ -24,26 +24,51 @@ class TemperatureStore:
         self.server.register_event_handler(
             "server:status_update", self._set_current_temps)
         self.server.register_event_handler(
-            "server:refresh_temp_sensors", self._init_sensors)
+            "server:klippy_state_changed", self._init_sensors)
 
         # Register endpoint
         self.server.register_endpoint(
             "/server/temperature_store", "server_temperature_store", ['GET'],
             self._handle_temp_store_request)
 
-    def _init_sensors(self, sensors):
-        logging.info("Configuring available sensors: %s" % (str(sensors)))
-        new_store = {}
-        for sensor in sensors:
-            if sensor in self.temperature_store:
-                new_store[sensor] = self.temperature_store[sensor]
-            else:
-                new_store[sensor] = {
-                    'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE),
-                    'targets': deque(maxlen=TEMPERATURE_STORE_SIZE)}
-        self.temperature_store = new_store
-        self.temp_update_cb.start()
-        # XXX - spawn a callback that requests temperature updates?
+    async def _init_sensors(self, state):
+        if state != "ready":
+            return
+
+        # Fetch sensors
+        request = self.server.make_request(
+            "objects/status", 'GET', {'heaters': []})
+        result = await request.wait()
+        if isinstance(result, self.server.error):
+            logging.info("Error Configuring Sensors: %s" % (str(result)))
+            return
+        sensors = result.get("heaters", {}).get("available_sensors", [])
+
+        if sensors:
+            # Add Subscription
+            sub = {s: [] for s in sensors}
+            request = self.server.make_request(
+                "objects/subscription", 'POST', sub)
+            result = await request.wait()
+            if isinstance(result, self.server.error):
+                logging.info("Error subscribing to sensors: %s" %(str(result)))
+                return
+            logging.info("Configuring available sensors: %s" % (str(sensors)))
+            new_store = {}
+            for sensor in sensors:
+                if sensor in self.temperature_store:
+                    new_store[sensor] = self.temperature_store[sensor]
+                else:
+                    new_store[sensor] = {
+                        'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE),
+                        'targets': deque(maxlen=TEMPERATURE_STORE_SIZE)}
+            self.temperature_store = new_store
+            self.temp_update_cb.start()
+        else:
+            logging.info("No sensors found")
+            self.last_temps = {}
+            self.temperature_store = {}
+            self.temp_update_cb.stop()
 
     def _set_current_temps(self, data):
         for sensor in self.temperature_store:

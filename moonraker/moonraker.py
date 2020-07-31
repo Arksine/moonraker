@@ -249,7 +249,7 @@ class Server:
         if not isinstance(result, ServerError):
             is_ready = result.get("is_ready", False)
             if is_ready:
-                self._set_klippy_ready(result.get('sensors', {}))
+                self._set_klippy_ready()
 
     def _load_config(self, config):
         self.request_timeout = config.get(
@@ -293,10 +293,9 @@ class Server:
         else:
             logging.info("No request matching response: " + str(response))
 
-    def _set_klippy_ready(self, sensors):
+    def _set_klippy_ready(self):
         logging.info("Klippy ready")
         self.is_klippy_ready = True
-        self.send_event("server:refresh_temp_sensors", sensors)
         self.send_event("server:klippy_state_changed", "ready")
 
     def _set_klippy_shutdown(self):
