@@ -264,7 +264,8 @@ function get_klippy_info() {
                         virtual_sdcard: [],
                         heater_bed: [],
                         extruder: ["temperature", "target"],
-                        fan: []};
+                        fan: [],
+                        print_stats: []};
                     add_subscription(sub);
                 } else {
                     get_status({idle_timeout: [], pause_resume: []});
@@ -522,7 +523,7 @@ function handle_status_update(status) {
             let full_name = name + "." + attr;
             let val = obj[attr];
             switch(full_name) {
-                case "virtual_sdcard.filename":
+                case "print_stats.filename":
                     $('#filename').prop("hidden", val == "");
                     $('#filename').text("Loaded File: " + val);
                     break;
@@ -1142,7 +1143,8 @@ window.onload = () => {
      $('#btnsubscribe').click(() => {
         if (api_type == 'http') {
             let url = api.object_subscription.url + "?gcode=gcode_position,speed,speed_factor,extrude_factor" +
-                    "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume";
+                    "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume"  +
+                    "&print_stats";
             let settings = {url: url};
             if (apikey != null)
                 settings.headers = {"X-Api-Key": apikey};
@@ -1158,7 +1160,8 @@ window.onload = () => {
                 virtual_sdcard: [],
                 heater_bed: [],
                 extruder: ["temperature", "target"],
-                fan: []};
+                fan: [],
+                print_stats: []};
             add_subscription(sub);
         }
     });
