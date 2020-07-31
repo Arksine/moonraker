@@ -260,8 +260,9 @@ class PanelDue:
         # Initalize printer state and make subscription request
         self.printer_state = {
             'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'pause_resume': {}, 'fan': {}, 'display_status': {}}
-        sub_args = {'gcode': [], 'toolhead': []}
+            'pause_resume': {}, 'fan': {}, 'display_status': {},
+            'print_stats': {}}
+        sub_args = {k: [] for k in self.printer_state.keys()}
         self.extruder_count = 0
         self.heaters = []
         for cfg in config:
@@ -273,8 +274,6 @@ class PanelDue:
             elif cfg == "heater_bed":
                 self.printer_state[cfg] = {}
                 self.heaters.append(cfg)
-                sub_args[cfg] = []
-            elif cfg in self.printer_state:
                 sub_args[cfg] = []
         try:
             await self._klippy_request(
@@ -400,7 +399,7 @@ class PanelDue:
 
     def _prepare_M32(self, args):
         filename = self._clean_filename(args[0].strip())
-        return "M23 " + filename + "\n" + "M24"
+        return "SDCARD_PRINT_FILE FILENAME=" + filename
 
     def _prepare_M98(self, args):
         macro = args[0][1:].strip()
@@ -498,13 +497,14 @@ class PanelDue:
 
         # Print Progress Tracking
         sd_status = p_state['virtual_sdcard']
-        fname = sd_status.get('filename', "")
+        print_stats = p_state['print_stats']
+        fname = print_stats.get('filename', "")
         if fname:
             # We know a file has been loaded, initialize metadata
             if self.current_file != fname:
                 self.current_file = fname
                 self.file_metadata = self.file_manager.get_file_metadata(fname)
-            progress = p_state['virtual_sdcard'].get('progress', 0)
+            progress = sd_status.get('progress', 0)
             # progress and print tracking
             if progress:
                 response['fraction_printed'] = round(progress, 3)
@@ -515,7 +515,7 @@ class PanelDue:
                     # filament estimate
                     est_total_fil = self.file_metadata.get('filament_total')
                     if est_total_fil:
-                        cur_filament = sd_status.get('filament_used', 0.)
+                        cur_filament = print_stats.get('filament_used', 0.)
                         fpct = min(1., cur_filament / est_total_fil)
                         times_left.append(int(est_time - est_time * fpct))
                     # object height estimate
@@ -527,7 +527,7 @@ class PanelDue:
                 else:
                     # The estimated time is not in the metadata, however we
                     # can still provide an estimate based on file progress
-                    duration = sd_status.get('print_duration', 0.)
+                    duration = print_stats.get('print_duration', 0.)
                     times_left = [int(duration / progress - duration)]
                 response['timesLeft'] = times_left
         else:
@@ -630,12 +630,13 @@ class PanelDue:
         response = {}
         filename = arg_p
         sd_status = self.printer_state.get('virtual_sdcard', {})
+        print_stats = self.printer_state.get('print_stats', {})
         if filename is None:
             # PanelDue is requesting file information on a
             # currently printed file
             active = False
-            if sd_status:
-                filename = sd_status['filename']
+            if sd_status and print_stats:
+                filename = print_stats['filename']
                 active = sd_status['is_active']
             if not filename or not active:
                 # Either no file printing or no virtual_sdcard
