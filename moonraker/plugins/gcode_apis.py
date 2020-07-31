@@ -52,9 +52,9 @@ class GCodeAPIs:
         filename = args.get('filename')
         # XXX - validate that file is on disk
 
-        if filename[0] != '/':
-            filename = '/' + filename
-        script = "M23 " + filename + "\nM24"
+        if filename[0] == '/':
+            filename = filename[1:]
+        script = "SDCARD_PRINT_FILE FILENAME=" + filename
         return await self._send_gcode(script)
 
     async def gcode_restart(self, path, method, args):
