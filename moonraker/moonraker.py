@@ -218,8 +218,11 @@ class Server:
         await self._request_endpoints()
         if not self.server_configured:
             await self._request_config()
-        await self._request_ready()
-        if self.is_klippy_ready:
+        if not self.is_klippy_ready:
+            await self._request_ready()
+        if self.is_klippy_ready and self.server_configured:
+            # Make sure we have all registered endpoints
+            await self._request_endpoints()
             self.init_cb.stop()
 
     async def _request_endpoints(self):
@@ -243,22 +246,24 @@ class Server:
             self.server_configured = True
         else:
             logging.info(
-                "\nError receiving configuration.  This indicates a potential\n"
-                "configuration issue in printer.cfg.  Please check klippy.log\n"
-                "for more information")
+                "Error receiving configuration.  This indicates a "
+                "potential configuration issue in printer.cfg.  Please check "
+                "klippy.log for more information")
 
     async def _request_ready(self):
-        request = self.make_request(
-            "moonraker/check_ready", "GET", {})
+        request = self.make_request("info", "GET", {})
         result = await request.wait()
         if not isinstance(result, ServerError):
             is_ready = result.get("is_ready", False)
             if is_ready:
                 self._set_klippy_ready()
-        if not self.is_klippy_ready:
+            else:
+                msg = result.get("message", "Klippy Not Ready")
+                logging.info(msg)
+        else:
             logging.info(
-                "\nKlippy not ready.  This indicates a that Klippy may have\n"
-                "experienced an error during startup.  Please check\n"
+                "Klippy Info request error.  This indicates a that Klippy "
+                "may have experienced an error during startup.  Please check "
                 "klippy.log for more information")
 
     def _load_config(self, config):

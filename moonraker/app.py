@@ -21,7 +21,7 @@ MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
 RESERVED_ENDPOINTS = [
-    "list_endpoints", "moonraker/check_ready", "moonraker/get_configuration"
+    "list_endpoints", "moonraker/get_configuration"
 ]
 
 
