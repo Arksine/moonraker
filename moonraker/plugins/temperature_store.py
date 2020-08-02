@@ -63,6 +63,10 @@ class TemperatureStore:
                         'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE),
                         'targets': deque(maxlen=TEMPERATURE_STORE_SIZE)}
             self.temperature_store = new_store
+            # Prune unconfigured sensors in self.last_temps
+            for sensor in list(self.last_temps.keys()):
+                if sensor not in self.temperature_store:
+                    del self.last_temps[sensor]
             self.temp_update_cb.start()
         else:
             logging.info("No sensors found")
