@@ -153,13 +153,14 @@ class PanelDue:
         # Initialize tracked state.
         self.printer_state = {
             'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'pause_resume': {}, 'fan': {}, 'display_status': {}}
+            'fan': {}, 'display_status': {}, 'print_stats': {}}
         self.available_macros = {}
         self.non_trivial_keys = []
         self.extruder_count = 0
         self.heaters = []
         self.is_ready = False
         self.is_shutdown = False
+        self.last_printer_state = 'C'
 
         # Register server events
         self.server.register_event_handler(
@@ -231,6 +232,7 @@ class PanelDue:
     async def _process_klippy_ready(self):
         # Request "info" and "configfile" status
         retries = 10
+        printer_info = cfg_status = {}
         while retries:
             try:
                 printer_info = await self._klippy_request("info")
@@ -260,8 +262,7 @@ class PanelDue:
         # Initalize printer state and make subscription request
         self.printer_state = {
             'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'pause_resume': {}, 'fan': {}, 'display_status': {},
-            'print_stats': {}}
+            'fan': {}, 'display_status': {}, 'print_stats': {}}
         sub_args = {k: [] for k in self.printer_state.keys()}
         self.extruder_count = 0
         self.heaters = []
@@ -440,18 +441,25 @@ class PanelDue:
             return 'S'
 
         printer_state = self.printer_state
-        is_active = printer_state['virtual_sdcard'].get('is_active', False)
-        paused = printer_state['pause_resume'].get('is_paused', False)
-        if paused:
-            if is_active:
+        th_busy = printer_state['toolhead'].get(
+            'status', 'Ready') == "Printing"
+        sd_state = printer_state['print_stats'].get('state', "standby")
+        if sd_state == "printing":
+            if self.last_printer_state == 'A':
+                # Resuming
+                return 'R'
+            # Printing
+            return 'P'
+        elif sd_state == "paused":
+            if th_busy and self.last_printer_state != 'A':
+                # Pausing
                 return 'D'
             else:
+                # Paused
                 return 'A'
 
-        if is_active:
-            return 'P'
-
-        if printer_state['gcode'].get('busy', False):
+        if th_busy:
+            # Printer is "busy"
             return 'B'
 
         return 'I'
@@ -463,7 +471,8 @@ class PanelDue:
 
         if not self.is_ready:
             # Klipper is still starting up, do not query status
-            response['status'] = 'S' if self.is_shutdown else 'C'
+            self.last_printer_state = 'S' if self.is_shutdown else 'C'
+            response['status'] = self.last_printer_state
             await self.write_response(response)
             return
 
@@ -482,8 +491,8 @@ class PanelDue:
             response['axes'] = 3
 
         p_state = self.printer_state
-        status = self._get_printer_status()
-        response['status'] = status
+        self.last_printer_state = self._get_printer_status()
+        response['status'] = self.last_printer_state
         response['babystep'] = round(p_state['gcode'].get(
             'homing_zpos', 0.), 3)
 
@@ -499,7 +508,8 @@ class PanelDue:
         sd_status = p_state['virtual_sdcard']
         print_stats = p_state['print_stats']
         fname = print_stats.get('filename', "")
-        if fname:
+        sd_print_state = print_stats.get('state')
+        if sd_print_state in ['printing', 'paused']:
             # We know a file has been loaded, initialize metadata
             if self.current_file != fname:
                 self.current_file = fname
