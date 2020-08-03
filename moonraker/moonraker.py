@@ -100,14 +100,18 @@ class Server:
         mod_path = os.path.join(
             os.path.dirname(__file__), 'plugins', plugin_name + '.py')
         if not os.path.exists(mod_path):
-            logging.info("Plugin (%s) does not exist" % (plugin_name))
-            return None
+            msg = "Plugin (%s) does not exist" % (plugin_name)
+            logging.info(msg)
+            if default == Sentinel:
+                raise ServerError(msg)
+            return default
         module = importlib.import_module("plugins." + plugin_name)
         try:
             load_func = getattr(module, "load_plugin")
             plugin = load_func(self)
         except Exception:
             msg = "Unable to load plugin (%s)" % (plugin_name)
+            logging.info(msg)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
@@ -285,7 +289,7 @@ class Server:
         for name, cfg in plugin_cfgs.items():
             plugin = self.plugins.get(name)
             if plugin is None:
-                plugin = self.load_plugin(name)
+                plugin = self.load_plugin(name, None)
             if hasattr(plugin, "load_config"):
                 plugin.load_config(cfg)
         # Remove plugins that are loaded but no longer configured
