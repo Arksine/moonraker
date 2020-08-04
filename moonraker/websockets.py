@@ -178,7 +178,7 @@ class WebsocketManager:
             'method': "notify_" + name,
             'params': [data]})
         async with self.ws_lock:
-            for ws in self.websockets.values():
+            for ws in list(self.websockets.values()):
                 try:
                     ws.write_message(notification)
                 except WebSocketClosedError:
