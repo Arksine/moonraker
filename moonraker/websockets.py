@@ -178,15 +178,18 @@ class WebsocketManager:
             'method': "notify_" + name,
             'params': [data]})
         async with self.ws_lock:
+            to_remove = []
             for ws in self.websockets.values():
                 try:
                     ws.write_message(notification)
                 except WebSocketClosedError:
-                    self.websockets.pop(ws.uid, None)
-                    logging.info("Websocket Removed: %d" % ws.uid)
+                    to_remove.append(ws.uid)
                 except Exception:
                     logging.exception(
                         "Error sending data over websocket: %d" % (ws.uid))
+            for ws_uid in to_remove:
+                self.websockets.pop(ws_uid, None)
+                logging.info("Websocket Removed: %d" % ws_uid)
 
     async def close(self):
         async with self.ws_lock:
