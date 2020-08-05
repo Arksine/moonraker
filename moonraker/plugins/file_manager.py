@@ -143,21 +143,23 @@ class FileManager:
     async def _handle_operation_check(self, requested_path):
         # Get virtual_sdcard status
         request = self.server.make_request(
-            "objects/status", 'GET', {'virtual_sdcard': []})
+            "objects/status", 'GET', {'print_stats': []})
         result = await request.wait()
         if isinstance(result, self.server.error):
             raise result
-        vsd = result.get('virtual_sdcard', {})
-        loaded_file = vsd.get('filename', "")
+        pstats = result.get('print_stats', {})
+        loaded_file = pstats.get('filename', "")
+        state = pstats.get('state', "")
         gc_path = self.file_paths.get('gcodes', "")
         full_path = os.path.join(gc_path, loaded_file)
-        if os.path.isdir(requested_path):
-            # Check to see of the loaded file is in the reques
-            if full_path.startswith(requested_path):
+        if loaded_file and state != "complete":
+            if os.path.isdir(requested_path):
+                # Check to see of the loaded file is in the request
+                if full_path.startswith(requested_path):
+                    raise self.server.error("File currently in use", 403)
+            elif full_path == requested_path:
                 raise self.server.error("File currently in use", 403)
-        elif full_path == requested_path:
-            raise self.server.error("File currently in use", 403)
-        ongoing = vsd.get('total_duration', 0.) > 0.
+        ongoing = state in ["printing", "paused"]
         return ongoing
 
     def _convert_path(self, url_path):
