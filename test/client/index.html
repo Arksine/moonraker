@@ -2,7 +2,7 @@
 <html>
 <head>
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-<script src="/js/main.js?v=0.1.17" type="module"></script>
+<script src="/js/main.js?v=0.1.18" type="module"></script>
 </head>
 <body>
 <h3>Klippy Web API Test</h3>
@@ -56,14 +56,13 @@
 </div>
 <div id=filetype>
   <input type="radio" name="file_type" value="gcodes" checked="true">GCodes<br/>
-  <input type="radio" name="file_type" value="config">Config Files
+  <input type="radio" name="file_type" value="config">Config Files<br/>
+  <input type="radio" name="file_type" value="config_examples">Config Examples
 </div>
 </div>
 <br/>
 Progress: <progress id="progressbar" value="0" max="100"></progress>
 <span id="upload_progress">0%</span><br/><br/>
-<button id="btnwritecfg" class="toggleable" style="width: 12em">Upload printer.cfg</button>
-<button id="btngetcfg" class="toggleable" style="width: 12em">Download printer.cfg</button><br/><br/>
 <button id="btnqueryendstops" style="width: 9em">Query Endstops</button>
 <button id="btnsubscribe" style="width: 9em">Post Subscription</button>
 <button id="btngetsub" style="width: 9em">Get Subscription</button>

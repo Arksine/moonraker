@@ -96,11 +96,11 @@ var api = {
     moonraker_log: {
         url: "/server/files/moonraker.log"
     },
-    printer_cfg: {
-        url: "/server/files/config/printer.cfg"
+    cfg_files: {
+        url: "/server/files/config/"
     },
-    included_cfg_files: {
-        url: "/server/files/config/include/"
+    cfg_examples: {
+        url: "/server/files/config_examples/"
     },
 
     // Machine APIs
@@ -128,7 +128,6 @@ var paused = false;
 var klippy_ready = false;
 var api_type = 'http';
 var is_printing = false;
-var upload_location = "gcodes"
 var file_list_type = "gcodes";
 var json_rpc = new JsonRPC();
 
@@ -196,19 +195,6 @@ function update_filelist(filelist) {
     }
 }
 
-function update_configlist(cfglist) {
-    $("#filelist").empty();
-    // Add base printer.cfg
-    $("#filelist").append(
-        "<option value='printer.cfg'>printer.cfg</option>");
-    for (let file of cfglist) {
-        let fname = "include/" + file.filename;
-        $("#filelist").append(
-            "<option value='" + fname + "'>" +
-            fname + "</option>");
-    }
-}
-
 var last_progress = 0;
 function update_progress(loaded, total) {
     let progress = parseInt(loaded / total * 100);
@@ -241,10 +227,7 @@ function get_file_list() {
     .then((result) => {
         // result is an "ok" acknowledgment that the gcode has
         // been successfully processed
-        if (file_list_type == "config")
-            update_configlist(result);
-        else
-            update_filelist(result);
+        update_filelist(result);
     })
     .catch((error) => {
         update_error(api.file_list.method, error);
@@ -934,7 +917,6 @@ window.onload = () => {
     //  Hidden file element's click is forwarded to the button
     $('#btnupload').click(() => {
         if (api_type == "http") {
-            upload_location = file_list_type;
             $('#upload-file').click();
         } else {
             console.log("File Upload not supported over websocket")
@@ -956,13 +938,7 @@ window.onload = () => {
             if (api_type == 'http') {
                 let fdata = new FormData();
                 fdata.append("file", file);
-                if (upload_location.startsWith("config")) {
-                    fdata.append("root", "config");
-                    if (upload_location == "config_main")
-                        fdata.append("primary_config", "true");
-                } else {
-                    fdata.append("root", upload_location);
-                }
+                fdata.append("root", file_list_type);
                 let settings = {
                     url: api.upload.url,
                     data: fdata,
@@ -1003,16 +979,9 @@ window.onload = () => {
             if (api_type == 'http') {
                 let url = api.gcode_files.url + filename;
                 if (file_list_type == "config") {
-                    url = api.included_cfg_files.url + filename;
-                    if (filename.startsWith("include/")) {
-                        url = api.included_cfg_files.url + filename.slice(8);
-                    } else if (filename == "printer.cfg") {
-                        url = api.printer_cfg.url;
-                    }
-                    else {
-                        console.log("Cannot download file: " + filename);
-                        return false;
-                    }
+                    url = api.cfg_files.url + filename;
+                } else if (file_list_type == "config_examples") {
+                    url = api.cfg_examples.url + filename;
                 }
                 let dl_url = "http://" + location.host + url;
                 if (apikey != null) {
@@ -1043,13 +1012,10 @@ window.onload = () => {
             if (api_type == 'http') {
                 let url = api.gcode_files.url + filename;
                 if (file_list_type == "config") {
-                    url = api.included_cfg_files.url + filename;
-                    if (filename.startsWith("include/")) {
-                        url = api.included_cfg_files.url + filename.slice(8);
-                    } else {
-                        console.log("Cannot Delete printer.cfg");
-                        return false;
-                    }
+                    url = api.cfg_files.url + filename;
+                } else if (file_list_type != "gcodes") {
+                    console.log("Cannot delete file");
+                    return false;
                 }
                 let settings = {
                     url: url,
@@ -1155,37 +1121,6 @@ window.onload = () => {
             });
         } else {
             get_file_list();
-        }
-    });
-
-    $('#btnwritecfg').click(() => {
-        if (api_type == "http") {
-            upload_location = "config_main";
-            $('#upload-file').click();
-        } else {
-            console.log("File Upload not supported over websocket")
-        }
-    });
-
-    $('#btngetcfg').click(() => {
-        if (api_type == 'http') {
-            let dl_url = "http://" + location.host + api.printer_cfg.url;
-            if (apikey != null) {
-                let settings = {
-                    url: api.oneshot_token.url,
-                    headers: {"X-Api-Key": apikey}
-                };
-                $.get(settings, (resp, status) => {
-                    let token = resp.result;
-                    dl_url += "?token=" + token;
-                    do_download(dl_url);
-                    return false;
-                });
-            } else {
-                do_download(dl_url);
-            }
-        } else {
-            console.log("Get Log not supported over websocket")
         }
     });
 
