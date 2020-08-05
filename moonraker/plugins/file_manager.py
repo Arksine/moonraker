@@ -56,22 +56,14 @@ class FileManager:
                 self._update_file_list()
             except Exception:
                 logging.exception("Unable to initialize gcode file list")
-        # Main configuration file
-        main_cfg = config.get('printer_config_main', None)
-        if main_cfg is not None:
-            main_cfg = os.path.normpath(os.path.expanduser(main_cfg))
-            if main_cfg != self.file_paths.get("printer.cfg", ""):
-                self.file_paths['printer.cfg'] = main_cfg
+        # Configuration files in the optional config path
+        cfg_path = config.get('printer_config_path', None)
+        if cfg_path is not None:
+            cfg_path = os.path.normpath(os.path.expanduser(cfg_path))
+            if cfg_path != self.file_paths.get('config', ""):
+                self.file_paths['config'] = cfg_path
                 self.server.register_static_file_handler(
-                    '/server/files/config/printer.cfg', main_cfg)
-        # "Included" configuration files
-        included_cfg = config.get('printer_config_path', None)
-        if included_cfg is not None:
-            included_cfg = os.path.normpath(os.path.expanduser(included_cfg))
-            if included_cfg != self.file_paths.get('config', ""):
-                self.file_paths['config'] = included_cfg
-                self.server.register_static_file_handler(
-                    "/server/files/config/include/", included_cfg,
+                    "/server/files/config/", cfg_path,
                     can_delete=True)
             try:
                 self._update_file_list(base='config')
@@ -84,7 +76,7 @@ class FileManager:
             if example_cfg_path != self.file_paths.get("config_examples", ""):
                 self.file_paths['config_examples'] = example_cfg_path
                 self.server.register_static_file_handler(
-                    "/server/files/config/examples/", example_cfg_path)
+                    "/server/files/config_examples/", example_cfg_path)
             try:
                 self._update_file_list(base='config_examples')
             except Exception:
@@ -317,10 +309,8 @@ class FileManager:
         root = self._get_argument(request, 'root', "gcodes")
         if root == "gcodes":
             result = await self._do_gcode_upload(request)
-        elif root == "config":
-            result = self._do_config_upload(request)
         else:
-            raise self.server.error(400, "Unknown root path")
+            result = self._do_standard_upload(request, root)
         return result
 
     async def _do_gcode_upload(self, request):
@@ -357,19 +347,13 @@ class FileManager:
         self.notify_filelist_changed(upload['filename'], 'added', "gcodes")
         return {'result': upload['filename'], 'print_started': start_print}
 
-    def _do_config_upload(self, request):
-        req_arg = self._get_argument(request, 'primary_config', "false")
-        is_main_config = req_arg.lower() == "true"
-        cfg_base = "printer.cfg" if is_main_config else "config"
-        cfg_path = self.file_paths.get(cfg_base, None)
-        if cfg_path is None:
-            raise self.server.error(
-                "Printer configuration location on disk not set")
-        upload = self._get_upload_info(request, cfg_path)
+    def _do_standard_upload(self, request, root):
+        path = self.file_paths.get(root, None)
+        if path is None:
+            raise self.server.error("Unknown root path: %s" % (root))
+        upload = self._get_upload_info(request, path)
         self._write_file(upload)
-        if cfg_base == "config":
-            self.notify_filelist_changed(
-                upload['filename'], 'added', "config")
+        self.notify_filelist_changed(upload['filename'], 'added', root)
         return {'result': upload['filename']}
 
     def _get_argument(self, request, name, default=None):
