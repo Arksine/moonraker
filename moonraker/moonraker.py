@@ -36,11 +36,6 @@ class Server:
         self.host = args.address
         self.port = args.port
 
-        # Options configurable by Klippy
-        self.request_timeout = 5.
-        self.long_running_gcodes = {}
-        self.long_running_requests = {}
-
         # Event initialization
         self.events = {}
 
@@ -271,12 +266,6 @@ class Server:
                 "klippy.log for more information")
 
     def _load_config(self, config):
-        self.request_timeout = config.get(
-            'request_timeout', self.request_timeout)
-        self.long_running_gcodes = config.get(
-            'long_running_gcodes', self.long_running_gcodes)
-        self.long_running_requests = config.get(
-            'long_running_requests', self.long_running_requests)
         self.moonraker_app.load_config(config)
         # load config for core plugins
         for plugin_name in CORE_PLUGINS:
@@ -329,14 +318,7 @@ class Server:
         self.send_event("server:status_update", status)
 
     def make_request(self, path, method, args):
-        timeout = self.long_running_requests.get(path, self.request_timeout)
-
-        if path == "gcode/script":
-            script = args.get('script', "")
-            base_gc = script.strip().split()[0].upper()
-            timeout = self.long_running_gcodes.get(base_gc, timeout)
-
-        base_request = BaseRequest(path, method, args, timeout)
+        base_request = BaseRequest(path, method, args)
         self.pending_requests[base_request.id] = base_request
         ret = self.klippy_send(base_request.to_dict())
         if not ret:
@@ -365,6 +347,9 @@ class Server:
         self.is_klippy_ready = False
         self.server_configured = False
         self.init_cb.stop()
+        for request in self.pending_requests.values():
+            request.notify(ServerError("Klippy Disconnected", 503))
+        self.pending_requests = {}
         if self.is_klippy_connected:
             self.is_klippy_connected = False
             logging.info("Klippy Connection Removed")
@@ -385,26 +370,28 @@ class Server:
 
 # Basic WebRequest class, easily converted to dict for json encoding
 class BaseRequest:
-    def __init__(self, path, method, args, timeout=None):
+    def __init__(self, path, method, args):
         self.id = id(self)
         self.path = path
         self.method = method
         self.args = args
-        self._timeout = timeout
         self._event = Event()
         self.response = None
-        if timeout is not None:
-            self._timeout = time.time() + timeout
 
     async def wait(self):
-        # Wait for klippy to process the request or until the timeout
-        # has been reached.
-        try:
-            await self._event.wait(timeout=self._timeout)
-        except TimeoutError:
-            logging.info("Request '%s' Timed Out" %
-                         (self.method + " " + self.path))
-            return ServerError("Klippy Request Timed Out", 500)
+        # Log pending requests every 60 seconds
+        start_time = time.time()
+        while True:
+            timeout = time.time() + 60.
+            try:
+                await self._event.wait(timeout=timeout)
+            except TimeoutError:
+                pending_time = time.time() - start_time
+                logging.info("Request '%s %s' pending: %.2f seconds" %
+                             (self.method, self.path, pending_time))
+                self._event.clear()
+                continue
+            break
         return self.response
 
     def notify(self, response):
