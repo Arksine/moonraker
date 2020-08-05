@@ -308,14 +308,9 @@ as the "gcodes" root.  The following roots are available:
 - config_examples (read-only)
 
 Write operations (upload, delete, make directory, remove directory) are
-only available on the gcodes and config roots.  Note that the config root
-is only available if user has specified a folder in which "included" config
-files reside.  If the user is not using "include" functionality, or if they
-have not specified the folder in moonraker's configuration, then the "config"
-root will not exist.  Also note that while `printer.cfg` is part of the
-"config" root for the purposes of uploading, it should not reside in the
-same folder as included files, thus it will not show up for file list or
-directory queries.
+only available on the `gcodes` and config roots.  Note that the `config` root
+is only available if the "config_path" option has been set in Moonraker's
+configuration.
 
 ### List Available Files
 Walks through a directory and fetches all files.  All file names include a
@@ -537,10 +532,6 @@ below.
   - print: If set to "true", Klippy will attempt to start the print after
     uploading.  Note that this value should be a string type, not boolean. This
     provides compatibility with Octoprint's legacy upload API.
-  Arguments available only for "config" root:
-  - primary_config:  If set to "true", this indications that the attached file
-    should overwrite printer.cfg.  As with the "print" argument above, this
-    should be a string type.
 
 - Websocket command:\
   Not Available
@@ -568,19 +559,9 @@ to delete a file in a subdirectory.
 - Returns:\
   The HTTP request returns the name of the deleted file.
 
-### Download printer.cfg
-- HTTP command:\
-  `GET /server/files/config/printer.cfg`
-
-- Websocket command:\
-  Not Available
-
-- Returns:\
-  printer.cfg
-
 ### Download included config file
 - HTTP command:\
-  `GET /server/files/config/include/<file_name>`
+  `GET /server/files/config/<file_name>`
 
 - Websocket command:\
   Not Available
@@ -592,7 +573,7 @@ to delete a file in a subdirectory.
 Delete a file in the "config" root.  A relative path may be added to the file
 to delete a file in a subdirectory.
 - HTTP command:\
-  `DELETE /server/files/config/include/<file_name>`
+  `DELETE /server/files/config/<file_name>`
 
 - Websocket command:\
   Not Available
@@ -602,7 +583,7 @@ to delete a file in a subdirectory.
 
 ### Download a config example
 - HTTP command:\
-  `GET /server/files/config/examples/<file_name>`
+  `GET /server/files/config_examples/<file_name>`
 
 - Websocket command:\
   Not Available
@@ -720,17 +701,19 @@ When a client makes a change to the virtual sdcard file list
 (via upload or delete) a notification is broadcast to alert all connected
 clients of the change:
 
-`{jsonrpc: "2.0", method: "notify_filelist_changed", params: [<file changed info>]}`
+`{jsonrpc: "2.0", method: "notify_filelist_changed",
+ params: [<file changed info>]}`
 
 The <file changed info> param is an object in the following format:
 
 ```json
 {action: "<action>", filename: "<file_name>", root: "<root_name>"}
 ```
-Note that file move/copy actions also include the name of the previous file:
+Note that file move/copy actions also include the name and root of the
+previous/source file:
 ```json
 {action: "<action>", filename: "<file_name>", root: "<root_name>",
- prev_file: "<previous file name>"}
+ prev_file: "<previous file name>", prev_root: "<previous_root_name>"}
 ```
 
 The `action` is the operation that resulted in a file list change, the `filename`
