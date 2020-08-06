@@ -11,8 +11,8 @@ TEMPERATURE_UPDATE_MS = 1000
 TEMPERATURE_STORE_SIZE = 20 * 60
 
 class TemperatureStore:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
 
         # Temperature Store Tracking
         self.last_temps = {}
@@ -51,7 +51,7 @@ class TemperatureStore:
                 "objects/subscription", 'POST', sub)
             result = await request.wait()
             if isinstance(result, self.server.error):
-                logging.info("Error subscribing to sensors: %s" %(str(result)))
+                logging.info("Error subscribing to sensors: %s" % (str(result)))
                 return
             logging.info("Configuring available sensors: %s" % (str(sensors)))
             new_store = {}
@@ -98,5 +98,5 @@ class TemperatureStore:
     async def close(self):
         self.temp_update_cb.stop()
 
-def load_plugin(server):
-    return TemperatureStore(server)
+def load_plugin(config):
+    return TemperatureStore(config)
