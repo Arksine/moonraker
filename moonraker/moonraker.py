@@ -14,6 +14,7 @@ import json
 import errno
 import tornado
 import tornado.netutil
+import confighelper
 from tornado import gen
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.util import TimeoutError
@@ -33,14 +34,16 @@ class Sentinel:
 class Server:
     error = ServerError
     def __init__(self, args):
-        self.host = args.address
-        self.port = args.port
+        config = confighelper.get_configuration(self, args)
+        self.host = config.get('host', "0.0.0.0")
+        self.port = config.getint('port', 7125)
 
         # Event initialization
         self.events = {}
 
         # Klippy Connection Handling
-        socketfile = os.path.normpath(os.path.expanduser(args.socketfile))
+        socketfile = config['cmd_args'].get('socketfile', "/tmp/moonraker")
+        socketfile = os.path.normpath(os.path.expanduser(socketfile))
         self.klippy_server_sock = tornado.netutil.bind_unix_socket(
             socketfile, backlog=1)
         self.remove_server_sock = tornado.netutil.add_accept_handler(
@@ -48,23 +51,17 @@ class Server:
         self.klippy_sock = None
         self.is_klippy_connected = False
         self.is_klippy_ready = False
-        self.server_configured = False
+        self.moonraker_available = False
         self.partial_data = b""
 
         # Server/IOLoop
         self.server_running = False
-        self.moonraker_app = app = MoonrakerApp(self, args)
-        self.io_loop = IOLoop.current()
-        self.init_cb = PeriodicCallback(self._initialize, INIT_MS)
-
-        # Plugin initialization
-        self.plugins = {}
+        self.moonraker_app = app = MoonrakerApp(config)
         self.register_endpoint = app.register_local_handler
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
-
-        for plugin in CORE_PLUGINS:
-            self.load_plugin(plugin)
+        self.io_loop = IOLoop.current()
+        self.init_cb = PeriodicCallback(self._initialize, INIT_MS)
 
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
@@ -80,6 +77,10 @@ class Server:
         self.register_remote_method(
             'process_status_update', self._process_status_update)
 
+        # Plugin initialization
+        self.plugins = {}
+        self._load_plugins(config)
+
     def start(self):
         logging.info(
             "Starting Moonraker on (%s, %d)" %
@@ -88,7 +89,18 @@ class Server:
         self.server_running = True
 
     # ***** Plugin Management *****
-    def load_plugin(self, plugin_name, default=Sentinel):
+    def _load_plugins(self, config):
+        # load core plugins
+        for plugin in CORE_PLUGINS:
+            self.load_plugin(config, plugin)
+
+        # check for optional plugins
+        opt_sections = set(config.sections()) - \
+            set(['server', 'authorization', 'cmd_args'])
+        for section in opt_sections:
+            self.load_plugin(config[section], section, None)
+
+    def load_plugin(self, config, plugin_name, default=Sentinel):
         if plugin_name in self.plugins:
             return self.plugins[plugin_name]
         # Make sure plugin exists
@@ -103,7 +115,7 @@ class Server:
         module = importlib.import_module("plugins." + plugin_name)
         try:
             load_func = getattr(module, "load_plugin")
-            plugin = load_func(self)
+            plugin = load_func(config)
         except Exception:
             msg = "Unable to load plugin (%s)" % (plugin_name)
             logging.info(msg)
@@ -215,13 +227,14 @@ class Server:
 
     async def _initialize(self):
         await self._request_endpoints()
-        if not self.server_configured:
-            await self._request_config()
-        if not self.is_klippy_ready:
-            await self._request_ready()
-        if self.is_klippy_ready and self.server_configured:
-            # Make sure we have all registered endpoints
-            await self._request_endpoints()
+        if not self.moonraker_available:
+            await self._check_available()
+        elif not self.is_klippy_ready:
+            await self._check_ready()
+        else:
+            # Moonraker is enabled in the Klippy module
+            # and Klippy is ready.  We can stop the init
+            # procedure.
             self.init_cb.stop()
 
     async def _request_endpoints(self):
@@ -236,20 +249,21 @@ class Server:
                 self.moonraker_app.register_static_file_handler(
                     sp['resource_id'], sp['file_path'])
 
-    async def _request_config(self):
+    async def _check_available(self):
         request = self.make_request(
-            "moonraker/get_configuration", "GET", {})
+            "moonraker/check_available", "GET", {})
         result = await request.wait()
         if not isinstance(result, ServerError):
-            self._load_config(result)
-            self.server_configured = True
+            self.send_event("server:moonraker_available", result)
+            self.moonraker_available = True
         else:
             logging.info(
-                "Error receiving configuration.  This indicates a "
-                "potential configuration issue in printer.cfg.  Please check "
-                "klippy.log for more information")
+                "\nCheck for moonraker availability has failed.  This "
+                "indicates that the [moonraker] section has not been added to "
+                "printer.cfg, or that Klippy has experienced an error "
+                "parsing its configuraton.  Check klippy.log for more info.")
 
-    async def _request_ready(self):
+    async def _check_ready(self):
         request = self.make_request("info", "GET", {})
         result = await request.wait()
         if not isinstance(result, ServerError):
@@ -264,33 +278,6 @@ class Server:
                 "Klippy Info request error.  This indicates a that Klippy "
                 "may have experienced an error during startup.  Please check "
                 "klippy.log for more information")
-
-    def _load_config(self, config):
-        self.moonraker_app.load_config(config)
-        # load config for core plugins
-        for plugin_name in CORE_PLUGINS:
-            plugin = self.plugins[plugin_name]
-            if hasattr(plugin, "load_config"):
-                plugin.load_config(config)
-        # Load and apply optional plugin Configuration
-        plugin_cfgs = {name[7:]: cfg for name, cfg in config.items()
-                       if name.startswith("plugin_")}
-        for name, cfg in plugin_cfgs.items():
-            plugin = self.plugins.get(name)
-            if plugin is None:
-                plugin = self.load_plugin(name, None)
-            if hasattr(plugin, "load_config"):
-                plugin.load_config(cfg)
-        # Remove plugins that are loaded but no longer configured
-        valid_plugins = CORE_PLUGINS + list(plugin_cfgs.keys())
-        self.io_loop.spawn_callback(self._prune_plugins, valid_plugins)
-
-    async def _prune_plugins(self, valid_plugins):
-        for name, plugin in self.plugins.items():
-            if name not in valid_plugins:
-                if hasattr(plugin, "close"):
-                    await plugin.close()
-                self.plugins.pop(name, None)
 
     def _handle_klippy_response(self, request_id, response):
         req = self.pending_requests.pop(request_id, None)
@@ -345,7 +332,7 @@ class Server:
 
     def close_client_sock(self):
         self.is_klippy_ready = False
-        self.server_configured = False
+        self.moonraker_available = False
         self.init_cb.stop()
         for request in self.pending_requests.values():
             request.notify(ServerError("Klippy Disconnected", 503))
@@ -407,23 +394,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="Moonraker - Klipper API Server")
     parser.add_argument(
-        "-a", "--address", default='0.0.0.0', metavar='<address>',
-        help="host name or ip to bind to the Web Server")
-    parser.add_argument(
-        "-p", "--port", type=int, default=7125, metavar='<port>',
-        help="port the Web Server will listen on")
+        "-c", "--configfile", default="~/moonraker.conf",
+        metavar='<configfile>',
+        help="Location of moonraker configuration file")
     parser.add_argument(
         "-s", "--socketfile", default="/tmp/moonraker", metavar='<socketfile>',
         help="file name and location for the Unix Domain Socket")
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")
-    parser.add_argument(
-        "-k", "--apikey", default="~/.moonraker_api_key",
-        metavar='<apikeyfile>', help="API Key file location")
-    parser.add_argument(
-        "-d", "--debug", action='store_true',
-        help="Enable Debug Logging")
     cmd_line_args = parser.parse_args()
 
     # Setup Logging
@@ -433,10 +412,7 @@ def main():
     file_hdlr = MoonrakerLoggingHandler(
         log_file, when='midnight', backupCount=2)
     root_logger.addHandler(file_hdlr)
-    if cmd_line_args.debug:
-        root_logger.setLevel(logging.DEBUG)
-    else:
-        root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.INFO)
     formatter = logging.Formatter(
         '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
     file_hdlr.setFormatter(formatter)
@@ -454,7 +430,7 @@ def main():
         server = Server(cmd_line_args)
     except Exception:
         logging.exception("Moonraker Error")
-        return
+        exit(1)
     try:
         server.start()
         io_loop.start()
