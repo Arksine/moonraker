@@ -7,8 +7,8 @@
 GCODE_ENDPOINT = "gcode/script"
 
 class GCodeAPIs:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
 
         # Register GCode Endpoints
         self.server.register_endpoint(
@@ -63,5 +63,5 @@ class GCodeAPIs:
     async def gcode_firmware_restart(self, path, method, args):
         return await self._send_gcode("FIRMWARE_RESTART")
 
-def load_plugin(server):
-    return GCodeAPIs(server)
+def load_plugin(config):
+    return GCodeAPIs(config)
