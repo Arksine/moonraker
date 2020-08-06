@@ -6,8 +6,8 @@
 import logging
 
 class Machine:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
         self.server.register_endpoint(
             "/machine/reboot", "machine_reboot", ['POST'],
             self._handle_machine_request)
@@ -30,5 +30,5 @@ class Machine:
             logging.exception("Error running cmd '%s'" % (cmd))
         return "ok"
 
-def load_plugin(server):
-    return Machine(server)
+def load_plugin(config):
+    return Machine(config)
