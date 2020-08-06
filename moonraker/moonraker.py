@@ -258,10 +258,11 @@ class Server:
             self.moonraker_available = True
         else:
             logging.info(
-                "\nCheck for moonraker availability has failed.  This "
-                "indicates that the [moonraker] section has not been added to "
-                "printer.cfg, or that Klippy has experienced an error "
-                "parsing its configuraton.  Check klippy.log for more info.")
+                "%s\nUnable to detect Moonraker compatibility in Klipper.\n "
+                "Repeated failures may indicate that the [moonraker] section\n "
+                "has not been added to printer.cfg.  This may also indicate\n"
+                "that Klippy has experienced an error during startup.  Check\n"
+                "klippy.log for more info." % (str(result)))
 
     async def _check_ready(self):
         request = self.make_request("info", "GET", {})
@@ -272,12 +273,12 @@ class Server:
                 self._set_klippy_ready()
             else:
                 msg = result.get("message", "Klippy Not Ready")
-                logging.info(msg)
+                logging.info("\n" + msg)
         else:
             logging.info(
-                "Klippy Info request error.  This indicates a that Klippy "
-                "may have experienced an error during startup.  Please check "
-                "klippy.log for more information")
+                "%s\nKlippy info request error.  This indicates a that Klippy\n"
+                "may have experienced an error during startup.  Please check\n "
+                "klippy.log for more information" % (str(result)))
 
     def _handle_klippy_response(self, request_id, response):
         req = self.pending_requests.pop(request_id, None)
