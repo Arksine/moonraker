@@ -25,7 +25,7 @@ class SerialConnection:
         self.ioloop = IOLoop.current()
         self.paneldue = paneldue
         self.port = ""
-        self.baud = 57200
+        self.baud = 57600
         self.sendlock = Lock()
         self.partial_input = b""
         self.ser = self.fd = None
@@ -33,7 +33,7 @@ class SerialConnection:
 
     def load_config(self, config):
         port = config.get('serial', None)
-        baud = int(config.get('baud', 57200))
+        baud = int(config.get('baud', 57600))
         if port is None:
             logging.info("No serial port specified, cannot connect")
             return
