@@ -10,8 +10,8 @@ from tornado.ioloop import IOLoop
 from tornado import gen
 
 class PrinterPower:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
         self.server.register_endpoint(
             "/printer/power/devices", "power_devices", ['GET'],
             self._handle_list_devices)
@@ -27,6 +27,22 @@ class PrinterPower:
 
         self.current_dev = None
         self.devices = {}
+        dev_names = config.get('devices')
+        dev_names = [d.strip() for d in dev_names.split(',') if d.strip()]
+        logging.info("Power plugin loading devices: " + str(dev_names))
+        devices = {}
+        for dev in dev_names:
+            pin = config.getint(dev + "_pin")
+            name = config.get(dev + "_name", dev)
+            active_low = config.getboolean(dev + "_active_low", False)
+            devices[dev] = {
+                "name": name,
+                "pin": pin,
+                "active_low": int(active_low),
+                "status": None
+            }
+        ioloop = IOLoop.current()
+        ioloop.spawn_callback(self.initialize_devices, devices)
 
     async def _handle_list_devices(self, path, method, args):
         output = {"devices": []}
@@ -65,34 +81,6 @@ class PrinterPower:
             result[dev] = self.devices[dev]["status"]
         return result
 
-    def load_config(self, config):
-        if "devices" not in config:
-            return
-
-        devices = config["devices"].split(',')
-        logging.info("Power plugin loading devices: " + str(devices))
-
-        parsed_devices = {}
-        for dev in devices:
-            dev = dev.strip()
-            pin = config.get(dev + "_pin", "")
-            if not pin.isdigit():
-                logging.info(
-                    "Power plugin: ERR %s does not have a pin defined" % (dev))
-                continue
-
-            name = config.get(dev + "_name", dev)
-            active_low = int(config.get(
-                dev + "_active_low", "false").lower() == "true")
-            parsed_devices[dev] = {
-                "name": name,
-                "pin": int(pin),
-                "active_low": active_low,
-                "status": None
-            }
-        ioloop = IOLoop.current()
-        ioloop.spawn_callback(self.initialize_devices, parsed_devices)
-
     async def initialize_devices(self, devices):
         for name, device in devices.items():
             try:
@@ -105,7 +93,6 @@ class PrinterPower:
                 logging.exception(
                     "Power plugin: ERR Problem configuring the output pin for"
                     " device %s. Removing device" % (name))
-                self.devices.pop(name, None)
                 continue
             self.devices[name] = device
 
@@ -184,5 +171,5 @@ class GPIO:
         GPIO._set_gpio_option(pin, "value", value)
 
 
-def load_plugin(server):
-    return PrinterPower(server)
+def load_plugin(config):
+    return PrinterPower(config)
