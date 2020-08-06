@@ -9,9 +9,8 @@ import time
 import json
 import errno
 import logging
-import tempfile
 from utils import ServerError
-from tornado import gen, netutil
+from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.locks import Lock
 
@@ -21,28 +20,16 @@ class PanelDueError(ServerError):
     pass
 
 class SerialConnection:
-    def __init__(self, paneldue):
+    def __init__(self, config, paneldue):
         self.ioloop = IOLoop.current()
         self.paneldue = paneldue
-        self.port = ""
-        self.baud = 57600
+        self.port = config.get('serial')
+        self.baud = config.getint('baud', 57600)
         self.sendlock = Lock()
         self.partial_input = b""
         self.ser = self.fd = None
         self.connected = False
-
-    def load_config(self, config):
-        port = config.get('serial', None)
-        baud = int(config.get('baud', 57600))
-        if port is None:
-            logging.info("No serial port specified, cannot connect")
-            return
-        if port != self.port or baud != self.baud or \
-                not self.connected:
-            self.disconnect()
-            self.port = port
-            self.baud = baud
-            self.ioloop.spawn_callback(self._connect)
+        self.ioloop.spawn_callback(self._connect)
 
     def disconnect(self):
         if self.connected:
@@ -137,13 +124,13 @@ class SerialConnection:
 
 
 class PanelDue:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
         self.ioloop = IOLoop.current()
-        self.ser_conn = SerialConnection(self)
-        self.file_manager = self.server.load_plugin('file_manager')
+        self.ser_conn = SerialConnection(config, self)
+        self.file_manager = self.server.lookup_plugin('file_manager')
         self.kinematics = "none"
-        self.machine_name = "Klipper"
+        self.machine_name = config.get('machine_name', "Klipper")
         self.firmware_name = "Repetier | Klipper"
         self.last_message = None
         self.last_gcode_response = None
@@ -154,13 +141,24 @@ class PanelDue:
         self.printer_state = {
             'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
             'fan': {}, 'display_status': {}, 'print_stats': {}}
-        self.available_macros = {}
-        self.non_trivial_keys = []
         self.extruder_count = 0
         self.heaters = []
         self.is_ready = False
         self.is_shutdown = False
         self.last_printer_state = 'C'
+
+        # Set up macros
+        self.available_macros = {}
+        macros = config.get('macros', None)
+        if macros is not None:
+            # The macro's configuration name is the key, whereas the full
+            # command is the value
+            macros = [m for m in macros.split('\n') if m.strip()]
+            self.available_macros = {m.split()[0]: m for m in macros}
+
+        ntkeys = config.get('non_trivial_keys', "Klipper state")
+        self.non_trivial_keys = [k for k in ntkeys.split('\n') if k.strip()]
+        logging.info("PanelDue Configured")
 
         # Register server events
         self.server.register_event_handler(
@@ -197,23 +195,6 @@ class PanelDue:
             'M999': lambda args: "FIRMWARE_RESTART"
         }
 
-    def load_config(self, config):
-        self.ser_conn.load_config(config)
-        self.machine_name = config.get('machine_name', self.machine_name)
-        macros = config.get('macros', None)
-        if macros is not None:
-            # The macro's configuration name is the key, whereas the full
-            # command is the value
-            macros = [m for m in macros.split('\n') if m.strip()]
-            self.available_macros = {m.split()[0]: m for m in macros}
-        else:
-            self.available_macros = {}
-
-        ntkeys = config.get('non_trivial_keys', "Klipper state")
-        self.non_trivial_keys = [k for k in ntkeys.split('\n') if k.strip()]
-        self.ioloop.spawn_callback(self.write_response, {'status': 'C'})
-        logging.info("PanelDue Configured")
-
     async def _klippy_request(self, command, method='GET', args={}):
         request = self.server.make_request(command, method, args)
         result = await request.wait()
@@ -222,6 +203,7 @@ class PanelDue:
         return result
 
     async def handle_klippy_state(self, state):
+        # XXX - Add a "connected" state and send a "C" to paneldue?
         if state == "ready":
             await self._process_klippy_ready()
         elif state == "shutdown":
@@ -692,5 +674,5 @@ class PanelDue:
     async def close(self):
         self.ser_conn.disconnect()
 
-def load_plugin(server):
-    return PanelDue(server)
+def load_plugin(config):
+    return PanelDue(config)
