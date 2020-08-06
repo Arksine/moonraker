@@ -24,9 +24,7 @@ class FileManager:
         self.file_lists = {}
         self.gcode_metadata = {}
         self.metadata_lock = Lock()
-
-        self.server.register_event_handler(
-            "server:moonraker_available", self.update_mutable_paths)
+        self.mutable_path_args = {}
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -51,51 +49,64 @@ class FileManager:
         # Register Klippy Configuration Path
         config_path = config.get('config_path', None)
         if config_path is not None:
-            cfg_path = os.path.normpath(os.path.expanduser(config_path))
-            if not os.path.isdir(cfg_path):
+            ret = self._register_directory(
+                'config', config_path, can_delete=True)
+            if not ret:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
-            self.file_paths['config'] = cfg_path
-            self.server.register_static_file_handler(
-                "/server/files/config/", cfg_path,
-                can_delete=True)
-            try:
-                self._update_file_list(base='config')
-            except Exception:
-                logging.exception("Unable to initialize config file list")
 
     def update_mutable_paths(self, paths):
         # Update paths from Klippy.  The sd_path can potentially change
         # location on restart.
-        logging.debug("Updating Mutable Paths: %s" % (str(paths)))
-        sd = paths.get('sd_path', None)
-        if sd is not None:
-            sd = os.path.normpath(os.path.expanduser(sd))
-            if sd != self.file_paths.get('gcodes', ""):
-                self.file_paths['gcodes'] = sd
-                self.server.register_static_file_handler(
-                    '/server/files/gcodes/', sd, can_delete=True,
-                    op_check_cb=self._handle_operation_check)
-            try:
-                self._update_file_list()
-            except Exception:
-                logging.exception("Unable to initialize gcode file list")
+        if paths == self.mutable_path_args:
+            # No change in mutable paths
+            return
+        self.mutable_path_args = dict(paths)
+        str_paths = "\n".join(["%s: %s" % (k, v) for k, v in paths.items()])
+        logging.debug("\nUpdating Mutable Paths:\n%s" % (str_paths))
+
+        # Register directories
+        sd = paths.pop('sd_path', None)
+        self._register_directory("gcodes", sd, can_delete=True)
         # Register path for example configs
-        klipper_path = paths.get('klipper_path', None)
+        klipper_path = paths.pop('klipper_path', None)
         if klipper_path is not None:
             example_cfg_path = os.path.join(klipper_path, "config")
-            if example_cfg_path != self.file_paths.get("config_examples", ""):
-                self.file_paths['config_examples'] = example_cfg_path
-                self.server.register_static_file_handler(
-                    "/server/files/config_examples/", example_cfg_path)
+            self._register_directory("config_examples", example_cfg_path)
+        paths.pop('klippy_env', None)
+        paths.pop('printer.cfg', None)
+
+        # register remaining static files
+        for pattern, path in paths.items():
+            if path is not None:
+                path = os.path.normpath(os.path.expanduser(path))
+                self.server.register_static_file_handler(pattern, path)
+
+    def _register_directory(self, base, path, can_delete=False):
+        op_check_cb = None
+        if base == 'gcodes':
+            op_check_cb = self._handle_operation_check
+        if path is None:
+            return False
+        path = os.path.normpath(os.path.expanduser(path))
+        if not os.path.isdir(path):
+            return False
+        if path != self.file_paths.get(base, ""):
+            self.file_paths[base] = path
+            self.server.register_static_file_handler(
+                base, path, can_delete=can_delete, op_check_cb=op_check_cb)
             try:
-                self._update_file_list(base='config_examples')
+                self._update_file_list(base=base)
             except Exception:
                 logging.exception(
-                    "Unable to initialize config_examples file list")
+                    "Unable to initialize file list: <%s>" % (base))
+        return True
 
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
+
+    def get_mutable_path_args(self):
+        return dict(self.mutable_path_args)
 
     async def _handle_filelist_request(self, path, method, args):
         root = args.get('root', "gcodes")

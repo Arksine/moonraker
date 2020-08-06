@@ -245,16 +245,16 @@ class Server:
             static_paths = result.get('static_paths', {})
             for ep in endpoints:
                 self.moonraker_app.register_remote_handler(ep)
-            for sp in static_paths:
-                self.moonraker_app.register_static_file_handler(
-                    sp['resource_id'], sp['file_path'])
+            mutable_paths = {sp['resource_id']: sp['file_path']
+                             for sp in static_paths}
+            file_manager = self.lookup_plugin('file_manager')
+            file_manager.update_mutable_paths(mutable_paths)
 
     async def _check_available(self):
         request = self.make_request(
             "moonraker/check_available", "GET", {})
         result = await request.wait()
         if not isinstance(result, ServerError):
-            self.send_event("server:moonraker_available", result)
             self.moonraker_available = True
         else:
             logging.info(
