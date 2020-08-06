@@ -84,5 +84,5 @@ class ShellCommandFactory:
     def build_shell_command(self, cmd, callback):
         return ShellCommand(cmd, callback)
 
-def load_plugin(server):
+def load_plugin(config):
     return ShellCommandFactory()
