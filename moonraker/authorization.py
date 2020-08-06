@@ -11,48 +11,44 @@ import ipaddress
 import logging
 import tornado
 from tornado.ioloop import IOLoop, PeriodicCallback
+from utils import ServerError
 
 TOKEN_TIMEOUT = 5
 CONNECTION_TIMEOUT = 3600
 PRUNE_CHECK_TIME = 300 * 1000
 
 class Authorization:
-    def __init__(self, api_key_file):
-        self.api_key_loc = os.path.expanduser(api_key_file)
+    def __init__(self, config):
+        api_key_file = config.get('api_key_file', "~/.moonraker_api_key")
+        self.api_key_file = os.path.expanduser(api_key_file)
         self.api_key = self._read_api_key()
-        self.auth_enabled = True
-        self.trusted_ips = []
-        self.trusted_ranges = []
+        self.auth_enabled = config.getboolean('enabled', True)
         self.trusted_connections = {}
         self.access_tokens = {}
 
-        self.prune_handler = PeriodicCallback(
-            self._prune_conn_handler, PRUNE_CHECK_TIME)
-        self.prune_handler.start()
-
-    def load_config(self, config):
-        self.auth_enabled = config.get("require_auth", self.auth_enabled)
-        # reset trusted ips
+        # Get Trusted Clients
         self.trusted_ips = []
-        trusted_ips = config.get("trusted_ips", [])
-        for ip in trusted_ips:
-            try:
-                ip_addr = ipaddress.ip_address(ip)
-            except ValueError:
-                logging.info("IP address <%s> invalid" % (ip))
-                continue
-            self.trusted_ips.append(ip_addr)
-        # reset trusted ranges
         self.trusted_ranges = []
-        trusted_ranges = config.get("trusted_ranges", [])
-        for ip_range in trusted_ranges:
+        trusted_clients = config.get('trusted_clients', "")
+        trusted_clients = [c.strip() for c in trusted_clients.split('\n')
+                           if c.strip()]
+        for ip in trusted_clients:
+            # Check IP address
             try:
-                ip_net = ipaddress.ip_network(ip_range)
+                tc = ipaddress.ip_address(ip)
             except ValueError:
-                logging.info("IP range <%s> invalid" % (ip_range))
-                continue
-            self.trusted_ranges.append(ip_net)
-        self._reset_trusted_connections()
+                tc = None
+            if tc is None:
+                # Check ip network
+                try:
+                    tc = ipaddress.ip_network(ip)
+                except ValueError:
+                    raise ServerError(
+                        "Invalid option in trusted_clients: %s" % (ip))
+                self.trusted_ranges.append(tc)
+            else:
+                self.trusted_ips.append(tc)
+
         t_clients = [str(ip) for ip in self.trusted_ips] + \
             [str(rng) for rng in self.trusted_ranges]
         logging.info(
@@ -60,6 +56,10 @@ class Authorization:
             "Auth Enabled: %s\n"
             "Trusted Clients:\n%s" %
             (self.auth_enabled, "\n".join(t_clients)))
+
+        self.prune_handler = PeriodicCallback(
+            self._prune_conn_handler, PRUNE_CHECK_TIME)
+        self.prune_handler.start()
 
     def register_handlers(self, app):
         # Register Authorization Endpoints
@@ -79,32 +79,22 @@ class Authorization:
         return self.get_access_token()
 
     def _read_api_key(self):
-        if os.path.exists(self.api_key_loc):
-            with open(self.api_key_loc, 'r') as f:
+        if os.path.exists(self.api_key_file):
+            with open(self.api_key_file, 'r') as f:
                 api_key = f.read()
             return api_key
         # API Key file doesn't exist.  Generate
         # a new api key and create the file.
         logging.info(
             "No API Key file found, creating new one at:\n%s"
-            % (self.api_key_loc))
+            % (self.api_key_file))
         return self._create_api_key()
 
     def _create_api_key(self):
         api_key = uuid.uuid4().hex
-        with open(self.api_key_loc, 'w') as f:
+        with open(self.api_key_file, 'w') as f:
             f.write(api_key)
         return api_key
-
-    def _reset_trusted_connections(self):
-        valid_conns = {}
-        for ip, access_time in self.trusted_connections.items():
-            if self._check_authorized_ip(ip):
-                valid_conns[ip] = access_time
-            else:
-                logging.info(
-                    "Connection [%s] no longer trusted, removing" % (ip))
-        self.trusted_connections = valid_conns
 
     def _check_authorized_ip(self, ip):
         if ip in self.trusted_ips:
