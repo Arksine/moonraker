@@ -18,12 +18,17 @@ METADATA_SCRIPT = os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py")
 
 class FileManager:
-    def __init__(self, server):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
         self.file_paths = {}
         self.file_lists = {}
         self.gcode_metadata = {}
         self.metadata_lock = Lock()
+
+        self.server.register_event_handler(
+            "server:moonraker_available", self.update_mutable_paths)
+
+        # Register file management endpoints
         self.server.register_endpoint(
             "/server/files/list", "file_list", ['GET'],
             self._handle_filelist_request)
@@ -43,9 +48,27 @@ class FileManager:
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
 
-    def load_config(self, config):
-        # Gcode Files
-        sd = config.get('sd_path', None)
+        # Register Klippy Configuration Path
+        config_path = config.get('config_path', None)
+        if config_path is not None:
+            cfg_path = os.path.normpath(os.path.expanduser(config_path))
+            if not os.path.isdir(cfg_path):
+                raise config.error(
+                    "Option 'config_path' is not a valid directory")
+            self.file_paths['config'] = cfg_path
+            self.server.register_static_file_handler(
+                "/server/files/config/", cfg_path,
+                can_delete=True)
+            try:
+                self._update_file_list(base='config')
+            except Exception:
+                logging.exception("Unable to initialize config file list")
+
+    def update_mutable_paths(self, paths):
+        # Update paths from Klippy.  The sd_path can potentially change
+        # location on restart.
+        logging.debug("Updating Mutable Paths: %s" % (str(paths)))
+        sd = paths.get('sd_path', None)
         if sd is not None:
             sd = os.path.normpath(os.path.expanduser(sd))
             if sd != self.file_paths.get('gcodes', ""):
@@ -57,21 +80,8 @@ class FileManager:
                 self._update_file_list()
             except Exception:
                 logging.exception("Unable to initialize gcode file list")
-        # Configuration files in the optional config path
-        cfg_path = config.get('printer_config_path', None)
-        if cfg_path is not None:
-            cfg_path = os.path.normpath(os.path.expanduser(cfg_path))
-            if cfg_path != self.file_paths.get('config', ""):
-                self.file_paths['config'] = cfg_path
-                self.server.register_static_file_handler(
-                    "/server/files/config/", cfg_path,
-                    can_delete=True)
-            try:
-                self._update_file_list(base='config')
-            except Exception:
-                logging.exception("Unable to initialize config file list")
         # Register path for example configs
-        klipper_path = config.get('klipper_path', None)
+        klipper_path = paths.get('klipper_path', None)
         if klipper_path is not None:
             example_cfg_path = os.path.join(klipper_path, "config")
             if example_cfg_path != self.file_paths.get("config_examples", ""):
@@ -488,5 +498,5 @@ class FileManager:
             result.update(params)
         self.server.send_event("file_manager:filelist_changed", result)
 
-def load_plugin(server):
-    return FileManager(server)
+def load_plugin(config):
+    return FileManager(config)
