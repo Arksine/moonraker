@@ -21,7 +21,7 @@ MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
 RESERVED_ENDPOINTS = [
-    "list_endpoints", "moonraker/get_configuration"
+    "list_endpoints", "moonraker/check_available"
 ]
 
 
@@ -91,19 +91,22 @@ class APIDefinition:
         self.parser = parser
 
 class MoonrakerApp:
-    def __init__(self, server, args):
-        self.server = server
+    def __init__(self, config):
+        self.server = config.get_server()
         self.tornado_server = None
         self.api_cache = {}
         self.registered_base_handlers = []
 
         # Set Up Websocket and Authorization Managers
-        self.wsm = WebsocketManager(server)
-        self.auth = Authorization(args.apikey)
+        self.wsm = WebsocketManager(self.server)
+        self.auth = Authorization(config['authorization'])
 
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
+
+        debug = config.getboolean('enable_debug_logging', True)
+        enable_cors = config.getboolean('enable_cors', False)
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
@@ -112,18 +115,19 @@ class MoonrakerApp:
             (r"/websocket", WebSocket,
              {'wsm': self.wsm, 'auth': self.auth}),
             (r"/api/version", EmulateOctoprintHandler,
-             {'server': server, 'auth': self.auth})]
+             {'server': self.server, 'auth': self.auth})]
 
         self.app = tornado.web.Application(
             app_handlers,
-            serve_traceback=args.debug,
+            serve_traceback=debug,
             websocket_ping_interval=10,
             websocket_ping_timeout=30,
-            enable_cors=False)
+            enable_cors=enable_cors)
         self.get_handler_delegate = self.app.get_handler_delegate
 
         # Register handlers
-        self.register_static_file_handler("moonraker.log", args.logfile)
+        logfile = config['cmd_args'].get('logfile')
+        self.register_static_file_handler("moonraker.log", logfile)
         self.auth.register_handlers(self)
 
     def listen(self, host, port):
@@ -136,11 +140,6 @@ class MoonrakerApp:
             self.tornado_server.stop()
         await self.wsm.close()
         self.auth.close()
-
-    def load_config(self, config):
-        if 'enable_cors' in config:
-            self.app.settings['enable_cors'] = config['enable_cors']
-        self.auth.load_config(config)
 
     def register_remote_handler(self, endpoint):
         if endpoint in RESERVED_ENDPOINTS:
@@ -195,6 +194,8 @@ class MoonrakerApp:
         else:
             logging.info("Invalid file path: %s" % (file_path))
             return
+        logging.debug("Registering static file: (%s) %s" % (
+            pattern, file_path))
         methods = ['GET']
         if can_delete:
             methods.append('DELETE')
