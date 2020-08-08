@@ -11,9 +11,6 @@ import time
 import socket
 import logging
 import json
-import errno
-import tornado
-import tornado.netutil
 import confighelper
 from tornado import gen, iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
@@ -42,12 +39,8 @@ class Server:
         self.events = {}
 
         # Klippy Connection Handling
-        socketfile = config['cmd_args'].get('socketfile', "/tmp/moonraker")
-        socketfile = os.path.normpath(os.path.expanduser(socketfile))
-        self.klippy_server_sock = tornado.netutil.bind_unix_socket(
-            socketfile, backlog=1)
-        self.remove_server_sock = tornado.netutil.add_accept_handler(
-            self.klippy_server_sock, self._handle_klippy_connection)
+        self.klippy_address = config.get(
+            'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_iostream = None
         self.is_klippy_ready = False
         self.moonraker_available = False
@@ -85,6 +78,7 @@ class Server:
             (self.host, self.port))
         self.moonraker_app.listen(self.host, self.port)
         self.server_running = True
+        self.ioloop.spawn_callback(self._connect_klippy)
 
     # ***** Plugin Management *****
     def _load_plugins(self, config):
@@ -147,13 +141,22 @@ class Server:
         self.remote_methods[method_name] = cb
 
     # ***** Klippy Connection *****
-    def _handle_klippy_connection(self, conn, addr):
-        if self.klippy_iostream is not None and \
-                not self.klippy_iostream.closed():
-            logging.info("New Connection received while Klippy Connected")
-            self.klippy_iostream.close()
+    async def _connect_klippy(self):
+        ksock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        kstream = iostream.IOStream(ksock)
+        try:
+            await kstream.connect(self.klippy_address)
+        except iostream.StreamClosedError:
+            # Klippy Socket Server not available
+            self.ioloop.call_later(1., self._connect_klippy)
+            return
+        await gen.sleep(0.5)
+        if kstream.closed():
+            # Klippy Connection was rejected
+            self.ioloop.call_later(1., self._connect_klippy)
+            return
         logging.info("Klippy Connection Established")
-        self.klippy_iostream = iostream.IOStream(conn)
+        self.klippy_iostream = kstream
         self.klippy_iostream.set_close_callback(
             self._handle_stream_closed)
         self.ioloop.spawn_callback(
@@ -178,23 +181,28 @@ class Server:
                 if cb is not None:
                     cb(**params)
                 else:
-                    logging.info("Unknown command received %s" % cmd.decode())
+                    logging.info("Unknown command received %s" % data.decode())
             except Exception:
                 logging.exception(
                     "Error processing Klippy Host Response: %s"
-                    % (cmd.decode()))
+                    % (data.decode()))
 
     def _handle_stream_closed(self):
         self.is_klippy_ready = False
         self.moonraker_available = False
+        self.klippy_iostream = None
         self.init_cb.stop()
         for request in self.pending_requests.values():
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
         logging.info("Klippy Connection Removed")
         self.send_event("server:klippy_state_changed", "disconnect")
+        self.ioloop.call_later(1., self._connect_klippy)
 
     async def send_klippy_request(self, request):
+        if self.klippy_iostream is None:
+            request.notify(ServerError("Klippy Host not connected", 503))
+            return
         data = json.dumps(request.to_dict()).encode() + b"\x03"
         try:
             await self.klippy_iostream.write(data)
@@ -356,9 +364,6 @@ def main():
         "-c", "--configfile", default="~/moonraker.conf",
         metavar='<configfile>',
         help="Location of moonraker configuration file")
-    parser.add_argument(
-        "-s", "--socketfile", default="/tmp/moonraker", metavar='<socketfile>',
-        help="file name and location for the Unix Domain Socket")
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")

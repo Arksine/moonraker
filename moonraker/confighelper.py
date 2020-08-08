@@ -83,7 +83,5 @@ def get_configuration(server, cmd_line_args):
     if server_cfg.get('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
-    config['cmd_args'] = {
-        'logfile': cmd_line_args.logfile,
-        'socketfile': cmd_line_args.socketfile}
+    config['cmd_args'] = {'logfile': cmd_line_args.logfile}
     return ConfigHelper(server, config, 'server')
