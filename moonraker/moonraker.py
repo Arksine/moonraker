@@ -43,7 +43,6 @@ class Server:
             'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_iostream = None
         self.is_klippy_ready = False
-        self.moonraker_available = False
 
         # Server/IOLoop
         self.server_running = False
@@ -189,7 +188,6 @@ class Server:
 
     def _handle_stream_closed(self):
         self.is_klippy_ready = False
-        self.moonraker_available = False
         self.klippy_iostream = None
         self.init_cb.stop()
         for request in self.pending_requests.values():
@@ -211,14 +209,13 @@ class Server:
 
     async def _initialize(self):
         await self._request_endpoints()
-        if not self.moonraker_available:
-            await self._check_available()
-        elif not self.is_klippy_ready:
+        if not self.is_klippy_ready:
             await self._check_ready()
         else:
             # Moonraker is enabled in the Klippy module
             # and Klippy is ready.  We can stop the init
             # procedure.
+            await self._check_available_objects()
             self.init_cb.stop()
 
     async def _request_endpoints(self):
@@ -234,19 +231,23 @@ class Server:
             file_manager = self.lookup_plugin('file_manager')
             file_manager.update_mutable_paths(mutable_paths)
 
-    async def _check_available(self):
-        request = self.make_request(
-            "moonraker/check_available", "GET", {})
+    async def _check_available_objects(self):
+        request = self.make_request("objects/list", "GET", {})
         result = await request.wait()
         if not isinstance(result, ServerError):
-            self.moonraker_available = True
+            missing_objs = []
+            for obj in ["virtual_sdcard", "display_status", "pause_resume"]:
+                if obj not in result:
+                    missing_objs.append(obj)
+            if missing_objs:
+                err_str = ", ".join([f"[{o}]" for o in missing_objs])
+                logging.info(
+                    f"\nWarning, unable to detect the following printer "
+                    f"objects:\n{err_str}\nPlease add the the above sections "
+                    f"to printer.cfg for full Moonraker functionality.")
         else:
             logging.info(
-                "%s\nUnable to detect Moonraker compatibility in Klipper.\n "
-                "Repeated failures may indicate that the [moonraker] section\n "
-                "has not been added to printer.cfg.  This may also indicate\n"
-                "that Klippy has experienced an error during startup.  Check\n"
-                "klippy.log for more info." % (str(result)))
+                "%s\nUnable to retreive Klipper Object List " % (str(result)))
 
     async def _check_ready(self):
         request = self.make_request("info", "GET", {})
