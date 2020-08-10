@@ -343,7 +343,7 @@ class FileRequestHandler(AuthorizedFileHandler):
         base = self.request.path.lstrip("/").split("/")[2]
         filename = self.path.lstrip("/")
         file_manager = self.server.lookup_plugin('file_manager')
-        file_manager.notify_filelist_changed(filename, 'removed', base)
+        file_manager.notify_filelist_changed('delete_file', filename, base)
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):

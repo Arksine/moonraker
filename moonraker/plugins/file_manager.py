@@ -134,7 +134,7 @@ class FileManager:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            self.notify_filelist_changed(url_path, "add_directory", base)
+            self.notify_filelist_changed("create_dir", url_path, base)
         elif method == 'DELETE' and base in FULL_ACCESS_ROOTS:
             # Remove a directory
             if directory.strip("/") == base:
@@ -156,7 +156,7 @@ class FileManager:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
-            self.notify_filelist_changed(url_path, "delete_directory", base)
+            self.notify_filelist_changed("delete_dir", url_path, base)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -215,7 +215,7 @@ class FileManager:
         # make sure the destination is not in use
         if os.path.exists(dest_path):
             await self._handle_operation_check(dest_path)
-        action = ""
+        action = op_result = ""
         if path == "/server/files/move":
             if source_base not in FULL_ACCESS_ROOTS:
                 raise self.server.error(
@@ -224,22 +224,25 @@ class FileManager:
             # if moving the file, make sure the source is not in use
             await self._handle_operation_check(source_path)
             try:
-                shutil.move(source_path, dest_path)
+                op_result = shutil.move(source_path, dest_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            action = "file_move"
+            action = "move_item"
         elif path == "/server/files/copy":
             try:
                 if os.path.isdir(source_path):
-                    shutil.copytree(source_path, dest_path)
+                    op_result = shutil.copytree(source_path, dest_path)
                 else:
-                    shutil.copy2(source_path, dest_path)
+                    op_result = shutil.copy2(source_path, dest_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            action = "file_copy"
+            action = "copy_item"
+        if op_result != dest_path:
+            dst_url_path = os.path.join(
+                dst_url_path, os.path.basename(op_result))
         self.notify_filelist_changed(
-            dst_url_path, action, dest_base,
-            {'prev_file': src_url_path, 'prev_root': source_base})
+            action, dst_url_path, dest_base,
+            {'path': src_url_path, 'root': source_base})
         return "ok"
 
     def _list_directory(self, path):
@@ -249,19 +252,20 @@ class FileManager:
         flist = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
-            modified = time.ctime(os.path.getmtime(full_path))
+            path_info = self._get_path_info(full_path)
             if os.path.isdir(full_path):
-                flist['dirs'].append({
-                    'dirname': fname,
-                    'modified': modified
-                })
+                path_info['dirname'] = fname
+                flist['dirs'].append(path_info)
             elif os.path.isfile(full_path):
-                size = os.path.getsize(full_path)
-                flist['files'].append(
-                    {'filename': fname,
-                     'modified': modified,
-                     'size': size})
+                path_info['filename'] = fname
+                flist['files'].append(path_info)
         return flist
+
+    def _get_path_info(self, path):
+        modified = time.ctime(os.path.getmtime(path))
+        size = os.path.getsize(path)
+        path_info = {'modified': modified, 'size': size}
+        return path_info
 
     def _shell_proc_callback(self, result):
         try:
@@ -323,9 +327,7 @@ class FileManager:
                     continue
                 full_path = os.path.join(root, name)
                 r_path = full_path[len(path) + 1:]
-                size = os.path.getsize(full_path)
-                modified = time.ctime(os.path.getmtime(full_path))
-                new_list[r_path] = {'size': size, 'modified': modified}
+                new_list[r_path] = self._get_path_info(full_path)
         self.file_lists[base] = new_list
         if base == 'gcodes':
             ioloop = IOLoop.current()
@@ -374,7 +376,8 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        self.notify_filelist_changed(upload['filename'], 'added', "gcodes")
+        self.notify_filelist_changed(
+            'upload_file', upload['filename'], "gcodes")
         return {'result': upload['filename'], 'print_started': start_print}
 
     def _do_standard_upload(self, request, root):
@@ -383,7 +386,7 @@ class FileManager:
             raise self.server.error("Unknown root path: %s" % (root))
         upload = self._get_upload_info(request, path)
         self._write_file(upload)
-        self.notify_filelist_changed(upload['filename'], 'added', root)
+        self.notify_filelist_changed('upload_file', upload['filename'], root)
         return {'result': upload['filename']}
 
     def _get_argument(self, request, name, default=None):
@@ -502,11 +505,14 @@ class FileManager:
             raise self.server.error("Invalid file path: %s" % (path))
         os.remove(full_path)
 
-    def notify_filelist_changed(self, fname, action, base, params={}):
+    def notify_filelist_changed(self, action, fname, base, source_item={}):
         self._update_file_list(base)
-        result = {'filename': fname, 'action': action, 'root': base}
-        if params:
-            result.update(params)
+        file_info = dict(self.file_lists[base].get(
+            fname, {'size': 0, 'modified': ""}))
+        file_info.update({'path': fname, 'root': base})
+        result = {'action': action, 'item': file_info}
+        if source_item:
+            result.update({'source_item': source_item})
         self.server.send_event("file_manager:filelist_changed", result)
 
 def load_plugin(config):
