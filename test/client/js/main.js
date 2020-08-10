@@ -286,6 +286,9 @@ function get_klippy_info() {
     })
     .catch((error) => {
         update_error(api.printer_info.method, error);
+        setTimeout(() => {
+            get_klippy_info();
+        }, 2000);
     });
 }
 
@@ -594,8 +597,8 @@ json_rpc.register_method("notify_klippy_state_changed", handle_klippy_state);
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed
     // a gcode file.
-    if (file_list_type == file_info.root)
-        get_file_list(file_info.root);
+    if (file_list_type == file_info.item.root)
+        get_file_list(file_info.item.root);
     console.log("Filelist Changed:");
     console.log(file_info);
 }
