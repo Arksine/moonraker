@@ -704,21 +704,43 @@ clients of the change:
 `{jsonrpc: "2.0", method: "notify_filelist_changed",
  params: [<file changed info>]}`
 
-The <file changed info> param is an object in the following format:
+The <file changed info> param is an object in the following format, where
+the "action" is the operation that prompted the change, and the "item"
+contains information about the item that has changed:
 
 ```json
-{action: "<action>", filename: "<file_name>", root: "<root_name>"}
+{action: "<action>",
+  item: {
+    path: "<file or directory path>",
+    root: "<root_name>",
+    size: <file size>,
+    modified: "<date modified>"
+ }
 ```
-Note that file move/copy actions also include the name and root of the
-previous/source file:
+Note that file move and copy actions also include a "source item" that
+contains the path and root of the source file or directory.
 ```json
-{action: "<action>", filename: "<file_name>", root: "<root_name>",
- prev_file: "<previous file name>", prev_root: "<previous_root_name>"}
+{action: "<action>",
+  item: {
+    path: "<file or directory path>",
+    root: "<root_name>",
+    size: <file size>,
+    modified: "<date modified>"
+ },
+  source_item: {
+    path: "<file or directory path>",
+    root: "<root_name>"
+  }
+}
 ```
 
-The `action` is the operation that resulted in a file list change, the `filename`
-is the name of the file the action was performed on, and the `filelist` is the current
-file list, returned in the same format as `get_file_list`.
+The following `actions` are currently available:
+- `upload_file`
+- `delete_file`
+- `create_dir`
+- `delete_dir`
+- `move_item`
+- `copy_item`
 
 # Appendix
 
