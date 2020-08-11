@@ -47,7 +47,7 @@ class SerialConnection:
             if connect_time > start_time + 30.:
                 logging.info("Unable to connect, aborting")
                 break
-            logging.info("Attempting to connect to: %s" % (self.port))
+            logging.info(f"Attempting to connect to: {self.port}")
             try:
                 # XXX - sometimes the port cannot be exclusively locked, this
                 # would likely be due to a restart where the serial port was
@@ -55,7 +55,7 @@ class SerialConnection:
                 self.ser = serial.Serial(
                     self.port, self.baud, timeout=0, exclusive=True)
             except (OSError, IOError, serial.SerialException):
-                logging.exception("Unable to open port: %s" % (self.port))
+                logging.exception(f"Unable to open port: {self.port}")
                 await gen.sleep(2.)
                 connect_time += time.time()
                 continue
@@ -235,11 +235,10 @@ class PanelDue:
         self.kinematics = printer_cfg.get('kinematics', "none")
 
         logging.info(
-            "PanelDue Config Received:\n"
-            "Firmware Name: %s\n"
-            "Kinematics: %s\n"
-            "Printer Config: %s\n"
-            % (self.firmware_name, self.kinematics, str(config)))
+            f"PanelDue Config Received:\n"
+            f"Firmware Name: {self.firmware_name}\n"
+            f"Kinematics: {self.kinematics}\n"
+            f"Printer Config: {config}\n")
 
         # Initalize printer state and make subscription request
         self.printer_state = {
@@ -305,7 +304,7 @@ class PanelDue:
             # Invalid checksum, do not process
             msg = "!! Invalid Checksum"
             if line_no is not None:
-                msg = " Line Number: %d" % line_no
+                msg += f" Line Number: {line_no}"
             logging.exception("PanelDue: " + msg)
             raise PanelDueError(msg)
 
@@ -317,7 +316,7 @@ class PanelDue:
         if calculated_cs & 0xFF != checksum:
             msg = "!! Invalid Checksum"
             if line_no is not None:
-                msg = " Line Number: %d" % line_no
+                msg += f" Line Number: {line_no}"
             logging.info("PanelDue: " + msg)
             raise PanelDueError(msg)
 
@@ -337,7 +336,7 @@ class PanelDue:
                 try:
                     val = int(p[1:].strip()) if arg in "sr" else p[1:].strip()
                 except Exception:
-                    msg = "paneldue: Error parsing direct gcode %s" % (script)
+                    msg = f"paneldue: Error parsing direct gcode {script}"
                     self.handle_gcode_response("!! " + msg)
                     logging.exception(msg)
                     return
@@ -356,7 +355,7 @@ class PanelDue:
             await self._klippy_request(
                 "gcode/script", method='POST', args=args)
         except PanelDueError:
-            msg = "Error executing script %s" % script
+            msg = f"Error executing script {script}"
             self.handle_gcode_response("!! " + msg)
             logging.exception(msg)
 
@@ -390,13 +389,13 @@ class PanelDue:
         macro = macro[name_start:]
         cmd = self.available_macros.get(macro)
         if cmd is None:
-            raise PanelDueError("Macro %s invalid" % (macro))
+            raise PanelDueError(f"Macro {macro} invalid")
         return cmd
 
     def _prepare_M290(self, args):
         # args should in in the format Z0.02
         offset = args[0][1:].strip()
-        return "SET_GCODE_OFFSET Z_ADJUST=%s MOVE=1" % (offset)
+        return f"SET_GCODE_OFFSET Z_ADJUST={offset} MOVE=1"
 
     def handle_gcode_response(self, response):
         # Only queue up "non-trivial" gcode responses.  At the
@@ -567,8 +566,7 @@ class PanelDue:
         response_type = arg_s
         if response_type != 2:
             logging.info(
-                "PanelDue: Cannot process response type %d in M20"
-                % (response_type))
+                f"Cannot process response type {response_type} in M20")
             return
         path = arg_p
 

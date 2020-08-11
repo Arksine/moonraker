@@ -62,8 +62,8 @@ class FileManager:
             # No change in mutable paths
             return
         self.mutable_path_args = dict(paths)
-        str_paths = "\n".join(["%s: %s" % (k, v) for k, v in paths.items()])
-        logging.debug("\nUpdating Mutable Paths:\n%s" % (str_paths))
+        str_paths = "\n".join([f"{k}: {v}" for k, v in paths.items()])
+        logging.debug(f"\nUpdating Mutable Paths:\n{str_paths}")
 
         # Register directories
         sd = paths.pop('sd_path', None)
@@ -99,7 +99,7 @@ class FileManager:
                 self._update_file_list(base=base)
             except Exception:
                 logging.exception(
-                    "Unable to initialize file list: <%s>" % (base))
+                    f"Unable to initialize file list: <{base}>")
         return True
 
     def get_sd_directory(self):
@@ -117,7 +117,7 @@ class FileManager:
         metadata = self.gcode_metadata.get(requested_file)
         if metadata is None:
             raise self.server.error(
-                "Metadata not available for <%s>" % (requested_file), 404)
+                f"Metadata not available for <{requested_file}>", 404)
         metadata['filename'] = requested_file
         return metadata
 
@@ -142,7 +142,7 @@ class FileManager:
                     "Cannot delete root directory")
             if not os.path.isdir(dir_path):
                 raise self.server.error(
-                    "Directory does not exist (%s)" % (directory))
+                    f"Directory does not exist ({directory})")
             force = args.get('force', False)
             if isinstance(force, str):
                 force = force.lower() == "true"
@@ -186,10 +186,10 @@ class FileManager:
     def _convert_path(self, url_path):
         parts = url_path.strip("/").split("/")
         if not parts:
-            raise self.server.error("Invalid path: " % (url_path))
+            raise self.server.error(f"Invalid path: {url_path}")
         base = parts[0]
         if base not in self.file_paths:
-            raise self.server.error("Invalid base path (%s)" % (base))
+            raise self.server.error(f"Invalid base path ({base})")
         root_path = local_path = self.file_paths[base]
         url_path = ""
         if len(parts) > 1:
@@ -209,9 +209,9 @@ class FileManager:
         dest_base, dst_url_path, dest_path = self._convert_path(destination)
         if dest_base not in FULL_ACCESS_ROOTS:
             raise self.server.error(
-                "Destination path is read-only: %s" % (dest_base))
+                f"Destination path is read-only: {dest_base}")
         if not os.path.exists(source_path):
-            raise self.server.error("File %s does not exist" % (source_path))
+            raise self.server.error(f"File {source_path} does not exist")
         # make sure the destination is not in use
         if os.path.exists(dest_path):
             await self._handle_operation_check(dest_path)
@@ -219,8 +219,7 @@ class FileManager:
         if path == "/server/files/move":
             if source_base not in FULL_ACCESS_ROOTS:
                 raise self.server.error(
-                    "Source path is read-only, cannot move: %s"
-                    % (source_base))
+                    f"Source path is read-only, cannot move: {source_base}")
             # if moving the file, make sure the source is not in use
             await self._handle_operation_check(source_path)
             try:
@@ -248,7 +247,7 @@ class FileManager:
     def _list_directory(self, path):
         if not os.path.isdir(path):
             raise self.server.error(
-                "Directory does not exist (%s)" % (path))
+                f"Directory does not exist ({path})")
         flist = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
@@ -311,14 +310,14 @@ class FileManager:
         # Use os.walk find files in sd path and subdirs
         path = self.file_paths.get(base, None)
         if path is None:
-            msg = "No known path for root: %s" % (base)
+            msg = f"No known path for root: {base}"
             logging.info(msg)
             raise self.server.error(msg)
         elif not os.path.isdir(path):
-            msg = "Cannot generate file list for root: %s" % (base)
+            msg = f"Cannot generate file list for root: {base}"
             logging.info(msg)
             raise self.server.error(msg)
-        logging.info("Updating File List <%s>..." % (base))
+        logging.info(f"Updating File List <{base}>...")
         new_list = {}
         for root, dirs, files in os.walk(path, followlinks=True):
             for name in files:
@@ -342,7 +341,7 @@ class FileManager:
         elif root in FULL_ACCESS_ROOTS:
             result = self._do_standard_upload(request, root)
         else:
-            raise self.server.error("Invalid root request: %s" % (root))
+            raise self.server.error(f"Invalid root request: {root}")
         return result
 
     async def _do_gcode_upload(self, request):
@@ -383,7 +382,7 @@ class FileManager:
     def _do_standard_upload(self, request, root):
         path = self.file_paths.get(root, None)
         if path is None:
-            raise self.server.error("Unknown root path: %s" % (root))
+            raise self.server.error(f"Unknown root path: {root}")
         upload = self._get_upload_info(request, path)
         self._write_file(upload)
         self.notify_filelist_changed('upload_file', upload['filename'], root)
@@ -419,7 +418,7 @@ class FileManager:
         # Validate the path.  Don't allow uploads to a parent of the root
         if not full_path.startswith(base_path):
             raise self.server.error(
-                "Cannot write to path: %s" % (full_path))
+                f"Cannot write to path: {full_path}")
         return {
             'filename': filename,
             'body': upload['body'],
@@ -472,7 +471,7 @@ class FileManager:
         root = parts[0]
         if root not in self.file_paths:
             raise self.server.error(
-                "Invalid Directory Request: %s" % (directory))
+                f"Invalid Directory Request: {directory}")
         path = self.file_paths[root]
         if len(parts) == 1:
             dir_path = path
@@ -480,7 +479,7 @@ class FileManager:
             dir_path = os.path.join(path, parts[1])
         if not os.path.isdir(dir_path):
             raise self.server.error(
-                "Directory does not exist (%s)" % (dir_path))
+                f"Directory does not exist ({dir_path})")
         flist = self._list_directory(dir_path)
         if simple_format:
             simple_list = []
@@ -498,11 +497,11 @@ class FileManager:
         parts = path.split("/", 1)
         root = parts[0]
         if root not in self.file_paths or len(parts) != 2:
-            raise self.server.error("Invalid file path: %s" % (path))
+            raise self.server.error(f"Invalid file path: {path}")
         root_path = self.file_paths[root]
         full_path = os.path.join(root_path, parts[1])
         if not os.path.isfile(full_path):
-            raise self.server.error("Invalid file path: %s" % (path))
+            raise self.server.error(f"Invalid file path: {path}")
         os.remove(full_path)
 
     def notify_filelist_changed(self, action, fname, base, source_item={}):

@@ -27,7 +27,7 @@ class Machine:
         try:
             await scmd.run(timeout=2., verbose=False)
         except Exception:
-            logging.exception("Error running cmd '%s'" % (cmd))
+            logging.exception(f"Error running cmd '{cmd}'")
         return "ok"
 
 def load_plugin(config):

@@ -77,7 +77,7 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
             try:
                 self.rules.remove(rule)
             except Exception:
-                logging.exception("Unable to remove rule: %s" % (pattern))
+                logging.exception(f"Unable to remove rule: {pattern}")
 
 class APIDefinition:
     def __init__(self, endpoint, http_uri, ws_method,
@@ -149,8 +149,9 @@ class MoonrakerApp:
         if api_def.uri in self.registered_base_handlers:
             # reserved handler or already registered
             return
-        logging.info("Registering remote endpoint: (%s) %s" % (
-            " ".join(api_def.request_methods), api_def.uri))
+        logging.info(
+            f"Registering remote endpoint: "
+            f"({' '.join(api_def.request_methods)}) {api_def.uri}")
         self.wsm.register_handler(api_def)
         params = {}
         params['server'] = self.server
@@ -168,8 +169,9 @@ class MoonrakerApp:
             return
         api_def = self._create_api_definition(
             uri, ws_method, request_methods)
-        logging.info("Registering local endpoint: (%s) %s" % (
-            " ".join(request_methods), uri))
+        logging.info(
+            f"Registering local endpoint: "
+            f"({' '.join(request_methods)}) {uri}")
         if not http_only:
             self.wsm.register_handler(api_def, callback)
         params = {}
@@ -192,10 +194,9 @@ class MoonrakerApp:
                 pattern += "/"
             pattern += "(.*)"
         else:
-            logging.info("Invalid file path: %s" % (file_path))
+            logging.info(f"Invalid file path: {file_path}")
             return
-        logging.debug("Registering static file: (%s) %s" % (
-            pattern, file_path))
+        logging.debug(f"Registering static file: ({pattern}) {file_path}")
         methods = ['GET']
         if can_delete:
             methods.append('DELETE')
@@ -318,7 +319,7 @@ class FileRequestHandler(AuthorizedFileHandler):
         # a file
         basename = os.path.basename(self.absolute_path)
         self.set_header(
-            "Content-Disposition", "attachment; filename=%s" % (basename))
+            "Content-Disposition", f"attachment; filename={basename}")
 
     async def delete(self, path):
         if 'DELETE' not in self.methods:

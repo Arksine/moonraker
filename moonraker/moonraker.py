@@ -98,7 +98,7 @@ class Server:
         mod_path = os.path.join(
             os.path.dirname(__file__), 'plugins', plugin_name + '.py')
         if not os.path.exists(mod_path):
-            msg = "Plugin (%s) does not exist" % (plugin_name)
+            msg = f"Plugin ({plugin_name}) does not exist"
             logging.info(msg)
             if default == Sentinel:
                 raise ServerError(msg)
@@ -108,19 +108,19 @@ class Server:
             load_func = getattr(module, "load_plugin")
             plugin = load_func(config)
         except Exception:
-            msg = "Unable to load plugin (%s)" % (plugin_name)
+            msg = f"Unable to load plugin ({plugin_name})"
             logging.info(msg)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
         self.plugins[plugin_name] = plugin
-        logging.info("Plugin (%s) loaded" % (plugin_name))
+        logging.info(f"Plugin ({plugin_name}) loaded")
         return plugin
 
     def lookup_plugin(self, plugin_name, default=Sentinel):
         plugin = self.plugins.get(plugin_name, default)
         if plugin == Sentinel:
-            raise ServerError("Plugin (%s) not found" % (plugin_name))
+            raise ServerError(f"Plugin ({plugin_name}) not found")
         return plugin
 
     def register_event_handler(self, event, callback):
@@ -134,8 +134,7 @@ class Server:
     def register_remote_method(self, method_name, cb):
         if method_name in self.remote_methods:
             # XXX - may want to raise an exception here
-            logging.info("Remote method (%s) already registered"
-                         % (method_name))
+            logging.info(f"Remote method ({method_name}) already registered")
             return
         self.remote_methods[method_name] = cb
 
@@ -180,11 +179,10 @@ class Server:
                 if cb is not None:
                     cb(**params)
                 else:
-                    logging.info("Unknown command received %s" % data.decode())
+                    logging.info(f"Unknown command received: {data.decode()}")
             except Exception:
                 logging.exception(
-                    "Error processing Klippy Host Response: %s"
-                    % (data.decode()))
+                    f"Error processing Klippy Host Response: {data.decode()}")
 
     def _handle_stream_closed(self):
         self.is_klippy_ready = False
@@ -247,7 +245,7 @@ class Server:
                     f"to printer.cfg for full Moonraker functionality.")
         else:
             logging.info(
-                "%s\nUnable to retreive Klipper Object List " % (str(result)))
+                f"{result}\nUnable to retreive Klipper Object List")
 
     async def _check_ready(self):
         request = self.make_request("info", "GET", {})
@@ -261,9 +259,9 @@ class Server:
                 logging.info("\n" + msg)
         else:
             logging.info(
-                "%s\nKlippy info request error.  This indicates a that Klippy\n"
-                "may have experienced an error during startup.  Please check\n "
-                "klippy.log for more information" % (str(result)))
+                f"{result}\nKlippy info request error.  This indicates that\n"
+                f"Klippy may have experienced an error during startup.\n"
+                f"Please check klippy.log for more information")
 
     def _handle_klippy_response(self, request_id, response):
         req = self.pending_requests.pop(request_id, None)
@@ -383,8 +381,8 @@ def main():
     file_hdlr.setFormatter(formatter)
 
     if sys.version_info < (3, 7):
-        msg = "Moonraker requires Python 3.7 or above.  Detected Version: %s" \
-            % (sys.version)
+        msg = f"Moonraker requires Python 3.7 or above.  " \
+            f"Detected Version: {sys.version}"
         logging.info(msg)
         print(msg)
         exit(1)

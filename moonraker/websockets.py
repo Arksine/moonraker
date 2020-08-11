@@ -26,7 +26,7 @@ class JsonRPC:
         try:
             request = json.loads(data)
         except Exception:
-            msg = "Websocket data not json: %s" % (str(data))
+            msg = f"Websocket data not json: {data}"
             logging.exception(msg)
             response = self.build_error(-32700, "Parse error")
             return json.dumps(response)
@@ -164,13 +164,13 @@ class WebsocketManager:
     async def add_websocket(self, ws):
         async with self.ws_lock:
             self.websockets[ws.uid] = ws
-            logging.info("New Websocket Added: %d" % ws.uid)
+            logging.info(f"New Websocket Added: {ws.uid}")
 
     async def remove_websocket(self, ws):
         async with self.ws_lock:
             old_ws = self.websockets.pop(ws.uid, None)
             if old_ws is not None:
-                logging.info("Websocket Removed: %d" % ws.uid)
+                logging.info(f"Websocket Removed: {ws.uid}")
 
     async def notify_websockets(self, name, data):
         notification = json.dumps({
@@ -183,10 +183,10 @@ class WebsocketManager:
                     ws.write_message(notification)
                 except WebSocketClosedError:
                     self.websockets.pop(ws.uid, None)
-                    logging.info("Websocket Removed: %d" % ws.uid)
+                    logging.info(f"Websocket Removed: {ws.uid}")
                 except Exception:
                     logging.exception(
-                        "Error sending data over websocket: %d" % (ws.uid))
+                        f"Error sending data over websocket: {ws.uid}")
 
     async def close(self):
         async with self.ws_lock:

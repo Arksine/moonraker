@@ -85,14 +85,13 @@ class PrinterPower:
         for name, device in devices.items():
             try:
                 logging.debug(
-                    "Attempting to configure pin GPIO%d"
-                    % (device["pin"]))
+                    f"Attempting to configure pin GPIO{device['pin']}")
                 await GPIO.setup_pin(device["pin"], device["active_low"])
                 device["status"] = GPIO.is_pin_on(device["pin"])
             except Exception:
                 logging.exception(
-                    "Power plugin: ERR Problem configuring the output pin for"
-                    " device %s. Removing device" % (name))
+                    f"Power plugin: ERR Problem configuring the output pin for"
+                    f" device {name}. Removing device")
                 continue
             self.devices[name] = device
 
@@ -100,16 +99,16 @@ class GPIO:
     gpio_root = "/sys/class/gpio"
 
     @staticmethod
-    def _set_gpio_option(gpio, option, value):
+    def _set_gpio_option(pin, option, value):
         GPIO._write(
-            os.path.join(GPIO.gpio_root, "gpio%d" % (gpio), option),
+            os.path.join(GPIO.gpio_root, f"gpio{pin}", option),
             value
         )
 
     @staticmethod
     def _get_gpio_option(pin, option):
         return GPIO._read(
-            os.path.join(GPIO.gpio_root, "gpio%d" % (pin), option)
+            os.path.join(GPIO.gpio_root, f"gpio{pin}", option)
         )
 
     @staticmethod
@@ -126,9 +125,9 @@ class GPIO:
 
     @staticmethod
     async def verify_pin(pin, active_low=1):
-        gpiopath = os.path.join(GPIO.gpio_root, "gpio%d" % (pin))
+        gpiopath = os.path.join(GPIO.gpio_root, f"gpio{pin}")
         if not os.path.exists(gpiopath):
-            logging.info("Re-intializing GPIO%d" % (pin))
+            logging.info(f"Re-intializing GPIO{pin}")
             await GPIO.setup_pin(pin, active_low)
             return
 
@@ -143,14 +142,14 @@ class GPIO:
         pin = int(pin)
         active_low = 1 if active_low == 1 else 0
 
-        gpiopath = os.path.join(GPIO.gpio_root, "gpio%d" % (pin))
+        gpiopath = os.path.join(GPIO.gpio_root, f"gpio{pin}")
         if not os.path.exists(gpiopath):
             GPIO._write(
                 os.path.join(GPIO.gpio_root, "export"),
                 pin)
-            logging.info("Waiting for GPIO%d to initialize" % (pin))
+            logging.info(f"Waiting for GPIO{pin} to initialize")
             while os.stat(os.path.join(
-                    GPIO.gpio_root, "gpio%d" % (pin),
+                    GPIO.gpio_root, f"gpio{pin}",
                     "active_low")).st_gid == 0:
                 await gen.sleep(.1)
 

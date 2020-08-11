@@ -44,7 +44,7 @@ class Authorization:
                     tc = ipaddress.ip_network(ip)
                 except ValueError:
                     raise ServerError(
-                        "Invalid option in trusted_clients: %s" % (ip))
+                        f"Invalid option in trusted_clients: {ip}")
                 self.trusted_ranges.append(tc)
             else:
                 self.trusted_ips.append(tc)
@@ -86,8 +86,8 @@ class Authorization:
         # API Key file doesn't exist.  Generate
         # a new api key and create the file.
         logging.info(
-            "No API Key file found, creating new one at:\n%s"
-            % (self.api_key_file))
+            f"No API Key file found, creating new one at:"
+            f"\n{self.api_key_file}")
         return self._create_api_key()
 
     def _create_api_key(self):
@@ -113,7 +113,7 @@ class Authorization:
         for ip in expired_conns:
             self.trusted_connections.pop(ip, None)
             logging.info(
-                "Trusted Connection Expired, IP: %s" % (ip))
+                f"Trusted Connection Expired, IP: {ip}")
 
     def _token_expire_handler(self, token):
         self.access_tokens.pop(token, None)
@@ -135,7 +135,7 @@ class Authorization:
                 return True
             elif self._check_authorized_ip(ip):
                 logging.info(
-                    "Trusted Connection Detected, IP: %s" % (ip))
+                    f"Trusted Connection Detected, IP: {ip}")
                 self.trusted_connections[ip] = time.time()
                 return True
         return False
@@ -158,7 +158,7 @@ class Authorization:
             ip = ipaddress.ip_address(request.remote_ip)
         except ValueError:
             logging.exception(
-                "Unable to Create IP Address %s" % (request.remote_ip))
+                f"Unable to Create IP Address {request.remote_ip}")
             ip = None
         if self._check_trusted_connection(ip):
             return True
