@@ -10,6 +10,7 @@ import re
 import os
 import sys
 import time
+import traceback
 
 # regex helpers
 def _regex_find_floats(pattern, data, strict=False):
@@ -113,13 +114,13 @@ class PrusaSlicer(BaseSlicer):
             data = "".join(lines[1:-1])
             if len(info) != 3:
                 self.log.append(
-                    {'MetadataError': "Error parsing thumbnail header: %s"
-                     % (lines[0])})
+                    f"MetadataError: Error parsing thumbnail"
+                    f" header: {lines[0]}")
                 continue
             if len(data) != info[2]:
                 self.log.append(
-                    {'MetadataError': "Thumbnail Size Mismatch: detected %d, "
-                     "actual %d" % (info[2], len(data))})
+                    f"MetadataError: Thumbnail Size Mismatch: "
+                    f"detected {info[2]}, actual {len(data)}")
                 continue
             parsed_matches.append({
                 'width': info[0], 'height': info[1],
@@ -291,43 +292,50 @@ SUPPORTED_DATA = [
     'first_layer_height', 'layer_height', 'object_height',
     'filament_total', 'estimated_time', 'thumbnails']
 
+def extract_metadata(file_path, log):
+    metadata = {}
+    slicers = [s() for s in SUPPORTED_SLICERS]
+    header_data = footer_data = slicer = None
+    size = os.path.getsize(file_path)
+    metadata['size'] = size
+    metadata['modified'] = time.ctime(os.path.getmtime(file_path))
+    with open(file_path, 'r') as f:
+        # read the default size, which should be enough to
+        # identify the slicer
+        header_data = f.read(READ_SIZE)
+        for s in slicers:
+            if re.search(s.get_id_pattern(), header_data) is not None:
+                slicer = s
+                break
+        if slicer is not None:
+            metadata['slicer'] = slicer.get_name()
+            if size > READ_SIZE * 2:
+                f.seek(size - READ_SIZE)
+                footer_data = f.read()
+            elif size > READ_SIZE:
+                remaining = size - READ_SIZE
+                footer_data = header_data[remaining - READ_SIZE:] + f.read()
+            else:
+                footer_data = header_data
+            slicer.set_data(header_data, footer_data, log)
+            for key in SUPPORTED_DATA:
+                func = getattr(slicer, "parse_" + key)
+                result = func()
+                if result is not None:
+                    metadata[key] = result
+    return metadata
 
 def main(path, filename):
     file_path = os.path.join(path, filename)
-    slicers = [s() for s in SUPPORTED_SLICERS]
     log = []
     metadata = {}
     if not os.path.isfile(file_path):
-        log.append("File Not Found: %s" % (file_path))
+        log.append(f"File Not Found: {file_path}")
     else:
-        header_data = footer_data = slicer = None
-        size = os.path.getsize(file_path)
-        metadata['size'] = size
-        metadata['modified'] = time.ctime(os.path.getmtime(file_path))
-        with open(file_path, 'r') as f:
-            # read the default size, which should be enough to
-            # identify the slicer
-            header_data = f.read(READ_SIZE)
-            for s in slicers:
-                if re.search(s.get_id_pattern(), header_data) is not None:
-                    slicer = s
-                    break
-            if slicer is not None:
-                metadata['slicer'] = slicer.get_name()
-                if size > READ_SIZE * 2:
-                    f.seek(size - READ_SIZE)
-                    footer_data = f.read()
-                elif size > READ_SIZE:
-                    remaining = size - READ_SIZE
-                    footer_data = header_data[remaining - READ_SIZE:] + f.read()
-                else:
-                    footer_data = header_data
-                slicer.set_data(header_data, footer_data, log)
-                for key in SUPPORTED_DATA:
-                    func = getattr(slicer, "parse_" + key)
-                    result = func()
-                    if result is not None:
-                        metadata[key] = result
+        try:
+            metadata = extract_metadata(file_path, log)
+        except Exception:
+            log.append(traceback.format_exc())
     fd = sys.stdout.fileno()
     data = json.dumps(
         {'file': filename, 'log': log, 'metadata': metadata}).encode()
