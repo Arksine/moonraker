@@ -34,7 +34,7 @@ def get_software_version():
 
     # Obtain version info from "git" program
     prog = ('git', '-C', moonraker_path, 'describe', '--always',
-            '--tags', '--long', '--dirty', "--all")
+            '--tags', '--long', '--dirty')
     try:
         process = subprocess.Popen(prog, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE)
