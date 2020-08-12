@@ -182,6 +182,13 @@ macros:
 #   PanelDue's "macros" tab.  These can be gcode macros or simple
 #   gcodes.  A macro may contain parameters.  The default is no
 #   macros will be displayed by the PanelDue.
+confirmed_macros:
+  RESTART
+  FIRMWARE_RESTART
+#  Like the "macros" option, this list is added to the macros tab.
+#  When one of these macros is excuted the PanelDue will prompt
+#  the user with a confirmation dialog.  The default is to include
+#  RESTART and FIRMWARE_RESTART.
 ```
 
 Most options above are self explanatory.  The "macros" option can be used
