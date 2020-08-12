@@ -148,13 +148,25 @@ class PanelDue:
         self.last_printer_state = 'C'
 
         # Set up macros
+        self.confirmed_gcode = ""
+        self.mbox_sequence = 0
         self.available_macros = {}
+        self.confirmed_macros = {
+            "RESTART": "RESTART",
+            "FIRMWARE_RESTART": "FIRMWARE_RESTART"}
         macros = config.get('macros', None)
         if macros is not None:
             # The macro's configuration name is the key, whereas the full
             # command is the value
             macros = [m for m in macros.split('\n') if m.strip()]
             self.available_macros = {m.split()[0]: m for m in macros}
+        conf_macros = config.get('confirmed_macros', None)
+        if conf_macros is not None:
+            # The macro's configuration name is the key, whereas the full
+            # command is the value
+            conf_macros = [m for m in conf_macros.split('\n') if m.strip()]
+            self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
+        self.available_macros.update(self.confirmed_macros)
 
         ntkeys = config.get('non_trivial_keys', "Klipper state")
         self.non_trivial_keys = [k for k in ntkeys.split('\n') if k.strip()]
@@ -192,6 +204,7 @@ class PanelDue:
             'M120': lambda args: "SAVE_GCODE_STATE STATE=PANELDUE",
             'M121': lambda args: "RESTORE_GCODE_STATE STATE=PANELDUE",
             'M290': self._prepare_M290,
+            'M292': self._prepare_M292,
             'M999': lambda args: "FIRMWARE_RESTART"
         }
 
@@ -199,7 +212,12 @@ class PanelDue:
         try:
             result = await self.server.make_request(command, method, args)
         except self.server.error as e:
-            raise PanelDueError(str(e)) from e
+            script = args.get('script', "")
+            if script in ["RESTART", "FIRMWARE_RESTART"] and \
+                    str(e) == "Klippy Disconnected":
+                result = "ok"
+            else:
+                raise PanelDueError(str(e)) from e
         return result
 
     async def handle_klippy_state(self, state):
@@ -350,6 +368,9 @@ class PanelDue:
             func = self.special_gcodes[cmd]
             script = func(parts[1:])
 
+        if not script:
+            return
+
         try:
             args = {'script': script}
             await self._klippy_request(
@@ -390,12 +411,38 @@ class PanelDue:
         cmd = self.available_macros.get(macro)
         if cmd is None:
             raise PanelDueError(f"Macro {macro} invalid")
+        if macro in self.confirmed_macros:
+            self._create_confirmation(macro, cmd)
+            cmd = ""
         return cmd
 
     def _prepare_M290(self, args):
         # args should in in the format Z0.02
         offset = args[0][1:].strip()
         return f"SET_GCODE_OFFSET Z_ADJUST={offset} MOVE=1"
+
+    def _prepare_M292(self, args):
+        p_val = int(args[0][1])
+        if p_val == 0:
+            cmd = self.confirmed_gcode
+            self.confirmed_gcode = ""
+            return cmd
+        return ""
+
+    def _create_confirmation(self, name, gcode):
+        self.mbox_sequence += 1
+        self.confirmed_gcode = gcode
+        title = "Confirmation Dialog"
+        msg = f"Please confirm your intent to run {name}."  \
+            " Press OK to continue, or CANCEL to abort."
+        mbox = {}
+        mbox['msgBox.mode'] = 3
+        mbox['msgBox.msg'] = msg
+        mbox['msgBox.seq'] = self.mbox_sequence
+        mbox['msgBox.title'] = title
+        mbox['msgBox.controls'] = 0
+        mbox['msgBox.timeout'] = 0
+        self.ioloop.spawn_callback(self.write_response, mbox)
 
     def handle_gcode_response(self, response):
         # Only queue up "non-trivial" gcode responses.  At the
