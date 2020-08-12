@@ -1,3 +1,59 @@
+### Moonraker Version 0.1 - August 11 2020
+- It is no longer possible to configure the subscription timer.  All subscribed
+  objects will update at an interval of 250ms.
+- Request timeout configuration has been removed.  The server will no longer
+  apply a timeout to requests.  Any requests pending when Klippy disconnects
+  will be aborted with an error.  All pending requests are logged each minute.
+- The RESET_SD gcode is now SDCARD_RESET_FILE
+- The "virtual_sdcard" object has removed the following items:
+  - "filename"
+  - "total_duration"
+  - "print_duration"
+  - "filament_used"
+- A new object, "print_stats", has been added.  It reports the following items:
+  - "filename"
+  - "total_duration"
+  - "print_duration"
+  - "filament_used"
+  - "state" - can be one of the following:
+    - "standby" - sd print not in progress
+    - "printing" - print in progress
+    - "paused" - print paused
+    - "error" - print experienced an error
+    - "complete" - print complete
+  - "message" - contains error message when state is "error"
+- The behavior of print_stats is slightly different.  When a print is finished the stats are
+  not cleared.  They will remain populated with the final data until the user issues a
+  SDCARD_RESET_FILE gcode.
+- Moonraker Configuration has moved to moonraker.conf
+- Klippy now hosts the Unix Domain Socket.  As a result, the order in which the
+  Klipper and Moonraker services are started no longer matters.
+- The  `notify_filelist_changed` event has been refactored for clarity.  It now
+  returns a result in the following format:
+  ```json
+  {
+    action: "<action>",
+    item: {
+      path: "<file or directory path>",
+      root: "<root_name>",
+      size: <file size>,
+      modified: "<date modified>"
+    },
+    source_item: {
+      path: "<file or directory path>",
+      root: "<root_name>"
+    }
+  }
+  ```
+  Note that the `source_item` is only present for `move_item` and `copy_item`
+  actions.  Below is a list of all available actions:
+  - `upload_file`
+  - `delete_file`
+  - `create_dir`
+  - `delete_dir`
+  - `move_item`
+  - `copy_item`
+
 ### Moonraker Version .08-alpha - 7/2/2020
 - Moonraker has moved to its own repo.
 - Python 3 support has been added.

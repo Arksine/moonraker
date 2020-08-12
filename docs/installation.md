@@ -10,39 +10,14 @@ Klipper should be installed prior to installing Moonraker.  Please see
 [Klipper's Documention](https://github.com/KevinOConnor/klipper/blob/master/docs/Installation.md)
 for instructions on how to do this.
 
-Moonraker is still in alpha development, and thus some of its dependencies
-in Klipper have yet to be merged.  Until this has been done it will be
-necessary to add a remote and work off a developmental branch of Klipper
-to correctly run Moonraker.
-
-```
-  cd ~/klipper
-  git remote add arksine https://github.com/Arksine/klipper.git
-```
-
-Now fetch and checkout:
-```
-git fetch arksine
-git checkout arksine/dev-moonraker-testing
-```
-Note that you are now in a detached head state and you cannot pull. Any
-time you want to update to the latest version of this branch you must
-repeat the two commands above.
-
-
-For reference, if you want to switch back to the clone of the official repo:
-```
-git checkout master
-```
-Note that the above command is NOT part of the Moonraker install procedure.
-
 You can now install the Moonraker application:
 ```
 cd ~
 git clone https://github.com/Arksine/moonraker.git
 ```
 
-If you have an older version of moonraker installed, it must be removed:
+If you have an experimental verison of moonraker that pre-dates this repo,
+it must be uninstalled:
 ```
 cd ~/moonraker/scripts
 ./uninstall-moonraker.sh
@@ -56,156 +31,164 @@ cd ~/moonraker/scripts
 
 When the script completes it should start both Moonraker and Klipper. In
 `klippy.log` you should find the following entry:\
-`Moonraker: server connection detected`
+`webhooks: New connection established`
 
-Currently Moonraker is responsible for creating the Unix Domain Socket,
-so so it must be started first for Klippy to connect.  In any instance
-where Klipper was started first simply restart the klipper service.
-```
-sudo service klipper restart
-```
-After the connection is established Klippy will register API endpoints and
-send configuration to the server.  Once the initial configuration is sent
-to Moonraker its configuration will be retained when Klippy disconnects
-(either through a restart or by stopping the service), and updated when
-Klippy reconnects.
+Now you may install a client, such as [Mainsail](
+https://github.com/meteyou/mainsail).
+- Note that as of the time of this writing (August 11 2020) the current version
+  of Mainsail (0.1.2) is not compatible with this repo.  Please give the
+  developer some time to bring up Mainsail in line with the latest release
+  of Moonraker.
 
 # Configuration
-The host, port, log file location, socket file location and api key file
-are all specified via command arguments:
+
+## Command line
+The configuration and log file paths may be specified via the command
+line.
 ```
-usage: moonraker.py [-h] [-a <address>] [-p <port>] [-s <socketfile>]
-                    [-l <logfile>] [-k <apikeyfile>]
+usage: moonraker.py [-h] [-c <configfile>] [-l <logfile>]
 
 Moonraker - Klipper API Server
 
 optional arguments:
   -h, --help            show this help message and exit
-  -a <address>, --address <address>
-                        host name or ip to bind to the Web Server
-  -p <port>, --port <port>
-                        port the Web Server will listen on
-  -s <socketfile>, --socketfile <socketfile>
-                        file name and location for the Unix Domain Socket
+  -c <configfile>, --configfile <configfile>
+                        Location of moonraker configuration file
   -l <logfile>, --logfile <logfile>
                         log file name and location
-  -k <apikeyfile>, --apikey <apikeyfile>
-                        API Key file location
 ```
 
 The default configuration is:
-- address = 0.0.0.0 (Bind to all interfaces)
-- port = 7125
-- socketfile = /tmp/moonraker
-- logfile = /tmp/moonraker.log
-- apikeyfile = ~/.moonraker_api_key
+- config file - `~/moonraker.conf`
+- log file - `/tmp/moonraker.log`
 
 It is recommended to use the defaults, however one may change these
 arguments by editing `/etc/default/moonraker`.
 
-All other configuration is sent to the server via Klippy, thus it is done in
-printer.cfg.  A basic configuration that authorizes clients on a range from
-192.168.1.1 - 192.168.1.254 is as follows:
+## Klipper configuration (printer.cfg)
+
+Moonraker depends on the following Klippy extras for full functionality:
+- [virtual_sdcard]
+- [pause_resume]
+- [display_status]
+
+If you have a `filament_switch_sensor` configured then `pause_resume` will
+automatically be loaded.  Likewise, if you have a `display` configured then
+`display_status` will be automatically loaded.  If your configuration is
+missing one or both, you can simply add the bare sections to printer.cfg:
 ```
-[moonraker]
+[pause_resume]
+
+[display_status]
+
+[virtual_sdcard]
+path: ~/gcode_files
+```
+NOTE: While Klipper does not set any hard limits on the location of the
+`path` option for the `virtual_sdcard`, Moonraker requires that the path
+be located within the HOME directory, it cannot however be the HOME
+directory.  If you wish to host your files elsewhere, use a symlink.
+
+## Moonraker configuration (moonraker.conf)
+
+All other configuration is done via `moonraker.conf`.  If you are
+familiar with Klipper, the configuration is similar.  A basic
+configuration might look like the following:
+```
+[server]
+host: 0.0.0.0
+port: 7125
+enable_debug_logging: True
+config_path: ~/.klippy_config
+
+[authorization]
+enabled: True
 trusted_clients:
  192.168.1.0/24
 ```
 
+Note that while all items in the `[server]` and `[authorization]`
+sections have default values, the sections must be present for
+moonraker to start. Aside from the `config_path` and `trusted_clients`
+options it is recommended to use default values.
+
 Below is a detailed explanation of all options currently available:
 ```
-#[moonraker]
-#require_auth: True
-#  Enables Authorization.  When set to true, only trusted clients and
-#  requests with an API key are accepted.
-#enable_cors: False
-#  Enables CORS support.  If serving static files from a different http
-#  server then CORS  will need to be enabled.
-#trusted_clients:
-#  A list of new line separated ip addresses and/or ip ranges that are trusted.
-#  Trusted clients are given full access to the API.  Both IPv4 and IPv6
-#  addresses and ranges are supported. Ranges must be expressed in CIDR
-#  notation (see http://ip.sb/cidr for more info).  For example an entry of
-#  192.168.1.0/24 will authorize IPs in the range of 192.168.1.1 -
-#  192.168.1.254.  Note that when specifying IPv4 ranges the last segment
-#  of the ip address must be 0.
-#  The default is no clients or ranges are trusted.
-#request_timeout: 5.
-#  The amount of time (in seconds) a client request has to process before the
-#  server returns an error.  This timeout does NOT apply to gcode requests.
-#  Default is 5 seconds.
-#long_running_gcodes:
-# BED_MESH_CALIBRATE, 120.
-# M104, 200.
-#   A list of gcodes that will be assigned their own timeout.  The list should
-#   be in the format presented above, where the first item is the gcode name
-#   and the second item is the timeout (in seconds).  Each pair should be
-#   separated by a newline.  The default is an empty list where no gcodes have
-#   a unique timeout.
-#long_running_requests:
-# gcode/script, 60.
-# pause_resume/pause, 60.
-# pause_resume/resume, 60.
-# pause_resume/cancel, 60.
-#    A list of requests that will be assigned their own timeout.  The list
-#    should be formatted in the same manner as long_running_gcodes.  The
-#    default is matches the example shown above.
-#status_tier_1:
-# toolhead
-# gcode
-#status_tier_2:
-# fan
-#status_tier_3:
-# extruder
-# virtual_sdcard
-#  Subscription Configuration.  By default items in tier 1 are polled every
-#  250 ms, tier 2 every 500 ms, tier 3 every 1s, tier 4 every 2s, tier
-#  5 every 4s, tier 6 every 8s.
-#tick_time: .25
-#  This is the base interval used for status tier 1.  All other status tiers
-#  are calculated using the value defined by tick_time (See below for more
-#  information).  Default is 250ms.
-#config_include_path: ~/klipper_config
-#  The path of a directory in which "included" configuration files reside.
-#  If specified, moonraker will serve this path allowing file and directory
-#  manipuation within it.  Note that this should not be the same directory
-#  in which printer.cfg is located (the home directory for most installations).
-#  The default is None, in which no included config files will be served.
+[server]
+host: 0.0.0.0
+#  The host address in which to bind the HTTP server.  Default is to bind
+#  to all interfaces
+port: 7125
+#   The port the HTTP server will listen on.  Default is 7125
+klippy_address: /tmp/klippy_uds
+#   The address of Unix Domain Socket used to communicate with Klippy. Default
+#   is /tmp/klippy_uds
+enable_debug_logging: True
+#   When set to True Moonraker will log in verbose mode.  During this stage
+#   of development the default is True.  In the future this will change.
+config_path:
+#   An optional path where configuration files are located. If specified,
+#   Moonraker will serve this path allowing file and directory manipulation
+#   within it. This path must be located within the user's HOME directory,
+#   by may not be the home directory itself. The default is no path, which
+#   results in no configuration files being served.
+
+[authorization]
+enabled: True
+#   Enables authorization.  When set to true, requests must either contain
+#   a valid API key or originate from a trusted client. Default is True.
+api_key_path: ~/.moonraker_api_key
+#   Path of the file that stores Moonraker's API key.  The default is
+#   ~/.moonraker_api_key
+trusted_clients:
+ 192.168.1.30
+ 192.168.1.0/24
+#   A list of newline separated ip addresses and/or ip ranges that are
+#   trusted. Trusted clients are given full access to the API.  Both IPv4
+#   and IPv6 addresses and ranges are supported. Ranges must be expressed
+#   in CIDR notation (see http://ip.sb/cidr for more info).  For example, an
+#   entry of 192.168.1.0/24 will authorize IPs in the range of 192.168.1.1 -
+#   192.168.1.254.  Note that when specifying IPv4 ranges the last segment
+#   of the ip address must be 0. The default is no clients or ranges are
+#   trusted.
 ```
 
-The "status tiers" are used to determine how fast each klippy object is allowed
-to be polled.  Each tier is calculated using the `tick_time` option.  There are
-6 tiers, `tier_1 = tick_time` (.25s), `tier_2 = tick_time*2` (.5s),
-`tier_3 = tick_time*4` (1s), `tier_4 = tick_time*8` (2s),
-`tier_5 = tick_time*16` (4s), and `tier_6 = tick_time*16` (8s).  This method
-was chosen to provide some flexibility for slower hosts while making it easy to
-batch subscription updates together.
+For the moment, you need to restart the moonraker service to load a new
+configuration:
+```
+sudo service moonraker restart
+```
 
-## Plugin Configuration
+### Plugin Configuration
 The core plugins are configured via the primary configuration above.  Optional
 plugins each need their own configuration as outlined below.
 
-### PanelDue Plugin
-
+#### PanelDue Plugin
 ```
-[moonraker_plugin paneldue]
-serial: /dev/ttyAMA0
+[paneldue]
+serial:
+#   The serial port in which the PanelDue is connected.  This parameter
+#   must be provided.
 baud: 57600
-machine_name: Voron 2
+#   The baud rate to connect at.  The default is 57600 baud.
+machine_name: Klipper
+#   An optional unique machine name which displays on the PanelDue's
+#   Header.  The default is "Klipper".
 macros:
-  LOAD_FILAMENT
-  UNLOAD_FILAMENT
-  PREHEAT_CHAMBER
-  TURN_OFF_MOTORS
-  TURN_OFF_HEATERS
-  PANELDUE_BEEP FREQUENCY=500 DURATION=1
+ LOAD_FILAMENT
+ UNLOAD_FILAMENT
+ PANELDUE_BEEP FREQUENCY=500 DURATION=1
+#   A list of newline separated "macros" that are displayed in the
+#   PanelDue's "macros" tab.  These can be gcode macros or simple
+#   gcodes.  A macro may contain parameters.  The default is no
+#   macros will be displayed by the PanelDue.
 ```
 
 Most options above are self explanatory.  The "macros" option can be used
 to specify commands (either built in or gcode_macros) that will show up
 in the PanelDue's "macro" menu.
 
-Note that buzzing the piezo requires the following gcode_macro:
+Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
 ```
 [gcode_macro PANELDUE_BEEP]
 # Beep frequency
@@ -213,27 +196,32 @@ default_parameter_FREQUENCY: 300
 # Beep duration in seconds
 default_parameter_DURATION: 1.
 gcode:
-  { printer.moonraker.action_call_remote_method(
-		"paneldue_beep", frequency=FREQUENCY|int,
-		duration=DURATION|float) }
+  { printer.webhooks.action_call_remote_method(
+	"paneldue_beep", frequency=FREQUENCY|int,
+	duration=DURATION|float) }
 ```
 
-### Power Control Plugin
+#### Power Control Plugin
+Power Plugin Configuration.  One may use this module to toggle the
+state of a relay using a linux GPIO, enabling the ability to power
+a printer on/off regardless of Klippy's state.  GPIOs are toggled
+using linux sysfs.
 ```
-[moonraker_plugin power]
+[power]
 devices: printer, led
-#  A comma separated list of devices you wish to control. Do not use spaces in
-#  the device's name here
-#{dev}_name: Friendly Name
-#  This is the friendly name for the device. {dev} must be swapped for the name
-#  of the device used under devices, as an example:
-#  printer_name: My Printer
+#   A comma separated list of devices you wish to control. Device names may not
+#   contain whitespace.  This parameter must be provided.
+#
+# Each device specified in "devices" should define its own set of the below
+# options:
+{dev}_name: Friendly Name
+#   An optional alias for the device. The default is the name specifed in
+#   "devices".
 {dev}_pin: 23
-#  This option is required.
-#  The GPIO Pin number you wish to control
-#{dev}_active_low: False
-#  If you have a device that needs a low or 0 signal to be turned on, set this
-#  option to True.
+#   The sysfs GPIO pin number you wish to control.  This parameter must be
+#   provided.
+{dev}_active_low: False
+#   When set to true the pin signal is inverted.  Default is False.
 ```
 
 Define the devices you wish to control under _devices_ with a comma separated
