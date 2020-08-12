@@ -88,8 +88,12 @@ class FileManager:
             op_check_cb = self._handle_operation_check
         if path is None:
             return False
+        home = os.path.expanduser('~')
         path = os.path.normpath(os.path.expanduser(path))
-        if not os.path.isdir(path):
+        if not os.path.isdir(path) or not path.startswith(home) or \
+                path == home:
+            logging.info(
+                f"Supplied path ({path}) for ({base}) not valid")
             return False
         if path != self.file_paths.get(base, ""):
             self.file_paths[base] = path
