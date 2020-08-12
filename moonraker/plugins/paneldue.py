@@ -196,10 +196,10 @@ class PanelDue:
         }
 
     async def _klippy_request(self, command, method='GET', args={}):
-        request = self.server.make_request(command, method, args)
-        result = await request.wait()
-        if isinstance(result, self.server.error):
-            raise PanelDueError(str(result))
+        try:
+            result = await self.server.make_request(command, method, args)
+        except self.server.error as e:
+            raise PanelDueError(str(e)) from e
         return result
 
     async def handle_klippy_state(self, state):

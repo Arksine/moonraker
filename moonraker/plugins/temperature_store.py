@@ -36,22 +36,22 @@ class TemperatureStore:
             return
 
         # Fetch sensors
-        request = self.server.make_request(
-            "objects/status", 'GET', {'heaters': []})
-        result = await request.wait()
-        if isinstance(result, self.server.error):
-            logging.info(f"Error Configuring Sensors: {result}")
+        try:
+            result = await self.server.make_request(
+                "objects/status", 'GET', {'heaters': []})
+        except self.server.error as e:
+            logging.info(f"Error Configuring Sensors: {e}")
             return
         sensors = result.get("heaters", {}).get("available_sensors", [])
 
         if sensors:
             # Add Subscription
             sub = {s: [] for s in sensors}
-            request = self.server.make_request(
-                "objects/subscription", 'POST', sub)
-            result = await request.wait()
-            if isinstance(result, self.server.error):
-                logging.info(f"Error subscribing to sensors: {result}")
+            try:
+                result = await self.server.make_request(
+                    "objects/subscription", 'POST', sub)
+            except self.server.error as e:
+                logging.info(f"Error subscribing to sensors: {e}")
                 return
             logging.info(f"Configuring available sensors: {sensors}")
             new_store = {}

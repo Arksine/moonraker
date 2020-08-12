@@ -32,11 +32,8 @@ class GCodeAPIs:
 
     async def _send_gcode(self, script):
         args = {'script': script}
-        request = self.server.make_request(
+        result = await self.server.make_request(
             GCODE_ENDPOINT, 'POST', args)
-        result = await request.wait()
-        if isinstance(result, self.server.error):
-            raise result
         return result
 
     async def gcode_pause(self, path, method, args):

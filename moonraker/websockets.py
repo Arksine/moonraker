@@ -72,11 +72,12 @@ class JsonRPC:
             result = await method(*args, **kwargs)
         except TypeError as e:
             return self.build_error(-32603, "Invalid params", req_id)
+        except ServerError as e:
+            return self.build_error(e.status_code, str(e), req_id)
         except Exception as e:
             return self.build_error(-31000, str(e), req_id)
-        if isinstance(result, ServerError):
-            return self.build_error(result.status_code, str(result), req_id)
-        elif req_id is None:
+
+        if req_id is None:
             return None
         else:
             return self.build_result(result, req_id)
@@ -142,9 +143,8 @@ class WebsocketManager:
 
     def _generate_callback(self, endpoint, request_method):
         async def func(**kwargs):
-            request = self.server.make_request(
+            result = await self.server.make_request(
                 endpoint, request_method, kwargs)
-            result = await request.wait()
             return result
         return func
 

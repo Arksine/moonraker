@@ -217,51 +217,53 @@ class Server:
             self.init_cb.stop()
 
     async def _request_endpoints(self):
-        request = self.make_request("list_endpoints", "GET", {})
-        result = await request.wait()
-        if not isinstance(result, ServerError):
-            endpoints = result.get('hooks', {})
-            static_paths = result.get('static_paths', {})
-            for ep in endpoints:
-                self.moonraker_app.register_remote_handler(ep)
-            mutable_paths = {sp['resource_id']: sp['file_path']
-                             for sp in static_paths}
-            file_manager = self.lookup_plugin('file_manager')
-            file_manager.update_mutable_paths(mutable_paths)
+        try:
+            result = await self.make_request("list_endpoints", "GET", {})
+        except ServerError:
+            return
+        endpoints = result.get('hooks', {})
+        static_paths = result.get('static_paths', {})
+        for ep in endpoints:
+            self.moonraker_app.register_remote_handler(ep)
+        mutable_paths = {sp['resource_id']: sp['file_path']
+                         for sp in static_paths}
+        file_manager = self.lookup_plugin('file_manager')
+        file_manager.update_mutable_paths(mutable_paths)
 
     async def _check_available_objects(self):
-        request = self.make_request("objects/list", "GET", {})
-        result = await request.wait()
-        if not isinstance(result, ServerError):
-            missing_objs = []
-            for obj in ["virtual_sdcard", "display_status", "pause_resume"]:
-                if obj not in result:
-                    missing_objs.append(obj)
-            if missing_objs:
-                err_str = ", ".join([f"[{o}]" for o in missing_objs])
-                logging.info(
-                    f"\nWarning, unable to detect the following printer "
-                    f"objects:\n{err_str}\nPlease add the the above sections "
-                    f"to printer.cfg for full Moonraker functionality.")
-        else:
+        try:
+            result = await self.make_request("objects/list", "GET", {})
+        except ServerError as e:
             logging.info(
-                f"{result}\nUnable to retreive Klipper Object List")
+                f"{e}\nUnable to retreive Klipper Object List")
+            return
+        missing_objs = []
+        for obj in ["virtual_sdcard", "display_status", "pause_resume"]:
+            if obj not in result:
+                missing_objs.append(obj)
+        if missing_objs:
+            err_str = ", ".join([f"[{o}]" for o in missing_objs])
+            logging.info(
+                f"\nWarning, unable to detect the following printer "
+                f"objects:\n{err_str}\nPlease add the the above sections "
+                f"to printer.cfg for full Moonraker functionality.")
 
     async def _check_ready(self):
-        request = self.make_request("info", "GET", {})
-        result = await request.wait()
-        if not isinstance(result, ServerError):
-            is_ready = result.get("is_ready", False)
-            if is_ready:
-                self._set_klippy_ready()
-            else:
-                msg = result.get("message", "Klippy Not Ready")
-                logging.info("\n" + msg)
-        else:
+        try:
+            result = await self.make_request("info", "GET", {})
+        except ServerError as e:
             logging.info(
-                f"{result}\nKlippy info request error.  This indicates that\n"
+                f"{e}\nKlippy info request error.  This indicates that\n"
                 f"Klippy may have experienced an error during startup.\n"
                 f"Please check klippy.log for more information")
+            return
+        is_ready = result.get("is_ready", False)
+        if is_ready:
+            self._set_klippy_ready()
+        else:
+            msg = result.get("message", "Klippy Not Ready")
+            logging.info("\n" + msg)
+
 
     def _handle_klippy_response(self, request_id, response):
         req = self.pending_requests.pop(request_id, None)
@@ -288,12 +290,13 @@ class Server:
     def _process_status_update(self, status):
         self.send_event("server:status_update", status)
 
-    def make_request(self, path, method, args):
+    async def make_request(self, path, method, args):
         base_request = BaseRequest(path, method, args)
         self.pending_requests[base_request.id] = base_request
         self.ioloop.spawn_callback(
             self.send_klippy_request, base_request)
-        return base_request
+        result = await base_request.wait()
+        return result
 
     async def _kill_server(self):
         # XXX - Currently this function is not used.
@@ -345,6 +348,8 @@ class BaseRequest:
                 self._event.clear()
                 continue
             break
+        if isinstance(self.response, ServerError):
+            raise self.response
         return self.response
 
     def notify(self, response):

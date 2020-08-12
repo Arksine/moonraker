@@ -259,12 +259,12 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
         args = {}
         if self.request.query:
             args = self.query_parser(self.request)
-        request = self.server.make_request(
-            self.remote_callback, method, args)
-        result = await request.wait()
-        if isinstance(result, ServerError):
+        try:
+            result = await self.server.make_request(
+                self.remote_callback, method, args)
+        except ServerError as e:
             raise tornado.web.HTTPError(
-                result.status_code, str(result))
+                e.status_code, str(e)) from e
         self.finish({'result': result})
 
 class LocalRequestHandler(AuthorizedRequestHandler):
@@ -301,7 +301,7 @@ class LocalRequestHandler(AuthorizedRequestHandler):
             result = await self.callback(self.request.path, method, args)
         except ServerError as e:
             raise tornado.web.HTTPError(
-                e.status_code, str(e))
+                e.status_code, str(e)) from e
         self.finish({'result': result})
 
 
