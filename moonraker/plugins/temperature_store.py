@@ -38,7 +38,7 @@ class TemperatureStore:
         # Fetch sensors
         try:
             result = await self.server.make_request(
-                "objects/status", 'GET', {'heaters': []})
+                "objects/status", {'heaters': []})
         except self.server.error as e:
             logging.info(f"Error Configuring Sensors: {e}")
             return
@@ -49,7 +49,7 @@ class TemperatureStore:
             sub = {s: [] for s in sensors}
             try:
                 result = await self.server.make_request(
-                    "objects/subscription", 'POST', sub)
+                    "objects/subscription", sub)
             except self.server.error as e:
                 logging.info(f"Error subscribing to sensors: {e}")
                 return

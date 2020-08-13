@@ -134,17 +134,16 @@ class WebsocketManager:
                     api_def.endpoint, r_method, callback)
             else:
                 # Callback is a remote method
-                rpc_cb = self._generate_callback(api_def.endpoint, r_method)
+                rpc_cb = self._generate_callback(api_def.endpoint)
             self.rpc.register_method(cmd, rpc_cb)
 
     def remove_handler(self, ws_method):
         for prefix in ["get", "post", "delete"]:
             self.rpc.remove_method(prefix + "_" + ws_method)
 
-    def _generate_callback(self, endpoint, request_method):
+    def _generate_callback(self, endpoint):
         async def func(**kwargs):
-            result = await self.server.make_request(
-                endpoint, request_method, kwargs)
+            result = await self.server.make_request(endpoint, kwargs)
             return result
         return func
 

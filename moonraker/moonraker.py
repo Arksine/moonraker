@@ -217,7 +217,7 @@ class Server:
 
     async def _request_endpoints(self):
         try:
-            result = await self.make_request("list_endpoints", "GET", {})
+            result = await self.make_request("list_endpoints", {})
         except ServerError:
             return
         endpoints = result.get('hooks', {})
@@ -231,7 +231,7 @@ class Server:
 
     async def _check_available_objects(self):
         try:
-            result = await self.make_request("objects/list", "GET", {})
+            result = await self.make_request("objects/list", {})
         except ServerError as e:
             logging.info(
                 f"{e}\nUnable to retreive Klipper Object List")
@@ -249,7 +249,7 @@ class Server:
 
     async def _check_ready(self):
         try:
-            result = await self.make_request("info", "GET", {})
+            result = await self.make_request("info", {})
         except ServerError as e:
             logging.info(
                 f"{e}\nKlippy info request error.  This indicates that\n"
@@ -289,8 +289,8 @@ class Server:
     def _process_status_update(self, status):
         self.send_event("server:status_update", status)
 
-    async def make_request(self, path, method, args):
-        base_request = BaseRequest(path, method, args)
+    async def make_request(self, rpc_method, params):
+        base_request = BaseRequest(rpc_method, params)
         self.pending_requests[base_request.id] = base_request
         self.ioloop.spawn_callback(
             self.send_klippy_request, base_request)
@@ -325,11 +325,10 @@ class Server:
 
 # Basic WebRequest class, easily converted to dict for json encoding
 class BaseRequest:
-    def __init__(self, path, method, args):
+    def __init__(self, rpc_method, params):
         self.id = id(self)
-        self.path = path
-        self.method = method
-        self.args = args
+        self.rpc_method = rpc_method
+        self.params = params
         self._event = Event()
         self.response = None
 
@@ -343,7 +342,7 @@ class BaseRequest:
             except TimeoutError:
                 pending_time = time.time() - start_time
                 logging.info(
-                    f"Request '{self.method} {self.path}' pending:"
+                    f"Request '{self.rpc_method}' pending: "
                     f"{pending_time:.2f} seconds")
                 self._event.clear()
                 continue
@@ -357,8 +356,8 @@ class BaseRequest:
         self._event.set()
 
     def to_dict(self):
-        return {'id': self.id, 'path': self.path,
-                'method': self.method, 'args': self.args}
+        return {'id': self.id, 'method': self.rpc_method,
+                'params': self.params}
 
 def main():
     # Parse start arguments

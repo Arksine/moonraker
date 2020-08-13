@@ -208,9 +208,9 @@ class PanelDue:
             'M999': lambda args: "FIRMWARE_RESTART"
         }
 
-    async def _klippy_request(self, command, method='GET', args={}):
+    async def _klippy_request(self, command, args={}):
         try:
-            result = await self.server.make_request(command, method, args)
+            result = await self.server.make_request(command, args)
         except self.server.error as e:
             script = args.get('script', "")
             if script in ["RESTART", "FIRMWARE_RESTART"] and \
@@ -276,8 +276,7 @@ class PanelDue:
                 self.heaters.append(cfg)
                 sub_args[cfg] = []
         try:
-            await self._klippy_request(
-                "objects/subscription", method='POST', args=sub_args)
+            await self._klippy_request("objects/subscription", args=sub_args)
         except PanelDueError:
             logging.exception("Unable to complete subscription request")
         self.is_shutdown = False
@@ -303,7 +302,7 @@ class PanelDue:
     async def process_line(self, line):
         # If we find M112 in the line then skip verification
         if "M112" in line.upper():
-            await self._klippy_request("emergency_stop", method='POST')
+            await self._klippy_request("emergency_stop")
             return
 
         # Get line number
@@ -373,8 +372,7 @@ class PanelDue:
 
         try:
             args = {'script': script}
-            await self._klippy_request(
-                "gcode/script", method='POST', args=args)
+            await self._klippy_request("gcode/script", args=args)
         except PanelDueError:
             msg = f"Error executing script {script}"
             self.handle_gcode_response("!! " + msg)

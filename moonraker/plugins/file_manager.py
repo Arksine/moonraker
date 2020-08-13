@@ -168,7 +168,7 @@ class FileManager:
     async def _handle_operation_check(self, requested_path):
         # Get virtual_sdcard status
         result = await self.server.make_request(
-            "objects/status", 'GET', {'print_stats': []})
+            "objects/status", {'print_stats': []})
         pstats = result.get('print_stats', {})
         loaded_file = pstats.get('filename', "")
         state = pstats.get('state', "")
