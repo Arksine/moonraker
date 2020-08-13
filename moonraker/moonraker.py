@@ -73,8 +73,7 @@ class Server:
 
     def start(self):
         logging.info(
-            "Starting Moonraker on (%s, %d)" %
-            (self.host, self.port))
+            f"Starting Moonraker on ({self.host}, {self.port})")
         self.moonraker_app.listen(self.host, self.port)
         self.server_running = True
         self.ioloop.spawn_callback(self._connect_klippy)
@@ -272,7 +271,7 @@ class Server:
                 response = ServerError(response['message'], 400)
             req.notify(response)
         else:
-            logging.info("No request matching response: " + str(response))
+            logging.info(f"No request matching response: {response}")
 
     def _set_klippy_ready(self):
         logging.info("Klippy ready")
@@ -343,8 +342,9 @@ class BaseRequest:
                 await self._event.wait(timeout=timeout)
             except TimeoutError:
                 pending_time = time.time() - start_time
-                logging.info("Request '%s %s' pending: %.2f seconds" %
-                             (self.method, self.path, pending_time))
+                logging.info(
+                    f"Request '{self.method} {self.path}' pending:"
+                    f"{pending_time:.2f} seconds")
                 self._event.clear()
                 continue
             break

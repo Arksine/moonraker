@@ -46,7 +46,7 @@ def get_software_version():
                 version = version.decode()
             return version
         else:
-            logging.debug("Error getting git version: %s", err)
+            logging.debug(f"Error getting git version: {err}")
     except OSError:
         logging.exception("Error runing git describe")
 

@@ -49,13 +49,14 @@ class Authorization:
             else:
                 self.trusted_ips.append(tc)
 
-        t_clients = [str(ip) for ip in self.trusted_ips] + \
-            [str(rng) for rng in self.trusted_ranges]
+        t_clients = "\n".join(
+            [str(ip) for ip in self.trusted_ips] +
+            [str(rng) for rng in self.trusted_ranges])
+
         logging.info(
-            "Authorization Configuration Loaded\n"
-            "Auth Enabled: %s\n"
-            "Trusted Clients:\n%s" %
-            (self.auth_enabled, "\n".join(t_clients)))
+            f"Authorization Configuration Loaded\n"
+            f"Auth Enabled: {self.auth_enabled}\n"
+            f"Trusted Clients:\n{t_clients}")
 
         self.prune_handler = PeriodicCallback(
             self._prune_conn_handler, PRUNE_CHECK_TIME)
