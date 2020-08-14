@@ -35,10 +35,10 @@ class TemperatureStore:
         if state != "ready":
             return
 
+        klippy_apis = self.server.lookup_plugin('klippy_apis')
         # Fetch sensors
         try:
-            result = await self.server.make_request(
-                "objects/status", {'heaters': []})
+            result = await klippy_apis.query_objects({'heaters': None})
         except self.server.error as e:
             logging.info(f"Error Configuring Sensors: {e}")
             return
@@ -46,10 +46,9 @@ class TemperatureStore:
 
         if sensors:
             # Add Subscription
-            sub = {s: [] for s in sensors}
+            sub = {s: None for s in sensors}
             try:
-                result = await self.server.make_request(
-                    "objects/subscription", sub)
+                status = await klippy_apis.subscribe_objects(sub)
             except self.server.error as e:
                 logging.info(f"Error subscribing to sensors: {e}")
                 return
@@ -67,6 +66,8 @@ class TemperatureStore:
             for sensor in list(self.last_temps.keys()):
                 if sensor not in self.temperature_store:
                     del self.last_temps[sensor]
+            # Update initial temperatures
+            self._set_current_temps(status)
             self.temp_update_cb.start()
         else:
             logging.info("No sensors found")
