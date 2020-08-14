@@ -24,7 +24,7 @@ class FileManager:
         self.file_lists = {}
         self.gcode_metadata = {}
         self.metadata_lock = Lock()
-        self.mutable_path_args = {}
+        self.fixed_path_args = {}
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -49,40 +49,32 @@ class FileManager:
         # Register Klippy Configuration Path
         config_path = config.get('config_path', None)
         if config_path is not None:
-            ret = self._register_directory(
+            ret = self.register_directory(
                 'config', config_path, can_delete=True)
             if not ret:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
 
-    def update_mutable_paths(self, paths):
-        # Update paths from Klippy.  The sd_path can potentially change
-        # location on restart.
-        if paths == self.mutable_path_args:
-            # No change in mutable paths
+    def update_fixed_paths(self, paths):
+        if paths == self.fixed_path_args:
+            # No change in fixed paths
             return
-        self.mutable_path_args = dict(paths)
+        self.fixed_path_args = dict(paths)
         str_paths = "\n".join([f"{k}: {v}" for k, v in paths.items()])
-        logging.debug(f"\nUpdating Mutable Paths:\n{str_paths}")
+        logging.debug(f"\nUpdating Fixed Paths:\n{str_paths}")
 
-        # Register directories
-        sd = paths.pop('sd_path', None)
-        self._register_directory("gcodes", sd, can_delete=True)
         # Register path for example configs
-        klipper_path = paths.pop('klipper_path', None)
+        klipper_path = paths.get('klipper_path', None)
         if klipper_path is not None:
             example_cfg_path = os.path.join(klipper_path, "config")
-            self._register_directory("config_examples", example_cfg_path)
-        paths.pop('klippy_env', None)
-        paths.pop('printer.cfg', None)
+            self.register_directory("config_examples", example_cfg_path)
 
-        # register remaining static files
-        for pattern, path in paths.items():
-            if path is not None:
-                path = os.path.normpath(os.path.expanduser(path))
-                self.server.register_static_file_handler(pattern, path)
+        # Register log path
+        log_file = paths.get('log_file')
+        log_path = os.path.normpath(os.path.expanduser(log_file))
+        self.server.register_static_file_handler("klippy.log", log_path)
 
-    def _register_directory(self, base, path, can_delete=False):
+    def register_directory(self, base, path, can_delete=False):
         op_check_cb = None
         if base == 'gcodes':
             op_check_cb = self._handle_operation_check
@@ -93,7 +85,9 @@ class FileManager:
         if not os.path.isdir(path) or not path.startswith(home) or \
                 path == home:
             logging.info(
-                f"Supplied path ({path}) for ({base}) not valid")
+                f"\nSupplied path ({path}) for ({base}) not valid. Please\n"
+                "check that the path exists and is a subfolder in the HOME\n"
+                "directory. Note that the path may not BE the home directory.")
             return False
         if path != self.file_paths.get(base, ""):
             self.file_paths[base] = path
@@ -109,8 +103,8 @@ class FileManager:
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
 
-    def get_mutable_path_args(self):
-        return dict(self.mutable_path_args)
+    def get_fixed_path_args(self):
+        return dict(self.fixed_path_args)
 
     async def _handle_filelist_request(self, path, method, args):
         root = args.get('root', "gcodes")
@@ -167,8 +161,8 @@ class FileManager:
 
     async def _handle_operation_check(self, requested_path):
         # Get virtual_sdcard status
-        result = await self.server.make_request(
-            "objects/status", {'print_stats': []})
+        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        result = await klippy_apis.query_objects({'print_stats': None})
         pstats = result.get('print_stats', {})
         loaded_file = pstats.get('filename', "")
         state = pstats.get('state', "")
@@ -369,10 +363,9 @@ class FileManager:
         self._write_file(upload)
         if start_print:
             # Make a Klippy Request to "Start Print"
-            gcode_apis = self.server.lookup_plugin('gcode_apis')
+            klippy_apis = self.server.lookup_plugin('klippy_apis')
             try:
-                await gcode_apis.gcode_start_print(
-                    request.path, 'POST', {'filename': upload['filename']})
+                await klippy_apis.start_print(upload['filename'])
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False

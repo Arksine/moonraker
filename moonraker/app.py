@@ -21,7 +21,7 @@ MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
 RESERVED_ENDPOINTS = [
-    "list_endpoints", "moonraker/check_available"
+    "list_endpoints", "gcode/subscribe_output"
 ]
 
 
@@ -34,8 +34,10 @@ def _status_parser(request):
         for v in vals:
             if v:
                 parsed += v.decode().split(',')
+        if parsed == []:
+            parsed = None
         args[key] = parsed
-    return args
+    return {'objects': args}
 
 # Built-in Query String Parser
 def _default_parser(request):

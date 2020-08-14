@@ -22,7 +22,7 @@ from utils import ServerError, MoonrakerLoggingHandler
 INIT_MS = 1000
 
 CORE_PLUGINS = [
-    'file_manager', 'gcode_apis', 'machine',
+    'file_manager', 'klippy_apis', 'machine',
     'temperature_store', 'shell_command']
 
 class Sentinel:
@@ -43,6 +43,16 @@ class Server:
             'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_iostream = None
         self.is_klippy_ready = False
+        self.gc_response_registered = False
+        self.klippy_state = "disconnected"
+
+        # XXX - currently moonraker maintains a superset of all
+        # subscriptions, the results of which are forwarded to all
+        # connected websockets. A better implementation would open a
+        # unique unix domain socket for each websocket client and
+        # allow Klipper to forward only those subscriptions back to
+        # correct client.
+        self.all_subscriptions = {}
 
         # Server/IOLoop
         self.server_running = False
@@ -59,16 +69,13 @@ class Server:
         self.pending_requests = {}
         self.remote_methods = {}
         self.register_remote_method(
-            'set_klippy_shutdown', self._set_klippy_shutdown)
-        self.register_remote_method(
-            'response', self._handle_klippy_response)
-        self.register_remote_method(
             'process_gcode_response', self._process_gcode_response)
         self.register_remote_method(
             'process_status_update', self._process_status_update)
 
         # Plugin initialization
         self.plugins = {}
+        self.klippy_apis = self.load_plugin(config, 'klippy_apis')
         self._load_plugins(config)
 
     def start(self):
@@ -172,19 +179,40 @@ class Server:
                 continue
             try:
                 decoded_cmd = json.loads(data[:-1])
-                method = decoded_cmd.get('method')
-                params = decoded_cmd.get('params', {})
-                cb = self.remote_methods.get(method)
-                if cb is not None:
-                    cb(**params)
+                method = decoded_cmd.get('method', None)
+                if method is not None:
+                    # This is a remote method called from klippy
+                    cb = self.remote_methods.get(method, None)
+                    if cb is not None:
+                        params = decoded_cmd.get('params', {})
+                        cb(**params)
+                    else:
+                        logging.info(f"Unknown method received: {method}")
+                    continue
+                # This is a response to a request, process
+                req_id = decoded_cmd.get('id', None)
+                request = self.pending_requests.pop(req_id, None)
+                if request is None:
+                    logging.info(
+                        f"No request matching request ID: {req_id}, "
+                        f"response: {decoded_cmd}")
+                    continue
+                if 'result' in decoded_cmd:
+                    result = decoded_cmd['result']
+                    if not result:
+                        result = "ok"
                 else:
-                    logging.info(f"Unknown command received: {data.decode()}")
+                    err = decoded_cmd.get('error', "Malformed Klippy Response")
+                    result = ServerError(err, 400)
+                request.notify(result)
             except Exception:
                 logging.exception(
                     f"Error processing Klippy Host Response: {data.decode()}")
 
     def _handle_stream_closed(self):
         self.is_klippy_ready = False
+        self.gc_response_registered = False
+        self.klippy_state = "disconnected"
         self.klippy_iostream = None
         self.init_cb.stop()
         for request in self.pending_requests.values():
@@ -216,30 +244,31 @@ class Server:
             self.init_cb.stop()
 
     async def _request_endpoints(self):
-        try:
-            result = await self.make_request("list_endpoints", {})
-        except ServerError:
+        result = await self.klippy_apis.list_endpoints(default=None)
+        if result is None:
             return
-        endpoints = result.get('hooks', {})
-        static_paths = result.get('static_paths', {})
+        endpoints = result.get('endpoints', {})
         for ep in endpoints:
             self.moonraker_app.register_remote_handler(ep)
-        mutable_paths = {sp['resource_id']: sp['file_path']
-                         for sp in static_paths}
-        file_manager = self.lookup_plugin('file_manager')
-        file_manager.update_mutable_paths(mutable_paths)
+        # Subscribe to Gcode Output
+        if "gcode/subscribe_output" in endpoints and \
+                not self.gc_response_registered:
+            try:
+                await self.klippy_apis.subscribe_gcode_output()
+            except ServerError as e:
+                logging.info(
+                    f"{e}\nUnable to register gcode output subscription")
+                return
+            self.gc_response_registered = True
 
     async def _check_available_objects(self):
-        try:
-            result = await self.make_request("objects/list", {})
-        except ServerError as e:
+        result = await self.klippy_apis.get_object_list(default=None)
+        if result is None:
             logging.info(
-                f"{e}\nUnable to retreive Klipper Object List")
+                f"Unable to retreive Klipper Object List")
             return
-        missing_objs = []
-        for obj in ["virtual_sdcard", "display_status", "pause_resume"]:
-            if obj not in result:
-                missing_objs.append(obj)
+        req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
+        missing_objs = req_objs - set(result)
         if missing_objs:
             err_str = ", ".join([f"[{o}]" for o in missing_objs])
             logging.info(
@@ -249,32 +278,51 @@ class Server:
 
     async def _check_ready(self):
         try:
-            result = await self.make_request("info", {})
+            result = await self.klippy_apis.get_klippy_info()
         except ServerError as e:
             logging.info(
                 f"{e}\nKlippy info request error.  This indicates that\n"
                 f"Klippy may have experienced an error during startup.\n"
                 f"Please check klippy.log for more information")
             return
-        is_ready = result.get("is_ready", False)
+        # Update filemanager fixed paths
+        fixed_paths = {k: result[k] for k in
+                       ['klipper_path', 'python_path',
+                        'log_file', 'config_file']}
+        file_manager = self.lookup_plugin('file_manager')
+        file_manager.update_fixed_paths(fixed_paths)
+        is_ready = result.get('state', "") == "ready"
         if is_ready:
-            self._set_klippy_ready()
+            await self._set_klippy_ready()
         else:
-            msg = result.get("message", "Klippy Not Ready")
+            msg = result.get('state_message', "Klippy Not Ready")
             logging.info("\n" + msg)
 
-
-    def _handle_klippy_response(self, request_id, response):
-        req = self.pending_requests.pop(request_id, None)
-        if req is not None:
-            if isinstance(response, dict) and 'error' in response:
-                response = ServerError(response['message'], 400)
-            req.notify(response)
-        else:
-            logging.info(f"No request matching response: {response}")
-
-    def _set_klippy_ready(self):
+    async def _set_klippy_ready(self):
         logging.info("Klippy ready")
+        # Update SD Card Path
+        result = await self.klippy_apis.query_objects(
+            {'configfile': None}, default=None)
+        if result is None:
+            logging.info(f"Unable to set SD Card path")
+        else:
+            config = result.get('configfile', {}).get('config', {})
+            vsd_config = config.get('virtual_sdcard', {})
+            vsd_path = vsd_config.get('path', None)
+            if vsd_path is not None:
+                file_manager = self.lookup_plugin('file_manager')
+                file_manager.register_directory(
+                    'gcodes', vsd_path, can_delete=True)
+            else:
+                logging.info(
+                    "Configuration for [virtual_sdcard] not found,"
+                    " unable to set SD Card path")
+        # Register "webhooks" subscription
+        try:
+            await self.klippy_apis.subscribe_objects({'webhooks': None})
+        except ServerError as e:
+            logging.info("Unable to subscribe to webhooks object")
+        self.klippy_state = "ready"
         self.is_klippy_ready = True
         self.send_event("server:klippy_state_changed", "ready")
 
@@ -286,10 +334,36 @@ class Server:
     def _process_gcode_response(self, response):
         self.send_event("server:gcode_response", response)
 
-    def _process_status_update(self, status):
+    def _process_status_update(self, eventtime, status):
+        if 'webhooks' in status:
+            # XXX - process other states (startup, ready, error, etc)?
+            state = status['webhooks'].get('state', None)
+            if state is not None:
+                if state == "shutdown":
+                    self._set_klippy_shutdown()
+                self.klippy_state = state
         self.send_event("server:status_update", status)
 
     async def make_request(self, rpc_method, params):
+        # XXX - This adds the "response_template" to a subscription
+        # request and tracks all subscriptions so that each
+        # client gets what its requesting.  In the future we should
+        # track subscriptions per client and send clients only
+        # the data they are asking for.
+        if rpc_method == "objects/subscribe":
+            for obj, items in params.get('objects', {}).items():
+                if obj in self.all_subscriptions:
+                    pi = self.all_subscriptions[obj]
+                    if items is None or pi is None:
+                        self.all_subscriptions[obj] = None
+                    else:
+                        uitems = list(set(pi) | set(items))
+                        self.all_subscriptions[obj] = uitems
+                else:
+                    self.all_subscriptions[obj] = items
+            params['objects'] = dict(self.all_subscriptions)
+            params['response_template'] = {'method': "process_status_update"}
+
         base_request = BaseRequest(rpc_method, params)
         self.pending_requests[base_request.id] = base_request
         self.ioloop.spawn_callback(
@@ -297,7 +371,7 @@ class Server:
         result = await base_request.wait()
         return result
 
-    async def _kill_server(self):
+    async def _stop_server(self):
         # XXX - Currently this function is not used.
         # Should I expose functionality to shutdown
         # or restart the server, or simply remove this?
@@ -309,19 +383,10 @@ class Server:
         if self.klippy_iostream is not None and \
                 not self.klippy_iostream.closed():
             self.klippy_iostream.close()
-        self.close_server_sock()
         if self.server_running:
             self.server_running = False
             await self.moonraker_app.close()
             self.ioloop.stop()
-
-    def close_server_sock(self):
-        try:
-            self.remove_server_sock()
-            self.klippy_server_sock.close()
-            # XXX - remove server sock file (or use abstract?)
-        except Exception:
-            logging.exception("Error Closing Server Socket")
 
 # Basic WebRequest class, easily converted to dict for json encoding
 class BaseRequest:
