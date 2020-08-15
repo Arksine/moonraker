@@ -43,8 +43,7 @@ class Server:
             'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_connection = KlippyConnection(
             self.process_command, self.on_connection_closed)
-        self.is_klippy_ready = False
-        self.gc_response_registered = False
+        self.init_list = []
         self.klippy_state = "disconnected"
 
         # XXX - currently moonraker maintains a superset of all
@@ -183,8 +182,7 @@ class Server:
         request.notify(result)
 
     def on_connection_closed(self):
-        self.is_klippy_ready = False
-        self.gc_response_registered = False
+        self.init_list = []
         self.klippy_state = "disconnected"
         self.init_cb.stop()
         for request in self.pending_requests.values():
@@ -195,14 +193,32 @@ class Server:
         self.ioloop.call_later(1., self._connect_klippy)
 
     async def _initialize(self):
+        await self._check_ready()
         await self._request_endpoints()
-        if not self.is_klippy_ready:
-            await self._check_ready()
-        else:
+        # Subscribe to "webhooks"
+        # Register "webhooks" subscription
+        if "webhooks_sub" not in self.init_list:
+            try:
+                await self.klippy_apis.subscribe_objects({'webhooks': None})
+            except ServerError as e:
+                logging.info(f"{e}\nUnable to subscribe to webhooks object")
+            else:
+                logging.info("Webhooks Subscribed")
+                self.init_list.append("webhooks_sub")
+        # Subscribe to Gcode Output
+        if "gcode_output_sub" not in self.init_list:
+            try:
+                await self.klippy_apis.subscribe_gcode_output()
+            except ServerError as e:
+                logging.info(
+                    f"{e}\nUnable to register gcode output subscription")
+            else:
+                logging.info("GCode Output Subscribed")
+                self.init_list.append("gcode_output_sub")
+        if "klippy_ready" in self.init_list:
             # Moonraker is enabled in the Klippy module
             # and Klippy is ready.  We can stop the init
             # procedure.
-            await self._check_available_objects()
             self.init_cb.stop()
 
     async def _request_endpoints(self):
@@ -212,31 +228,6 @@ class Server:
         endpoints = result.get('endpoints', {})
         for ep in endpoints:
             self.moonraker_app.register_remote_handler(ep)
-        # Subscribe to Gcode Output
-        if "gcode/subscribe_output" in endpoints and \
-                not self.gc_response_registered:
-            try:
-                await self.klippy_apis.subscribe_gcode_output()
-            except ServerError as e:
-                logging.info(
-                    f"{e}\nUnable to register gcode output subscription")
-                return
-            self.gc_response_registered = True
-
-    async def _check_available_objects(self):
-        result = await self.klippy_apis.get_object_list(default=None)
-        if result is None:
-            logging.info(
-                f"Unable to retreive Klipper Object List")
-            return
-        req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
-        missing_objs = req_objs - set(result)
-        if missing_objs:
-            err_str = ", ".join([f"[{o}]" for o in missing_objs])
-            logging.info(
-                f"\nWarning, unable to detect the following printer "
-                f"objects:\n{err_str}\nPlease add the the above sections "
-                f"to printer.cfg for full Moonraker functionality.")
 
     async def _check_ready(self):
         try:
@@ -255,43 +246,47 @@ class Server:
         file_manager.update_fixed_paths(fixed_paths)
         is_ready = result.get('state', "") == "ready"
         if is_ready:
-            await self._set_klippy_ready()
+            await self._verify_klippy_requirements()
+            logging.info("Klippy ready")
+            self.klippy_state = "ready"
+            self.init_list.append('klippy_ready')
+            self.send_event("server:klippy_state_changed", "ready")
         else:
             msg = result.get('state_message', "Klippy Not Ready")
             logging.info("\n" + msg)
 
-    async def _set_klippy_ready(self):
-        logging.info("Klippy ready")
-        # Update SD Card Path
-        result = await self.klippy_apis.query_objects(
-            {'configfile': None}, default=None)
+    async def _verify_klippy_requirements(self):
+        result = await self.klippy_apis.get_object_list(default=None)
         if result is None:
-            logging.info(f"Unable to set SD Card path")
-        else:
-            config = result.get('configfile', {}).get('config', {})
-            vsd_config = config.get('virtual_sdcard', {})
-            vsd_path = vsd_config.get('path', None)
-            if vsd_path is not None:
-                file_manager = self.lookup_plugin('file_manager')
-                file_manager.register_directory(
-                    'gcodes', vsd_path, can_delete=True)
+            logging.info(
+                f"Unable to retreive Klipper Object List")
+            return
+        req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
+        missing_objs = req_objs - set(result)
+        if missing_objs:
+            err_str = ", ".join([f"[{o}]" for o in missing_objs])
+            logging.info(
+                f"\nWarning, unable to detect the following printer "
+                f"objects:\n{err_str}\nPlease add the the above sections "
+                f"to printer.cfg for full Moonraker functionality.")
+        if "virtual_sdcard" not in missing_objs:
+            # Update the gcode path
+            result = await self.klippy_apis.query_objects(
+                {'configfile': None}, default=None)
+            if result is None:
+                logging.info(f"Unable to set SD Card path")
             else:
-                logging.info(
-                    "Configuration for [virtual_sdcard] not found,"
-                    " unable to set SD Card path")
-        # Register "webhooks" subscription
-        try:
-            await self.klippy_apis.subscribe_objects({'webhooks': None})
-        except ServerError as e:
-            logging.info("Unable to subscribe to webhooks object")
-        self.klippy_state = "ready"
-        self.is_klippy_ready = True
-        self.send_event("server:klippy_state_changed", "ready")
-
-    def _set_klippy_shutdown(self):
-        logging.info("Klippy has shutdown")
-        self.is_klippy_ready = False
-        self.send_event("server:klippy_state_changed", "shutdown")
+                config = result.get('configfile', {}).get('config', {})
+                vsd_config = config.get('virtual_sdcard', {})
+                vsd_path = vsd_config.get('path', None)
+                if vsd_path is not None:
+                    file_manager = self.lookup_plugin('file_manager')
+                    file_manager.register_directory(
+                        'gcodes', vsd_path, can_delete=True)
+                else:
+                    logging.info(
+                        "Configuration for [virtual_sdcard] not found,"
+                        " unable to set SD Card path")
 
     def _process_gcode_response(self, response):
         self.send_event("server:gcode_response", response)
@@ -302,7 +297,8 @@ class Server:
             state = status['webhooks'].get('state', None)
             if state is not None:
                 if state == "shutdown":
-                    self._set_klippy_shutdown()
+                    logging.info("Klippy has shutdown")
+                    self.send_event("server:klippy_state_changed", "shutdown")
                 self.klippy_state = state
         self.send_event("server:status_update", status)
 
