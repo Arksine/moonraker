@@ -40,13 +40,21 @@ that uses promises to return responses and errors (see json-rcp.js).
   `{jsonrpc: "2.0", method: "get_printer_info", id: <request id>}`
 
 - Returns:\
-  An object containing the build version, cpu info, and if the Klippy
-  process is ready for operation.  The latter is useful when a client connects
-  after the klippy state event has been broadcast.
+  An object containing the build version, cpu info, Klippy's current state.
 
-  `{version: "<version>", cpu: "<cpu_info>", is_ready: <boolean>,
-    hostname: "<hostname>", error_detected: <boolean>,
-    message: "<current state message>"}`
+    ```json
+    {
+      state: "<klippy state>",
+      state_message: "<current state message>",
+      hostname: "<hostname>",
+      software_version: "<version>",
+      cpu_info: "<cpu_info>",
+      klipper_path: "<moonraker use only>",
+      python_path: "<moonraker use only>",
+      log_file: "<moonraker use only>",
+      config_file: "<moonraker use only>",
+    }
+    ```
 
 ### Emergency Stop
 - HTTP command:\
@@ -88,41 +96,16 @@ that uses promises to return responses and errors (see json-rcp.js).
   `{jsonrpc: "2.0", method: "get_printer_objects_list", id: <request id>}`
 
 - Returns:\
-  An object containing key, value pairs, where the key is the name of the
-  Klippy module available for status query, and the value is an array of
-  strings containing that module's available attributes.
+  An a list of "printer objects" that are currently available for query
+  or subscription.  This list will be passed in an "objects" parameter.
 
   ```json
-  { gcode: ["busy", "gcode_position", ...],
-    toolhead: ["position", "status"...], ...}
+  { objects: [gcode, toolhead, bed_mesh, configfile...]}
   ```
 
-### Request currently subscribed objects:
-- HTTP command:
-  `GET /printer/objects/subscription`
-
-- Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_objects_subscription", id: <request id>}`
-
-- Returns:\
-  An object of the similar that above, however the format of the `result`
-  value is changed to include poll times:
-
-   ```json
-  { objects: {
-      gcode: ["busy", "gcode_position", ...],
-      toolhead: ["position", "status"...],
-      ...},
-    poll_times: {
-      gcode: .25,
-      toolhead: .25,
-      ...}
-    }
-  ```
-
-### Request the a status update for an object, or group of objects:
+### Query the a status for an object, or group of objects:
 - HTTP command:\
-  `GET /printer/objects/status?gcode`
+  `GET /printer/objects/query?gcode`
 
   The above will fetch a status update for all gcode attributes.  The query
   string can contain multiple items, and specify individual attributes:
@@ -130,40 +113,66 @@ that uses promises to return responses and errors (see json-rcp.js).
   `?gcode=gcode_position,busy&toolhead&extruder=target`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_objects_status", params:
-    {gcode: [], toolhead: ["position", "status"]}, id: <request id>}`
+  `{jsonrpc: "2.0", method: "get_printer_objects_query", params:
+    {objects: {gcode: [], toolhead: ["position", "status"]}},
+     id: <request id>}`
 
   Note that an empty array will fetch all available attributes for its key.
 
 - Returns:\
-  An object where the top level keys are the requested Klippy objects, as shown
-  below:
+  An object where the top level items are "eventtime" and "status".  The
+  "status" item contains data about the requested update.
 
   ```json
-  { gcode: {
-      busy: true,
-      gcode_position: [0, 0, 0 ,0],
-      ...},
-    toolhead: {
-      position: [0, 0, 0, 0],
-      status: "Ready",
-      ...},
-    ...}
+  {
+    eventtime: <klippy time of update>,
+    status: {
+      gcode: {
+        busy: true,
+        gcode_position: [0, 0, 0 ,0],
+        ...},
+      toolhead: {
+        position: [0, 0, 0, 0],
+        status: "Ready",
+        ...},
+      ...}
+    }
   ```
 ### Subscribe to a status request or a batch of status requests:
 - HTTP command:\
-  `POST /printer/objects/subscription?gcode=gcode_position,bus&extruder=target`
+  `POST /printer/objects/subscribe?gcode=gcode_position,bus&extruder=target`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_objects_subscription", params:
-    {gcode: [], toolhead: ["position", "status"]}, id: <request id>}`
+  `{jsonrpc: "2.0", method: "post_printer_objects_subscribe", params:
+    {objects: {gcode: [], toolhead: ["position", "status"]}},
+    id: <request id>}`
 
 - Returns:\
-  An acknowledgement that the request has been received:
+  Status data for all currently subscribed objects, with the format matching that of
+  the `/printer/objects/query`:
 
-  `ok`
+  ```json
+  {
+    eventtime: <klippy time of update>,
+    status: {
+      gcode: {
+        busy: true,
+        gcode_position: [0, 0, 0 ,0],
+        ...},
+      toolhead: {
+        position: [0, 0, 0, 0],
+        status: "Ready",
+        ...},
+      ...}
+    }
+  ```
+  Note that Moonraker's current behavior is maintain a superset of all client
+  subscriptions, thus you may received data for objects that you did not
+  request.  This behavior is subject to change in the future (where each
+  client receives only the subscriptions it requested).
 
-  The actual status updates will be sent asynchronously over the websocket.
+  Future updates for subscribed objects are sent asynchronously over the
+  websocket.  See the `notify_status_update` notification for details.
 
 ### Query Endstops
 - HTTP command:\
@@ -775,15 +784,14 @@ the websocket:
    status.
    - If the response returns an error (such as 404), set a timeout for
      2 seconds and try again.
-   - If the response returns success, check the result's `is_ready` attribute
-     to determine if Klipper is ready.
-     - If Klipper is ready you may proceed to request status of printer objects
+   - If the response returns success, check the result's `state` attribute
+     - If `state == "ready"` you may proceed to request status of printer objects
        make subscriptions, get the file list, etc.
-     - If not ready check `error_detected` to see if Klippy has experienced an
-       error.
+     - If `state == "error"` then Klippy has experienced an error
        - If an error is detected it might be wise to prompt the user.  You can
-         get a description of the error from the `message` attribute
-       - If no error then re-request printer info in 2s.
+         get a description of the error from the `state_message` attribute
+     - If `state == "shutdown"` then Klippy is in a shutdown state.
+     - If `state == "startup"` then re-request printer info in 2s.
 - Repeat step 2s until Klipper reports ready.  T
 - Client's should watch for the `notify_klippy_state_changed` event.  If it reports
   disconnected then Klippy has either been stopped or restarted.  In this
