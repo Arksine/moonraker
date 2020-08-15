@@ -45,14 +45,14 @@ var api = {
         method: "get_printer_objects_list"
     },
     object_status: {
-        url: "/printer/objects/status",
-        method: "get_printer_objects_status"
+        url: "/printer/objects/query",
+        method: "get_printer_objects_query"
     },
     object_subscription: {
-        url: "/printer/objects/subscription",
+        url: "/printer/objects/subscribe",
         method: {
-            post: "post_printer_objects_subscription",
-            get: "get_printer_objects_subscription"
+            post: "post_printer_objects_subscribe",
+            get: "get_printer_objects_subscribe"
         },
     },
     temperature_store: {
@@ -243,11 +243,11 @@ function get_klippy_info() {
     json_rpc.call_method(api.printer_info.method)
     .then((result) => {
 
-        if (result.is_ready) {
+        if (result.state == "ready") {
             if (!klippy_ready) {
                 update_term("Klippy Hostname: " + result.hostname +
-                    " | CPU: " + result.cpu +
-                    " | Build Version: " + result.version);
+                    " | CPU: " + result.cpu_info +
+                    " | Build Version: " + result.software_version);
                 klippy_ready = true;
                 // Klippy has transitioned from not ready to ready.
                 // It is now safe to fetch the file list.
@@ -257,23 +257,25 @@ function get_klippy_info() {
                 if ($("#cbxSub").is(":checked")) {
                     // If autosubscribe is check, request the subscription now
                     const sub = {
-                        gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
-                        idle_timeout: [],
-                        pause_resume: [],
-                        toolhead: [],
-                        virtual_sdcard: [],
-                        heater_bed: [],
-                        extruder: ["temperature", "target"],
-                        fan: [],
-                        print_stats: []};
+                        objects: {
+                            gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
+                            idle_timeout: null,
+                            pause_resume: null,
+                            toolhead: null,
+                            virtual_sdcard: null,
+                            heater_bed: null,
+                            extruder: ["temperature", "target"],
+                            fan: null,
+                            print_stats: null}
+                        };
                     add_subscription(sub);
                 } else {
-                    get_status({idle_timeout: [], pause_resume: []});
+                    get_status({idle_timeout: null, pause_resume: null});
                 }
             }
         } else {
-            if (result.error_detected) {
-                update_term(result.message);
+            if (result.state == "error") {
+                update_term(result.state_message);
             } else {
                 update_term("Waiting for Klippy ready status...");
             }
@@ -341,7 +343,7 @@ function get_status(printer_objects) {
     });
 }
 
-function get_object_info() {
+function get_object_list() {
     json_rpc.call_method(api.object_list.method)
     .then((result) => {
         // result will be a dictionary containing all available printer
@@ -357,8 +359,8 @@ function add_subscription(printer_objects) {
     json_rpc.call_method_with_kwargs(
         api.object_subscription.method.post, printer_objects)
     .then((result) => {
-        // result is simply an "ok" acknowledgement that subscriptions
-        // have been added for requested objects
+        // result is the the state from all fetched data
+        handle_status_update(result.status)
         console.log(result);
     })
     .catch((error) => {
@@ -1156,15 +1158,17 @@ window.onload = () => {
             });
         } else {
             const sub = {
-                gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
-                idle_timeout: [],
-                pause_resume: [],
-                toolhead: [],
-                virtual_sdcard: [],
-                heater_bed: [],
-                extruder: ["temperature", "target"],
-                fan: [],
-                print_stats: []};
+                objects: {
+                    gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
+                    idle_timeout: null,
+                    pause_resume: null,
+                    toolhead: null,
+                    virtual_sdcard: null,
+                    heater_bed: null,
+                    extruder: ["temperature", "target"],
+                    fan: null,
+                    print_stats: null}
+                };
             add_subscription(sub);
         }
     });
@@ -1207,7 +1211,7 @@ window.onload = () => {
                 return false;
             });
         } else {
-            get_object_info();
+            get_object_list();
         }
     });
 
