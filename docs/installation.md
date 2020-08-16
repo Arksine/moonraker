@@ -10,6 +10,37 @@ Klipper should be installed prior to installing Moonraker.  Please see
 [Klipper's Documention](https://github.com/KevinOConnor/klipper/blob/master/docs/Installation.md)
 for instructions on how to do this.
 
+After Klipper is installed, you need to modify its "default" file.  This file
+contains klipper's command line arguments, and you must add an argument that
+instructs Klippy to create a Unix Domain socket:
+```
+sudo nano /etc/default/klipper
+```
+You should see a file that looks something like the following:
+```
+# Configuration for /etc/init.d/klipper
+
+KLIPPY_USER=pi
+
+KLIPPY_EXEC=/home/pi/klippy-env/bin/python
+
+KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer.cfg -l /tmp/klippy.log"
+```
+
+You need to add `-a /tmp/klippy_uds` to KLIPPY_ARGS:
+```
+# Configuration for /etc/init.d/klipper
+
+KLIPPY_USER=pi
+
+KLIPPY_EXEC=/home/pi/klippy-env/bin/python
+
+KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer.cfg -l /tmp/klippy.log -a /tmp/klippy_uds"
+```
+You may also want to take this opportunity to change the location of
+printer.cfg if you enable Moonraker's "config_path" option (see the
+[configuration section](#moonraker-configuration-moonrakerconf) for more information).
+
 You can now install the Moonraker application:
 ```
 cd ~

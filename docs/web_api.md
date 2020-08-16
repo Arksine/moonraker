@@ -100,7 +100,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   or subscription.  This list will be passed in an "objects" parameter.
 
   ```json
-  { objects: [gcode, toolhead, bed_mesh, configfile...]}
+  { objects: ["gcode", "toolhead", "bed_mesh", "configfile",....]}
   ```
 
 ### Query the a status for an object, or group of objects:
@@ -671,11 +671,16 @@ Printer generated events are sent over the websocket as JSON-RPC 2.0
 notifications.  These notifications are sent to all connected clients
 in the following format:
 
-`{jsonrpc: "2.0", method: <event method name>, params: [<event state>]}`
+`{jsonrpc: "2.0", method: <event method name>}`
 
-It is important to keep in mind that the `params` value will always be
+OR
+
+`{jsonrpc: "2.0", method: <event method name>, params: [<event parameter>]}`
+
+If a notification has parameters,  the `params` value will always be
 wrapped in an array as directed by the JSON-RPC standard.  Currently
-all notifications available are broadcast with a single parameter.
+all notifications available are broadcast with either no parameters
+or a single parameter.
 
 ### Gcode response:
 All calls to gcode.respond() are forwarded over the websocket.  They arrive
@@ -689,21 +694,12 @@ Status Subscriptions arrive as a "notify_status_update" notification:
 `{jsonrpc: "2.0", method: "notify_status_update", params: [<status_data>]}`
 
 The structure of the status data is identical to the structure that is
-returned from a status request.
+returned from an object query's "status" attribute.
 
-### Klippy Process State Changed:
-The following Klippy state changes are broadcast over the websocket:
-- ready
-- disconnect
-- shutdown
+### Klippy Disconnected:
+Notify clients when Moonraker's connection to Klippy has terminated
 
-Note that Klippy's "ready" is different from the Printer's "ready".  The
-Klippy "ready" state is broadcast upon startup after initialization is
-complete.  It should also be noted that the websocket will be disconnected
-after the "disconnect" state, as that notification is broadcast prior to a
-restart. Klippy State notifications are broadcast in the following format:
-
-`{jsonrpc: "2.0", method: "notify_klippy_state_changed", params: [<state>]}`
+`{jsonrpc: "2.0", method: "notify_klippy_disconnected"}`
 
 ### File List Changed
 When a client makes a change to the virtual sdcard file list
