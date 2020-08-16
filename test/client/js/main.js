@@ -218,6 +218,28 @@ function update_error(cmd, msg) {
     update_term("Command [" + cmd + "] resulted in an error: " + msg);
     console.log("Error processing " + cmd +": " + msg);
 }
+
+function handle_klippy_state(state) {
+    // Klippy state can be "ready", "disconnect", and "shutdown".  This
+    // differs from Printer State in that it represents the status of
+    // the Host software
+    switch(state) {
+        case "ready":
+            // It would be possible to use this event to notify the
+            // client that the printer has started, however the server
+            // may not start in time for clients to receive this event.
+            // It is being kept in case
+            if (!klippy_ready)
+                update_term("Klippy Ready");
+            break;
+        case "shutdown":
+            // Either M112 was entered or there was a printer error.  We
+            // probably want to notify the user and disable certain controls.
+            klippy_ready = false;
+            update_term("Klipper has shutdown, check klippy.log for info");
+            break;
+    }
+}
 //***********End UI Update Functions****************/
 
 //***********Websocket-Klipper API Functions (JSON-RPC)************/
@@ -553,6 +575,8 @@ function handle_status_update(status) {
                         update_streamdiv(name, attr, val);
                     }
                     break;
+                case "webhooks.state":
+                    handle_klippy_state(val);
                 default:
                     update_streamdiv(name, attr, val);
 
@@ -562,39 +586,19 @@ function handle_status_update(status) {
 }
 json_rpc.register_method("notify_status_update", handle_status_update);
 
-function handle_klippy_state(state) {
-    // Klippy state can be "ready", "disconnect", and "shutdown".  This
-    // differs from Printer State in that it represents the status of
-    // the Host software
-    switch(state) {
-        case "ready":
-            // It would be possible to use this event to notify the
-            // client that the printer has started, however the server
-            // may not start in time for clients to receive this event.
-            // It is being kept in case
-            update_term("Klippy Ready");
-            break;
-        case "disconnect":
-            // Klippy has disconnected from the MCU and is prepping to
-            // restart.  The client will receive this signal right before
-            // the websocket disconnects.  If we need to do any kind of
-            // cleanup on the client to prepare for restart this would
-            // be a good place.
-            klippy_ready = false;
-            update_term("Klippy Disconnected");
-            setTimeout(() => {
-                get_klippy_info();
-            }, 2000);
-            break;
-        case "shutdown":
-            // Either M112 was entered or there was a printer error.  We
-            // probably want to notify the user and disable certain controls.
-            klippy_ready = false;
-            update_term("Klipper has shutdown, check klippy.log for info");
-            break;
-    }
+function handle_klippy_disconnected() {
+    // Klippy has disconnected from the MCU and is prepping to
+    // restart.  The client will receive this signal right before
+    // the websocket disconnects.  If we need to do any kind of
+    // cleanup on the client to prepare for restart this would
+    // be a good place.
+    klippy_ready = false;
+    update_term("Klippy Disconnected");
+    setTimeout(() => {
+        get_klippy_info();
+    }, 2000);
 }
-json_rpc.register_method("notify_klippy_state_changed", handle_klippy_state);
+json_rpc.register_method("notify_klippy_disconnected", handle_klippy_disconnected);
 
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed
