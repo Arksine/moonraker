@@ -177,7 +177,11 @@ class PanelDue:
 
         # Register server events
         self.server.register_event_handler(
-            "server:klippy_state_changed", self.handle_klippy_state)
+            "server:klippy_ready", self._process_klippy_ready)
+        self.server.register_event_handler(
+            "server:klippy_shutdown", self._process_klippy_shutdown)
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._process_klippy_disconnect)
         self.server.register_event_handler(
             "server:status_update", self.handle_status_update)
         self.server.register_event_handler(
@@ -210,15 +214,6 @@ class PanelDue:
             'M292': self._prepare_M292,
             'M999': lambda args: "FIRMWARE_RESTART"
         }
-
-    async def handle_klippy_state(self, state):
-        # XXX - Add a "connected" state and send a "C" to paneldue?
-        if state == "ready":
-            await self._process_klippy_ready()
-        elif state == "shutdown":
-            await self._process_klippy_shutdown()
-        elif state == "disconnect":
-            await self._process_klippy_disconnect()
 
     async def _process_klippy_ready(self):
         # Request "info" and "configfile" status

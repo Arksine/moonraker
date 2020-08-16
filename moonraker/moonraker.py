@@ -189,7 +189,7 @@ class Server:
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
         logging.info("Klippy Connection Removed")
-        self.send_event("server:klippy_state_changed", "disconnect")
+        self.send_event("server:klippy_disconnect")
         self.ioloop.call_later(1., self._connect_klippy)
 
     async def _initialize(self):
@@ -250,7 +250,7 @@ class Server:
             logging.info("Klippy ready")
             self.klippy_state = "ready"
             self.init_list.append('klippy_ready')
-            self.send_event("server:klippy_state_changed", "ready")
+            self.send_event("server:klippy_ready")
         else:
             msg = result.get('state_message', "Klippy Not Ready")
             logging.info("\n" + msg)
@@ -298,7 +298,7 @@ class Server:
             if state is not None:
                 if state == "shutdown":
                     logging.info("Klippy has shutdown")
-                    self.send_event("server:klippy_state_changed", "shutdown")
+                    self.send_event("server:klippy_shutdown")
                 self.klippy_state = state
         self.send_event("server:status_update", status)
 

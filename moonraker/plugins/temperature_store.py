@@ -24,17 +24,14 @@ class TemperatureStore:
         self.server.register_event_handler(
             "server:status_update", self._set_current_temps)
         self.server.register_event_handler(
-            "server:klippy_state_changed", self._init_sensors)
+            "server:klippy_ready", self._init_sensors)
 
         # Register endpoint
         self.server.register_endpoint(
             "/server/temperature_store", "server_temperature_store", ['GET'],
             self._handle_temp_store_request)
 
-    async def _init_sensors(self, state):
-        if state != "ready":
-            return
-
+    async def _init_sensors(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
         # Fetch sensors
         try:
