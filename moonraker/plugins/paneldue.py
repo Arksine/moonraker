@@ -142,8 +142,9 @@ class PanelDue:
 
         # Initialize tracked state.
         self.printer_state = {
-            'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'fan': {}, 'display_status': {}, 'print_stats': {}}
+            'gcode_move': {}, 'toolhead': {}, 'virtual_sdcard': {},
+            'fan': {}, 'display_status': {}, 'print_stats': {},
+            'idle_timeout': {}}
         self.extruder_count = 0
         self.heaters = []
         self.is_ready = False
@@ -247,8 +248,9 @@ class PanelDue:
 
         # Initalize printer state and make subscription request
         self.printer_state = {
-            'gcode': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'fan': {}, 'display_status': {}, 'print_stats': {}}
+            'gcode_move': {}, 'toolhead': {}, 'virtual_sdcard': {},
+            'fan': {}, 'display_status': {}, 'print_stats': {},
+            'idle_timeout': {}}
         sub_args = {k: None for k in self.printer_state.keys()}
         self.extruder_count = 0
         self.heaters = []
@@ -462,8 +464,8 @@ class PanelDue:
             return 'S'
 
         printer_state = self.printer_state
-        th_busy = printer_state['toolhead'].get(
-            'status', 'Ready') == "Printing"
+        p_busy = printer_state['idle_timeout'].get(
+            'state', 'Idle') == "Printing"
         sd_state = printer_state['print_stats'].get('state', "standby")
         if sd_state == "printing":
             if self.last_printer_state == 'A':
@@ -472,14 +474,14 @@ class PanelDue:
             # Printing
             return 'P'
         elif sd_state == "paused":
-            if th_busy and self.last_printer_state != 'A':
+            if p_busy and self.last_printer_state != 'A':
                 # Pausing
                 return 'D'
             else:
                 # Paused
                 return 'A'
 
-        if th_busy:
+        if p_busy:
             # Printer is "busy"
             return 'B'
 
@@ -514,15 +516,15 @@ class PanelDue:
         p_state = self.printer_state
         self.last_printer_state = self._get_printer_status()
         response['status'] = self.last_printer_state
-        response['babystep'] = round(p_state['gcode'].get(
-            'homing_zpos', 0.), 3)
+        response['babystep'] = round(p_state['gcode_move'].get(
+            'homing_origin', [0., 0., 0., 0.])[2], 3)
 
         # Current position
         pos = p_state['toolhead'].get('position', [0., 0., 0., 0.])
         response['pos'] = [round(p, 2) for p in pos[:3]]
         homed_pos = p_state['toolhead'].get('homed_axes', "")
         response['homed'] = [int(a in homed_pos) for a in "xyz"]
-        sfactor = round(p_state['gcode'].get('speed_factor', 1.) * 100, 2)
+        sfactor = round(p_state['gcode_move'].get('speed_factor', 1.) * 100, 2)
         response['sfactor'] = sfactor
 
         # Print Progress Tracking
@@ -552,7 +554,8 @@ class PanelDue:
                     # object height estimate
                     obj_height = self.file_metadata.get('object_height')
                     if obj_height:
-                        cur_height = p_state['gcode'].get('move_zpos', 0.)
+                        cur_height = p_state['gcode_move'].get(
+                            'gcode_position', [0., 0., 0., 0.])[2]
                         hpct = min(1., cur_height / obj_height)
                         times_left.append(int(est_time - est_time * hpct))
                 else:
@@ -579,7 +582,8 @@ class PanelDue:
                 response['tool'] = tool
 
         # Report Heater Status
-        efactor = round(p_state['gcode'].get('extrude_factor', 1.) * 100., 2)
+        efactor = round(p_state['gcode_move'].get(
+            'extrude_factor', 1.) * 100., 2)
 
         for name in self.heaters:
             temp = round(p_state[name].get('temperature', 0.0), 1)
