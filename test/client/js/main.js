@@ -280,7 +280,7 @@ function get_klippy_info() {
                     // If autosubscribe is check, request the subscription now
                     const sub = {
                         objects: {
-                            gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
+                            gcode_move: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
                             idle_timeout: null,
                             pause_resume: null,
                             toolhead: null,
@@ -1151,7 +1151,7 @@ window.onload = () => {
      // Post Subscription Request
      $('#btnsubscribe').click(() => {
         if (api_type == 'http') {
-            let url = api.object_subscription.url + "?gcode=gcode_position,speed,speed_factor,extrude_factor" +
+            let url = api.object_subscription.url + "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
                     "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume"  +
                     "&print_stats";
             let settings = {url: url};
@@ -1163,7 +1163,7 @@ window.onload = () => {
         } else {
             const sub = {
                 objects: {
-                    gcode: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
+                    gcode_move: ["gcode_position", "speed", "speed_factor", "extrude_factor"],
                     idle_timeout: null,
                     pause_resume: null,
                     toolhead: null,
