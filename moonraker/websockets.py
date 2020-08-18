@@ -152,11 +152,7 @@ class WebsocketManager:
 
     def _generate_local_callback(self, endpoint, request_method, callback):
         async def func(**kwargs):
-            try:
-                result = await callback(
-                    endpoint, request_method, kwargs)
-            except ServerError as e:
-                result = e
+            result = await callback(endpoint, request_method, kwargs)
             return result
         return func
 
