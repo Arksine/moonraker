@@ -229,14 +229,17 @@ in the PanelDue's "macro" menu.
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
 ```
 [gcode_macro PANELDUE_BEEP]
+variable_sequence: 0
+variable_frequency: 0
+variable_duration: 0
 # Beep frequency
 default_parameter_FREQUENCY: 300
 # Beep duration in seconds
 default_parameter_DURATION: 1.
 gcode:
-  { printer.webhooks.action_call_remote_method(
-	"paneldue_beep", frequency=FREQUENCY|int,
-	duration=DURATION|float) }
+  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=frequency VALUE={FREQUENCY|int}
+  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=duration VALUE={DURATION|float}
+  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=sequence VALUE={printer["gcode_macro PANELDUE_BEEP"].sequence|int + 1}
 ```
 
 #### Power Control Plugin
