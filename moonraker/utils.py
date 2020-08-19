@@ -4,13 +4,28 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 import logging
+import logging.handlers
 import os
 import subprocess
+import asyncio
+from queue import SimpleQueue as Queue
 
 class ServerError(Exception):
     def __init__(self, message, status_code=400):
         Exception.__init__(self, message)
         self.status_code = status_code
+
+# Coroutine friendly QueueHandler courtesy of Martjin Pieters:
+# https://www.zopatista.com/python/2019/05/11/asyncio-logging/
+class LocalQueueHandler(logging.handlers.QueueHandler):
+    def emit(self, record: logging.LogRecord) -> None:
+        # Removed the call to self.prepare(), handle task cancellation
+        try:
+            self.enqueue(record)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.handleError(record)
 
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, filename, **kwargs):
@@ -51,3 +66,17 @@ def get_software_version():
         logging.exception("Error runing git describe")
 
     return "?"
+
+def setup_logging(log_file):
+    root_logger = logging.getLogger()
+    queue = Queue()
+    queue_handler = LocalQueueHandler(queue)
+    root_logger.addHandler(queue_handler)
+    root_logger.setLevel(logging.INFO)
+    file_hdlr = MoonrakerLoggingHandler(
+        log_file, when='midnight', backupCount=2)
+    formatter = logging.Formatter(
+        '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
+    file_hdlr.setFormatter(formatter)
+    listener = logging.handlers.QueueListener(queue, file_hdlr)
+    listener.start()
