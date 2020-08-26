@@ -3,6 +3,7 @@
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import utils
 
 INFO_ENDPOINT = "info"
 ESTOP_ENDPOINT = "emergency_stop"
@@ -98,8 +99,12 @@ class KlippyAPI:
     async def emergency_stop(self, default=Sentinel):
         return await self._send_klippy_request(ESTOP_ENDPOINT, {}, default)
 
-    async def get_klippy_info(self, default=Sentinel):
-        return await self._send_klippy_request(INFO_ENDPOINT, {}, default)
+    async def get_klippy_info(self, send_id=False, default=Sentinel):
+        params = {}
+        if send_id:
+            ver = utils.get_software_version()
+            params = {'client_info': {'program': "Moonraker", 'version': ver}}
+        return await self._send_klippy_request(INFO_ENDPOINT, params, default)
 
     async def get_object_list(self, default=Sentinel):
         result = await self._send_klippy_request(

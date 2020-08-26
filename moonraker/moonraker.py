@@ -231,14 +231,17 @@ class Server:
             self.moonraker_app.register_remote_handler(ep)
 
     async def _check_ready(self):
+        send_id = "identified" not in self.init_list
         try:
-            result = await self.klippy_apis.get_klippy_info()
+            result = await self.klippy_apis.get_klippy_info(send_id)
         except ServerError as e:
             logging.info(
                 f"{e}\nKlippy info request error.  This indicates that\n"
                 f"Klippy may have experienced an error during startup.\n"
                 f"Please check klippy.log for more information")
             return
+        if send_id:
+            self.init_list.append("identified")
         # Update filemanager fixed paths
         fixed_paths = {k: result[k] for k in
                        ['klipper_path', 'python_path',
