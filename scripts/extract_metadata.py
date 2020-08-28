@@ -95,7 +95,8 @@ class PrusaSlicer(BaseSlicer):
             return None
         total_time = 0
         time_match = time_matches[0]
-        time_patterns = [(r"\d+h", 60*60), (r"\d+m", 60), (r"\d+s", 1)]
+        time_patterns = [(r"\d+d", 24*60*60), (r"\d+h", 60*60),
+                         (r"\d+m", 60), (r"\d+s", 1)]
         for pattern, multiplier in time_patterns:
             t = _regex_find_ints(pattern, time_match)
             if t:
