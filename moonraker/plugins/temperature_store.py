@@ -58,6 +58,8 @@ class TemperatureStore:
                     new_store[sensor] = {
                         'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE),
                         'targets': deque(maxlen=TEMPERATURE_STORE_SIZE)}
+                if sensor not in self.last_temps:
+                    self.last_temps[sensor] = (0., 0.)
             self.temperature_store = new_store
             # Prune unconfigured sensors in self.last_temps
             for sensor in list(self.last_temps.keys()):
@@ -75,10 +77,10 @@ class TemperatureStore:
     def _set_current_temps(self, data):
         for sensor in self.temperature_store:
             if sensor in data:
+                last_temp, last_target = self.last_temps[sensor]
                 self.last_temps[sensor] = (
-                    round(data[sensor].get('temperature', 0.), 2),
-                    data[sensor].get('target', 0.))
-
+                    round(data[sensor].get('temperature', last_temp), 2),
+                    data[sensor].get('target', last_target))
 
     def _update_temperature_store(self):
         # XXX - If klippy is not connected, set values to zero
