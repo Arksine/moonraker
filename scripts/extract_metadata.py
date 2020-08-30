@@ -324,6 +324,8 @@ def extract_metadata(file_path, log):
                 result = func()
                 if result is not None:
                     metadata[key] = result
+        else:
+            metadata['slicer'] = "Unknown"
     return metadata
 
 def main(path, filename):
