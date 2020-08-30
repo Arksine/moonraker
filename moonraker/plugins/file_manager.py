@@ -22,8 +22,7 @@ class FileManager:
         self.server = config.get_server()
         self.file_paths = {}
         self.file_lists = {}
-        self.gcode_metadata = {}
-        self.metadata_lock = Lock()
+        self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
 
         # Register file management endpoints
@@ -261,47 +260,7 @@ class FileManager:
         path_info = {'modified': modified, 'size': size}
         return path_info
 
-    def _shell_proc_callback(self, result):
-        try:
-            proc_resp = json.loads(result.strip())
-        except Exception:
-            logging.exception("file_manager: unable to load metadata")
-            logging.debug(result)
-            return
-        proc_log = proc_resp.get('log', [])
-        for log_msg in proc_log:
-            logging.info(log_msg)
-        file_path = proc_resp.pop('file', None)
-        if file_path is not None:
-            self.gcode_metadata[file_path] = proc_resp.get('metadata')
-
-    async def _update_metadata(self):
-        async with self.metadata_lock:
-            exisiting_data = {}
-            update_list = []
-            gc_files = dict(self.file_lists.get('gcodes', {}))
-            gc_path = self.file_paths.get('gcodes', "")
-            for fname, fdata in gc_files.items():
-                mdata = self.gcode_metadata.get(fname, {})
-                if mdata.get('size', "") == fdata.get('size') \
-                        and mdata.get('modified', "") == fdata.get('modified'):
-                    # file metadata has already been extracted
-                    exisiting_data[fname] = mdata
-                else:
-                    update_list.append(fname)
-            self.gcode_metadata = exisiting_data
-            for fname in update_list:
-                cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
-                                gc_path, "-f", "'" + fname + "'"])
-                shell_command = self.server.lookup_plugin('shell_command')
-                scmd = shell_command.build_shell_command(
-                    cmd, self._shell_proc_callback)
-                try:
-                    await scmd.run(timeout=4.)
-                except Exception:
-                    logging.exception("Error running extract_metadata.py")
-
-    def _update_file_list(self, base='gcodes'):
+    def _update_file_list(self, base='gcodes', do_notify=False):
         # Use os.walk find files in sd path and subdirs
         path = self.file_paths.get(base, None)
         if path is None:
@@ -324,8 +283,7 @@ class FileManager:
                 new_list[r_path] = self._get_path_info(full_path)
         self.file_lists[base] = new_list
         if base == 'gcodes':
-            ioloop = IOLoop.current()
-            ioloop.spawn_callback(self._update_metadata)
+            self.gcode_metadata.refresh_metadata(new_list, path, do_notify)
         return dict(new_list)
 
     async def process_file_upload(self, request):
@@ -499,7 +457,7 @@ class FileManager:
         os.remove(full_path)
 
     def notify_filelist_changed(self, action, fname, base, source_item={}):
-        self._update_file_list(base)
+        self._update_file_list(base, do_notify=True)
         file_info = dict(self.file_lists[base].get(
             fname, {'size': 0, 'modified': ""}))
         file_info.update({'path': fname, 'root': base})
@@ -507,6 +465,81 @@ class FileManager:
         if source_item:
             result.update({'source_item': source_item})
         self.server.send_event("file_manager:filelist_changed", result)
+
+class MetadataStorage:
+    def __init__(self, server):
+        self.server = server
+        self.lock = Lock()
+        self.metadata = {}
+        self.script_response = None
+
+    def get(self, key, default=None):
+        return self.metadata.get(key, default)
+
+    def __getitem__(self, key):
+        return self.metadata[key]
+
+    def _handle_script_response(self, result):
+        try:
+            proc_resp = json.loads(result.strip())
+        except Exception:
+            logging.exception("file_manager: unable to load metadata")
+            logging.debug(result)
+            return
+        proc_log = proc_resp.get('log', [])
+        for log_msg in proc_log:
+            logging.info(log_msg)
+        if 'file' in proc_resp:
+            self.script_response = proc_resp
+
+    def refresh_metadata(self, filelist, gc_path, do_notify=False):
+        IOLoop.current().spawn_callback(
+            self._do_metadata_update, filelist, gc_path, do_notify)
+
+    async def _do_metadata_update(self, filelist, gc_path, do_notify=False):
+        async with self.lock:
+            exisiting_data = {}
+            update_list = []
+            for fname, fdata in filelist.items():
+                mdata = self.metadata.get(fname, {})
+                if mdata.get('size', "") == fdata.get('size') \
+                        and mdata.get('modified', "") == fdata.get('modified'):
+                    # file metadata has already been extracted
+                    exisiting_data[fname] = mdata
+                else:
+                    update_list.append(fname)
+            self.metadata = exisiting_data
+            for fname in update_list:
+                retries = 3
+                while retries:
+                    try:
+                        await self._extract_metadata(fname, gc_path, do_notify)
+                    except Exception:
+                        logging.exception("Error running extract_metadata.py")
+                        retries -= 1
+                    else:
+                        break
+                else:
+                    logging.info(
+                        f"Unable to extract medatadata from file: {fname}")
+
+    async def _extract_metadata(self, filename, path, do_notify=False):
+        cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
+                        path, "-f", "'" + filename + "'"])
+        shell_command = self.server.lookup_plugin('shell_command')
+        scmd = shell_command.build_shell_command(
+            cmd, self._handle_script_response)
+        self.script_response = None
+        await scmd.run(timeout=4.)
+        if self.script_response is None:
+            raise self.server.error("Unable to extract metadata")
+        path = self.script_response['file']
+        metadata = self.script_response['metadata']
+        self.metadata[path] = dict(metadata)
+        metadata['filename'] = path
+        if do_notify:
+            self.server.send_event(
+                "file_manager:metadata_update", metadata)
 
 def load_plugin(config):
     return FileManager(config)
