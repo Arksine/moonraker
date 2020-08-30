@@ -610,6 +610,11 @@ function handle_file_list_changed(file_info) {
 }
 json_rpc.register_method("notify_filelist_changed", handle_file_list_changed);
 
+function handle_metadata_update(metadata) {
+    console.log(metadata);
+}
+json_rpc.register_method("notify_metadata_update", handle_metadata_update);
+
 //***********End Klipper Event Handlers (JSON-RPC)*****************/
 
 // The function below is an example of one way to use JSON-RPC's batch send
