@@ -115,6 +115,8 @@ class WebsocketManager:
             "server:status_update", self._handle_status_update)
         self.server.register_event_handler(
             "file_manager:filelist_changed", self._handle_filelist_changed)
+        self.server.register_event_handler(
+            "file_manager:metadata_update", self._handle_metadata_update)
 
     async def _handle_klippy_disconnect(self):
         await self.notify_websockets("klippy_disconnected")
@@ -127,6 +129,9 @@ class WebsocketManager:
 
     async def _handle_filelist_changed(self, flist):
         await self.notify_websockets("filelist_changed", flist)
+
+    async def _handle_metadata_update(self, metadata):
+        await self.notify_websockets("metadata_update", metadata)
 
     def register_handler(self, api_def, callback=None):
         for r_method in api_def.request_methods:
