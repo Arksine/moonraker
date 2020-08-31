@@ -80,3 +80,4 @@ def setup_logging(log_file):
     file_hdlr.setFormatter(formatter)
     listener = logging.handlers.QueueListener(queue, file_hdlr)
     listener.start()
+    return listener

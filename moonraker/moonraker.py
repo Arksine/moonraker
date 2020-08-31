@@ -454,13 +454,14 @@ def main():
     # Setup Logging
     log_file = os.path.normpath(os.path.expanduser(cmd_line_args.logfile))
     cmd_line_args.logfile = log_file
-    utils.setup_logging(log_file)
+    ql = utils.setup_logging(log_file)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
             f"Detected Version: {sys.version}"
         logging.info(msg)
         print(msg)
+        ql.stop()
         exit(1)
 
     # Start IOLoop and Server
@@ -469,6 +470,7 @@ def main():
         server = Server(cmd_line_args)
     except Exception:
         logging.exception("Moonraker Error")
+        ql.stop()
         exit(1)
     try:
         server.start()
@@ -477,6 +479,7 @@ def main():
         logging.exception("Server Running Error")
     io_loop.close(True)
     logging.info("Server Shutdown")
+    ql.stop()
 
 
 if __name__ == '__main__':
