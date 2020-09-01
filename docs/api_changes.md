@@ -1,7 +1,40 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
-### August 16 2020
+### September 1st 2020
+- A new notification has been added: `notify_metdata_update`.  This
+  notification is sent when Moonraker parses metdata from a new upload.
+  Note that the upload must be made via the API, files manually (using
+  SAMBA, SCP, etc) do not trigger a notification.  The notification is
+  sent in the following format:
+  ```
+  {jsonrpc: "2.0", method: "notify_metadata_update", params: [metadata]}
+  ```
+  Where `metadata` is an object in the following format:
+
+  ```json
+  {
+    filename: "file name",
+    size: <file size>,
+    modified: "last modified date",
+    slicer: "Slicer Name",
+    first_layer_height: <in mm>,
+    layer_height: <in mm>,
+    object_height: <in mm>,
+    estimated_time: <time in seconds>,
+    filament_total: <in mm>,
+    thumbnails: [
+      {
+        width: <in pixels>,
+        height: <in pixels>,
+        size: <length of string>,
+        data: <base64 string>
+      }, ...
+    ]
+  }
+  ```
+
+### August 16th 2020
 - The structure of data returned from `/printer/info` (`get_printer_info`)
   has changed to the following format:
   ```json

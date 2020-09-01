@@ -747,6 +747,36 @@ The following `actions` are currently available:
 - `move_item`
 - `copy_item`
 
+### Metadata Update
+When a new file is uploaded via the API a websocket notification is broadcast
+to all connected clients after parsing is complete:
+
+`{jsonrpc: "2.0", method: "notify_metadata_update", params: [metadata]}`
+
+Where `metadata` is an object in the following format:
+
+```json
+{
+  filename: "file name",
+  size: <file size>,
+  modified: "last modified date",
+  slicer: "Slicer Name",
+  first_layer_height: <in mm>,
+  layer_height: <in mm>,
+  object_height: <in mm>,
+  estimated_time: <time in seconds>,
+  filament_total: <in mm>,
+  thumbnails: [
+    {
+      width: <in pixels>,
+      height: <in pixels>,
+      size: <length of string>,
+      data: <base64 string>
+    }, ...
+  ]
+}
+```
+
 # Appendix
 
 ### Websocket setup
