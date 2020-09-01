@@ -14,14 +14,14 @@ import json
 import confighelper
 import utils
 from tornado import iostream
-from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.ioloop import IOLoop
 from tornado.util import TimeoutError
 from tornado.locks import Event
 from app import MoonrakerApp
 from utils import ServerError
 
-INIT_MS = 250
-LOG_ATTEMPT_INTERVAL = int(2000 / INIT_MS + .5)
+INIT_TIME = .25
+LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
 CORE_PLUGINS = [
@@ -65,7 +65,6 @@ class Server:
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
         self.ioloop = IOLoop.current()
-        self.init_cb = PeriodicCallback(self._initialize, INIT_MS)
 
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
@@ -155,7 +154,7 @@ class Server:
             self.ioloop.call_later(.25, self._connect_klippy)
             return
         # begin server iniialization
-        self.init_cb.start()
+        self.ioloop.spawn_callback(self._initialize)
 
     def process_command(self, cmd):
         method = cmd.get('method', None)
@@ -188,7 +187,6 @@ class Server:
     def on_connection_closed(self):
         self.init_list = []
         self.klippy_state = "disconnected"
-        self.init_cb.stop()
         for request in self.pending_requests.values():
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
@@ -224,8 +222,9 @@ class Server:
             # and Klippy is ready.  We can stop the init
             # procedure.
             self.init_attempts = 0
-            self.init_cb.stop()
-        self.init_attempts += 1
+        else:
+            self.init_attempts += 1
+            self.ioloop.call_later(INIT_TIME, self._initialize)
 
     async def _request_endpoints(self):
         result = await self.klippy_apis.list_endpoints(default=None)
