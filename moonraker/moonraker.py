@@ -13,14 +13,16 @@ import logging
 import json
 import confighelper
 import utils
-from tornado import gen, iostream
+from tornado import iostream
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.util import TimeoutError
 from tornado.locks import Event
 from app import MoonrakerApp
 from utils import ServerError
 
-INIT_MS = 1000
+INIT_MS = 250
+LOG_ATTEMPT_INTERVAL = int(2000 / INIT_MS + .5)
+MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
 CORE_PLUGINS = [
     'file_manager', 'klippy_apis', 'machine',
@@ -45,6 +47,7 @@ class Server:
         self.klippy_connection = KlippyConnection(
             self.process_command, self.on_connection_closed)
         self.init_list = []
+        self.init_attempts = 0
         self.klippy_state = "disconnected"
 
         # XXX - currently moonraker maintains a superset of all
@@ -149,7 +152,7 @@ class Server:
     async def _connect_klippy(self):
         ret = await self.klippy_connection.connect(self.klippy_address)
         if not ret:
-            self.ioloop.call_later(1., self._connect_klippy)
+            self.ioloop.call_later(.25, self._connect_klippy)
             return
         # begin server iniialization
         self.init_cb.start()
@@ -191,7 +194,7 @@ class Server:
         self.pending_requests = {}
         logging.info("Klippy Connection Removed")
         self.send_event("server:klippy_disconnect")
-        self.ioloop.call_later(1., self._connect_klippy)
+        self.ioloop.call_later(.25, self._connect_klippy)
 
     async def _initialize(self):
         await self._check_ready()
@@ -220,7 +223,9 @@ class Server:
             # Moonraker is enabled in the Klippy module
             # and Klippy is ready.  We can stop the init
             # procedure.
+            self.init_attempts = 0
             self.init_cb.stop()
+        self.init_attempts += 1
 
     async def _request_endpoints(self):
         result = await self.klippy_apis.list_endpoints(default=None)
@@ -235,10 +240,12 @@ class Server:
         try:
             result = await self.klippy_apis.get_klippy_info(send_id)
         except ServerError as e:
-            logging.info(
-                f"{e}\nKlippy info request error.  This indicates that\n"
-                f"Klippy may have experienced an error during startup.\n"
-                f"Please check klippy.log for more information")
+            if self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
+                    self.init_attempts <= MAX_LOG_ATTEMPTS:
+                logging.info(
+                    f"{e}\nKlippy info request error.  This indicates that\n"
+                    f"Klippy may have experienced an error during startup.\n"
+                    f"Please check klippy.log for more information")
             return
         if send_id:
             self.init_list.append("identified")
@@ -255,7 +262,8 @@ class Server:
             self.klippy_state = "ready"
             self.init_list.append('klippy_ready')
             self.send_event("server:klippy_ready")
-        else:
+        elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
+                self.init_attempts <= MAX_LOG_ATTEMPTS:
             msg = result.get('state_message', "Klippy Not Ready")
             logging.info("\n" + msg)
 
