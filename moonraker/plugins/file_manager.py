@@ -535,6 +535,9 @@ class MetadataStorage:
             raise self.server.error("Unable to extract metadata")
         path = self.script_response['file']
         metadata = self.script_response['metadata']
+        if not metadata:
+            # This indicates an error, do not add metadata for this
+            raise self.server.error("Unable to extract metadata")
         self.metadata[path] = dict(metadata)
         metadata['filename'] = path
         if do_notify:
