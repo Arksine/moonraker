@@ -9,11 +9,9 @@ class Machine:
     def __init__(self, config):
         self.server = config.get_server()
         self.server.register_endpoint(
-            "/machine/reboot", "machine_reboot", ['POST'],
-            self._handle_machine_request)
+            "/machine/reboot", ['POST'], self._handle_machine_request)
         self.server.register_endpoint(
-            "/machine/shutdown", "machine_shutdown", ['POST'],
-            self._handle_machine_request)
+            "/machine/shutdown", ['POST'], self._handle_machine_request)
 
     async def _handle_machine_request(self, path, method, args):
         if path == "/machine/shutdown":
