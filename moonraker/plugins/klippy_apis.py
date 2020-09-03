@@ -23,23 +23,17 @@ class KlippyAPI:
 
         # Register GCode Aliases
         self.server.register_endpoint(
-            "/printer/print/pause", "printer_print_pause", ['POST'],
-            self._gcode_pause)
+            "/printer/print/pause", ['POST'], self._gcode_pause)
         self.server.register_endpoint(
-            "/printer/print/resume", "printer_print_resume", ['POST'],
-            self._gcode_resume)
+            "/printer/print/resume", ['POST'], self._gcode_resume)
         self.server.register_endpoint(
-            "/printer/print/cancel", "printer_print_cancel", ['POST'],
-            self._gcode_cancel)
+            "/printer/print/cancel", ['POST'], self._gcode_cancel)
         self.server.register_endpoint(
-            "/printer/print/start", "printer_print_start", ['POST'],
-            self._gcode_start_print)
+            "/printer/print/start", ['POST'], self._gcode_start_print)
         self.server.register_endpoint(
-            "/printer/restart", "printer_restart", ['POST'],
-            self._gcode_restart)
+            "/printer/restart", ['POST'], self._gcode_restart)
         self.server.register_endpoint(
-            "/printer/firmware_restart", "printer_firmware_restart", ['POST'],
-            self._gcode_firmware_restart)
+            "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
 
     async def _gcode_pause(self, path, method, args):
         return await self.run_gcode("PAUSE")
