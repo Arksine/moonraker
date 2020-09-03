@@ -1,6 +1,46 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### September 3rd 2020
+- The Websocket APIs have changed for clarity.  The APIs methods now
+  use namespaces similar to those found in common programming languages.
+  This change affects all websocket APIs, however websocket events have
+  not changed.  Below is a chart mapping the Previous API to the New API:
+  | Previous Websocket Method | New Websocket Method |
+  |---------------------------|----------------------|
+  | get_printer_info | printer.info |
+  | post_printer_emergency_stop | printer.emergency_stop |
+  | post_printer_restart | printer.restart |
+  | post_printer_firmware_restart | printer.firmware_restart |
+  | get_printer_objects_list | printer.objects.list |
+  | get_printer_objects_query | printer.objects.query |
+  | post_printer_objects_subscribe | printer.objects.subscribe |
+  | get_printer_query_endstops_status | printer.query_endstops.status |
+  | post_printer_gcode_script | printer.gcode.script |
+  | get_printer_gcode_help | printer.gcode.help |
+  | post_printer_print_start | printer.print.start |
+  | post_printer_print_pause | printer.print.pause |
+  | post_printer_print_resume | printer.print.resume |
+  | post_printer_print_cancel | printer.print.cancel |
+  | post_machine_reboot | machine.reboot |
+  | post_machine_shutdown | machine.shutdown |
+  | get_server_temperature_store | server.temperature_store |
+  | get_file_list | server.files.list |
+  | get_file_metadata | server.files.metadata |
+  | get_directory | server.files.get_directory |
+  | post_directory | server.files.post_directory |
+  | delete_directory | server.files.delete_directory |
+  | post_file_move | server.files.move |
+  | post_file_copy | server.files.copy |
+- The "power" plugin APIs have changed.  This affects both HTTP and
+  Websocket APIs.  They were originally added to the "/printer" path,
+  however this adds the possibility of a naming conflict.  The new
+  APIs are as follows:
+  - `GET /machine/gpio_power/devices` : `machine.gpio_power.devices`
+  - `GET /machine/gpio_power/status` : `machine.gpio_power.status`
+  - `POST /machine/gpio_power/on` : `machine.gpio_power.on`
+  - `POST /machine/gpio_power/off` : `machine.gpio_power.off`
+
 ### September 1st 2020
 - A new notification has been added: `notify_metdata_update`.  This
   notification is sent when Moonraker parses metdata from a new upload.

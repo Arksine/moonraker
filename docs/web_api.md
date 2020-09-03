@@ -37,7 +37,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `GET /printer/info`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_info", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.info", id: <request id>}`
 
 - Returns:\
   An object containing the build version, cpu info, Klippy's current state.
@@ -61,7 +61,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/emergency_stop`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_emergency_stop", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.emergency_stop", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -71,7 +71,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/restart`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_restart", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.restart", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -81,7 +81,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/firmware_restart`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_firmware_restart", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.firmware_restart", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -93,7 +93,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `GET /printer/objects/list`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_objects_list", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.objects.list", id: <request id>}`
 
 - Returns:\
   An a list of "printer objects" that are currently available for query
@@ -113,7 +113,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `?gcode=gcode_position,busy&toolhead&extruder=target`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_objects_query", params:
+  `{jsonrpc: "2.0", method: "printer.objects.query", params:
     {objects: {gcode: [], toolhead: ["position", "status"]}},
      id: <request id>}`
 
@@ -143,7 +143,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/objects/subscribe?gcode=gcode_position,bus&extruder=target`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_objects_subscribe", params:
+  `{jsonrpc: "2.0", method: "printer.objects.subscribe", params:
     {objects: {gcode: [], toolhead: ["position", "status"]}},
     id: <request id>}`
 
@@ -179,7 +179,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `GET /printer/query_endstops/status`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_query_endstops_status", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.query_endstops.status", id: <request id>}`
 
 - Returns:\
   An object containing the current endstop state, with each attribute in the
@@ -197,7 +197,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `GET /server/temperature_store`
 
 - Websocket command:
-  `{jsonrpc: "2.0", method: "get_temperature_store", id: <request id>}`
+  `{jsonrpc: "2.0", method: "server.temperature_store", id: <request id>}`
 
 - Returns:\
   An object where the keys are the available temperature sensor names, and with
@@ -217,7 +217,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   Will echo "Hello" to the terminal.
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_gcode_script",
+  `{jsonrpc: "2.0", method: "printer.gcode.script",
     params: {script: <gc>}, id: <request id>}`
 
 - Returns:\
@@ -230,7 +230,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `GET /printer/gcode/help`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_printer_gcode_help",
+  `{jsonrpc: "2.0", method: "printer.gcode.help",
     params: {script: <gc>}, id: <request id>}`
 
 - Returns:\
@@ -245,7 +245,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/print/start?filename=<file name>`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_print_start",
+  `{jsonrpc: "2.0", method: "printer.print.start",
     params: {filename: <file name>, id:<request id>}`
 
 - Returns:\
@@ -256,7 +256,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/print/pause`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_print_pause", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.print.pause", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -266,7 +266,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/print/resume`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_print_resume", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.print.resume", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -276,7 +276,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /printer/print/cancel`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_printer_print_cancel", id: <request id>}`
+  `{jsonrpc: "2.0", method: "printer.print.cancel", id: <request id>}`
 
 - Returns:\
   `ok`
@@ -288,7 +288,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /machine/shutdown`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_machine_shutdown", id: <request id>}`
+  `{jsonrpc: "2.0", method: "machine.shutdown", id: <request id>}`
 
 - Returns:\
   No return value as the server will shut down upon execution
@@ -298,7 +298,7 @@ that uses promises to return responses and errors (see json-rcp.js).
   `POST /machine/reboot`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_machine_reboot", id: <request id>}`
+  `{jsonrpc: "2.0", method: "machine.reboot", id: <request id>}`
 
 - Returns:\
   No return value as the server will shut down upon execution
@@ -332,7 +332,7 @@ path relative to the specified "root".  Note that if the query st
   the "gcodes" file list by default.
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_file_list", params: {root: "gcodes"}
+  `{jsonrpc: "2.0", method: "server.files.list", params: {root: "gcodes"}
   , id: <request id>}`
 
   If `params` are are omitted then the command will return the "gcodes"
@@ -360,7 +360,7 @@ path relative to the specified "root".  Note that if the query st
   `GET /server/files/metadata?filename=<filename>`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_file_metadata", params: {filename: "filename"}
+  `{jsonrpc: "2.0", method: "server.files.metadata", params: {filename: "filename"}
   , id: <request id>}`
 
 - Returns:\
@@ -402,8 +402,8 @@ subdirectories.
   the "gcodes" file list by default.
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "get_directory", params: {path: "gcodes/my_subdir"}
-  , id: <request id>}`
+  `{jsonrpc: "2.0", method: "server.files.get_directory",
+   params: {path: "gcodes/my_subdir"} , id: <request id>}`
 
   If the "params" are omitted then the command will return
   the "gcodes" file list by default.
@@ -437,7 +437,7 @@ Creates a new directory at the specified path.
   `POST /server/files/directory?path=gcodes/my_new_dir`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_directory", params:
+  `{jsonrpc: "2.0", method: "server.files.post_directory", params:
    {path: "gcodes/my_new_dir"}, id: <request id>}`
 
 Returns:\
@@ -450,7 +450,7 @@ Deletes a directory at the specified path.
   `DELETE /server/files/directory?path=gcodes/my_subdir`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "delete_directory", params:
+  `{jsonrpc: "2.0", method: "server.files.delete_directory", params:
    {path: "gcodes/my_subdir"} , id: <request id>}`
 
   If the specified directory contains files then the delete request
@@ -490,7 +490,7 @@ in *moving* the source directory to the destination directory.
   &dest=gcodes/subdir/my_file.gcode`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_file_move", params:
+  `{jsonrpc: "2.0", method: "server.files.move", params:
    {source: "gcodes/my_file.gcode",
    dest: "gcodes/subdir/my_file.gcode"}, id: <request id>}`
 
@@ -505,7 +505,7 @@ the source and destination should have the root prefixed.
    &dest=gcodes/subdir/my_file.gcode`
 
 - Websocket command:\
-  `{jsonrpc: "2.0", method: "post_file_copy", params:
+  `{jsonrpc: "2.0", method: "server.files.copy", params:
    {source: "gcodes/my_file.gcode", dest: "gcodes/subdir/my_file.gcode"},
    id: <request id>}`
 
@@ -806,7 +806,7 @@ The following startup sequence is recommened for clients which make use of
 the websocket:
 1) Attempt to connect to `/websocket` until successful using a timer-like
    mechanism
-2) Once connected, query `/printer/info` (or `get_printer_info`) for the ready
+2) Once connected, query `/printer/info` (or `printer.info`) for the ready
    status.
    - If the response returns an error (such as 404), set a timeout for
      2 seconds and try again.
@@ -819,7 +819,7 @@ the websocket:
      - If `state == "shutdown"` then Klippy is in a shutdown state.
      - If `state == "startup"` then re-request printer info in 2s.
 - Repeat step 2s until Klipper reports ready.  T
-- Client's should watch for the `notify_klippy_state_changed` event.  If it reports
+- Client's should watch for the `notify_klippy_disconnected` event.  If it reports
   disconnected then Klippy has either been stopped or restarted.  In this
   instance the client should repeat the steps above to determine when
   klippy is ready.
