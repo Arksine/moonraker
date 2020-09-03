@@ -13,16 +13,16 @@ class PrinterPower:
     def __init__(self, config):
         self.server = config.get_server()
         self.server.register_endpoint(
-            "/printer/power/devices", "power_devices", ['GET'],
+            "/machine/gpio_power/devices", ['GET'],
             self._handle_list_devices)
         self.server.register_endpoint(
-            "/printer/power/status", "power_status", ['GET'],
+            "/machine/gpio_power/status", ['GET'],
             self._handle_power_request)
         self.server.register_endpoint(
-            "/printer/power/on", "power_on", ['POST'],
+            "/machine/gpio_power/on", ['POST'],
             self._handle_power_request)
         self.server.register_endpoint(
-            "/printer/power/off", "power_off", ['POST'],
+            "/machine/gpio_power/off", ['POST'],
             self._handle_power_request)
 
         self.current_dev = None
