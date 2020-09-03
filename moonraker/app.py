@@ -82,11 +82,11 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
                 logging.exception(f"Unable to remove rule: {pattern}")
 
 class APIDefinition:
-    def __init__(self, endpoint, http_uri, ws_method,
+    def __init__(self, endpoint, http_uri, ws_methods,
                  request_methods, parser):
         self.endpoint = endpoint
         self.uri = http_uri
-        self.ws_method = ws_method
+        self.ws_methods = ws_methods
         if not isinstance(request_methods, list):
             request_methods = [request_methods]
         self.request_methods = request_methods
@@ -146,15 +146,15 @@ class MoonrakerApp:
     def register_remote_handler(self, endpoint):
         if endpoint in RESERVED_ENDPOINTS:
             return
-        api_def = self.api_cache.get(
-            endpoint, self._create_api_definition(endpoint))
+        api_def = self._create_api_definition(endpoint)
         if api_def.uri in self.registered_base_handlers:
             # reserved handler or already registered
             return
         logging.info(
-            f"Registering remote endpoint: "
-            f"({' '.join(api_def.request_methods)}) {api_def.uri}")
-        self.wsm.register_handler(api_def)
+            f"Registering remote endpoint - "
+            f"HTTP: ({' '.join(api_def.request_methods)}) {api_def.uri}; "
+            f"Websocket: {', '.join(api_def.ws_methods)}")
+        self.wsm.register_remote_handler(api_def)
         params = {}
         params['server'] = self.server
         params['auth'] = self.auth
@@ -164,17 +164,18 @@ class MoonrakerApp:
             api_def.uri, RemoteRequestHandler, params)
         self.registered_base_handlers.append(api_def.uri)
 
-    def register_local_handler(self, uri, ws_method, request_methods,
+    def register_local_handler(self, uri, request_methods,
                                callback, http_only=False):
         if uri in self.registered_base_handlers:
             return
         api_def = self._create_api_definition(
-            uri, ws_method, request_methods)
-        logging.info(
-            f"Registering local endpoint: "
-            f"({' '.join(request_methods)}) {uri}")
+            uri, request_methods, is_remote=False)
+        msg = "Registering local endpoint - "
+        msg += f"HTTP: ({' '.join(request_methods)}) {uri}"
         if not http_only:
-            self.wsm.register_handler(api_def, callback)
+            msg += f"; Websocket: {', '.join(api_def.ws_methods)}"
+            self.wsm.register_local_handler(api_def, callback)
+        logging.info(msg)
         params = {}
         params['server'] = self.server
         params['auth'] = self.auth
@@ -216,21 +217,41 @@ class MoonrakerApp:
             self.wsm.remove_handler(api_def.uri)
             self.mutable_router.remove_handler(api_def.ws_method)
 
-    def _create_api_definition(self, endpoint, ws_method=None,
-                               request_methods=['GET', 'POST']):
+    def _create_api_definition(self, endpoint, request_methods=[],
+                               is_remote=True):
         if endpoint in self.api_cache:
             return self.api_cache[endpoint]
         if endpoint[0] == '/':
             uri = endpoint
-        else:
+        elif is_remote:
             uri = "/printer/" + endpoint
-        if ws_method is None:
-            ws_method = uri[1:].replace('/', '_')
+        else:
+            uri = "/server/" + endpoint
+        ws_methods = []
+        if is_remote:
+            # Remote requests accept both GET and POST requests.  These
+            # requests execute the same callback, thus they resolve to
+            # only a single websocket method.
+            ws_methods.append(uri[1:].replace('/', '.'))
+            request_methods = ['GET', 'POST']
+        else:
+            name_parts = uri[1:].split('/')
+            if len(request_methods) > 1:
+                for req_mthd in request_methods:
+                    func_name = req_mthd.lower() + "_" + name_parts[-1]
+                    ws_methods.append(".".join(name_parts[:-1] + [func_name]))
+            else:
+                ws_methods.append(".".join(name_parts))
+        if not is_remote and len(request_methods) != len(ws_methods):
+            raise self.server.error(
+                "Invalid API definition.  Number of websocket methods must "
+                "match the number of request methods")
         if endpoint.startswith("objects/"):
             parser = _status_parser
         else:
             parser = _default_parser
-        api_def = APIDefinition(endpoint, uri, ws_method,
+
+        api_def = APIDefinition(endpoint, uri, ws_methods,
                                 request_methods, parser)
         self.api_cache[endpoint] = api_def
         return api_def

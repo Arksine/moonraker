@@ -133,21 +133,20 @@ class WebsocketManager:
     async def _handle_metadata_update(self, metadata):
         await self.notify_websockets("metadata_update", metadata)
 
-    def register_handler(self, api_def, callback=None):
-        for r_method in api_def.request_methods:
-            cmd = r_method.lower() + '_' + api_def.ws_method
-            if callback is not None:
-                # Callback is a local method
-                rpc_cb = self._generate_local_callback(
-                    api_def.endpoint, r_method, callback)
-            else:
-                # Callback is a remote method
-                rpc_cb = self._generate_callback(api_def.endpoint)
-            self.rpc.register_method(cmd, rpc_cb)
+    def register_local_handler(self, api_def, callback):
+        for ws_method, req_method in \
+                zip(api_def.ws_methods, api_def.request_methods):
+            rpc_cb = self._generate_local_callback(
+                api_def.endpoint, req_method, callback)
+            self.rpc.register_method(ws_method, rpc_cb)
+
+    def register_remote_handler(self, api_def):
+        ws_method = api_def.ws_methods[0]
+        rpc_cb = self._generate_callback(api_def.endpoint)
+        self.rpc.register_method(ws_method, rpc_cb)
 
     def remove_handler(self, ws_method):
-        for prefix in ["get", "post", "delete"]:
-            self.rpc.remove_method(prefix + "_" + ws_method)
+        self.rpc.remove_method(ws_method)
 
     def _generate_callback(self, endpoint):
         async def func(**kwargs):
