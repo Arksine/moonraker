@@ -165,25 +165,26 @@ class MoonrakerApp:
         self.registered_base_handlers.append(api_def.uri)
 
     def register_local_handler(self, uri, request_methods,
-                               callback, http_only=False):
+                               callback, protocol=["http", "websocket"]):
         if uri in self.registered_base_handlers:
             return
         api_def = self._create_api_definition(
             uri, request_methods, is_remote=False)
-        msg = "Registering local endpoint - "
-        msg += f"HTTP: ({' '.join(request_methods)}) {uri}"
-        if not http_only:
-            msg += f"; Websocket: {', '.join(api_def.ws_methods)}"
+        msg = "Registering local endpoint"
+        if "http" in protocol:
+            msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
+            params = {}
+            params['server'] = self.server
+            params['auth'] = self.auth
+            params['methods'] = request_methods
+            params['arg_parser'] = api_def.parser
+            params['callback'] = callback
+            self.mutable_router.add_handler(uri, LocalRequestHandler, params)
+            self.registered_base_handlers.append(uri)
+        if "websocket" in protocol:
+            msg += f" - Websocket: {', '.join(api_def.ws_methods)}"
             self.wsm.register_local_handler(api_def, callback)
         logging.info(msg)
-        params = {}
-        params['server'] = self.server
-        params['auth'] = self.auth
-        params['methods'] = request_methods
-        params['arg_parser'] = api_def.parser
-        params['callback'] = callback
-        self.mutable_router.add_handler(uri, LocalRequestHandler, params)
-        self.registered_base_handlers.append(uri)
 
     def register_static_file_handler(self, pattern, file_path,
                                      can_delete=False, op_check_cb=None):

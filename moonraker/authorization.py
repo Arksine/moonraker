@@ -66,10 +66,10 @@ class Authorization:
         # Register Authorization Endpoints
         app.register_local_handler(
             "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, http_only=True)
+            self._handle_apikey_request, protocol=['http'])
         app.register_local_handler(
             "/access/oneshot_token", ['GET'],
-            self._handle_token_request, http_only=True)
+            self._handle_token_request, protocol=['http'])
 
     async def _handle_apikey_request(self, path, method, args):
         if method.upper() == 'POST':
