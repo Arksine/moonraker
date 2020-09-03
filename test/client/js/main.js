@@ -10,79 +10,81 @@ import JsonRPC from "./json-rpc.js?v=0.1.2";
 var api = {
     printer_info: {
         url: "/printer/info",
-        method: "get_printer_info"
+        method: "printer.info"
     },
     gcode_script: {
         url: "/printer/gcode/script",
-        method: "post_printer_gcode_script"
+        method: "printer.gcode.script"
     },
     gcode_help: {
         url: "/printer/gcode/help",
-        method: "get_printer_gcode_help"
+        method: "printer.gcode.help"
     },
     start_print: {
         url: "/printer/print/start",
-        method: "post_printer_print_start"
+        method: "printer.print.start"
     },
     cancel_print: {
         url: "/printer/print/cancel",
-        method: "post_printer_print_cancel"
+        method: "printer.print.cancel"
     },
     pause_print: {
         url: "/printer/print/pause",
-        method: "post_printer_print_pause"
+        method: "printer.print.pause"
     },
     resume_print: {
         url: "/printer/print/resume",
-        method: "post_printer_print_resume"
+        method: "printer.print.resume"
     },
     query_endstops: {
         url: "/printer/query_endstops/status",
-        method: "get_printer_query_endstops_status"
+        method: "printer.query_endstops.status"
     },
     object_list: {
         url: "/printer/objects/list",
-        method: "get_printer_objects_list"
+        method: "printer.objects.list"
     },
     object_status: {
         url: "/printer/objects/query",
-        method: "get_printer_objects_query"
+        method: "printer.objects.query"
     },
     object_subscription: {
         url: "/printer/objects/subscribe",
-        method: {
-            post: "post_printer_objects_subscribe",
-            get: "get_printer_objects_subscribe"
-        },
+        method: "printer.objects.subscribe"
     },
     temperature_store: {
         url: "/server/temperature_store",
-        method: "get_server_temperature_store"
+        method: "server.temperature_store"
     },
     estop: {
         url: "/printer/emergency_stop",
-        method: "post_printer_emergency_stop"
+        method: "printer.emergency_stop"
     },
     restart: {
         url: "/printer/restart",
-        method: "post_printer_restart"
+        method: "printer.restart"
     },
     firmware_restart: {
         url: "/printer/firmware_restart",
-        method: "post_printer_firmware_restart"
+        method: "printer.firmware_restart"
     },
 
     // File Management Apis
     file_list:{
         url: "/server/files/list",
-        method: "get_file_list"
+        method: "server.files.list"
     },
     metadata: {
         url: "/server/files/metadata",
-        method: "get_file_metadata"
+        method: "server.files.metadata"
     },
     directory: {
-        url: "/server/files/directory"
+        url: "/server/files/directory",
+        method: {
+            get: "server.files.get_directory",
+            post: "server.files.post_directory",
+            delete: "server.files.delete_directory"
+        }
     },
     upload: {
         url: "/server/files/upload"
@@ -106,11 +108,11 @@ var api = {
     // Machine APIs
     reboot: {
         url: "/machine/reboot",
-        method: "post_machine_reboot"
+        method: "machine.reboot"
     },
     shutdown: {
         url: "/machine/shutdown",
-        method: "post_machine_shutdown"
+        method: "machine.shutdown"
     },
 
     // Access APIs
@@ -379,26 +381,26 @@ function get_object_list() {
 
 function add_subscription(printer_objects) {
     json_rpc.call_method_with_kwargs(
-        api.object_subscription.method.post, printer_objects)
+        api.object_subscription.method, printer_objects)
     .then((result) => {
         // result is the the state from all fetched data
         handle_status_update(result.status)
         console.log(result);
     })
     .catch((error) => {
-        update_error(api.object_subscription.method.post, error);
+        update_error(api.object_subscription.method, error);
     });
 }
 
 function get_subscribed() {
-    json_rpc.call_method(api.object_subscription.method.get)
+    json_rpc.call_method(api.object_subscription.method)
     .then((result) => {
         // result is a dictionary containing all currently subscribed
         // printer objects/attributes
         console.log(result);
     })
     .catch((error) => {
-        update_error(api.object_subscription.method.get, error);
+        update_error(api.object_subscription.method, error);
     });
 }
 
@@ -634,7 +636,7 @@ function send_gcode_batch(gcodes) {
     for (let gc of gcodes) {
         batch.push(
             {
-                method: 'post_printer_gcode_script',
+                method: api.gcode_script.method,
                 type: 'request',
                 params: {script: gc}
             });
@@ -675,7 +677,7 @@ async function send_gcode_macro(gcodes) {
     for (let gc of gcodes) {
         try {
             let result = await json_rpc.call_method_with_kwargs(
-                'post_printer_gcode_script', {script: gc});
+                api.gcode_script.method, {script: gc});
         } catch (err) {
             console.log("Error executing gcode macro: " + err.message);
             break;
