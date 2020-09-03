@@ -47,6 +47,7 @@ class Server:
         self.klippy_connection = KlippyConnection(
             self.process_command, self.on_connection_closed)
         self.init_list = []
+        self.init_handle = None
         self.init_attempts = 0
         self.klippy_state = "disconnected"
 
@@ -192,6 +193,8 @@ class Server:
         self.pending_requests = {}
         logging.info("Klippy Connection Removed")
         self.send_event("server:klippy_disconnect")
+        if self.init_handle is not None:
+            self.ioloop.remove_timeout(self.init_handle)
         self.ioloop.call_later(.25, self._connect_klippy)
 
     async def _initialize(self):
@@ -217,14 +220,16 @@ class Server:
             else:
                 logging.info("GCode Output Subscribed")
                 self.init_list.append("gcode_output_sub")
-        if "klippy_ready" in self.init_list:
-            # Moonraker is enabled in the Klippy module
-            # and Klippy is ready.  We can stop the init
-            # procedure.
+        if "klippy_ready" in self.init_list or \
+                not self.klippy_connection.is_connected():
+            # Either Klippy is ready or the connection dropped
+            # during initialization.  Exit initialization
             self.init_attempts = 0
+            self.init_handle = None
         else:
             self.init_attempts += 1
-            self.ioloop.call_later(INIT_TIME, self._initialize)
+            self.init_handle = self.ioloop.call_later(
+                INIT_TIME, self._initialize)
 
     async def _request_endpoints(self):
         result = await self.klippy_apis.list_endpoints(default=None)
