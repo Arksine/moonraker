@@ -65,10 +65,10 @@ class Authorization:
     def register_handlers(self, app):
         # Register Authorization Endpoints
         app.register_local_handler(
-            "/access/api_key", None, ['GET', 'POST'],
+            "/access/api_key", ['GET', 'POST'],
             self._handle_apikey_request, http_only=True)
         app.register_local_handler(
-            "/access/oneshot_token", None, ['GET'],
+            "/access/oneshot_token", ['GET'],
             self._handle_token_request, http_only=True)
 
     async def _handle_apikey_request(self, path, method, args):
