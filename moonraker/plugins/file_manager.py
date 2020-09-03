@@ -27,20 +27,16 @@ class FileManager:
 
         # Register file management endpoints
         self.server.register_endpoint(
-            "/server/files/list", "file_list", ['GET'],
-            self._handle_filelist_request)
+            "/server/files/list", ['GET'], self._handle_filelist_request)
         self.server.register_endpoint(
-            "/server/files/metadata", "file_metadata", ['GET'],
-            self._handle_metadata_request)
+            "/server/files/metadata", ['GET'], self._handle_metadata_request)
         self.server.register_endpoint(
-            "/server/files/directory", "directory", ['GET', 'POST', 'DELETE'],
+            "/server/files/directory", ['GET', 'POST', 'DELETE'],
             self._handle_directory_request)
         self.server.register_endpoint(
-            "/server/files/move", "file_move", ['POST'],
-            self._handle_file_move_copy)
+            "/server/files/move", ['POST'], self._handle_file_move_copy)
         self.server.register_endpoint(
-            "/server/files/copy", "file_copy", ['POST'],
-            self._handle_file_move_copy)
+            "/server/files/copy", ['POST'], self._handle_file_move_copy)
         # Register APIs to handle file uploads
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
