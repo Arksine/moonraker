@@ -28,7 +28,7 @@ class TemperatureStore:
 
         # Register endpoint
         self.server.register_endpoint(
-            "/server/temperature_store", "server_temperature_store", ['GET'],
+            "/server/temperature_store", ['GET'],
             self._handle_temp_store_request)
 
     async def _init_sensors(self):
