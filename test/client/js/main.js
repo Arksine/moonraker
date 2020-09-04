@@ -86,6 +86,9 @@ var api = {
             delete: "server.files.delete_directory"
         }
     },
+    delete_file: {
+        method: "server.files.delete_file"
+    },
     upload: {
         url: "/server/files/upload"
     },
@@ -477,6 +480,19 @@ function get_metadata(file_name) {
     })
     .catch((error) => {
         update_error(api.metadata.method, error);
+    });
+}
+
+function delete_file(file_path) {
+    json_rpc.call_method_with_kwargs(
+        api.delete_file.method, {'path': file_path})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.delete_file.method, error);
     });
 }
 
@@ -1046,7 +1062,8 @@ window.onload = () => {
                     settings.headers = {"X-Api-Key": apikey};
                 $.ajax(settings);
             } else {
-                console.log("File Delete not supported over websocket")
+                let fname = file_list_type + "/" + filename;
+                delete_file(fname);
             }
         }
     });
