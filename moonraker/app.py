@@ -9,6 +9,7 @@ import mimetypes
 import logging
 import tornado
 from inspect import isclass
+from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from utils import ServerError
 from websockets import WebsocketManager, WebSocket
@@ -186,8 +187,7 @@ class MoonrakerApp:
             self.wsm.register_local_handler(api_def, callback)
         logging.info(msg)
 
-    def register_static_file_handler(self, pattern, file_path,
-                                     can_delete=False):
+    def register_static_file_handler(self, pattern, file_path):
         if pattern[0] != "/":
             pattern = "/server/files/" + pattern
         if os.path.isfile(file_path):
@@ -200,12 +200,7 @@ class MoonrakerApp:
             logging.info(f"Invalid file path: {file_path}")
             return
         logging.debug(f"Registering static file: ({pattern}) {file_path}")
-        methods = ['GET']
-        if can_delete:
-            methods.append('DELETE')
-        params = {
-            'server': self.server, 'auth': self.auth,
-            'path': file_path, 'methods': methods}
+        params = {'server': self.server, 'auth': self.auth, 'path': file_path}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
@@ -321,12 +316,6 @@ class LocalRequestHandler(AuthorizedRequestHandler):
 
 
 class FileRequestHandler(AuthorizedFileHandler):
-    def initialize(self, server, auth, path, methods,
-                   default_filename=None):
-        super(FileRequestHandler, self).initialize(
-            server, auth, path, default_filename)
-        self.methods = methods
-
     def set_extra_headers(self, path):
         # The call below shold never return an empty string,
         # as the path should have already been validated to be
@@ -336,10 +325,8 @@ class FileRequestHandler(AuthorizedFileHandler):
             "Content-Disposition", f"attachment; filename={basename}")
 
     async def delete(self, path):
-        if 'DELETE' not in self.methods:
-            raise tornado.web.HTTPError(405)
-
         path = self.request.path.lstrip("/").split("/", 2)[-1]
+        path = url_unescape(path)
         file_manager = self.server.lookup_plugin('file_manager')
         try:
             filename = await file_manager.delete_file(path)
@@ -348,7 +335,7 @@ class FileRequestHandler(AuthorizedFileHandler):
                 raise tornado.web.HTTPError(
                     403, "File is loaded, DELETE not permitted")
             else:
-                raise tornado.web.HTTPError(400, str(e))
+                raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):

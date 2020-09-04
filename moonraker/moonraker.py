@@ -297,8 +297,7 @@ class Server:
                 vsd_path = vsd_config.get('path', None)
                 if vsd_path is not None:
                     file_manager = self.lookup_plugin('file_manager')
-                    file_manager.register_directory(
-                        'gcodes', vsd_path, can_delete=True)
+                    file_manager.register_directory('gcodes', vsd_path)
                 else:
                     logging.info(
                         "Configuration for [virtual_sdcard] not found,"

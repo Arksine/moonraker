@@ -22,7 +22,6 @@ class FileManager:
         self.server = config.get_server()
         self.file_paths = {}
         self.file_lists = {}
-        self.mutable_paths = set()
         self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
 
@@ -48,8 +47,7 @@ class FileManager:
         # Register Klippy Configuration Path
         config_path = config.get('config_path', None)
         if config_path is not None:
-            ret = self.register_directory(
-                'config', config_path, can_delete=True)
+            ret = self.register_directory('config', config_path)
             if not ret:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
@@ -73,7 +71,7 @@ class FileManager:
         log_path = os.path.normpath(os.path.expanduser(log_file))
         self.server.register_static_file_handler("klippy.log", log_path)
 
-    def register_directory(self, base, path, can_delete=False):
+    def register_directory(self, base, path):
         if path is None:
             return False
         home = os.path.expanduser('~')
@@ -87,10 +85,7 @@ class FileManager:
             return False
         if path != self.file_paths.get(base, ""):
             self.file_paths[base] = path
-            if can_delete:
-                self.mutable_paths.add(base)
-            self.server.register_static_file_handler(
-                base, path, can_delete=can_delete)
+            self.server.register_static_file_handler(base, path)
             try:
                 self._update_file_list(base=base)
             except Exception:
@@ -449,14 +444,15 @@ class FileManager:
         return await self.delete_file(file_path)
 
     async def delete_file(self, path):
-        parts = path.split("/", 1)
+        parts = path.lstrip("/").split("/", 1)
+        if len(parts) != 2:
+            raise self.server.error(
+                f"Path not available for DELETE: {path}", 405)
         root = parts[0]
         filename = parts[1]
-        if root not in self.file_paths or len(parts) != 2:
-            raise self.server.error(f"Invalid file path: {path}")
-        if root not in self.mutable_paths:
+        if root not in self.file_paths or root not in FULL_ACCESS_ROOTS:
             raise self.server.error(
-                f"Path not mutable, Cannot delete file: {path}")
+                f"Path not available for DELETE: {path}", 405)
         root_path = self.file_paths[root]
         full_path = os.path.join(root_path, filename)
         if not os.path.isfile(full_path):
