@@ -187,7 +187,7 @@ class MoonrakerApp:
         logging.info(msg)
 
     def register_static_file_handler(self, pattern, file_path,
-                                     can_delete=False, op_check_cb=None):
+                                     can_delete=False):
         if pattern[0] != "/":
             pattern = "/server/files/" + pattern
         if os.path.isfile(file_path):
@@ -205,7 +205,7 @@ class MoonrakerApp:
             methods.append('DELETE')
         params = {
             'server': self.server, 'auth': self.auth,
-            'path': file_path, 'methods': methods, 'op_check_cb': op_check_cb}
+            'path': file_path, 'methods': methods}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
@@ -322,11 +322,10 @@ class LocalRequestHandler(AuthorizedRequestHandler):
 
 class FileRequestHandler(AuthorizedFileHandler):
     def initialize(self, server, auth, path, methods,
-                   op_check_cb=None, default_filename=None):
+                   default_filename=None):
         super(FileRequestHandler, self).initialize(
             server, auth, path, default_filename)
         self.methods = methods
-        self.op_check_cb = op_check_cb
 
     def set_extra_headers(self, path):
         # The call below shold never return an empty string,
@@ -340,26 +339,17 @@ class FileRequestHandler(AuthorizedFileHandler):
         if 'DELETE' not in self.methods:
             raise tornado.web.HTTPError(405)
 
-        # Use the same method Tornado uses to validate the path
-        self.path = self.parse_url_path(path)
-        del path  # make sure we don't refer to path instead of self.path again
-        absolute_path = self.get_absolute_path(self.root, self.path)
-        self.absolute_path = self.validate_absolute_path(
-            self.root, absolute_path)
-
-        if self.op_check_cb is not None:
-            try:
-                await self.op_check_cb(self.absolute_path)
-            except ServerError as e:
-                if e.status_code == 403:
-                    raise tornado.web.HTTPError(
-                        403, "File is loaded, DELETE not permitted")
-
-        os.remove(self.absolute_path)
-        base = self.request.path.lstrip("/").split("/")[2]
-        filename = self.path.lstrip("/")
+        path = self.request.path.lstrip("/").split("/", 3)[-1]
+        filename = path.split("/", 1)[-1]
         file_manager = self.server.lookup_plugin('file_manager')
-        file_manager.notify_filelist_changed('delete_file', filename, base)
+        try:
+            file_manager.delete_file(path)
+        except self.server.error as e:
+            if e.status_code == 403:
+                raise tornado.web.HTTPError(
+                    403, "File is loaded, DELETE not permitted")
+            else:
+                raise tornado.web.HTTPError(400, str(e))
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):

@@ -666,7 +666,7 @@ class PanelDue:
 
         if not path.startswith("gcodes/"):
             path = "gcodes/" + path
-        self.file_manager.delete_file(path)
+        await self.file_manager.delete_file(path)
 
     async def _run_paneldue_M36(self, arg_p=None):
         response = {}

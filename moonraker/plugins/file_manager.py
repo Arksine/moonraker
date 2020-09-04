@@ -22,6 +22,7 @@ class FileManager:
         self.server = config.get_server()
         self.file_paths = {}
         self.file_lists = {}
+        self.mutable_paths = set()
         self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
 
@@ -70,9 +71,6 @@ class FileManager:
         self.server.register_static_file_handler("klippy.log", log_path)
 
     def register_directory(self, base, path, can_delete=False):
-        op_check_cb = None
-        if base == 'gcodes':
-            op_check_cb = self._handle_operation_check
         if path is None:
             return False
         home = os.path.expanduser('~')
@@ -86,8 +84,10 @@ class FileManager:
             return False
         if path != self.file_paths.get(base, ""):
             self.file_paths[base] = path
+            if can_delete:
+                self.mutable_paths.add(base)
             self.server.register_static_file_handler(
-                base, path, can_delete=can_delete, op_check_cb=op_check_cb)
+                base, path, can_delete=can_delete)
             try:
                 self._update_file_list(base=base)
             except Exception:
@@ -441,16 +441,27 @@ class FileManager:
             return simple_list
         return flist
 
-    def delete_file(self, path):
+    async def delete_file(self, path):
         parts = path.split("/", 1)
         root = parts[0]
+        filename = parts[1]
         if root not in self.file_paths or len(parts) != 2:
             raise self.server.error(f"Invalid file path: {path}")
+        if root not in self.mutable_paths:
+            raise self.server.error(
+                f"Path not mutable, Cannot delete file: {path}")
         root_path = self.file_paths[root]
-        full_path = os.path.join(root_path, parts[1])
+        full_path = os.path.join(root_path, filename)
         if not os.path.isfile(full_path):
             raise self.server.error(f"Invalid file path: {path}")
+        if root == "gcodes":
+            try:
+                await self._handle_operation_check(full_path)
+            except self.server.error as e:
+                if e.status_code == 403:
+                    raise
         os.remove(full_path)
+        self.notify_filelist_changed('delete_file', filename, root)
 
     def notify_filelist_changed(self, action, fname, base, source_item={}):
         self._update_file_list(base, do_notify=True)
