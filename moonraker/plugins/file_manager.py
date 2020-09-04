@@ -38,6 +38,9 @@ class FileManager:
             "/server/files/move", ['POST'], self._handle_file_move_copy)
         self.server.register_endpoint(
             "/server/files/copy", ['POST'], self._handle_file_move_copy)
+        self.server.register_endpoint(
+            "/server/files/delete_file", ['DELETE'], self._handle_file_delete,
+            protocol=["websocket"])
         # Register APIs to handle file uploads
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
@@ -441,6 +444,10 @@ class FileManager:
             return simple_list
         return flist
 
+    async def _handle_file_delete(self, path, method, args):
+        file_path = args.get("path")
+        return await self.delete_file(file_path)
+
     async def delete_file(self, path):
         parts = path.split("/", 1)
         root = parts[0]
@@ -462,6 +469,7 @@ class FileManager:
                     raise
         os.remove(full_path)
         self.notify_filelist_changed('delete_file', filename, root)
+        return filename
 
     def notify_filelist_changed(self, action, fname, base, source_item={}):
         self._update_file_list(base, do_notify=True)

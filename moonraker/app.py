@@ -339,11 +339,10 @@ class FileRequestHandler(AuthorizedFileHandler):
         if 'DELETE' not in self.methods:
             raise tornado.web.HTTPError(405)
 
-        path = self.request.path.lstrip("/").split("/", 3)[-1]
-        filename = path.split("/", 1)[-1]
+        path = self.request.path.lstrip("/").split("/", 2)[-1]
         file_manager = self.server.lookup_plugin('file_manager')
         try:
-            file_manager.delete_file(path)
+            filename = await file_manager.delete_file(path)
         except self.server.error as e:
             if e.status_code == 403:
                 raise tornado.web.HTTPError(
