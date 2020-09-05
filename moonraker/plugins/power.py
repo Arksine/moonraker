@@ -55,7 +55,7 @@ class PrinterPower:
 
     async def _handle_power_request(self, path, method, args):
         if len(args) == 0:
-            if path == "/printer/power/status":
+            if path == "/machine/gpio_power/status":
                 args = self.devices
             else:
                 return "no_devices"
@@ -68,11 +68,11 @@ class PrinterPower:
 
             await GPIO.verify_pin(self.devices[dev]["pin"],
                                   self.devices[dev]["active_low"])
-            if path == "/printer/power/on":
+            if path == "/machine/gpio_power/on":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 1)
-            elif path == "/printer/power/off":
+            elif path == "/machine/gpio_power/off":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 0)
-            elif path != "/printer/power/status":
+            elif path != "/machine/gpio_power/status":
                 raise self.server.error("Unsupported power request")
 
             self.devices[dev]["status"] = GPIO.is_pin_on(
