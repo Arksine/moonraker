@@ -38,6 +38,16 @@ def _regex_find_ints(pattern, data):
             pass
     return []
 
+def _regex_find_first(pattern, data, cast=float):
+    match = re.search(pattern, data)
+    val = None
+    if match:
+        try:
+            val = cast(match.group(1))
+        except Exception:
+            return None
+    return val
+
 # Slicer parsing implementations
 class BaseSlicer(object):
     def __init__(self, name, id_pattern):
@@ -104,6 +114,14 @@ class UnknownSlicer(BaseSlicer):
     def parse_object_height(self):
         return self._parse_max_float(r"G1\sZ\d+\.\d*", self.footer_data)
 
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"M109 S(\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"M190 S(\d+\.?\d*)", self.header_data)
+
 class PrusaSlicer(BaseSlicer):
     def __init__(self, name="PrusaSlicer", id_pattern=r"PrusaSlicer\s.*\son"):
         super(PrusaSlicer, self).__init__(name, id_pattern)
@@ -160,8 +178,15 @@ class PrusaSlicer(BaseSlicer):
             parsed_matches.append({
                 'width': info[0], 'height': info[1],
                 'size': info[2], 'data': data})
-
         return parsed_matches
+
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"; first_layer_temperature = (\d+\.?\d*)", self.footer_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"; first_layer_bed_temperature = (\d+\.?\d*)", self.footer_data)
 
 class Slic3rPE(PrusaSlicer):
     def __init__(self, name="Slic3r PE",
@@ -209,6 +234,14 @@ class Cura(BaseSlicer):
     def parse_estimated_time(self):
         return self._parse_max_float(r";TIME:.*", self.header_data)
 
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"M109 S(\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"M190 S(\d+\.?\d*)", self.header_data)
+
 
 class Simplify3D(BaseSlicer):
     def __init__(self, name="Simplify3D", id_pattern=r"Simplify3D\(R\)"):
@@ -242,6 +275,28 @@ class Simplify3D(BaseSlicer):
                 total_time += max(t) * multiplier
         return round(total_time, 2)
 
+    def _get_temp_items(self, pattern):
+        match = re.search(pattern, self.header_data)
+        if match is None:
+            return []
+        return match.group().split(",")[1:]
+
+    def _get_first_layer_temp(self, heater):
+        heaters = self._get_temp_items(r"temperatureName.*")
+        temps = self._get_temp_items(r"temperatureSetpointTemperatures.*")
+        for h, temp in zip(heaters, temps):
+            if h == heater:
+                try:
+                    return float(temp)
+                except Exception:
+                    return None
+        return None
+
+    def parse_first_layer_extr_temp(self):
+        return self._get_first_layer_temp("Extruder 1")
+
+    def parse_first_layer_bed_temp(self):
+        return self._get_first_layer_temp("Heated Bed")
 
 class KISSlicer(BaseSlicer):
     def __init__(self, name="KISSlicer", id_pattern=r";\sKISSlicer"):
@@ -272,6 +327,14 @@ class KISSlicer(BaseSlicer):
         if time is not None:
             time *= 60
         return round(time, 2)
+
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"; first_layer_C = (\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"; bed_C = (\d+\.?\d*)", self.header_data)
 
 
 class IdeaMaker(BaseSlicer):
@@ -312,6 +375,14 @@ class IdeaMaker(BaseSlicer):
     def parse_thumbnails(self):
         return None
 
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"M109 T0 S(\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"M190 S(\d+\.?\d*)", self.header_data)
+
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS = [
@@ -319,7 +390,8 @@ SUPPORTED_SLICERS = [
     Cura, Simplify3D, KISSlicer, IdeaMaker]
 SUPPORTED_DATA = [
     'first_layer_height', 'layer_height', 'object_height',
-    'filament_total', 'estimated_time', 'thumbnails']
+    'filament_total', 'estimated_time', 'thumbnails',
+    'first_layer_bed_temp', 'first_layer_extr_temp']
 
 def extract_metadata(file_path, log):
     metadata = {}
