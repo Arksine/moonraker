@@ -563,7 +563,11 @@ to delete a file in a subdirectory.
   `DELETE /server/files/gcodes/<file_name>`
 
 - Websocket command:\
-  Not Available
+  `{jsonrpc: "2.0", method: "server.files.delete_file", params:
+   {path: "gcodes/<file_name>"}, id: <request id>}`
+
+   If the gcode file exists within a subdirectory, the relative
+   path should be included in the file name.
 
 - Returns:\
   The HTTP request returns the name of the deleted file.
@@ -585,7 +589,8 @@ to delete a file in a subdirectory.
   `DELETE /server/files/config/<file_name>`
 
 - Websocket command:\
-  Not Available
+  `{jsonrpc: "2.0", method: "server.files.delete_file", params:
+   {path: "config/<file_name>}, id: <request id>}`
 
 - Returns:\
   The HTTP request returns the name of the deleted file.

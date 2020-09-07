@@ -1,6 +1,17 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### September 7th 2020
+- A new websocket API has been added, `server.files.delete_file`:
+  ```
+  {jsonrpc: "2.0", method: "server.files.delete_file", params:
+  {path: "<root>/<file_name>"}, id: <request id>}
+  ```
+  Where <root> is either "gcodes" or "config", and <file_name> is
+  the relative path to the file for deletion.  For example:
+  `path: "gcodes/my_sub_dir/my_gcode_file.gcode"`
+
+
 ### September 3rd 2020
 - The Websocket APIs have changed for clarity.  The APIs methods now
   use namespaces similar to those found in common programming languages.
