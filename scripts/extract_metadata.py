@@ -70,6 +70,40 @@ class BaseSlicer(object):
         else:
             return None
 
+    def parse_first_layer_height(self):
+        return None
+
+    def parse_layer_height(self):
+        return None
+
+    def parse_object_height(self):
+        return None
+
+    def parse_filament_total(self):
+        return None
+
+    def parse_estimated_time(self):
+        return None
+
+    def parse_first_layer_bed_temp(self):
+        return None
+
+    def parse_first_layer_extr_temp(self):
+        return None
+
+    def parse_thumbnails(self):
+        return None
+
+class UnknownSlicer(BaseSlicer):
+    def __init__(self, name="Unknown", id_pattern=r""):
+        super(UnknownSlicer, self).__init__(name, id_pattern)
+
+    def parse_first_layer_height(self):
+        return self._parse_min_float(r"G1\sZ\d+\.\d*", self.header_data)
+
+    def parse_object_height(self):
+        return self._parse_max_float(r"G1\sZ\d+\.\d*", self.footer_data)
+
 class PrusaSlicer(BaseSlicer):
     def __init__(self, name="PrusaSlicer", id_pattern=r"PrusaSlicer\s.*\son"):
         super(PrusaSlicer, self).__init__(name, id_pattern)
@@ -175,8 +209,6 @@ class Cura(BaseSlicer):
     def parse_estimated_time(self):
         return self._parse_max_float(r";TIME:.*", self.header_data)
 
-    def parse_thumbnails(self):
-        return None
 
 class Simplify3D(BaseSlicer):
     def __init__(self, name="Simplify3D", id_pattern=r"Simplify3D\(R\)"):
@@ -210,8 +242,6 @@ class Simplify3D(BaseSlicer):
                 total_time += max(t) * multiplier
         return round(total_time, 2)
 
-    def parse_thumbnails(self):
-        return None
 
 class KISSlicer(BaseSlicer):
     def __init__(self, name="KISSlicer", id_pattern=r";\sKISSlicer"):
@@ -243,8 +273,6 @@ class KISSlicer(BaseSlicer):
             time *= 60
         return round(time, 2)
 
-    def parse_thumbnails(self):
-        return None
 
 class IdeaMaker(BaseSlicer):
     def __init__(self, name="IdeaMaker", id_pattern=r"\sideaMaker\s.*,",):
@@ -308,24 +336,23 @@ def extract_metadata(file_path, log):
             if re.search(s.get_id_pattern(), header_data) is not None:
                 slicer = s
                 break
-        if slicer is not None:
-            metadata['slicer'] = slicer.get_name()
-            if size > READ_SIZE * 2:
-                f.seek(size - READ_SIZE)
-                footer_data = f.read()
-            elif size > READ_SIZE:
-                remaining = size - READ_SIZE
-                footer_data = header_data[remaining - READ_SIZE:] + f.read()
-            else:
-                footer_data = header_data
-            slicer.set_data(header_data, footer_data, log)
-            for key in SUPPORTED_DATA:
-                func = getattr(slicer, "parse_" + key)
-                result = func()
-                if result is not None:
-                    metadata[key] = result
+        if slicer is None:
+            slicer = UnknownSlicer()
+        metadata['slicer'] = slicer.get_name()
+        if size > READ_SIZE * 2:
+            f.seek(size - READ_SIZE)
+            footer_data = f.read()
+        elif size > READ_SIZE:
+            remaining = size - READ_SIZE
+            footer_data = header_data[remaining - READ_SIZE:] + f.read()
         else:
-            metadata['slicer'] = "Unknown"
+            footer_data = header_data
+        slicer.set_data(header_data, footer_data, log)
+        for key in SUPPORTED_DATA:
+            func = getattr(slicer, "parse_" + key)
+            result = func()
+            if result is not None:
+                metadata[key] = result
     return metadata
 
 def main(path, filename):
