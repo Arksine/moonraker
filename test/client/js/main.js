@@ -6,6 +6,10 @@
 
 import JsonRPC from "./json-rpc.js?v=0.1.2";
 
+var origin = location.origin;
+var ws_url = (window.location.protocol == "https" ? "wss://" : "ws://")
+    + location.host;
+
 // API Definitions
 var api = {
     printer_info: {
@@ -86,6 +90,14 @@ var api = {
             delete: "server.files.delete_directory"
         }
     },
+    move: {
+        url: "/server/files/move",
+        method: "server.files.move"
+    },
+    copy: {
+        url: "/server/files/copy",
+        method: "server.files.copy"
+    },
     delete_file: {
         method: "server.files.delete_file"
     },
@@ -133,7 +145,6 @@ var paused = false;
 var klippy_ready = false;
 var api_type = 'http';
 var is_printing = false;
-var file_list_type = "gcodes";
 var json_rpc = new JsonRPC();
 
 function round_float (value) {
@@ -191,15 +202,6 @@ function update_streamdiv(obj, attr, val) {
     $("#" + id).text(out);
 }
 
-function update_filelist(filelist) {
-    $("#filelist").empty();
-    for (let file of filelist) {
-        $("#filelist").append(
-            "<option value='" + file.filename + "'>" +
-            file.filename + "</option>");
-    }
-}
-
 var last_progress = 0;
 function update_progress(loaded, total) {
     let progress = parseInt(loaded / total * 100);
@@ -248,13 +250,13 @@ function handle_klippy_state(state) {
 //***********End UI Update Functions****************/
 
 //***********Websocket-Klipper API Functions (JSON-RPC)************/
-function get_file_list() {
-    let args = {root: file_list_type}
+function get_file_list(root) {
+    let args = {root: root}
     json_rpc.call_method_with_kwargs(api.file_list.method, args)
     .then((result) => {
         // result is an "ok" acknowledgment that the gcode has
         // been successfully processed
-        update_filelist(result);
+        console.log(result);
     })
     .catch((error) => {
         update_error(api.file_list.method, error);
@@ -276,9 +278,6 @@ function get_klippy_info() {
                     " | CPU: " + result.cpu_info +
                     " | Build Version: " + result.software_version);
                 klippy_ready = true;
-                // Klippy has transitioned from not ready to ready.
-                // It is now safe to fetch the file list.
-                get_file_list();
 
                 // Add our subscriptions the the UI is configured to do so.
                 if ($("#cbxSub").is(":checked")) {
@@ -483,6 +482,33 @@ function get_metadata(file_name) {
     });
 }
 
+function make_directory(dir_path) {
+    json_rpc.call_method_with_kwargs(
+        api.directory.method.post, {'path': dir_path})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.directory.method.post, error);
+    });
+}
+
+function delete_directory(dir_path) {
+    json_rpc.call_method_with_kwargs(
+        api.directory.method.delete,
+        {'path': dir_path, 'force': true})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.directory.method.delete, error);
+    });
+}
+
 function delete_file(file_path) {
     json_rpc.call_method_with_kwargs(
         api.delete_file.method, {'path': file_path})
@@ -493,6 +519,32 @@ function delete_file(file_path) {
     })
     .catch((error) => {
         update_error(api.delete_file.method, error);
+    });
+}
+
+function copy_item(source_path, dest_path) {
+    json_rpc.call_method_with_kwargs(
+        api.copy.method, {'source': source_path, 'dest': dest_path})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.copy.method, error);
+    });
+}
+
+function move_item(source_path, dest_path) {
+    json_rpc.call_method_with_kwargs(
+        api.move.method, {'source': source_path, 'dest': dest_path})
+    .then((result) => {
+        // result is an "ok" acknowledgement that the
+        // print has started
+        console.log(result);
+    })
+    .catch((error) => {
+        update_error(api.move.method, error);
     });
 }
 
@@ -621,8 +673,15 @@ json_rpc.register_method("notify_klippy_disconnected", handle_klippy_disconnecte
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed
     // a gcode file.
-    if (file_list_type == file_info.item.root)
-        get_file_list(file_info.item.root);
+    // Update the jstree based on the action and info
+    let parent_node = parse_node_path(file_info.item.root, file_info.item.path);
+    $("#filelist").jstree('refresh_node', parent_node);
+    if (file_info.action == "move_item") {
+        let src_parent_node = parse_node_path(
+            file_info.source_item.root, file_info.source_item.path)
+        if (src_parent_node != parent_node)
+            $("#filelist").jstree('refresh_node', src_parent_node);
+    }
     console.log("Filelist Changed:");
     console.log(file_info);
 }
@@ -634,6 +693,8 @@ function handle_metadata_update(metadata) {
 json_rpc.register_method("notify_metadata_update", handle_metadata_update);
 
 //***********End Klipper Event Handlers (JSON-RPC)*****************/
+
+//*****************Websocket Batch GCode Tests*********************/
 
 // The function below is an example of one way to use JSON-RPC's batch send
 // method.  Generally speaking it is better and easier to use individual
@@ -701,6 +762,287 @@ async function send_gcode_macro(gcodes) {
     }
 }
 
+//**************End Websocket Batch GCode Tests********************/
+
+//*****************HTTP Helper Functions***************************/
+
+function encode_filename(path) {
+    let parts = path.split("/")
+    if (!parts.length) {
+        return "";
+    }
+    let fname = encodeURIComponent(parts.pop())
+    if (parts.length) {
+        return parts.join("/") + "/" + fname;
+    }
+    return fname;
+}
+function form_get_request(api_url, query_string="") {
+    let settings = {url: origin + api_url + query_string};
+    if (apikey != null)
+        settings.headers = {"X-Api-Key": apikey};
+    $.get(settings, (resp, status) => {
+            console.log(resp);
+            return false;
+    });
+}
+
+function form_post_request(api_url, query_string="") {
+    let settings = {url: origin + api_url + query_string};
+    if (apikey != null)
+        settings.headers = {"X-Api-Key": apikey};
+    $.post(settings, (resp, status) => {
+            console.log(resp);
+            return false;
+    });
+}
+
+function form_delete_request(api_url, query_string="") {
+    let settings = {
+        url: origin + api_url + query_string,
+        method: 'DELETE',
+        success: (resp, status) => {
+            console.log(resp);
+            return false;
+            }
+    };
+    if (apikey != null)
+        settings.headers = {"X-Api-Key": apikey};
+    $.ajax(settings);
+}
+
+function form_download_request(uri) {
+    let dl_url = origin + uri;
+    if (apikey != null) {
+        let settings = {
+            url: origin + api.oneshot_token.url,
+            headers: {"X-Api-Key": apikey}
+        };
+        $.get(settings, (resp, status) => {
+            let token = resp.result;
+            dl_url += "?token=" + token;
+            do_download(dl_url);
+            return false;
+        });
+    } else {
+        do_download(dl_url);
+    }
+}
+
+//*************End HTTP Helper Functions***************************/
+
+//***************JSTree Helper Functions***************************/
+
+function parse_node_path(root, path) {
+    let slice_idx = path.lastIndexOf("/");
+    let node_path = "";
+    if (slice_idx != -1)
+        node_path = "/" + path.slice(0, slice_idx);
+    return root + node_path;
+}
+
+function get_selected_node() {
+    let js_instance = $("#filelist").jstree(true);
+    let sel = js_instance.get_selected();
+    if (!sel.length)
+        return null;
+    sel = sel[0];
+    return js_instance.get_node(sel);
+}
+
+function get_selected_item(type="file") {
+    let node = get_selected_node();
+    if (node == null || node.type != type)
+        return "";
+    return node.id;
+}
+
+function generate_children(result, parent) {
+    let children = [];
+    result.dirs.sort((a, b) => {
+        return a.dirname > b.dirname ? 1 : -1;
+    })
+    result.files.sort((a, b) => {
+        return a.filename > b.filename ? 1 : -1;
+    });
+    for (let dir of result.dirs) {
+        let full_path = parent.id + "/" + dir.dirname;
+        children.push({text: dir.dirname, id: full_path,
+                        type: "dir", children: true,
+                        mutable: parent.original.mutable});
+    }
+    for (let file of result.files) {
+        let full_path = parent.id + "/" + file.filename;
+        children.push({text: file.filename, id: full_path,
+                        type: "file", mutable: parent.original.mutable});
+    }
+    return children;
+}
+
+function jstree_populate_children(node, callback) {
+    if (api_type == "http") {
+        let qs = `?path=${node.id}`;
+        let settings = {url: origin + api.directory.url + qs};
+        if (apikey != null)
+            settings.headers = {"X-Api-Key": apikey};
+        $.get(settings, (resp, status) => {
+            callback(generate_children(resp.result, node));
+            return false;
+        });
+    } else {
+        json_rpc.call_method_with_kwargs(
+            api.directory.method.get, {path: node.id})
+        .then((result) => {
+            callback(generate_children(result, node));
+        })
+        .catch((error) => {
+            console.log(error)
+            update_error(api.directory.method.get, error);
+        });
+    }
+}
+
+function jstree_download_file() {
+    update_progress(0, 100);
+    let filename = get_selected_item();
+    if (filename) {
+        let url = `/server/files/${encode_filename(filename)}`;
+        form_download_request(url);
+    }
+}
+
+var paste_item = null;
+function jstree_paste() {
+    if (paste_item == null) {
+        console.log(`Invalid Paste Command`);
+        return
+    }
+    let node = get_selected_node()
+    if (node == null || node == paste_item.source_node) {
+        paste_item = null;
+        return;
+    }
+    let source_path = paste_item.source_node.id;
+    let dest_path = node.id;
+    // TODO: Need checks here.
+    // - If the source is a file and the action is move, the destination must
+    // - be a directory?
+    if (paste_item.source_node.id == node.id) {
+        // Can't move or copy to the same item
+        return;
+    } else if (paste_item.source_node.type != "file" && node.type == "file") {
+        // Can't copy or move a directory into a file
+        return;
+    } else if (paste_item.action == "copy" && node.type != "file") {
+       // When copying to a folder add the file/folder name to the destination
+       dest_path += `/${paste_item.source_node.text}`;
+    }
+    if (api_type == 'http') {
+        let api_url = paste_item.action == "move" ? api.move.url : api.copy.url;
+        let qs = `?source=${source_path}&dest=${dest_path}`;
+        form_post_request(api_url, qs);
+    } else {
+        // Websocket
+        if (paste_item.action == "move")
+            move_item(source_path, dest_path);
+        else
+            copy_item(source_path, dest_path);
+    }
+    paste_item = null;
+}
+
+function jstree_delete_item() {
+    let node = get_selected_node();
+    if (node == null) {
+        console.log("Invalid item selection, cannot delete");
+    }
+    if (api_type == 'http') {
+        let api_url;
+        let qs = "";
+        if (node.type == "file") {
+            api_url = `/server/files/${encode_filename(node.id)}`;
+        } else {
+            api_url = api.directory.url;
+            qs = `?path=${encode_filename(node.id)}&force=true`;
+        }
+        form_delete_request(api_url, qs);
+    } else {
+        if (node.type == "file")
+            delete_file(node.id);
+        else
+            delete_directory(node.id);
+    }
+}
+
+function jstree_new_folder(node, status, cancelled) {
+    if (!status)
+        return;
+    let instance = $("#filelist").jstree(true);
+    if (cancelled) {
+        console.log("Create Folder Cancelled")
+        instance.delete_node(node);
+        return;
+    }
+    console.log(`Create Folder: ${node}`);
+    let parent = instance.get_node(instance.get_parent(node));
+    if (parent.type == "file") {
+        console.log("Invalid folder, cannot create")
+        instance.delete_node(node);
+        return;
+    }
+    let path = parent.id + "/" + node.text;
+    if (api_type == 'http') {
+        let url = api.directory.url;
+        let qs = "?path=" + path;
+        form_post_request(url, qs);
+
+    } else {
+        make_directory(path);
+    }
+}
+
+function jstree_rename(node, status, cancelled) {
+    if (!status || cancelled)
+        return;
+    let source_path = node.id;
+    let instance = $("#filelist").jstree(true);
+    let dest_path = instance.get_parent(node) + "/" + node.text;
+    if (api_type == 'http') {
+        let qs = `?source=${source_path}&dest=${dest_path}`;
+        form_post_request(api.move.url, qs);
+    } else {
+        move_item(source_path, dest_path);
+    }
+}
+
+function jstree_start_print() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7)
+        let qs = `?filename=${encode_filename(filename)}`;
+        if (api_type == 'http') {
+            form_post_request(api.start_print.url, qs);
+        } else {
+            start_print(filename);
+        }
+    }
+}
+
+function jstree_get_metadata() {
+    let filename = get_selected_item();
+    if (filename && filename.startsWith("gcodes/")) {
+        filename = filename.slice(7);
+        if (api_type == 'http') {
+            let qs = `?filename=${encode_filename(filename)}`;
+            form_get_request(api.metadata.url, qs);
+        } else {
+            get_metadata(filename);
+        }
+    }
+}
+
+//***********End JSTree Helper Functions***************************/
+
 // A simple reconnecting websocket
 class KlippyWebsocket {
     constructor(addr) {
@@ -720,7 +1062,7 @@ class KlippyWebsocket {
         if (apikey != null) {
             // Fetch a oneshot token to pass websocket authorization
             let token_settings = {
-                url: api.oneshot_token.url,
+                url: origin + api.oneshot_token.url,
                 headers: {
                     "X-Api-Key": apikey
                 }
@@ -789,8 +1131,6 @@ class KlippyWebsocket {
 function create_websocket(url) {
     if (websocket != null)
         websocket.close()
-    let prefix = window.location.protocol == "https" ? "wss://" : "ws://";
-    let ws_url = prefix + location.host
     websocket = new KlippyWebsocket(ws_url);
     websocket.onopen = () => {
         // Depending on the state of the printer, all enpoints may not be
@@ -810,7 +1150,7 @@ function create_websocket(url) {
 function check_authorization() {
     // send a HTTP "run gcode" command
     let settings = {
-        url: api.printer_info.url,
+        url: origin + api.printer_info.url,
         statusCode: {
             401: function() {
                     // Show APIKey Popup
@@ -851,9 +1191,163 @@ window.onload = () => {
         $('#apiargs').prop('hidden', (api_type == "http"));
     });
 
-    $('input[type=radio][name=file_type]').on('change', function() {
-        file_list_type = $(this).val();
-        get_file_list();
+    // Instantiate basic jstree
+    $('#filelist').jstree({
+        core: {
+            multiple: false,
+            check_callback: true,
+            data: function (node, cb) {
+                if (node.id === "#") {
+                    cb([
+                        {text: "gcodes", id: "gcodes",
+                         type: "root", children: true, mutable: true},
+                        {text: "config", id: "config",
+                         type: "root", children: true, mutable: true},
+                        {text: "config_examples", id: "config_examples",
+                         type: "root", children: true, mutable: false}
+                    ]);
+                } else {
+                    jstree_populate_children(node, cb);
+                }
+            }
+        },
+        types: {
+            default: {
+                icon: "jstree-folder"
+            },
+            "#": {
+                valid_children: ["root"],
+                max_children: 3
+            },
+            root: {
+                icon: "jstree-folder",
+                valid_children: ["dir", "file"]
+            },
+            file: {
+                icon: "jstree-file",
+                valid_children: []
+            },
+            dir: {
+                icon: "jstree-folder",
+                valid_children: ["dir", "file"]
+            }
+        },
+        contextmenu: {
+            items: (node, cb) => {
+                let actions = Object();
+                if (node.type != "file") {
+                    // Can upload, can paste
+                    actions.upload = {
+                        label: "Upload File",
+                        _disabled: !node.original.mutable,
+                        action: () => {
+                            $('#upload-file').click();
+                        }
+                    }
+                    actions.new_folder = {
+                        label: "New Folder",
+                        _disabled: !node.original.mutable,
+                        action: () => {
+                            let instance = $("#filelist").jstree(true);
+                            let par = get_selected_node();
+                            if (par == null)
+                                return false;
+                            instance.create_node(par, {
+                                type: "dir",
+                            }, "first", (ch_node) => {
+                                if (ch_node) {
+                                    let val = instance.edit(
+                                        ch_node.id, null, jstree_new_folder);
+                                    if (val === false) {
+                                        console.log(instance.last_error());
+                                    }
+                                } else {
+                                    console.log("Invalid Child, cannot create dir");
+                                }
+                            });
+
+                        },
+                        separator_after: true
+                    }
+                } else {
+                    actions.download = {
+                        label: "Download File",
+                        action: jstree_download_file,
+                        separator_after: true
+                    }
+                }
+                if (node.type != "root") {
+                    if (node.type == "file" && node.id.startsWith("gcodes")) {
+                        actions.print = {
+                            label: "Start Print",
+                            _disabled: is_printing,
+                            action: jstree_start_print
+                        }
+                        actions.metadata = {
+                            label: "Get Metadata",
+                            separator_after: true,
+                            action: jstree_get_metadata
+                        }
+                    }
+                    // can delete, cut (move), copy, or rename(move)
+                    actions.rename = {
+                        label: "Rename",
+                        _disabled: !node.original.mutable,
+                        action: () => {
+                            let instance = $("#filelist").jstree(true);
+                            let cur = get_selected_node();
+                            if (cur == null)
+                                return false;
+                            instance.edit(cur, null, jstree_rename);
+                        }
+                    }
+                    actions.delete = {
+                        label: "Delete",
+                        _disabled: !node.original.mutable,
+                        action: jstree_delete_item,
+                        separator_after: true
+                    }
+                    actions.edit = {
+                        label: "Edit",
+                        submenu: {}
+                    }
+                    actions.edit.submenu.cut = {
+                        label: "Cut",
+                        _disabled: !node.original.mutable,
+                        action: () => {
+                            paste_item = {
+                                action: "move",
+                                source_node: node
+                            }
+                        }
+                    }
+                    actions.edit.submenu.copy = {
+                        label: "Copy",
+                        action: () => {
+                            paste_item = {
+                                action: "copy",
+                                source_node: node
+                            }
+                        }
+                    }
+                }
+                if (!("edit" in actions)) {
+                    actions.edit = {
+                        label: "Edit",
+                        submenu: {}
+                    }
+                }
+                actions.edit.submenu.paste = {
+                    label: "Paste",
+                    _disabled: paste_item == null ||
+                        paste_item.source_node.id == node.id ||
+                        !node.original.mutable,
+                    action: jstree_paste
+                }
+                cb(actions);
+            }
+        },
+        plugins: ["types", "contextmenu"]
     });
 
     $('#cbxFileTransfer').on('change', function () {
@@ -874,12 +1368,8 @@ window.onload = () => {
         update_term(line);
         if (api_type == 'http') {
             // send a HTTP "run gcode" command
-            let settings = {url: api.gcode_script.url + "?script=" + line};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (data, status) => {
-                update_term(data.result);
-            });
+            let qs = "?script=" + line;
+            form_post_request(api.gcode_script.url, qs);
         } else {
             // Send a websocket "run gcode" command.
             run_gcode(line);
@@ -901,21 +1391,13 @@ window.onload = () => {
                 settings.headers = {"X-Api-Key": apikey};
             if (sendtype == "get") {
                 console.log("Sending GET " + url);
-                $.get(settings, (resp, status) => {
-                    console.log(resp);
-                });
+                form_get_request(url);
             } else if (sendtype == "post") {
                 console.log("Sending POST " + url);
-                $.post(settings, (resp, status) => {
-                    console.log(resp);
-                });
+                form_post_request(url);
             } else if (sendtype == "delete") {
                 console.log("Sending DELETE " + url);
-                settings.method = "DELETE";
-                settings.success = (resp, status) => {
-                    console.log(resp);
-                };
-                $.ajax(settings);
+                form_delete_request(url);
             }
         } else {
             let method = $('#apirequest').val().trim();
@@ -947,20 +1429,17 @@ window.onload = () => {
         return false;
     });
 
-    //  Hidden file element's click is forwarded to the button
-    $('#btnupload').click(() => {
-        if (api_type == "http") {
-            $('#upload-file').click();
-        } else {
-            console.log("File Upload not supported over websocket")
-        }
-    });
-
     // Uploads a selected file to the server
     $('#upload-file').change(() => {
         update_progress(0, 100);
         let file = $('#upload-file').prop('files')[0];
-        if (file) {
+        let dir = get_selected_item("dir");
+        if (!dir)
+            dir = get_selected_item("root");
+        if (file && dir) {
+            dir = dir.split('/');
+            let root = dir[0];
+            let directory = dir.slice(1).join("/");
             console.log("Sending Upload Request...");
             // It might not be a bad idea to validate that this is
             // a gcode file here, and reject and other files.
@@ -968,122 +1447,36 @@ window.onload = () => {
             // If you want to allow multiple selections, the below code should be
             // done in a loop, and the 'let file' above should be the entire
             // array of files and not the first element
-            if (api_type == 'http') {
-                let fdata = new FormData();
-                fdata.append("file", file);
-                fdata.append("root", file_list_type);
-                let settings = {
-                    url: api.upload.url,
-                    data: fdata,
-                    cache: false,
-                    contentType: false,
-                    processData: false,
-                    method: 'POST',
-                    xhr: () => {
-                        let xhr = new window.XMLHttpRequest();
-                        xhr.upload.addEventListener("progress", (evt) => {
-                            if (evt.lengthComputable) {
-                                update_progress(evt.loaded, evt.total);
-                            }
-                        }, false);
-                        return xhr;
-                    },
-                    success: (resp, status) => {
-                        console.log(resp);
-                        return false;
-                    }
-                };
-                if (apikey != null)
-                    settings.headers = {"X-Api-Key": apikey};
-                $.ajax(settings);
-            } else {
-                console.log("File Upload not supported over websocket")
-            }
-            $('#upload-file').val('');
-        }
-    });
 
-    // Download a file from the server.  This implementation downloads
-    // whatever is selected in the <select> element
-    $('#btndownload').click(() => {
-        update_progress(0, 100);
-        let filename = $("#filelist").val();
-        if (filename) {
-            if (api_type == 'http') {
-                let url = api.gcode_files.url + filename;
-                if (file_list_type == "config") {
-                    url = api.cfg_files.url + filename;
-                } else if (file_list_type == "config_examples") {
-                    url = api.cfg_examples.url + filename;
-                }
-                let dl_url = "http://" + location.host + url;
-                if (apikey != null) {
-                    let settings = {
-                        url: api.oneshot_token.url,
-                        headers: {"X-Api-Key": apikey}
-                    };
-                    $.get(settings, (resp, status) => {
-                        let token = resp.result;
-                        dl_url += "?token=" + token;
-                        do_download(dl_url);
-                        return false;
-                    });
-                } else {
-                    do_download(dl_url);
-                }
-            } else {
-                console.log("File Download not supported over websocket")
-            }
-        }
-    });
-
-    // Delete a file from the server.  This implementation deletes
-    // whatever is selected in the <select> element
-    $("#btndelete").click(() =>{
-        let filename = $("#filelist").val();
-        if (filename) {
-            if (api_type == 'http') {
-                let url = api.gcode_files.url + filename;
-                if (file_list_type == "config") {
-                    url = api.cfg_files.url + filename;
-                } else if (file_list_type != "gcodes") {
-                    console.log("Cannot delete file");
+            let fdata = new FormData();
+            fdata.append("file", file);
+            fdata.append("root", root);
+            fdata.append("path", directory);
+            let settings = {
+                url: origin + api.upload.url,
+                data: fdata,
+                cache: false,
+                contentType: false,
+                processData: false,
+                method: 'POST',
+                xhr: () => {
+                    let xhr = new window.XMLHttpRequest();
+                    xhr.upload.addEventListener("progress", (evt) => {
+                        if (evt.lengthComputable) {
+                            update_progress(evt.loaded, evt.total);
+                        }
+                    }, false);
+                    return xhr;
+                },
+                success: (resp, status) => {
+                    console.log(resp);
                     return false;
                 }
-                let settings = {
-                    url: url,
-                    method: 'DELETE',
-                    success: (resp, status) => {
-                        console.log(resp);
-                        return false;
-                    }
-                };
-                if (apikey != null)
-                    settings.headers = {"X-Api-Key": apikey};
-                $.ajax(settings);
-            } else {
-                let fname = file_list_type + "/" + filename;
-                delete_file(fname);
-            }
-        }
-    });
-
-    // Start a print.  This implementation starts the print for the
-    // file selected in the <select> element
-    $("#btnstartprint").click(() =>{
-        let filename = $("#filelist").val();
-        if (filename) {
-            if (api_type == 'http') {
-                let settings = {url: api.start_print.url + "?filename=" + filename};
-                if (apikey != null)
-                    settings.headers = {"X-Api-Key": apikey};
-                $.post(settings, (resp, status) => {
-                        console.log(resp);
-                        return false;
-                });
-            } else {
-                start_print(filename);
-            }
+            };
+            if (apikey != null)
+                settings.headers = {"X-Api-Key": apikey};
+            $.ajax(settings);
+            $('#upload-file').val('');
         }
     });
 
@@ -1091,13 +1484,8 @@ window.onload = () => {
     // is configured in printer.cfg.
     $("#btnpauseresume").click(() =>{
         if (api_type == 'http') {
-            let settings = {url: paused ? api.resume_print.url : api.pause_print.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp.result);
-                return false;
-            });
+            let path = paused ? api.resume_print.url : api.pause_print.url
+            form_post_request(path);
         } else {
             if (paused) {
                 resume_print();
@@ -1111,48 +1499,16 @@ window.onload = () => {
     // is configured in printer.cfg.
     $("#btncancelprint").click(() =>{
         if (api_type == 'http') {
-            let settings = {url: api.cancel_print.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.cancel_print.url);
         } else {
             cancel_print();
-        }
-    });
-
-    // Get File Metadata
-    $("#btngetmetadata").click(() =>{
-        let filename = $("#filelist").val();
-        if (filename) {
-            if (api_type == 'http') {
-                let url = api.metadata.url + "?filename=" + filename;
-                let settings = {url: url};
-                if (apikey != null)
-                    settings.headers = {"X-Api-Key": apikey};
-                $.get(settings, (resp, status) => {
-                        console.log(resp);
-                        return false;
-                });
-            } else {
-                get_metadata(filename);
-            }
         }
     });
 
     // Refresh File List
     $("#btngetfiles").click(() =>{
         if (api_type == 'http') {
-            let url = api.file_list.url + "?root=" + file_list_type;
-            let settings = {url: url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.get(settings, (resp, status) => {
-                    console.log(resp);
-                    return false;
-            });
+            form_get_request(api.file_list.url);
         } else {
             get_file_list();
         }
@@ -1160,13 +1516,7 @@ window.onload = () => {
 
     $('#btnqueryendstops').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.query_endstops.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.get(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_get_request(api.query_endstops.url);
         } else {
             get_endstops();
         }
@@ -1175,15 +1525,10 @@ window.onload = () => {
      // Post Subscription Request
      $('#btnsubscribe').click(() => {
         if (api_type == 'http') {
-            let url = api.object_subscription.url + "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
+            let qs = "?gcode_move=gcode_position,speed,speed_factor,extrude_factor" +
                     "&toolhead&virtual_sdcard&heater_bed&extruder=temperature,target&fan&idle_timeout&pause_resume"  +
                     "&print_stats";
-            let settings = {url: url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (data, status) => {
-                console.log(data);
-            });
+            form_post_request(api.object_subscription.url, qs);
         } else {
             const sub = {
                 objects: {
@@ -1201,29 +1546,9 @@ window.onload = () => {
         }
     });
 
-    // Get subscription info
-    $('#btngetsub').click(() => {
-        if (api_type == 'http') {
-            let settings = {url: api.object_subscription.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.get(settings, (resp, status) => {
-                console.log(resp);
-            });
-        } else {
-            get_subscribed();
-        }
-    });
-
     $('#btngethelp').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.gcode_help.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.get(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_get_request(api.gcode_help.url);
         } else {
             get_gcode_help();
         }
@@ -1231,13 +1556,7 @@ window.onload = () => {
 
     $('#btngetobjs').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.object_list.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.get(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_get_request(api.object_list.url);
         } else {
             get_object_list();
         }
@@ -1267,13 +1586,7 @@ window.onload = () => {
 
     $('#btnestop').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.estop.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.estop.url);
         } else {
             emergency_stop();
         }
@@ -1281,13 +1594,7 @@ window.onload = () => {
 
     $('#btnrestart').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.restart.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.restart.url);
         } else {
             restart();
         }
@@ -1295,13 +1602,7 @@ window.onload = () => {
 
     $('#btnfirmwarerestart').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.firmware_restart.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.firmware_restart.url);
         } else {
             firmware_restart();
         }
@@ -1309,13 +1610,7 @@ window.onload = () => {
 
     $('#btnreboot').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.reboot.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.reboot.url);
         } else {
             reboot();
         }
@@ -1323,60 +1618,18 @@ window.onload = () => {
 
     $('#btnshutdown').click(() => {
         if (api_type == 'http') {
-            let settings = {url: api.shutdown.url};
-            if (apikey != null)
-                settings.headers = {"X-Api-Key": apikey};
-            $.post(settings, (resp, status) => {
-                console.log(resp);
-                return false;
-            });
+            form_post_request(api.shutdown.url);
         } else {
             shutdown();
         }
     });
 
     $('#btngetlog').click(() => {
-        if (api_type == 'http') {
-            let dl_url = "http://" + location.host + api.klippy_log.url;
-            if (apikey != null) {
-                let settings = {
-                    url: api.oneshot_token.url,
-                    headers: {"X-Api-Key": apikey}
-                };
-                $.get(settings, (resp, status) => {
-                    let token = resp.result;
-                    dl_url += "?token=" + token;
-                    do_download(dl_url);
-                    return false;
-                });
-            } else {
-                do_download(dl_url);
-            }
-        } else {
-            console.log("Get Log not supported over websocket")
-        }
+        form_download_request(api.klippy_log.url);
     });
 
     $('#btnmoonlog').click(() => {
-        if (api_type == 'http') {
-            let dl_url = "http://" + location.host + api.moonraker_log.url;
-            if (apikey != null) {
-                let settings = {
-                    url: api.oneshot_token.url,
-                    headers: {"X-Api-Key": apikey}
-                };
-                $.get(settings, (resp, status) => {
-                    let token = resp.result;
-                    dl_url += "?token=" + token;
-                    do_download(dl_url);
-                    return false;
-                });
-            } else {
-                do_download(dl_url);
-            }
-        } else {
-            console.log("Get Log not supported over websocket")
-        }
+        form_download_request(api.moonraker_log.url);
     });
 
     check_authorization();
