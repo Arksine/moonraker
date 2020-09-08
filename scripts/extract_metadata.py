@@ -66,15 +66,15 @@ class BaseSlicer(object):
     def get_id_pattern(self):
         return self.id_pattern
 
-    def _parse_min_float(self, pattern, data):
-        result = _regex_find_floats(pattern, data)
+    def _parse_min_float(self, pattern, data, strict=False):
+        result = _regex_find_floats(pattern, data, strict)
         if result:
             return min(result)
         else:
             return None
 
-    def _parse_max_float(self, pattern, data):
-        result = _regex_find_floats(pattern, data)
+    def _parse_max_float(self, pattern, data, strict=False):
+        result = _regex_find_floats(pattern, data, strict)
         if result:
             return max(result)
         else:
@@ -383,11 +383,37 @@ class IdeaMaker(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+class IceSL(BaseSlicer):
+    def __init__(self, name="IceSL", id_pattern=r"; <IceSL.*>",):
+        super(IceSL, self).__init__(name, id_pattern)
+
+    def parse_first_layer_height(self):
+        return _regex_find_first(
+            r"; z_layer_height_first_layer_mm :\s+(\d+\.\d+)",
+            self.header_data, float)
+
+    def parse_layer_height(self):
+        return _regex_find_first(
+            r"; z_layer_height_mm :\s+(\d+\.\d+)",
+            self.header_data, float)
+
+    def parse_object_height(self):
+        return self._parse_max_float(
+            r"G0 F\d+ Z\d+\.\d+", self.footer_data, strict=True)
+
+    def parse_first_layer_extr_temp(self):
+        return _regex_find_first(
+            r"; extruder_temp_degree_c_0 :\s+(\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_bed_temp(self):
+        return _regex_find_first(
+            r"; bed_temp_degree_c :\s+(\d+\.?\d*)", self.header_data)
+
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS = [
     PrusaSlicer, Slic3rPE, Slic3r, SuperSlicer,
-    Cura, Simplify3D, KISSlicer, IdeaMaker]
+    Cura, Simplify3D, KISSlicer, IdeaMaker, IceSL]
 SUPPORTED_DATA = [
     'first_layer_height', 'layer_height', 'object_height',
     'filament_total', 'estimated_time', 'thumbnails',
