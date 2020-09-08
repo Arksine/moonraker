@@ -124,35 +124,39 @@ class UnknownSlicer(BaseSlicer):
 
 class PrusaSlicer(BaseSlicer):
     def __init__(self, name="PrusaSlicer", id_pattern=r"PrusaSlicer\s.*\son"):
-        super(PrusaSlicer, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
-        return self._parse_min_float(
-            r"; first_layer_height =.*", self.footer_data)
+        return _regex_find_first(
+            r"; first_layer_height = (\d+\.?\d*)", self.footer_data)
 
     def parse_layer_height(self):
-        return self._parse_min_float(r"; layer_height =.*", self.footer_data)
+        return _regex_find_first(
+            r"; layer_height = (\d+\.?\d*)", self.footer_data)
 
     def parse_object_height(self):
         return self._parse_max_float(r"G1\sZ\d+\.\d*\sF", self.footer_data)
 
     def parse_filament_total(self):
-        return self._parse_max_float(
-            r"filament\sused\s\[mm\]\s=\s\d+\.\d*", self.footer_data)
+        return _regex_find_first(
+            r"filament\sused\s\[mm\]\s=\s(\d+\.\d*)", self.footer_data)
 
     def parse_estimated_time(self):
-        time_matches = re.findall(
+        time_match = re.search(
             r';\sestimated\sprinting\stime.*', self.footer_data)
-        if not time_matches:
+        if not time_match:
             return None
         total_time = 0
-        time_match = time_matches[0]
-        time_patterns = [(r"\d+d", 24*60*60), (r"\d+h", 60*60),
-                         (r"\d+m", 60), (r"\d+s", 1)]
-        for pattern, multiplier in time_patterns:
-            t = _regex_find_ints(pattern, time_match)
-            if t:
-                total_time += max(t) * multiplier
+        time_match = time_match.group()
+        time_patterns = [(r"(\d+)d", 24*60*60), (r"(\d+)h", 60*60),
+                         (r"(\d+)m", 60), (r"(\d+)s", 1)]
+        try:
+            for pattern, multiplier in time_patterns:
+                t = re.search(pattern, time_match)
+                if t:
+                    total_time += int(t.group(1)) * multiplier
+        except Exception:
+            return None
         return round(total_time, 2)
 
     def parse_thumbnails(self):
@@ -191,42 +195,42 @@ class PrusaSlicer(BaseSlicer):
 class Slic3rPE(PrusaSlicer):
     def __init__(self, name="Slic3r PE",
                  id_pattern=r"Slic3r\sPrusa\sEdition\s.*\son"):
-        super(Slic3rPE, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_filament_total(self):
-        return self._parse_max_float(
-            r"filament\sused\s=\s\d+\.\d+mm", self.footer_data)
+        return _regex_find_first(
+            r"filament\sused\s=\s(\d+\.\d+)mm", self.footer_data)
 
     def parse_thumbnails(self):
         return None
 
 class Slic3r(Slic3rPE):
     def __init__(self, name="Slic3r", id_pattern=r"Slic3r\s\d.*\son"):
-        super(Slic3r, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_estimated_time(self):
         return None
 
 class SuperSlicer(PrusaSlicer):
     def __init__(self, name="SuperSlicer", id_pattern=r"SuperSlicer\s.*\son"):
-        super(SuperSlicer, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
 class Cura(BaseSlicer):
     def __init__(self, name="Cura", id_pattern=r"Cura_SteamEngine.*"):
-        super(Cura, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
-        return self._parse_min_float(r";MINZ:.*", self.header_data)
+        return _regex_find_first(r";MINZ:(\d+\.?\d*)", self.header_data)
 
     def parse_layer_height(self):
-        return self._parse_min_float(r";Layer\sheight:.*", self.header_data)
+        return _regex_find_first(r";Layer\sheight:\s(\d+\.?\d*)", self.header_data)
 
     def parse_object_height(self):
-        return self._parse_max_float(r";MAXZ:.*", self.header_data)
+        return _regex_find_first(r";MAXZ:(\d+\.?\d*)", self.header_data)
 
     def parse_filament_total(self):
-        filament = self._parse_max_float(
-            r";Filament\sused:.*", self.header_data)
+        filament = _regex_find_first(
+            r";Filament\sused:\s(\d+\.?\d*)m", self.header_data)
         if filament is not None:
             filament *= 1000
         return filament
@@ -245,34 +249,38 @@ class Cura(BaseSlicer):
 
 class Simplify3D(BaseSlicer):
     def __init__(self, name="Simplify3D", id_pattern=r"Simplify3D\(R\)"):
-        super(Simplify3D, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
         return self._parse_min_float(r"G1\sZ\d+\.\d*", self.header_data)
 
     def parse_layer_height(self):
-        return self._parse_min_float(r";\s+layerHeight,.*", self.header_data)
+        return _regex_find_first(
+            r";\s+layerHeight,(\d+\.?\d*)", self.header_data)
 
     def parse_object_height(self):
         return self._parse_max_float(r"G1\sZ\d+\.\d*", self.footer_data)
 
     def parse_filament_total(self):
-        return self._parse_max_float(
-            r";\s+Filament\slength:.*mm", self.footer_data)
+        return _regex_find_first(
+            r";\s+Filament\slength:\s(\d+\.?\d*)\smm", self.footer_data)
 
     def parse_estimated_time(self):
-        time_matches = re.findall(
+        time_match = re.search(
             r';\s+Build time:.*', self.footer_data)
-        if not time_matches:
+        if not time_match:
             return None
         total_time = 0
-        time_match = time_matches[0]
-        time_patterns = [(r"\d+\shours", 60*60), (r"\d+\smin", 60),
-                         (r"\d+\ssec", 1)]
-        for pattern, multiplier in time_patterns:
-            t = _regex_find_ints(pattern, time_match)
-            if t:
-                total_time += max(t) * multiplier
+        time_match = time_match.group()
+        time_patterns = [(r"(\d+)\shours", 60*60), (r"(\d+)\smin", 60),
+                         (r"(\d+)\ssec", 1)]
+        try:
+            for pattern, multiplier in time_patterns:
+                t = re.search(pattern, time_match)
+                if t:
+                    total_time += int(t.group(1)) * multiplier
+        except Exception:
+            return None
         return round(total_time, 2)
 
     def _get_temp_items(self, pattern):
@@ -300,15 +308,15 @@ class Simplify3D(BaseSlicer):
 
 class KISSlicer(BaseSlicer):
     def __init__(self, name="KISSlicer", id_pattern=r";\sKISSlicer"):
-        super(KISSlicer, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
-        return self._parse_min_float(
-            r";\s+first_layer_thickness_mm\s=\s\d.*", self.header_data)
+        return _regex_find_first(
+            r";\s+first_layer_thickness_mm\s=\s(\d+\.?\d*)", self.header_data)
 
     def parse_layer_height(self):
-        return self._parse_min_float(
-            r";\s+max_layer_thickness_mm\s=\s\d.*", self.header_data)
+        return _regex_find_first(
+            r";\s+max_layer_thickness_mm\s=\s(\d+\.?\d*)", self.header_data)
 
     def parse_object_height(self):
         return self._parse_max_float(
@@ -322,11 +330,13 @@ class KISSlicer(BaseSlicer):
         return None
 
     def parse_estimated_time(self):
-        time = self._parse_max_float(
-            r";\sCalculated.*Build\sTime:.*", self.footer_data)
+        time = _regex_find_first(
+            r";\sCalculated.*Build\sTime:\s(\d+\.?\d*)\sminutes",
+            self.footer_data)
         if time is not None:
             time *= 60
-        return round(time, 2)
+            return round(time, 2)
+        return None
 
     def parse_first_layer_extr_temp(self):
         return _regex_find_first(
@@ -339,7 +349,7 @@ class KISSlicer(BaseSlicer):
 
 class IdeaMaker(BaseSlicer):
     def __init__(self, name="IdeaMaker", id_pattern=r"\sideaMaker\s.*,",):
-        super(IdeaMaker, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
         layer_info = _regex_find_floats(
@@ -357,7 +367,7 @@ class IdeaMaker(BaseSlicer):
 
     def parse_object_height(self):
         bounds = _regex_find_floats(
-            r";Bounding Box:.*", self.footer_data)
+            r";Bounding Box:.*", self.header_data)
         if len(bounds) >= 6:
             return bounds[5]
         return None
@@ -370,10 +380,8 @@ class IdeaMaker(BaseSlicer):
         return None
 
     def parse_estimated_time(self):
-        return self._parse_max_float(r";Print\sTime:.*", self.footer_data)
-
-    def parse_thumbnails(self):
-        return None
+        return _regex_find_first(
+            r";Print\sTime:\s(\d+\.?\d*)", self.footer_data)
 
     def parse_first_layer_extr_temp(self):
         return _regex_find_first(
@@ -385,7 +393,7 @@ class IdeaMaker(BaseSlicer):
 
 class IceSL(BaseSlicer):
     def __init__(self, name="IceSL", id_pattern=r"; <IceSL.*>",):
-        super(IceSL, self).__init__(name, id_pattern)
+        super().__init__(name, id_pattern)
 
     def parse_first_layer_height(self):
         return _regex_find_first(
