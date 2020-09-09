@@ -371,14 +371,17 @@ path relative to the specified "root".  Note that if the query st
 ```json
   {
     filename: "file name",
-    size: <file size>,
+    size: <file_size>,
     modified: "last modified date",
     slicer: "Slicer Name",
-    first_layer_height: <in mm>,
-    layer_height: <in mm>,
-    object_height: <in mm>,
+    slicer_version: "<version>",
+    first_layer_height: <mm>,
+    first_layer_bed_temp: <C>,
+    first_layer_extr_temp: <C>,
+    layer_height: <mm>,
+    object_height: <mm>,
     estimated_time: <time in seconds>,
-    filament_total: <in mm>,
+    filament_total: <mm>,
     thumbnails: [
       {
         width: <in pixels>,
