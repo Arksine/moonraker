@@ -16,9 +16,6 @@ from websockets import WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from authorization import Authorization
 
-# Max Upload Size of 200MB
-MAX_UPLOAD_SIZE = 200 * 1024 * 1024
-
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
 RESERVED_ENDPOINTS = [
@@ -99,6 +96,8 @@ class MoonrakerApp:
         self.tornado_server = None
         self.api_cache = {}
         self.registered_base_handlers = []
+        self.max_upload_size = config.getint('max_upload_size', 200)
+        self.max_upload_size *= 1024 * 1024
 
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
@@ -107,7 +106,6 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
-
         debug = config.getboolean('enable_debug_logging', True)
         enable_cors = config.getboolean('enable_cors', False)
 
@@ -135,7 +133,7 @@ class MoonrakerApp:
 
     def listen(self, host, port):
         self.tornado_server = self.app.listen(
-            port, address=host, max_body_size=MAX_UPLOAD_SIZE,
+            port, address=host, max_body_size=self.max_upload_size,
             xheaders=True)
 
     async def close(self):
