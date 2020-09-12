@@ -115,10 +115,16 @@ missing one or both, you can simply add the bare sections to printer.cfg:
 [virtual_sdcard]
 path: ~/gcode_files
 ```
-NOTE: While Klipper does not set any hard limits on the location of the
-`path` option for the `virtual_sdcard`, Moonraker requires that the path
-be located within the HOME directory, it cannot however be the HOME
-directory.  If you wish to host your files elsewhere, use a symlink.
+NOTES:
+- While Klipper does not set any hard limits on the location of the
+  `path` option for the `virtual_sdcard`, Moonraker requires that the path
+  be located within the HOME directory, it cannot however be the HOME
+  directory.  If you wish to host your files elsewhere, use a symlink.
+- Upon first starting Moonraker is not aware of the gcode file path, thus
+  it cannot serve gcode files, add directories, etc.  After Klippy enters
+  the "ready" state it sends Moonraker the gcode file path.
+  Once Moonraker receives the path it will retain it regardless of Klippy's
+  state, and update it if the path is changed in printer.cfg.
 
 ## Moonraker configuration (moonraker.conf)
 
@@ -156,6 +162,9 @@ klippy_address: /tmp/klippy_uds
 #   is /tmp/klippy_uds
 max_upload_size: 200
 #   The maximum size allowed for a file upload.  Default is 200 MiB.
+enable_cors: False
+#   Enables CORS for all http requests.  This option is useful for web
+#   application development.  Default is False.
 enable_debug_logging: True
 #   When set to True Moonraker will log in verbose mode.  During this stage
 #   of development the default is True.  In the future this will change.
