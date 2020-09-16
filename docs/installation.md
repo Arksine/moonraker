@@ -157,7 +157,7 @@ host: 0.0.0.0
 #  to all interfaces
 port: 7125
 #   The port the HTTP server will listen on.  Default is 7125
-klippy_address: /tmp/klippy_uds
+klippy_uds_address: /tmp/klippy_uds
 #   The address of Unix Domain Socket used to communicate with Klippy. Default
 #   is /tmp/klippy_uds
 max_upload_size: 200
