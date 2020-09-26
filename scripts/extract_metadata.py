@@ -136,6 +136,15 @@ class PrusaSlicer(BaseSlicer):
             r"; layer_height = (\d+\.?\d*)", self.footer_data)
 
     def parse_object_height(self):
+        matches = re.findall(
+            r";BEFORE_LAYER_CHANGE\n(?:.*\n)?;(\d+\.?\d*)", self.footer_data)
+        if matches:
+            try:
+                matches = [float(m) for m in matches]
+            except Exception:
+                pass
+            else:
+                return max(matches)
         return self._parse_max_float(r"G1\sZ\d+\.\d*\sF", self.footer_data)
 
     def parse_filament_total(self):
