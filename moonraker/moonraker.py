@@ -99,7 +99,7 @@ class Server:
         opt_sections = set(config.sections()) - \
             set(['server', 'authorization', 'cmd_args'])
         for section in opt_sections:
-            self.load_plugin(config[section], section, None)
+            self.load_plugin(config, section, None)
 
     def load_plugin(self, config, plugin_name, default=Sentinel):
         if plugin_name in self.plugins:
@@ -115,11 +115,13 @@ class Server:
             return default
         module = importlib.import_module("plugins." + plugin_name)
         try:
+            if plugin_name not in CORE_PLUGINS:
+                config = config[plugin_name]
             load_func = getattr(module, "load_plugin")
             plugin = load_func(config)
         except Exception:
             msg = f"Unable to load plugin ({plugin_name})"
-            logging.info(msg)
+            logging.exception(msg)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
