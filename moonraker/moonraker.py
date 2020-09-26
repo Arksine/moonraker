@@ -67,6 +67,9 @@ class Server:
         self.register_upload_handler = app.register_upload_handler
         self.ioloop = IOLoop.current()
 
+        self.register_endpoint(
+            "/server/info", ['GET'], self._handle_info_request)
+
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
         # they do not return a response to Klippy after execution
@@ -261,11 +264,10 @@ class Server:
                         'log_file', 'config_file']}
         file_manager = self.lookup_plugin('file_manager')
         file_manager.update_fixed_paths(fixed_paths)
-        is_ready = result.get('state', "") == "ready"
-        if is_ready:
+        self.klippy_state = result.get('state', "unknown")
+        if self.klippy_state == "ready":
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
-            self.klippy_state = "ready"
             self.init_list.append('klippy_ready')
             self.send_event("server:klippy_ready")
         elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
@@ -360,6 +362,12 @@ class Server:
             self.server_running = False
             await self.moonraker_app.close()
             self.ioloop.stop()
+
+    async def _handle_info_request(self, path, method, args):
+        return {
+            'klippy_connected': self.klippy_connection.is_connected(),
+            'klippy_state': self.klippy_state,
+            'plugins': list(self.plugins.keys())}
 
 class KlippyConnection:
     def __init__(self, on_recd, on_close):
