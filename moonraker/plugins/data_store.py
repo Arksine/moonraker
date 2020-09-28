@@ -10,12 +10,15 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 TEMPERATURE_UPDATE_MS = 1000
 TEMPERATURE_STORE_SIZE = 20 * 60
 
+MAX_GCODE_LINES = 1000
+
 class DataStore:
     def __init__(self, config):
         self.server = config.get_server()
 
         # Temperature Store Tracking
         self.last_temps = {}
+        self.gcode_queue = deque(maxlen=MAX_GCODE_LINES)
         self.temperature_store = {}
         self.temp_update_cb = PeriodicCallback(
             self._update_temperature_store, TEMPERATURE_UPDATE_MS)
@@ -24,12 +27,17 @@ class DataStore:
         self.server.register_event_handler(
             "server:status_update", self._set_current_temps)
         self.server.register_event_handler(
+            "server:gcode_response", self._update_gcode_store)
+        self.server.register_event_handler(
             "server:klippy_ready", self._init_sensors)
 
-        # Register endpoint
+        # Register endpoints
         self.server.register_endpoint(
             "/server/temperature_store", ['GET'],
             self._handle_temp_store_request)
+        self.server.register_endpoint(
+            "/server/gcode_store", ['GET'],
+            self._handle_gcode_store_request)
 
     async def _init_sensors(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -97,6 +105,24 @@ class DataStore:
 
     async def close(self):
         self.temp_update_cb.stop()
+
+    def _update_gcode_store(self, response):
+        lines = response.strip().split("\n")
+        self.gcode_queue.extend(lines)
+
+    async def _handle_gcode_store_request(self, path, method, args):
+        count = args.get("count", None)
+        if count is not None:
+            try:
+                count = int(count)
+            except Exception:
+                raise self.server.error(
+                    "Parameter <count> must be an integer value, "
+                    f"received: {count}")
+            res = "\n".join(list(self.gcode_queue)[-count:])
+        else:
+            res = "\n".join(list(self.gcode_queue))
+        return {'gcode_store': res}
 
 def load_plugin(config):
     return DataStore(config)
