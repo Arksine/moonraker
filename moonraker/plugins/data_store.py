@@ -1,4 +1,4 @@
-# Heater sensor temperature storage
+# Klipper data logging and storage storage
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #
@@ -10,7 +10,7 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 TEMPERATURE_UPDATE_MS = 1000
 TEMPERATURE_STORE_SIZE = 20 * 60
 
-class TemperatureStore:
+class DataStore:
     def __init__(self, config):
         self.server = config.get_server()
 
@@ -99,4 +99,4 @@ class TemperatureStore:
         self.temp_update_cb.stop()
 
 def load_plugin(config):
-    return TemperatureStore(config)
+    return DataStore(config)

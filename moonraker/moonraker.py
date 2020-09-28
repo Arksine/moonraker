@@ -26,7 +26,7 @@ MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
 CORE_PLUGINS = [
     'file_manager', 'klippy_apis', 'machine',
-    'temperature_store', 'shell_command']
+    'data_store', 'shell_command']
 
 class Sentinel:
     pass
