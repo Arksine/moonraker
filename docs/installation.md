@@ -179,7 +179,7 @@ config_path:
 enabled: True
 #   Enables authorization.  When set to true, requests must either contain
 #   a valid API key or originate from a trusted client. Default is True.
-api_key_path: ~/.moonraker_api_key
+api_key_file: ~/.moonraker_api_key
 #   Path of the file that stores Moonraker's API key.  The default is
 #   ~/.moonraker_api_key
 trusted_clients:
