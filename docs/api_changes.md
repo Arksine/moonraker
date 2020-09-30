@@ -1,6 +1,12 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### September 30th 2020
+- Two new endpoints have been added:
+  - `GET /server/info` (`server.info`)
+  - `GET /server/gcode_store` (`server.gcode_store`)
+  See web_api.md for details on their usage.
+
 ### September 7th 2020
 - A new websocket API has been added, `server.files.delete_file`:
   ```

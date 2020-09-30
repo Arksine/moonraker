@@ -166,8 +166,8 @@ that uses promises to return responses and errors (see json-rcp.js).
       ...}
     }
   ```
-  Note that Moonraker's current behavior is maintain a superset of all client
-  subscriptions, thus you may received data for objects that you did not
+  Note that Moonraker's current behavior is to maintain a superset of all
+  subscriptions, thus you may receive updates for objects that you did not
   request.  This behavior is subject to change in the future (where each
   client receives only the subscriptions it requested).
 
@@ -192,6 +192,29 @@ that uses promises to return responses and errors (see json-rcp.js).
    z: "open"}
 ```
 
+### Query Server Info
+- HTTP command:\
+  `GET /server/info`
+
+- Websocket command:
+  `{jsonrpc: "2.0", method: "server.info", id: <request id>}`
+
+- Returns:\
+  An object containing the server's state, structured as follows:
+
+```json
+  {
+    klippy_connected: <bool>,
+    klippy_state: <string>,
+    plugins: [<strings>]
+  }
+```
+  Note that `klippy_state` will match the `state` value received from
+  `/printer/info`. The `klippy_connected` item tracks the state of the
+  connection to Klippy. The `plugins` key will return a list of all
+  enabled plugins.  This can be used by clients to check if an optional
+  plugin is available.
+
 ### Fetch stored temperature data
 - HTTP command:\
   `GET /server/temperature_store`
@@ -205,6 +228,32 @@ that uses promises to return responses and errors (see json-rcp.js).
   1 second by default, containing a total of 1200 values (20 minutes).  The
   array is organized from oldest temperature to most recent (left to right).
   Note that when the host starts each array is initialized to 0s.
+
+### Fetch stored gcode info
+- HTTP command:\
+  `GET /server/gcode_store`
+
+  Optionally, a `count` argument may be added to specify the number of lines fetch.
+  If omitted, the entire gcode store will be sent (up to 1000 lines).
+
+  `GET /server/gcode_store?count=100`
+
+- Websocket command:
+  `{jsonrpc: "2.0", method: "server.gcode_store", id: <request id>}`
+
+  OR
+  `{jsonrpc: "2.0", method: "server.gcode_store",
+   params: {count: <integer>} id: <request id>}`
+
+- Returns:\
+  An object which includes a string containing up to 1000 lines of
+  stored gcode responses.  Each line will be separated by a newline
+  character:
+```json
+  {
+    gcode_store: <string>
+  }
+```
 
 ## Gcode Controls
 
