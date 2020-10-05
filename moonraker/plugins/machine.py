@@ -17,7 +17,7 @@ class Machine:
         if path == "/machine/shutdown":
             cmd = "sudo shutdown now"
         elif path == "/machine/reboot":
-            cmd = "sudo reboot now"
+            cmd = "sudo shutdown -r now"
         else:
             raise self.server.error("Unsupported machine request")
         shell_command = self.server.lookup_plugin('shell_command')
