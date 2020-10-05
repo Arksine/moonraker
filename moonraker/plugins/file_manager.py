@@ -126,7 +126,7 @@ class FileManager:
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 finfo = self.file_lists[base].get(fname, None)
-                if fname is None or f['modified'] != finfo['modified']:
+                if finfo is None or f['modified'] != finfo['modified']:
                     # Either a new file found or file has changed, update
                     # internal file list
                     self._update_file_list(base, do_notify=True)
