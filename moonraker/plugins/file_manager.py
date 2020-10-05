@@ -118,7 +118,20 @@ class FileManager:
         method = method.upper()
         if method == 'GET':
             # Get list of files and subdirectories for this target
-            return self._list_directory(dir_path)
+            dir_info = self._list_directory(dir_path)
+            # Check to see if a filelist update is necessary
+            for f in dir_info['files']:
+                fname = os.path.join(url_path, f['filename'])
+                ext = f['filename'][f['filename'].rfind('.')+1:]
+                if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
+                    continue
+                finfo = self.file_lists[base].get(fname, None)
+                if fname is None or f['modified'] != finfo['modified']:
+                    # Either a new file found or file has changed, update
+                    # internal file list
+                    self._update_file_list(base, do_notify=True)
+                    break
+            return dir_info
         elif method == 'POST' and base in FULL_ACCESS_ROOTS:
             # Create a new directory
             try:
