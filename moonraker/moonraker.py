@@ -208,6 +208,8 @@ class Server:
         # Subscribe to "webhooks"
         # Register "webhooks" subscription
         if "webhooks_sub" not in self.init_list:
+            temp_subs = self.all_subscriptions
+            self.all_subscriptions = {}
             try:
                 await self.klippy_apis.subscribe_objects({'webhooks': None})
             except ServerError as e:
@@ -215,6 +217,7 @@ class Server:
             else:
                 logging.info("Webhooks Subscribed")
                 self.init_list.append("webhooks_sub")
+            self.all_subscriptions.update(temp_subs)
         # Subscribe to Gcode Output
         if "gcode_output_sub" not in self.init_list:
             try:
@@ -281,6 +284,10 @@ class Server:
             logging.info(
                 f"Unable to retreive Klipper Object List")
             return
+        # Remove stale objects from the persistent subscription dict
+        for name in list(self.all_subscriptions.keys()):
+            if name not in result:
+                del self.all_subscriptions[name]
         req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
         missing_objs = req_objs - set(result)
         if missing_objs:
