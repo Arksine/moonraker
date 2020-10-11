@@ -9,6 +9,7 @@ import time
 import json
 import errno
 import logging
+from collections import deque
 from utils import ServerError
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -18,6 +19,7 @@ MIN_EST_TIME = 10.
 
 class PanelDueError(ServerError):
     pass
+
 
 RESTART_GCODES = ["RESTART", "FIRMWARE_RESTART"]
 
@@ -140,6 +142,7 @@ class PanelDue:
         self.current_file = ""
         self.file_metadata = {}
         self.enable_checksum = config.getboolean('enable_checksum', True)
+        self.debug_queue = deque(maxlen=100)
 
         # Initialize tracked state.
         self.printer_state = {
@@ -304,6 +307,7 @@ class PanelDue:
                 {'beep_freq': frequency, 'beep_length': duration})
 
     async def process_line(self, line):
+        self.debug_queue.append(line)
         # If we find M112 in the line then skip verification
         if "M112" in line.upper():
             await self.klippy_apis.emergency_stop()
@@ -727,6 +731,10 @@ class PanelDue:
 
     async def close(self):
         self.ser_conn.disconnect()
+        msg = "\nPanelDue GCode Dump:"
+        for i, gc in enumerate(self.debug_queue):
+            msg += f"\nSequence {i}: {gc}"
+        logging.debug(msg)
 
 def load_plugin(config):
     return PanelDue(config)
