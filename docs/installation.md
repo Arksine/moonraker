@@ -280,7 +280,7 @@ Define the devices you wish to control under _devices_ with a comma separated
 list. For device specific configrations, swap {dev} for the name of the device
 that you listed under devices.
 
-Each device can have a Friendly Name, pin, and activehigh set. Pin is the only
+Each device can have a Friendly Name, {dev}_pin, and {dev}_active_Low set. Pin is the only
 required option. For devices that should be active when the signal is 0 or low,
-set {dev}_activehigh to False, otherwise don't put the option in the
+set {dev}_active_Low to True, otherwise don't put the option in the
 configuration.
