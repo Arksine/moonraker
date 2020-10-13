@@ -89,8 +89,10 @@ class Server:
         self._load_plugins(config)
 
     def start(self):
+        hostname, hostport = self.get_host_info()
         logging.info(
-            f"Starting Moonraker on ({self.host}, {self.port})")
+            f"Starting Moonraker on ({self.host}, {hostport}), "
+            f"Hostname: {hostname}")
         self.moonraker_app.listen(self.host, self.port)
         self.server_running = True
         self.ioloop.spawn_callback(self._connect_klippy)
@@ -155,6 +157,10 @@ class Server:
             logging.info(f"Remote method ({method_name}) already registered")
             return
         self.remote_methods[method_name] = cb
+
+    def get_host_info(self):
+        hostname = socket.gethostname()
+        return hostname, self.port
 
     # ***** Klippy Connection *****
     async def _connect_klippy(self):
