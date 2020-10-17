@@ -128,7 +128,8 @@ class PrinterPower:
                     for slave in self.devices[dev]["timeout_slaves"]:
                         if slave not in self.devices:
                             continue
-                        logging.info(f"Powering off because of timeout of {dev}: {slave}")
+                        logging.info(f"Powering off because of timeout of " +
+                            "{dev}: {slave}")
                         GPIO.set_pin_value(self.devices[slave]["pin"], 0)
 
             if active_devices == 0:
