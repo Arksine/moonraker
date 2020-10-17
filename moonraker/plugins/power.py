@@ -41,12 +41,15 @@ class PrinterPower:
             name = config.get(dev + "_name", dev)
             active_low = config.getboolean(dev + "_active_low", False)
             timeout = config.getint(dev + "_timeout", 0)
+            timeout_slaves = [s.strip() for s in
+                config.get(dev + "_timeout_slaves", "").split(',') if s.strip()]
             devices[dev] = {
                 "name": name,
                 "pin": pin,
                 "active_low": int(active_low),
                 "status": None,
-                "timeout": timeout
+                "timeout": timeout,
+                "timeout_slaves": timeout_slaves
             }
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.initialize_devices, devices)
@@ -116,12 +119,17 @@ class PrinterPower:
                     continue
 
                 active_devices += 1
-
                 if (self.devices[dev]['timeout'] > 0
                     and self.idle_cycles > self.devices[dev]['timeout']):
-                    logging.info(f"Powering off because of timeout {dev}")
+                    logging.info(f"Powering off because of timeout: {dev}")
                     active_devices -= 1
                     GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+
+                    for slave in self.devices[dev]["timeout_slaves"]:
+                        if slave not in self.devices:
+                            continue
+                        logging.info(f"Powering off because of timeout of {dev}: {slave}")
+                        GPIO.set_pin_value(self.devices[slave]["pin"], 0)
 
             if active_devices == 0:
                 self.timeout_callback.stop()

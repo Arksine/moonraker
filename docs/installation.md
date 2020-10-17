@@ -277,6 +277,10 @@ devices: printer, led
 {dev}_timeout: 0
 #   Timeout in seconds for device. When the printer is idle, after the amount of
 #   seconds have passed, the device will be turned off.
+{dev}_timeout_slaves: led
+#   A comma separated list of device ids that will also be turned off if the
+#   configured device is turned off. For instance, if the printer is turned off,
+#   the LEDs will also be turned off.
 ```
 
 Define the devices you wish to control under _devices_ with a comma separated
