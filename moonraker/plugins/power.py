@@ -119,7 +119,7 @@ class PrinterPower:
 
                 if (self.devices[dev]['timeout'] > 0
                     and self.idle_cycles > self.devices[dev]['timeout']):
-                    logging.info("Powering off because of timeout" + dev)
+                    logging.info(f"Powering off because of timeout {dev}")
                     active_devices -= 1
                     GPIO.set_pin_value(self.devices[dev]["pin"], 0)
 
@@ -129,9 +129,6 @@ class PrinterPower:
 
         elif self.idle == True:
             self.idle = False
-
-        logging.info ("### self Idle: " + str(self.idle) + " Idle: " + str(idle)
-            + " Idletime: " + str(self.idle_cycles))
 
     async def initialize_devices(self, devices):
         for name, device in devices.items():
