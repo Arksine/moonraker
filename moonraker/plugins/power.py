@@ -7,6 +7,7 @@
 import logging
 import os
 from tornado.ioloop import IOLoop
+from tornado.ioloop import PeriodicCallback
 from tornado import gen
 
 class PrinterPower:
@@ -27,6 +28,10 @@ class PrinterPower:
 
         self.current_dev = None
         self.devices = {}
+        self.idle = False
+        self.idle_cycles = 0
+        self.timeout_callback = PeriodicCallback(self._handle_power_timeout,
+            1000)
         dev_names = config.get('devices')
         dev_names = [d.strip() for d in dev_names.split(',') if d.strip()]
         logging.info("Power plugin loading devices: " + str(dev_names))
@@ -35,11 +40,13 @@ class PrinterPower:
             pin = config.getint(dev + "_pin")
             name = config.get(dev + "_name", dev)
             active_low = config.getboolean(dev + "_active_low", False)
+            timeout = config.getint(dev + "_timeout", 0)
             devices[dev] = {
                 "name": name,
                 "pin": pin,
                 "active_low": int(active_low),
-                "status": None
+                "status": None,
+                "timeout": timeout
             }
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.initialize_devices, devices)
@@ -70,6 +77,8 @@ class PrinterPower:
                                   self.devices[dev]["active_low"])
             if path == "/machine/gpio_power/on":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 1)
+                self.idle_cycles = 0
+                self.timeout_callback.start()
             elif path == "/machine/gpio_power/off":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 0)
             elif path != "/machine/gpio_power/status":
@@ -80,6 +89,49 @@ class PrinterPower:
 
             result[dev] = self.devices[dev]["status"]
         return result
+
+    async def _handle_power_timeout(self):
+        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        try:
+            result = await klippy_apis.query_objects({'idle_timeout': None,
+                'print_stats': None, 'pause_resume': None})
+        except:
+            return  # Error getting results, ignore this cycle
+        paused = True if (result['pause_resume']['is_paused'] == True
+            ) else False
+
+        idle = True if ((result['idle_timeout']['state'] == "Ready" or
+            result['idle_timeout']['state'] == "Idle") and not paused
+            ) else False
+        if self.idle == False and idle == True:
+            self.idle = True
+            self.idle_cycles = 0
+        elif idle == True:
+            self.idle_cycles += 1
+
+            active_devices = 0
+            for dev in self.devices:
+                if (GPIO.is_pin_on(self.devices[dev]["pin"]) == "off" or
+                    self.devices[dev]['timeout'] == 0):
+                    continue
+
+                active_devices += 1
+
+                if (self.devices[dev]['timeout'] > 0
+                    and self.idle_cycles > self.devices[dev]['timeout']):
+                    logging.info("Powering off because of timeout" + dev)
+                    active_devices -= 1
+                    GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+
+            if active_devices == 0:
+                self.timeout_callback.stop()
+                self.idle_cycles = 0
+
+        elif self.idle == True:
+            self.idle = False
+
+        logging.info ("### self Idle: " + str(self.idle) + " Idle: " + str(idle)
+            + " Idletime: " + str(self.idle_cycles))
 
     async def initialize_devices(self, devices):
         for name, device in devices.items():
@@ -94,6 +146,9 @@ class PrinterPower:
                     f" device {name}. Removing device")
                 continue
             self.devices[name] = device
+
+            if GPIO.is_pin_on(device["pin"]):
+                self.timeout_callback.start()
 
 class GPIO:
     gpio_root = "/sys/class/gpio"

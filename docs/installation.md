@@ -274,6 +274,9 @@ devices: printer, led
 #   provided.
 {dev}_active_low: False
 #   When set to true the pin signal is inverted.  Default is False.
+{dev}_timeout: 0
+#   Timeout in seconds for device. When the printer is idle, after the amount of
+#   seconds have passed, the device will be turned off.
 ```
 
 Define the devices you wish to control under _devices_ with a comma separated
