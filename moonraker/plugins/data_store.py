@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
+import time
 from collections import deque
 from tornado.ioloop import IOLoop, PeriodicCallback
 
@@ -107,8 +108,8 @@ class DataStore:
         self.temp_update_cb.stop()
 
     def _update_gcode_store(self, response):
-        lines = response.strip().split("\n")
-        self.gcode_queue.extend(lines)
+        curtime = time.time()
+        self.gcode_queue.append({'message': response, 'time': curtime})
 
     async def _handle_gcode_store_request(self, path, method, args):
         count = args.get("count", None)
@@ -119,9 +120,9 @@ class DataStore:
                 raise self.server.error(
                     "Parameter <count> must be an integer value, "
                     f"received: {count}")
-            res = "\n".join(list(self.gcode_queue)[-count:])
+            res = list(self.gcode_queue)[-count:]
         else:
-            res = "\n".join(list(self.gcode_queue))
+            res = list(self.gcode_queue)
         return {'gcode_store': res}
 
 def load_plugin(config):
