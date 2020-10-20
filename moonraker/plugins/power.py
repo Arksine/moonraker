@@ -79,19 +79,9 @@ class PrinterPower:
             await GPIO.verify_pin(self.devices[dev]["pin"],
                                   self.devices[dev]["active_low"])
             if path == "/machine/gpio_power/on":
-                GPIO.set_pin_value(self.devices[dev]["pin"], 1)
-                self.idle_cycles = 0
-                self.timeout_callback.start()
-                self.server.send_event("gpio_power:power_changed", {
-                    "device": dev,
-                    "status": "on"
-                })
+                await self._power_dev(dev, "on")
             elif path == "/machine/gpio_power/off":
-                GPIO.set_pin_value(self.devices[dev]["pin"], 0)
-                self.server.send_event("gpio_power:power_changed", {
-                    "device": dev,
-                    "status": "off"
-                })
+                await self._power_dev(dev, "off")
             elif path != "/machine/gpio_power/status":
                 raise self.server.error("Unsupported power request")
 
@@ -100,6 +90,26 @@ class PrinterPower:
 
             result[dev] = self.devices[dev]["status"]
         return result
+
+    async def _power_dev(self, dev, status):
+        if dev not in self.devices:
+            return
+
+        if (status == "on"):
+            GPIO.set_pin_value(self.devices[dev]["pin"], 1)
+            self.idle_cycles = 0
+            self.timeout_callback.start()
+            self.server.send_event("gpio_power:power_changed", {
+                "device": dev,
+                "status": "on"
+            })
+        elif (status == "off"):
+            GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+            self.server.send_event("gpio_power:power_changed", {
+                "device": dev,
+                "status": "off"
+            })
+
 
     async def _handle_power_timeout(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -131,14 +141,14 @@ class PrinterPower:
                     and self.idle_cycles > self.devices[dev]['timeout']):
                     logging.info(f"Powering off because of timeout: {dev}")
                     active_devices -= 1
-                    GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+                    await self._power_dev(dev, "off")
 
                     for slave in self.devices[dev]["timeout_slaves"]:
                         if slave not in self.devices:
                             continue
                         logging.info(f"Powering off because of timeout of " +
                             "{dev}: {slave}")
-                        GPIO.set_pin_value(self.devices[slave]["pin"], 0)
+                        await self._power_dev(slave, "off")
 
             if active_devices == 0:
                 self.timeout_callback.stop()
