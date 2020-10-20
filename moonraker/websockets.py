@@ -117,6 +117,8 @@ class WebsocketManager:
             "file_manager:filelist_changed", self._handle_filelist_changed)
         self.server.register_event_handler(
             "file_manager:metadata_update", self._handle_metadata_update)
+        self.server.register_event_handler(
+            "gpio_power:power_changed", self._handle_power_changed)
 
     async def _handle_klippy_disconnect(self):
         await self.notify_websockets("klippy_disconnected")
@@ -132,6 +134,9 @@ class WebsocketManager:
 
     async def _handle_metadata_update(self, metadata):
         await self.notify_websockets("metadata_update", metadata)
+
+    async def _handle_power_changed(self, pstatus):
+        await self.notify_websockets("power_changed", pstatus)
 
     def register_local_handler(self, api_def, callback):
         for ws_method, req_method in \
