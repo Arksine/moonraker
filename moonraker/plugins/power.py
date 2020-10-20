@@ -82,8 +82,16 @@ class PrinterPower:
                 GPIO.set_pin_value(self.devices[dev]["pin"], 1)
                 self.idle_cycles = 0
                 self.timeout_callback.start()
+                self.server.send_event("gpio_power:power_changed", {
+                    "device": dev,
+                    "status": "on"
+                })
             elif path == "/machine/gpio_power/off":
                 GPIO.set_pin_value(self.devices[dev]["pin"], 0)
+                self.server.send_event("gpio_power:power_changed", {
+                    "device": dev,
+                    "status": "off"
+                })
             elif path != "/machine/gpio_power/status":
                 raise self.server.error("Unsupported power request")
 
