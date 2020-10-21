@@ -233,8 +233,9 @@ that uses promises to return responses and errors (see json-rcp.js).
 - HTTP command:\
   `GET /server/gcode_store`
 
-  Optionally, a `count` argument may be added to specify the number of lines fetch.
-  If omitted, the entire gcode store will be sent (up to 1000 lines).
+  Optionally, a `count` argument may be added to specify the number of
+  responses to fetch. If omitted, the entire gcode store will be sent
+  (up to 1000 responses).
 
   `GET /server/gcode_store?count=100`
 
@@ -246,14 +247,42 @@ that uses promises to return responses and errors (see json-rcp.js).
    params: {count: <integer>} id: <request id>}`
 
 - Returns:\
-  An object which includes a string containing up to 1000 lines of
-  stored gcode responses.  Each line will be separated by a newline
-  character:
+  An object with the field `gcode_store` that contains an array
+  of objects.  Each object will contain a `message` field and a
+  `time` field:
 ```json
   {
-    gcode_store: <string>
+    gcode_store: [
+      {
+        message: <string>,
+        time: unix_time_stamp
+      }, ...
+    ]
   }
 ```
+Each `message` field contains a gcode response received at the time
+indicated in the `time` field. Note that the time stamp refers to
+unix time (in seconds).  This can be used to create a JavaScript
+`Date` object:
+```javascript
+for (let resp of result.gcode_store) {
+  let date = new Date(resp.time * 1000);
+  // Do something with date and resp.message ...
+}
+```
+
+### Restart Server
+- HTTP command:\
+  `POST /server/restart`
+
+- Websocket command:
+  `{jsonrpc: "2.0", method: "server.restart", id: <request id>}`
+
+- Returns:\
+  `"ok"` upon receipt of the restart request.  After the request
+  is returns, the server will restart.  Any existing connection
+  will be disconnected.  A restart will result in the creation
+  of a new server instance where the configuration is reloaded.
 
 ## Gcode Controls
 

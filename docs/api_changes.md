@@ -1,6 +1,14 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### October 21st 2020
+- The `/server/gcode_store` endpoint no longer returns a string
+  in the result's `gcode_store` field.  It now returns an
+  Array of objects, each object containing `message` and `time`
+  fields.  The time refers to a timestamp in unix time (seconds),
+  and may be used to determine when the gcode store received the
+  accompanying `message`.
+
 ### September 30th 2020
 - Two new endpoints have been added:
   - `GET /server/info` (`server.info`)
