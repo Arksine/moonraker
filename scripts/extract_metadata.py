@@ -490,7 +490,7 @@ def extract_metadata(file_path, log):
     header_data = footer_data = slicer = None
     size = os.path.getsize(file_path)
     metadata['size'] = size
-    metadata['modified'] = time.ctime(os.path.getmtime(file_path))
+    metadata['modified'] = os.path.getmtime(file_path)
     with open(file_path, 'r') as f:
         # read the default size, which should be enough to
         # identify the slicer
