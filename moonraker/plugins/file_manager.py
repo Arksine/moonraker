@@ -262,7 +262,7 @@ class FileManager:
         return flist
 
     def _get_path_info(self, path):
-        modified = time.ctime(os.path.getmtime(path))
+        modified = os.path.getmtime(path)
         size = os.path.getsize(path)
         path_info = {'modified': modified, 'size': size}
         return path_info
@@ -483,7 +483,7 @@ class FileManager:
     def notify_filelist_changed(self, action, fname, base, source_item={}):
         self._update_file_list(base, do_notify=True)
         file_info = dict(self.file_lists[base].get(
-            fname, {'size': 0, 'modified': ""}))
+            fname, {'size': 0, 'modified': 0}))
         file_info.update({'path': fname, 'root': base})
         result = {'action': action, 'item': file_info}
         if source_item:
@@ -527,7 +527,7 @@ class MetadataStorage:
             for fname, fdata in filelist.items():
                 mdata = self.metadata.get(fname, {})
                 if mdata.get('size', "") == fdata.get('size') \
-                        and mdata.get('modified', "") == fdata.get('modified'):
+                        and mdata.get('modified', 0) == fdata.get('modified'):
                     # file metadata has already been extracted
                     exisiting_data[fname] = mdata
                 else:
