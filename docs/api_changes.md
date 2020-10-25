@@ -1,6 +1,13 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### October 25th 2020
+- The `modified` field reported for files and directories is no
+  longer represented as a string.  It is now a floating point
+  value representing unix time (in seconds).  This can be used
+  to display the "last modified date" based on the client's
+  timezone.
+
 ### October 21st 2020
 - The `/server/gcode_store` endpoint no longer returns a string
   in the result's `gcode_store` field.  It now returns an

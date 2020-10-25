@@ -422,8 +422,8 @@ path relative to the specified "root".  Note that if the query st
 ```json
 [
   {filename: "file name",
-   size: <file size>,
-   modified: "last modified date",
+   size: <file_size>,
+   modified: <unix_time>,
    ...]
 ```
 
@@ -450,7 +450,7 @@ path relative to the specified "root".  Note that if the query st
   {
     filename: "file name",
     size: <file_size>,
-    modified: "last modified date",
+    modified: <unix_time>,
     slicer: "Slicer Name",
     slicer_version: "<version>",
     first_layer_height: <mm>,
@@ -458,14 +458,14 @@ path relative to the specified "root".  Note that if the query st
     first_layer_extr_temp: <C>,
     layer_height: <mm>,
     object_height: <mm>,
-    estimated_time: <time in seconds>,
+    estimated_time: <time_in_seconds>,
     filament_total: <mm>,
     thumbnails: [
       {
-        width: <in pixels>,
-        height: <in pixels>,
-        size: <length of string>,
-        data: <base64 string>
+        width: <in_pixels>,
+        height: <in_pixels>,
+        size: <length_of_string>,
+        data: <base64_string>
       }, ...
     ]
   }
@@ -498,14 +498,14 @@ subdirectories.
     files: [
       {
         filename: "file name",
-        size: <file size>,
-        modified: "last modified date"
+        size: <file_size>,
+        modified: <unix_time>
       }, ...
     ],
     dirs: [
       {
         dirname: "directory name",
-        modified: "last modified date"
+        modified: <unix_time>
       }
     ]
   }
