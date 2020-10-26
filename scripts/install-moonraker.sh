@@ -69,13 +69,13 @@ MOONRAKER_ARGS="${SRCDIR}/moonraker/moonraker.py"
 EOF
 }
 
-# Step 4: Start server
+# Step 6: Start server
 start_software()
 {
     report_status "Launching Moonraker API Server..."
-    sudo /etc/init.d/klipper stop
+    sudo systemctl stop klipper
     sudo /etc/init.d/moonraker restart
-    sudo /etc/init.d/klipper start
+    sudo systemctl start klipper
 }
 
 # Helper functions
