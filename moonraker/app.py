@@ -19,7 +19,8 @@ from authorization import Authorization
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
 RESERVED_ENDPOINTS = [
-    "list_endpoints", "gcode/subscribe_output"
+    "list_endpoints", "gcode/subscribe_output",
+    "register_remote_method"
 ]
 
 

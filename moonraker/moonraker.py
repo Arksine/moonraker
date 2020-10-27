@@ -78,10 +78,13 @@ class Server:
         # they do not return a response to Klippy after execution
         self.pending_requests = {}
         self.remote_methods = {}
+        self.klippy_reg_methods = []
         self.register_remote_method(
-            'process_gcode_response', self._process_gcode_response)
+            'process_gcode_response', self._process_gcode_response,
+            need_klippy_reg=False)
         self.register_remote_method(
-            'process_status_update', self._process_status_update)
+            'process_status_update', self._process_status_update,
+            need_klippy_reg=False)
 
         # Plugin initialization
         self.plugins = {}
@@ -151,12 +154,15 @@ class Server:
         for evt in events:
             self.ioloop.spawn_callback(evt, *args)
 
-    def register_remote_method(self, method_name, cb):
+    def register_remote_method(self, method_name, cb, need_klippy_reg=True):
         if method_name in self.remote_methods:
             # XXX - may want to raise an exception here
             logging.info(f"Remote method ({method_name}) already registered")
             return
         self.remote_methods[method_name] = cb
+        if need_klippy_reg:
+            # These methods need to be registered with Klippy
+            self.klippy_reg_methods.append(method_name)
 
     def get_host_info(self):
         hostname = socket.gethostname()
@@ -286,6 +292,12 @@ class Server:
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
             self.init_list.append('klippy_ready')
+            # register methods with klippy
+            for method in self.klippy_reg_methods:
+                try:
+                    await self.klippy_apis.register_method(method)
+                except ServerError:
+                    logging.exception(f"Unable to register method '{method}'")
             self.send_event("server:klippy_ready")
         elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
                 self.init_attempts <= MAX_LOG_ATTEMPTS:
