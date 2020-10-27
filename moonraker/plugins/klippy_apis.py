@@ -13,6 +13,7 @@ GCODE_ENDPOINT = "gcode/script"
 SUBSCRIPTION_ENDPOINT = "objects/subscribe"
 STATUS_ENDPOINT = "objects/query"
 OBJ_LIST_ENDPOINT = "objects/list"
+REG_METHOD_ENDPOINT = "register_remote_method"
 
 class Sentinel:
     pass
@@ -128,6 +129,12 @@ class KlippyAPI:
                     {'method': "process_gcode_response"}}
         return await self._send_klippy_request(
             GC_OUTPUT_ENDPOINT, template, default)
+
+    async def register_method(self, method_name):
+        return await self._send_klippy_request(
+            REG_METHOD_ENDPOINT,
+            {'response_template': {"method": method_name},
+             'remote_method': method_name})
 
 def load_plugin(config):
     return KlippyAPI(config)
