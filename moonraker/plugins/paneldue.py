@@ -158,7 +158,6 @@ class PanelDue:
         # Set up macros
         self.confirmed_gcode = ""
         self.mbox_sequence = 0
-        self.beep_sequence = 0
         self.available_macros = {}
         self.confirmed_macros = {
             "RESTART": "RESTART",
@@ -192,6 +191,9 @@ class PanelDue:
             "server:status_update", self.handle_status_update)
         self.server.register_event_handler(
             "server:gcode_response", self.handle_gcode_response)
+
+        self.server.register_remote_method(
+            "paneldue_beep", self.paneldue_beep)
 
         # These commands are directly executued on the server and do not to
         # make a request to Klippy
@@ -289,22 +291,12 @@ class PanelDue:
                 self.printer_state[obj].update(items)
             else:
                 self.printer_state[obj] = items
-        if "gcode_macro PANELDUE_BEEP" in status:
-            # This only processes a paneldue beep when the macro's
-            # variables have changed
-            params = self.printer_state["gcode_macro PANELDUE_BEEP"]
-            try:
-                self.handle_paneldue_beep(**params)
-            except Exception:
-                logging.exception("Unable to process PANELDUE_BEEP")
 
-    def handle_paneldue_beep(self, sequence, frequency, duration):
-        if sequence != self.beep_sequence:
-            self.beep_sequence = sequence
-            duration = int(duration * 1000.)
-            self.ioloop.spawn_callback(
-                self.write_response,
-                {'beep_freq': frequency, 'beep_length': duration})
+    def paneldue_beep(self, frequency, duration):
+        duration = int(duration * 1000.)
+        self.ioloop.spawn_callback(
+            self.write_response,
+            {'beep_freq': frequency, 'beep_length': duration})
 
     async def process_line(self, line):
         self.debug_queue.append(line)
