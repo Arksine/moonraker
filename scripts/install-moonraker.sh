@@ -19,7 +19,7 @@ check_klipper()
 # Step 2: Install packages
 install_packages()
 {
-    PKGLIST="python3-virtualenv python3-dev nginx"
+    PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7"
 
     # Update system package info
     report_status "Running apt-get update..."
