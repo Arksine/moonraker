@@ -9,8 +9,10 @@ import argparse
 import re
 import os
 import sys
-import time
+import base64
 import traceback
+import io
+from PIL import Image
 
 # regex helpers
 def _regex_find_floats(pattern, data, strict=False):
@@ -50,7 +52,8 @@ def _regex_find_first(pattern, data, cast=float):
 
 # Slicer parsing implementations
 class BaseSlicer(object):
-    def __init__(self):
+    def __init__(self, file_path):
+        self.path = file_path
         self.header_data = self.footer_data = self.log = None
 
     def set_data(self, header_data, footer_data, log):
@@ -280,6 +283,39 @@ class Cura(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+    def parse_thumbnails(self):
+        thumbName = os.path.splitext(
+            os.path.basename(self.path))[0] + ".png"
+        thumbPath = os.path.join(
+            os.path.dirname(self.path), "thumbs", thumbName)
+        if not os.path.isfile(thumbPath):
+            return None
+        # read file
+        thumbs = []
+        try:
+            with open(thumbPath, 'rb') as thumbFile:
+                fbytes = thumbFile.read()
+                with Image.open(io.BytesIO(fbytes)) as im:
+                    thumbFull = base64.b64encode(fbytes).decode()
+                    thumbs.append({
+                        'width': im.width, 'height': im.height,
+                        'size': len(thumbFull), 'data': thumbFull
+                    })
+                    # Create 32x32 thumbnail
+                    im.thumbnail((32, 32), Image.ANTIALIAS)
+                    tmpThumb = io.BytesIO()
+                    im.save(tmpThumb, format="PNG")
+                    thumbSmall = base64.b64encode(
+                        tmpThumb.getbuffer()).decode()
+                    tmpThumb.close()
+                    thumbs.insert(0, {
+                        'width': im.width, 'height': im.height,
+                        'size': len(thumbSmall), 'data': thumbSmall
+                    })
+        except Exception as e:
+            self.log.append(str(e))
+            return None
+        return thumbs
 
 class Simplify3D(BaseSlicer):
     def check_identity(self, data):
@@ -486,7 +522,7 @@ SUPPORTED_DATA = [
 
 def extract_metadata(file_path, log):
     metadata = {}
-    slicers = [s() for s in SUPPORTED_SLICERS]
+    slicers = [s(file_path) for s in SUPPORTED_SLICERS]
     header_data = footer_data = slicer = None
     size = os.path.getsize(file_path)
     metadata['size'] = size
@@ -502,7 +538,7 @@ def extract_metadata(file_path, log):
                 metadata.update(ident)
                 break
         if slicer is None:
-            slicer = UnknownSlicer()
+            slicer = UnknownSlicer(file_path)
             metadata['slicer'] = "Unknown"
         if size > READ_SIZE * 2:
             f.seek(size - READ_SIZE)
