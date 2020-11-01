@@ -240,17 +240,14 @@ in the PanelDue's "macro" menu.
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
 ```
 [gcode_macro PANELDUE_BEEP]
-variable_sequence: 0
-variable_frequency: 0
-variable_duration: 0
 # Beep frequency
 default_parameter_FREQUENCY: 300
 # Beep duration in seconds
 default_parameter_DURATION: 1.
 gcode:
-  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=frequency VALUE={FREQUENCY|int}
-  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=duration VALUE={DURATION|float}
-  SET_GCODE_VARIABLE MACRO=PANELDUE_BEEP VARIABLE=sequence VALUE={printer["gcode_macro PANELDUE_BEEP"].sequence|int + 1}
+  {action_call_remote_method("paneldue_beep",
+                             frequency=FREQUENCY|int,
+                             duration=DURATION|float)}
 ```
 
 #### Power Control Plugin
@@ -282,5 +279,32 @@ that you listed under devices.
 
 Each device can have a Friendly Name, pin, and activehigh set. Pin is the only
 required option. For devices that should be active when the signal is 0 or low,
-set {dev}_activehigh to False, otherwise don't put the option in the
+set {dev}_active_low to False, otherwise don't put the option in the
 configuration.
+
+It is possible to toggle device power from the Klippy host, this can be done
+with a gcode_macro, such as:
+```
+[gcode_macro POWER_OFF_PRINTER]
+gcode:
+  {action_call_remote_method("set_device_power",
+                             device="printer",
+                             state="off")}
+```
+The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
+This could be used in conjunction with Klipper's idle timeout to turn the
+printer off when idle with a configuration similar to that of below:
+```
+[delayed_gcode delayed_printer_off]
+initial_duration: 0.
+gcode:
+  {% if printer.idle_timeout.state == "Idle" %}
+    POWER_OFF_PRINTER
+  {% endif %}
+
+[idle_timeout]
+gcode:
+  TURN_OFF_MOTORS
+  TURN_OFF_HEATERS
+  UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
+```
