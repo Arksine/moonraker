@@ -6,7 +6,8 @@
 import logging
 import time
 from collections import deque
-from tornado.ioloop import IOLoop, PeriodicCallback
+
+from tornado.ioloop import PeriodicCallback
 
 TEMPERATURE_UPDATE_MS = 1000
 TEMPERATURE_STORE_SIZE = 20 * 60

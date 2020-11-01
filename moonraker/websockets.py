@@ -4,11 +4,13 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 
-import logging
-import tornado
 import json
+import logging
+
+import tornado
 from tornado.ioloop import IOLoop
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
+
 from utils import ServerError
 
 

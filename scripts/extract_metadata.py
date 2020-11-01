@@ -4,14 +4,15 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-import json
 import argparse
-import re
-import os
-import sys
 import base64
-import traceback
 import io
+import json
+import os
+import re
+import sys
+import traceback
+
 from PIL import Image
 
 

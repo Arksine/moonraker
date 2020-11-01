@@ -3,13 +3,14 @@
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import os
-import sys
-import shutil
 import io
-import zipfile
-import logging
 import json
+import logging
+import os
+import shutil
+import sys
+import zipfile
+
 from tornado.ioloop import IOLoop
 from tornado.locks import Lock
 

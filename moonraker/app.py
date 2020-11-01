@@ -4,17 +4,19 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 
-import os
-import mimetypes
 import logging
-import tornado
+import mimetypes
+import os
 from inspect import isclass
+
+import tornado
 from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
+
+from authorization import Authorization
+from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from utils import ServerError
 from websockets import WebsocketManager, WebSocket
-from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
-from authorization import Authorization
 
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket

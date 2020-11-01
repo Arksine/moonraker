@@ -4,13 +4,15 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 import base64
-import uuid
-import os
-import time
 import ipaddress
 import logging
+import os
+import time
+import uuid
+
 import tornado
 from tornado.ioloop import IOLoop, PeriodicCallback
+
 from utils import ServerError
 
 TOKEN_TIMEOUT = 5

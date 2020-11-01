@@ -3,17 +3,19 @@
 # Copyright (C) 2020  Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import serial
+import errno
+import json
+import logging
 import os
 import time
-import json
-import errno
-import logging
 from collections import deque
-from utils import ServerError
+
+import serial
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.locks import Lock
+
+from utils import ServerError
 
 MIN_EST_TIME = 10.
 

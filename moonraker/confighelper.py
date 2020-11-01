@@ -4,8 +4,8 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 import configparser
-import os
 import logging
+import os
 
 
 class ConfigError(Exception):
