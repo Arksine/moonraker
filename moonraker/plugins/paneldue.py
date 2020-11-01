@@ -17,11 +17,13 @@ from tornado.locks import Lock
 
 MIN_EST_TIME = 10.
 
+
 class PanelDueError(ServerError):
     pass
 
 
 RESTART_GCODES = ["RESTART", "FIRMWARE_RESTART"]
+
 
 class SerialConnection:
     def __init__(self, config, paneldue):
@@ -237,7 +239,7 @@ class PanelDue:
             break
 
         self.firmware_name = "Repetier | Klipper " + \
-            printer_info['software_version']
+                             printer_info['software_version']
         config = cfg_status.get('configfile', {}).get('config', {})
         printer_cfg = config.get('printer', {})
         self.kinematics = printer_cfg.get('kinematics', "none")
@@ -325,7 +327,7 @@ class PanelDue:
             # Verify checksum
             cs_index = line.rfind('*')
             try:
-                checksum = int(line[cs_index+1:])
+                checksum = int(line[cs_index + 1:])
             except Exception:
                 # Invalid checksum, do not process
                 msg = "!! Invalid Checksum"
@@ -346,7 +348,7 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            await self._run_gcode(line[line_index+1:cs_index])
+            await self._run_gcode(line[line_index + 1:cs_index])
         else:
             await self._run_gcode(line)
 
@@ -444,8 +446,8 @@ class PanelDue:
         self.mbox_sequence += 1
         self.confirmed_gcode = gcode
         title = "Confirmation Dialog"
-        msg = f"Please confirm your intent to run {name}."  \
-            " Press OK to continue, or CANCEL to abort."
+        msg = f"Please confirm your intent to run {name}." \
+              " Press OK to continue, or CANCEL to abort."
         mbox = {}
         mbox['msgBox.mode'] = 3
         mbox['msgBox.msg'] = msg
@@ -696,7 +698,6 @@ class PanelDue:
             else:
                 response['fileName'] = filename.split("/")[-1]
 
-
         # For consistency make sure that the filename begins with the
         # "gcodes/" root.  The M20 HACK should add this in some cases.
         # Ideally we would add support to the PanelDue firmware that
@@ -735,6 +736,7 @@ class PanelDue:
         for i, gc in enumerate(self.debug_queue):
             msg += f"\nSequence {i}: {gc}"
         logging.debug(msg)
+
 
 def load_plugin(config):
     return PanelDue(config)

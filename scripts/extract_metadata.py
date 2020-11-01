@@ -14,6 +14,7 @@ import traceback
 import io
 from PIL import Image
 
+
 # regex helpers
 def _regex_find_floats(pattern, data, strict=False):
     # If strict is enabled, pattern requires a floating point
@@ -29,6 +30,7 @@ def _regex_find_floats(pattern, data, strict=False):
             pass
     return []
 
+
 def _regex_find_ints(pattern, data):
     matches = re.findall(pattern, data)
     if matches:
@@ -40,6 +42,7 @@ def _regex_find_ints(pattern, data):
             pass
     return []
 
+
 def _regex_find_first(pattern, data, cast=float):
     match = re.search(pattern, data)
     val = None
@@ -49,6 +52,7 @@ def _regex_find_first(pattern, data, cast=float):
         except Exception:
             return None
     return val
+
 
 # Slicer parsing implementations
 class BaseSlicer(object):
@@ -102,6 +106,7 @@ class BaseSlicer(object):
     def parse_thumbnails(self):
         return None
 
+
 class UnknownSlicer(BaseSlicer):
     def check_identity(self, data):
         return {'slicer': "Unknown"}
@@ -119,6 +124,7 @@ class UnknownSlicer(BaseSlicer):
     def parse_first_layer_bed_temp(self):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
 
 class PrusaSlicer(BaseSlicer):
     def check_identity(self, data):
@@ -161,7 +167,7 @@ class PrusaSlicer(BaseSlicer):
             return None
         total_time = 0
         time_match = time_match.group()
-        time_patterns = [(r"(\d+)d", 24*60*60), (r"(\d+)h", 60*60),
+        time_patterns = [(r"(\d+)d", 24 * 60 * 60), (r"(\d+)h", 60 * 60),
                          (r"(\d+)m", 60), (r"(\d+)s", 1)]
         try:
             for pattern, multiplier in time_patterns:
@@ -205,6 +211,7 @@ class PrusaSlicer(BaseSlicer):
         return _regex_find_first(
             r"; first_layer_bed_temperature = (\d+\.?\d*)", self.footer_data)
 
+
 class Slic3rPE(PrusaSlicer):
     def check_identity(self, data):
         match = re.search(r"Slic3r\sPrusa\sEdition\s(.*)\son", data)
@@ -222,6 +229,7 @@ class Slic3rPE(PrusaSlicer):
     def parse_thumbnails(self):
         return None
 
+
 class Slic3r(Slic3rPE):
     def check_identity(self, data):
         match = re.search(r"Slic3r\s(\d.*)\son", data)
@@ -235,6 +243,7 @@ class Slic3r(Slic3rPE):
     def parse_estimated_time(self):
         return None
 
+
 class SuperSlicer(PrusaSlicer):
     def check_identity(self, data):
         match = re.search(r"SuperSlicer\s(.*)\son", data)
@@ -244,6 +253,7 @@ class SuperSlicer(PrusaSlicer):
                 'slicer_version': match.group(1)
             }
         return None
+
 
 class Cura(BaseSlicer):
     def check_identity(self, data):
@@ -317,6 +327,7 @@ class Cura(BaseSlicer):
             return None
         return thumbs
 
+
 class Simplify3D(BaseSlicer):
     def check_identity(self, data):
         match = re.search(r"Simplify3D\(R\)\sVersion\s(.*)", data)
@@ -348,7 +359,7 @@ class Simplify3D(BaseSlicer):
             return None
         total_time = 0
         time_match = time_match.group()
-        time_patterns = [(r"(\d+)\shours", 60*60), (r"(\d+)\smin", 60),
+        time_patterns = [(r"(\d+)\shours", 60 * 60), (r"(\d+)\smin", 60),
                          (r"(\d+)\ssec", 1)]
         try:
             for pattern, multiplier in time_patterns:
@@ -381,6 +392,7 @@ class Simplify3D(BaseSlicer):
 
     def parse_first_layer_bed_temp(self):
         return self._get_first_layer_temp("Heated Bed")
+
 
 class KISSlicer(BaseSlicer):
     def check_identity(self, data):
@@ -481,6 +493,7 @@ class IdeaMaker(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+
 class IceSL(BaseSlicer):
     def check_identity(self, data):
         match = re.search(r"; <IceSL.*>", data)
@@ -520,6 +533,7 @@ SUPPORTED_DATA = [
     'filament_total', 'estimated_time', 'thumbnails',
     'first_layer_bed_temp', 'first_layer_extr_temp']
 
+
 def extract_metadata(file_path, log):
     metadata = {}
     slicers = [s(file_path) for s in SUPPORTED_SLICERS]
@@ -555,6 +569,7 @@ def extract_metadata(file_path, log):
             if result is not None:
                 metadata[key] = result
     return metadata
+
 
 def main(path, filename):
     file_path = os.path.join(path, filename)

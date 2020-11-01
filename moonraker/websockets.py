@@ -11,8 +11,10 @@ from tornado.ioloop import IOLoop
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from utils import ServerError
 
+
 class Sentinel:
     pass
+
 
 class JsonRPC:
     def __init__(self):
@@ -99,6 +101,7 @@ class JsonRPC:
             'id': req_id
         }
 
+
 class WebsocketManager:
     def __init__(self, server):
         self.server = server
@@ -157,12 +160,14 @@ class WebsocketManager:
         async def func(**kwargs):
             result = await self.server.make_request(endpoint, kwargs)
             return result
+
         return func
 
     def _generate_local_callback(self, endpoint, request_method, callback):
         async def func(**kwargs):
             result = await callback(endpoint, request_method, kwargs)
             return result
+
         return func
 
     def has_websocket(self, ws_id):
@@ -200,6 +205,7 @@ class WebsocketManager:
             for ws in self.websockets.values():
                 ws.close()
             self.websockets = {}
+
 
 class WebSocket(WebSocketHandler):
     def initialize(self, wsm, auth):

@@ -18,6 +18,7 @@ FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py")
 
+
 class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
@@ -123,7 +124,7 @@ class FileManager:
             # Check to see if a filelist update is necessary
             for f in dir_info['files']:
                 fname = os.path.join(url_path, f['filename'])
-                ext = f['filename'][f['filename'].rfind('.')+1:]
+                ext = f['filename'][f['filename'].rfind('.') + 1:]
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 finfo = self.file_lists[base].get(fname, None)
@@ -283,7 +284,7 @@ class FileManager:
         new_list = {}
         for root, dirs, files in os.walk(path, followlinks=True):
             for name in files:
-                ext = name[name.rfind('.')+1:]
+                ext = name[name.rfind('.') + 1:]
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 full_path = os.path.join(root, name)
@@ -493,7 +494,7 @@ class FileManager:
                 simple_list.append("*" + dirobj['dirname'])
             for fileobj in flist['files']:
                 fname = fileobj['filename']
-                ext = fname[fname.rfind('.')+1:]
+                ext = fname[fname.rfind('.') + 1:]
                 if root == "gcodes" and ext in VALID_GCODE_EXTS:
                     simple_list.append(fname)
             return simple_list
@@ -536,6 +537,7 @@ class FileManager:
         if source_item:
             result.update({'source_item': source_item})
         self.server.send_event("file_manager:filelist_changed", result)
+
 
 class MetadataStorage:
     def __init__(self, server):
@@ -614,6 +616,7 @@ class MetadataStorage:
         if do_notify:
             self.server.send_event(
                 "file_manager:metadata_update", metadata)
+
 
 def load_plugin(config):
     return FileManager(config)

@@ -10,10 +10,12 @@ import subprocess
 import asyncio
 from queue import SimpleQueue as Queue
 
+
 class ServerError(Exception):
     def __init__(self, message, status_code=400):
         Exception.__init__(self, message)
         self.status_code = status_code
+
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:
 # https://www.zopatista.com/python/2019/05/11/asyncio-logging/
@@ -27,12 +29,13 @@ class LocalQueueHandler(logging.handlers.QueueHandler):
         except Exception:
             self.handleError(record)
 
+
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, filename, **kwargs):
         super(MoonrakerLoggingHandler, self).__init__(filename, **kwargs)
         self.header = "Moonraker Log Start...\n"
         self.header += "Git Version: " + get_software_version() + "\n"
-        self.header += "="*80 + "\n"
+        self.header += "=" * 80 + "\n"
         if self.stream is not None:
             self.stream.write(self.header)
 
@@ -40,6 +43,7 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
         super(MoonrakerLoggingHandler, self).doRollover()
         if self.stream is not None:
             self.stream.write(self.header)
+
 
 # Parse the git version from the command line.  This code
 # is borrowed from Klipper.
@@ -66,6 +70,7 @@ def get_software_version():
         logging.exception("Error runing git describe")
 
     return "?"
+
 
 def setup_logging(log_file):
     root_logger = logging.getLogger()

@@ -17,6 +17,7 @@ TOKEN_TIMEOUT = 5
 CONNECTION_TIMEOUT = 3600
 PRUNE_CHECK_TIME = 300 * 1000
 
+
 class Authorization:
     def __init__(self, config):
         api_key_file = config.get('api_key_file', "~/.moonraker_api_key")
@@ -178,6 +179,7 @@ class Authorization:
     def close(self):
         self.prune_handler.stop()
 
+
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self, server, auth):
         self.server = server
@@ -205,6 +207,7 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             self.finish()
         else:
             super(AuthorizedRequestHandler, self).options()
+
 
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files

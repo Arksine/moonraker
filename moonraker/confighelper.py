@@ -7,14 +7,18 @@ import configparser
 import os
 import logging
 
+
 class ConfigError(Exception):
     pass
+
 
 class Sentinel:
     pass
 
+
 class ConfigHelper:
     error = ConfigError
+
     def __init__(self, server, config, section):
         self.server = server
         self.config = config
@@ -63,6 +67,7 @@ class ConfigHelper:
     def getfloat(self, option, default=Sentinel):
         return self._get_item(
             self.config[self.section].getfloat, option, default)
+
 
 def get_configuration(server, cmd_line_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(

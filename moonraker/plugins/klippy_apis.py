@@ -14,8 +14,10 @@ SUBSCRIPTION_ENDPOINT = "objects/subscribe"
 STATUS_ENDPOINT = "objects/query"
 OBJ_LIST_ENDPOINT = "objects/list"
 
+
 class Sentinel:
     pass
+
 
 class KlippyAPI:
     def __init__(self, config):
@@ -125,9 +127,10 @@ class KlippyAPI:
 
     async def subscribe_gcode_output(self, default=Sentinel):
         template = {'response_template':
-                    {'method': "process_gcode_response"}}
+                        {'method': "process_gcode_response"}}
         return await self._send_klippy_request(
             GC_OUTPUT_ENDPOINT, template, default)
+
 
 def load_plugin(config):
     return KlippyAPI(config)

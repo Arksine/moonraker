@@ -37,6 +37,7 @@ def _status_parser(request):
         args[key] = parsed
     return {'objects': args}
 
+
 # Built-in Query String Parser
 def _default_parser(request):
     query_args = request.query_arguments
@@ -46,6 +47,7 @@ def _default_parser(request):
             raise tornado.web.HTTPError(404, "Invalid Query String")
         args[key] = vals[0].decode()
     return args
+
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application):
@@ -79,6 +81,7 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
             except Exception:
                 logging.exception(f"Unable to remove rule: {pattern}")
 
+
 class APIDefinition:
     def __init__(self, endpoint, http_uri, ws_methods,
                  request_methods, parser):
@@ -89,6 +92,7 @@ class APIDefinition:
             request_methods = [request_methods]
         self.request_methods = request_methods
         self.parser = parser
+
 
 class MoonrakerApp:
     def __init__(self, config):
@@ -250,6 +254,7 @@ class MoonrakerApp:
         self.api_cache[endpoint] = api_def
         return api_def
 
+
 # ***** Dynamic Handlers*****
 class RemoteRequestHandler(AuthorizedRequestHandler):
     def initialize(self, remote_callback, server, auth, arg_parser):
@@ -274,6 +279,7 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
         self.finish({'result': result})
+
 
 class LocalRequestHandler(AuthorizedRequestHandler):
     def initialize(self, callback, server, auth,
@@ -335,6 +341,7 @@ class FileRequestHandler(AuthorizedFileHandler):
             else:
                 raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
+
 
 class FileUploadHandler(AuthorizedRequestHandler):
     def initialize(self, server, auth):

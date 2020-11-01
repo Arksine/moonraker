@@ -11,6 +11,7 @@ import tornado
 from tornado import gen
 from tornado.ioloop import IOLoop
 
+
 class ShellCommand:
     def __init__(self, cmd, callback=None):
         self.io_loop = IOLoop.current()
@@ -93,9 +94,11 @@ class ShellCommand:
             self.io_loop.remove_handler(fd)
         return complete
 
+
 class ShellCommandFactory:
     def build_shell_command(self, cmd, callback):
         return ShellCommand(cmd, callback)
+
 
 def load_plugin(config):
     return ShellCommandFactory()

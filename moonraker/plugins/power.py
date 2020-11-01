@@ -9,6 +9,7 @@ import os
 from tornado.ioloop import IOLoop
 from tornado import gen
 
+
 class PrinterPower:
     def __init__(self, config):
         self.server = config.get_server()
@@ -112,6 +113,7 @@ class PrinterPower:
                 continue
             self.devices[name] = device
 
+
 class GPIO:
     gpio_root = "/sys/class/gpio"
 
@@ -175,7 +177,6 @@ class GPIO:
 
         if GPIO._get_gpio_option(pin, "direction").strip() != "out":
             GPIO._set_gpio_option(pin, "direction", "out")
-
 
     @staticmethod
     def is_pin_on(pin):

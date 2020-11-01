@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
 
+
 class Machine:
     def __init__(self, config):
         self.server = config.get_server()
@@ -27,6 +28,7 @@ class Machine:
         except Exception:
             logging.exception(f"Error running cmd '{cmd}'")
         return "ok"
+
 
 def load_plugin(config):
     return Machine(config)

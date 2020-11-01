@@ -13,6 +13,7 @@ TEMPERATURE_STORE_SIZE = 20 * 60
 
 MAX_GCODE_LINES = 1000
 
+
 class DataStore:
     def __init__(self, config):
         self.server = config.get_server()
@@ -124,6 +125,7 @@ class DataStore:
         else:
             res = list(self.gcode_queue)
         return {'gcode_store': res}
+
 
 def load_plugin(config):
     return DataStore(config)

@@ -29,11 +29,14 @@ CORE_PLUGINS = [
     'file_manager', 'klippy_apis', 'machine',
     'data_store', 'shell_command']
 
+
 class Sentinel:
     pass
 
+
 class Server:
     error = ServerError
+
     def __init__(self, args):
         config = confighelper.get_configuration(self, args)
         self.host = config.get('host', "0.0.0.0")
@@ -105,7 +108,7 @@ class Server:
 
         # check for optional plugins
         opt_sections = set(config.sections()) - \
-            set(['server', 'authorization', 'cmd_args'])
+                       set(['server', 'authorization', 'cmd_args'])
         for section in opt_sections:
             self.load_plugin(config, section, None)
 
@@ -392,6 +395,7 @@ class Server:
             'klippy_state': self.klippy_state,
             'plugins': list(self.plugins.keys())}
 
+
 class KlippyConnection:
     def __init__(self, on_recd, on_close):
         self.ioloop = IOLoop.current()
@@ -446,6 +450,7 @@ class KlippyConnection:
                 not self.iostream.closed():
             self.iostream.close()
 
+
 # Basic WebRequest class, easily converted to dict for json encoding
 class BaseRequest:
     def __init__(self, rpc_method, params):
@@ -482,6 +487,7 @@ class BaseRequest:
         return {'id': self.id, 'method': self.rpc_method,
                 'params': self.params}
 
+
 def main():
     # Parse start arguments
     parser = argparse.ArgumentParser(
@@ -502,7 +508,7 @@ def main():
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
-            f"Detected Version: {sys.version}"
+              f"Detected Version: {sys.version}"
         logging.info(msg)
         print(msg)
         ql.stop()
