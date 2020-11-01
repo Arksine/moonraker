@@ -12,6 +12,7 @@ from inspect import isclass
 import tornado
 from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
+from tornado.web import HTTPError
 
 from authorization import Authorization
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler

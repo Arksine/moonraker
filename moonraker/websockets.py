@@ -9,6 +9,7 @@ import logging
 
 import tornado
 from tornado.ioloop import IOLoop
+from tornado.web import HTTPError
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 
 from utils import ServerError

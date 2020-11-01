@@ -12,6 +12,7 @@ import uuid
 
 import tornado
 from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.web import HTTPError
 
 from utils import ServerError
 
