@@ -118,6 +118,15 @@ class FileManager:
         base, url_path, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
+            need_update = False
+            is_extended = args.get('extended', False)
+            if isinstance(is_extended, str):
+                val = is_extended.lower()
+                if val in ["true", "false"]:
+                    is_extended = True if val == "true" else False
+            if not isinstance(is_extended, bool):
+                raise self.server.error(
+                    f"Invalid argument for 'extended': {is_extended}")
             # Get list of files and subdirectories for this target
             dir_info = self._list_directory(dir_path)
             # Check to see if a filelist update is necessary
@@ -126,12 +135,17 @@ class FileManager:
                 ext = os.path.splitext(f['filename'])[-1].lower()
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
-                finfo = self.gcode_metadata.get(fname, None)
-                if finfo is None or f['modified'] != finfo['modified']:
+                metadata = self.gcode_metadata.get(fname, None)
+                if metadata is None or f['modified'] != metadata['modified']:
                     # Either a new file found or file has changed, update
                     # internal file list
-                    self._update_file_list(base, do_notify=True)
-                    break
+                    need_update = True
+                    if not is_extended:
+                        break
+                elif is_extended:
+                    f.update(metadata)
+            if need_update:
+                self._update_file_list(base, do_notify=True)
             return dir_info
         elif method == 'POST' and base in FULL_ACCESS_ROOTS:
             # Create a new directory
