@@ -47,18 +47,24 @@ cd ~
 git clone https://github.com/Arksine/moonraker.git
 ```
 
-If you have an experimental verison of moonraker that pre-dates this repo,
-it must be uninstalled:
-```
-cd ~/moonraker/scripts
-./uninstall-moonraker.sh
-```
-
 Finally, run moonraker's install script:
 ```
 cd ~/moonraker/scripts
 ./install-moonraker.sh
 ```
+
+The install script has a few command line options that may be useful,
+particularly for those upgrading:
+- -r\
+  This will rebuild the virtual environment for existing installations.
+  Sometimes this is necessary when a dependency has been added.
+- -f\
+  This will tell the script to overwrite Moonraker's "defaults" file.
+  By default the script will not modify the "defaults" file if it is
+  detected as present.
+- -c /path/to/moonraker.conf\
+  This allows the user to specify the path to Moonraker's config file.
+  The default location is "/home/<user>/moonraker.conf".
 
 When the script completes it should start both Moonraker and Klipper. In
 `klippy.log` you should find the following entry:\
