@@ -13,7 +13,7 @@ import json
 from tornado.ioloop import IOLoop
 from tornado.locks import Lock
 
-VALID_GCODE_EXTS = ['gcode', 'g', 'gco']
+VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py")
@@ -123,10 +123,10 @@ class FileManager:
             # Check to see if a filelist update is necessary
             for f in dir_info['files']:
                 fname = os.path.join(url_path, f['filename'])
-                ext = f['filename'][f['filename'].rfind('.')+1:]
+                ext = os.path.splitext(f['filename'])[-1].lower()
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
-                finfo = self.file_lists[base].get(fname, None)
+                finfo = self.gcode_metadata.get(fname, None)
                 if finfo is None or f['modified'] != finfo['modified']:
                     # Either a new file found or file has changed, update
                     # internal file list
@@ -283,7 +283,7 @@ class FileManager:
         new_list = {}
         for root, dirs, files in os.walk(path, followlinks=True):
             for name in files:
-                ext = name[name.rfind('.')+1:]
+                ext = os.path.splitext(name)[-1].lower()
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 full_path = os.path.join(root, name)
@@ -493,7 +493,7 @@ class FileManager:
                 simple_list.append("*" + dirobj['dirname'])
             for fileobj in flist['files']:
                 fname = fileobj['filename']
-                ext = fname[fname.rfind('.')+1:]
+                ext = os.path.splitext(fname)[-1].lower()
                 if root == "gcodes" and ext in VALID_GCODE_EXTS:
                     simple_list.append(fname)
             return simple_list
