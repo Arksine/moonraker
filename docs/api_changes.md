@@ -1,6 +1,12 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### November 2nd 2020
+- The `GET /server/files/directory` endpoint now accepts a new
+  optional argument, `extended`.  If `extended=true`, then
+  the data returned for gcode files will also include extracted
+  metadata if it exists.
+
 ### October 25th 2020
 - The `modified` field reported for files and directories is no
   longer represented as a string.  It is now a floating point

@@ -483,17 +483,22 @@ Unlike `/server/files/list`, this command does not walk through
 subdirectories.
 
 - HTTP command:\
-  `GET /server/files/directory?path=gcodes/my_subdir`
+  `GET /server/files/directory?path=gcodes/my_subdir&extended=true`
 
   If the query string is omitted then the command will return
   the "gcodes" file list by default.
 
 - Websocket command:\
   `{jsonrpc: "2.0", method: "server.files.get_directory",
-   params: {path: "gcodes/my_subdir"} , id: <request id>}`
+   params: {path: "gcodes/my_subdir", extended: true} ,
+   id: <request id>}`
 
   If the "params" are omitted then the command will return
   the "gcodes" file list by default.
+
+The `extended` argument is optional, and defaults to false. If
+specified and set to true, then data returned for gcode files
+will also include metadata if it is available.
 
 - Returns:\
   An object containing file and subdirectory information in the
