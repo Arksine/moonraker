@@ -709,7 +709,7 @@ class PanelDue:
             response['err'] = 0
             response['size'] = metadata['size']
             # workaround for PanelDue replacing the first "T" found
-            response['lastModified'] = "T" + metadata['modified']
+            response['lastModified'] = "T" + time.ctime(metadata['modified'])
             slicer = metadata.get('slicer')
             if slicer is not None:
                 response['generatedBy'] = slicer
