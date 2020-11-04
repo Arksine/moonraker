@@ -247,6 +247,36 @@ function handle_klippy_state(state) {
             break;
     }
 }
+
+function process_mesh(result) {
+    let bed_mesh = result.status.bed_mesh;
+    let matrix = bed_mesh.probed_matrix;
+    if (!(matrix instanceof Array) ||  matrix.length < 3 ||
+        !(matrix[0] instanceof Array) || matrix[0].length < 3) {
+        // make sure that the matrix is valid
+        console.log("Invalid Mesh Received");
+        return;
+    }
+    let coordinates = [];
+    let x_distance = (bed_mesh.mesh_max[0] - bed_mesh.mesh_min[0]) /
+        (matrix[0].length - 1);
+    let y_distance = (bed_mesh.mesh_max[1] - bed_mesh.mesh_min[1]) /
+        (matrix.length - 1);
+    let x_idx = 0;
+    let y_idx = 0;
+    for (const x_axis of matrix) {
+        x_idx = 0;
+        let y_coord = bed_mesh.mesh_min[1] + (y_idx * y_distance);
+        for (const z_coord of x_axis) {
+            let x_coord = bed_mesh.mesh_min[0] + (x_idx * x_distance);
+            x_idx++;
+            coordinates.push([x_coord, y_coord, z_coord]);
+        }
+        y_idx++;
+    }
+    console.log("Processed Mesh Coordinates:");
+    console.log(coordinates);
+}
 //***********End UI Update Functions****************/
 
 //***********Websocket-Klipper API Functions (JSON-RPC)************/
@@ -378,6 +408,17 @@ function get_object_list() {
     })
     .catch((error) => {
         update_error(api.object_list.method, error);
+    });
+}
+
+function get_mesh() {
+    json_rpc.call_method_with_kwargs(
+        api.object_status.method, {objects: {bed_mesh: null}})
+    .then((result) => {
+        process_mesh(result);
+    })
+    .catch((error) => {
+        update_error(api.object_status.method, error);
     });
 }
 
@@ -1559,6 +1600,20 @@ window.onload = () => {
             form_get_request(api.object_list.url);
         } else {
             get_object_list();
+        }
+    });
+
+    $('#btntestmesh').click(() => {
+        if (api_type == 'http') {
+            let settings = {url: origin + api.object_status.url + "?bed_mesh"};
+            if (apikey != null)
+                settings.headers = {"X-Api-Key": apikey};
+            $.get(settings, (resp, status) => {
+                    process_mesh(resp.result)
+                    return false;
+            });
+        } else {
+            get_mesh();
         }
     });
 

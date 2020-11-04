@@ -110,7 +110,6 @@ class PrinterPower:
                 "status": "off"
             })
 
-
     async def _handle_power_timeout(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
         try:

@@ -1,3 +1,4 @@
 # Python dependencies for Moonraker
 tornado==6.0.4
 pyserial==3.4
+pillow==8.0.1
