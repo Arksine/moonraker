@@ -106,8 +106,8 @@ class FileManager:
 
     async def _handle_metadata_request(self, path, method, args):
         requested_file = args.get('filename')
-        metadata = self.gcode_metadata.get(requested_file)
-        if metadata is None:
+        metadata = dict(self.gcode_metadata.get(requested_file, {}))
+        if not metadata:
             raise self.server.error(
                 f"Metadata not available for <{requested_file}>", 404)
         metadata['filename'] = requested_file
@@ -480,7 +480,7 @@ class FileManager:
             filename = filename[7:]
 
         flist = self.get_file_list()
-        return self.gcode_metadata.get(filename, flist.get(filename, {}))
+        return dict(self.gcode_metadata.get(filename, flist.get(filename, {})))
 
     def list_dir(self, directory, simple_format=False):
         # List a directory relative to its root.  Currently the only
