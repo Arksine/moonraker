@@ -1,0 +1,52 @@
+#  Example Home Assistant configuration file for a Voron V0.
+#  Credit to GitHub user @Kruppes
+#
+sensor:
+  - platform: rest
+    name: Voron_V0_sensor
+    resource: "http://192.168.178.56:7125/printer/objects/query?heater_bed&extruder&print_stats&toolhead&display_status&virtual_sdcard"
+    json_attributes_path: "$.result.status"
+    json_attributes:
+      - heater_bed
+      - extruder
+      - print_stats
+      - toolhead
+      - display_status
+      - virtual_sdcard
+    value_template: 'OK'
+  - platform: template
+    sensors:
+      vzero_hotend_target:
+        friendly_name: 'V0.126 Hotend Target'
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["extruder"]["target"]  | float | round(1) }}'
+        device_class: temperature
+        unit_of_measurement: '°C'
+      vzero_hotend_actual:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["extruder"]["temperature"]  | float | round(1) }}'
+        device_class: temperature
+        unit_of_measurement: '°C'
+      vzero_bed_target:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["heater_bed"]["target"]  | float | round(1) }}'
+        device_class: temperature
+        unit_of_measurement: '°C'
+      vzero_bed_actual:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["heater_bed"]["temperature"]  | float | round(1) }}'
+        device_class: temperature
+        unit_of_measurement: '°C'
+      vzero_state:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["state"]}}'
+      vzero_current_print:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["filename"]}}'
+      vzero_current_progress:
+        value_template: '{{ (states.sensor.voron_v0_sensor.attributes["display_status"]["progress"])*100  | round(1) }}'
+        unit_of_measurement: '%'
+      vzero_print_time:
+        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"] |timestamp_custom("%H:%M:%S", 0)}}'
+      vzero_time_remaining:
+        value_template: '{{ (((states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]/states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]- states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]) if states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]>0 else 0)) | timestamp_custom("%H:%M:%S", 0)}}'
+      vzero_eta:
+        value_template: '{{ (as_timestamp(now())+2*60*60+((states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]/states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]- states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]) if states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]>0 else 0)) | timestamp_custom("%H:%M:%S", 0)}}'
+      vzero_nozzletemp:
+        value_template: '{{[( states.sensor.voron_v0_sensor.attributes["extruder"]["temperature"]  | float | round(1)| string)," / ",( states.sensor.voron_v0_sensor.attributes["extruder"]["target"]  | float | round(1)| string)]|join}}'
+      vzero_bedtemp:
+        value_template: '{{[( states.sensor.voron_v0_sensor.attributes["heater_bed"]["temperature"]  | float | round(1)| string)," / ",( states.sensor.voron_v0_sensor.attributes["heater_bed"]["target"]  | float | round(1)| string)]|join}}'
