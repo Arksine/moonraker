@@ -22,7 +22,6 @@ class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
         self.file_paths = {}
-        self.file_lists = {}
         self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
 
@@ -88,12 +87,13 @@ class FileManager:
             self.file_paths[base] = path
             self.server.register_static_file_handler(base, path)
             if base == "gcodes":
+                # scan metadata
                 self.gcode_metadata.update_gcode_path(path)
-            try:
-                self._update_file_list(base=base)
-            except Exception:
-                logging.exception(
-                    f"Unable to initialize file list: <{base}>")
+                try:
+                    self.get_file_list("gcodes")
+                except Exception:
+                    logging.exception(
+                        f"Unable to initialize gcode metadata")
         return True
 
     def get_sd_directory(self):
@@ -104,7 +104,7 @@ class FileManager:
 
     async def _handle_filelist_request(self, path, method, args):
         root = args.get('root', "gcodes")
-        return self.get_file_list(format_list=True, base=root)
+        return self.get_file_list(root, list_format=True, notify=True)
 
     async def _handle_metadata_request(self, path, method, args):
         requested_file = args.get('filename')
@@ -120,7 +120,6 @@ class FileManager:
         base, url_path, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
-            need_update = False
             is_extended = args.get('extended', False)
             if isinstance(is_extended, str):
                 val = is_extended.lower()
@@ -135,19 +134,13 @@ class FileManager:
             for f in dir_info['files']:
                 fname = os.path.join(url_path, f['filename'])
                 ext = os.path.splitext(f['filename'])[-1].lower()
-                if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
+                if base != 'gcodes' or ext not in VALID_GCODE_EXTS:
                     continue
+                self.gcode_metadata.parse_metadata(
+                    fname, f['size'], f['modified'], notify=True)
                 metadata = self.gcode_metadata.get(fname, None)
-                if metadata is None or f['modified'] != metadata['modified']:
-                    # Either a new file found or file has changed, update
-                    # internal file list
-                    need_update = True
-                    if not is_extended:
-                        break
-                elif is_extended:
+                if metadata is not None and is_extended:
                     f.update(metadata)
-            if need_update:
-                self._update_file_list(base, do_notify=True)
             return dir_info
         elif method == 'POST' and base in FULL_ACCESS_ROOTS:
             # Create a new directory
@@ -283,34 +276,6 @@ class FileManager:
         size = os.path.getsize(path)
         path_info = {'modified': modified, 'size': size}
         return path_info
-
-    def _update_file_list(self, base='gcodes', do_notify=False):
-        # Use os.walk find files in sd path and subdirs
-        path = self.file_paths.get(base, None)
-        if path is None:
-            msg = f"No known path for root: {base}"
-            logging.info(msg)
-            raise self.server.error(msg)
-        elif not os.path.isdir(path):
-            msg = f"Cannot generate file list for root: {base}"
-            logging.info(msg)
-            raise self.server.error(msg)
-        logging.info(f"Updating File List <{base}>...")
-        new_list = {}
-        for root_path, dirs, files in os.walk(path, followlinks=True):
-            for name in files:
-                ext = os.path.splitext(name)[-1].lower()
-                if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
-                    continue
-                full_path = os.path.join(root_path, name)
-                fname = full_path[len(path) + 1:]
-                finfo = self._get_path_info(full_path)
-                new_list[fname] = finfo
-                if base == 'gcodes':
-                    self.gcode_metadata.parse_metadata(
-                        fname, finfo['size'], finfo['modified'], do_notify)
-        self.file_lists[base] = new_list
-        return dict(new_list)
 
     async def process_file_upload(self, request):
         # lookup root file path
@@ -458,14 +423,28 @@ class FileManager:
             except Exception:
                 logging.exception("Unable to write Image")
 
-    def get_file_list(self, format_list=False, base='gcodes'):
-        try:
-            filelist = self._update_file_list(base)
-        except Exception:
-            msg = "Unable to update file list"
-            logging.exception(msg)
+    def get_file_list(self, base, list_format=False, notify=False):
+        # Use os.walk find files in sd path and subdirs
+        filelist = {}
+        path = self.file_paths.get(base, None)
+        if path is None or not os.path.isdir(path):
+            msg = f"Failed to build file list, invalid path: {base}: {path}"
+            logging.info(msg)
             raise self.server.error(msg)
-        if format_list:
+        logging.info(f"Updating File List <{base}>...")
+        for root_path, dirs, files in os.walk(path, followlinks=True):
+            for name in files:
+                ext = os.path.splitext(name)[-1].lower()
+                if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
+                    continue
+                full_path = os.path.join(root_path, name)
+                fname = full_path[len(path) + 1:]
+                finfo = self._get_path_info(full_path)
+                filelist[fname] = finfo
+                if base == 'gcodes':
+                    self.gcode_metadata.parse_metadata(
+                        fname, finfo['size'], finfo['modified'], notify)
+        if list_format:
             flist = []
             for fname in sorted(filelist, key=str.lower):
                 fdict = {'filename': fname}
@@ -483,7 +462,7 @@ class FileManager:
         if filename.startswith('gcodes/'):
             filename = filename[7:]
 
-        flist = self.get_file_list()
+        flist = self.get_file_list("gcodes")
         return self.gcode_metadata.get(filename, flist.get(filename, {}))
 
     def list_dir(self, directory, simple_format=False):
@@ -546,9 +525,8 @@ class FileManager:
         return filename
 
     def notify_filelist_changed(self, action, fname, base, source_item={}):
-        self._update_file_list(base, do_notify=True)
-        file_info = dict(self.file_lists[base].get(
-            fname, {'size': 0, 'modified': 0}))
+        flist = self.get_file_list(base, notify=True)
+        file_info = flist.get(fname, {'size': 0, 'modified': 0})
         file_info.update({'path': fname, 'root': base})
         result = {'action': action, 'item': file_info}
         if source_item:
