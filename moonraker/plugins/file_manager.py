@@ -71,7 +71,7 @@ class FileManager:
         log_path = os.path.normpath(os.path.expanduser(log_file))
         self.server.register_static_file_handler("klippy.log", log_path)
 
-    def register_directory(self, base, path):
+    def register_directory(self, root, path):
         if path is None:
             return False
         home = os.path.expanduser('~')
@@ -79,14 +79,14 @@ class FileManager:
         if not os.path.isdir(path) or not path.startswith(home) or \
                 path == home:
             logging.info(
-                f"\nSupplied path ({path}) for ({base}) not valid. Please\n"
+                f"\nSupplied path ({path}) for ({root}) not valid. Please\n"
                 "check that the path exists and is a subfolder in the HOME\n"
                 "directory. Note that the path may not BE the home directory.")
             return False
-        if path != self.file_paths.get(base, ""):
-            self.file_paths[base] = path
-            self.server.register_static_file_handler(base, path)
-            if base == "gcodes":
+        if path != self.file_paths.get(root, ""):
+            self.file_paths[root] = path
+            self.server.register_static_file_handler(root, path)
+            if root == "gcodes":
                 # scan metadata
                 self.gcode_metadata.update_gcode_path(path)
                 try:
@@ -117,7 +117,7 @@ class FileManager:
 
     async def _handle_directory_request(self, path, method, args):
         directory = args.get('path', "gcodes")
-        base, url_path, dir_path = self._convert_path(directory)
+        root, url_path, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
             is_extended = args.get('extended', False)
@@ -134,7 +134,7 @@ class FileManager:
             for f in dir_info['files']:
                 fname = os.path.join(url_path, f['filename'])
                 ext = os.path.splitext(f['filename'])[-1].lower()
-                if base != 'gcodes' or ext not in VALID_GCODE_EXTS:
+                if root != 'gcodes' or ext not in VALID_GCODE_EXTS:
                     continue
                 self.gcode_metadata.parse_metadata(
                     fname, f['size'], f['modified'], notify=True)
@@ -142,16 +142,16 @@ class FileManager:
                 if metadata is not None and is_extended:
                     f.update(metadata)
             return dir_info
-        elif method == 'POST' and base in FULL_ACCESS_ROOTS:
+        elif method == 'POST' and root in FULL_ACCESS_ROOTS:
             # Create a new directory
             try:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            self.notify_filelist_changed("create_dir", url_path, base)
-        elif method == 'DELETE' and base in FULL_ACCESS_ROOTS:
+            self.notify_filelist_changed("create_dir", url_path, root)
+        elif method == 'DELETE' and root in FULL_ACCESS_ROOTS:
             # Remove a directory
-            if directory.strip("/") == base:
+            if directory.strip("/") == root:
                 raise self.server.error(
                     "Cannot delete root directory")
             if not os.path.isdir(dir_path):
@@ -170,7 +170,7 @@ class FileManager:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
-            self.notify_filelist_changed("delete_dir", url_path, base)
+            self.notify_filelist_changed("delete_dir", url_path, root)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -198,15 +198,15 @@ class FileManager:
         parts = url_path.strip("/").split("/")
         if not parts:
             raise self.server.error(f"Invalid path: {url_path}")
-        base = parts[0]
-        if base not in self.file_paths:
-            raise self.server.error(f"Invalid base path ({base})")
-        root_path = local_path = self.file_paths[base]
+        root = parts[0]
+        if root not in self.file_paths:
+            raise self.server.error(f"Invalid root path ({root})")
+        root_path = local_path = self.file_paths[root]
         url_path = ""
         if len(parts) > 1:
             url_path = "/".join(parts[1:])
             local_path = os.path.join(root_path, url_path)
-        return base, url_path, local_path
+        return root, url_path, local_path
 
     async def _handle_file_move_copy(self, path, method, args):
         source = args.get("source")
@@ -216,11 +216,11 @@ class FileManager:
         if destination is None:
             raise self.server.error(
                 "File move/copy request missing destination")
-        source_base, src_url_path, source_path = self._convert_path(source)
-        dest_base, dst_url_path, dest_path = self._convert_path(destination)
-        if dest_base not in FULL_ACCESS_ROOTS:
+        source_root, src_url_path, source_path = self._convert_path(source)
+        dest_root, dst_url_path, dest_path = self._convert_path(destination)
+        if dest_root not in FULL_ACCESS_ROOTS:
             raise self.server.error(
-                f"Destination path is read-only: {dest_base}")
+                f"Destination path is read-only: {dest_root}")
         if not os.path.exists(source_path):
             raise self.server.error(f"File {source_path} does not exist")
         # make sure the destination is not in use
@@ -228,9 +228,9 @@ class FileManager:
             await self._handle_operation_check(dest_path)
         action = op_result = ""
         if path == "/server/files/move":
-            if source_base not in FULL_ACCESS_ROOTS:
+            if source_root not in FULL_ACCESS_ROOTS:
                 raise self.server.error(
-                    f"Source path is read-only, cannot move: {source_base}")
+                    f"Source path is read-only, cannot move: {source_root}")
             # if moving the file, make sure the source is not in use
             await self._handle_operation_check(source_path)
             try:
@@ -251,8 +251,8 @@ class FileManager:
             dst_url_path = os.path.join(
                 dst_url_path, os.path.basename(op_result))
         self.notify_filelist_changed(
-            action, dst_url_path, dest_base,
-            {'path': src_url_path, 'root': source_base})
+            action, dst_url_path, dest_root,
+            {'path': src_url_path, 'root': source_root})
         return "ok"
 
     def _list_directory(self, path):
@@ -290,11 +290,11 @@ class FileManager:
 
     async def _do_gcode_upload(self, request):
         start_print = print_ongoing = False
-        base_path = self.file_paths.get("gcodes", "")
-        if not base_path:
+        root_path = self.file_paths.get("gcodes", "")
+        if not root_path:
             raise self.server.error("Gcodes root not available")
         start_print = self._get_argument(request, 'print', "false") == "true"
-        upload = self._get_upload_info(request, base_path)
+        upload = self._get_upload_info(request, root_path)
         fparts = os.path.splitext(upload['full_path'])
         is_ufp = fparts[-1].lower() == ".ufp"
         # Verify that the operation can be done if attempting to upload a gcode
@@ -342,7 +342,7 @@ class FileManager:
             return args[0].decode().strip()
         return default
 
-    def _get_upload_info(self, request, base_path):
+    def _get_upload_info(self, request, root_path):
         # check relative path
         dir_path = self._get_argument(request, 'path', "")
         # fetch the upload from the request
@@ -354,17 +354,17 @@ class FileManager:
             raise self.server.error(
                 "Bad Request, can only process a single file upload")
         upload = f_list[0]
-        if os.path.isfile(base_path):
-            filename = os.path.basename(base_path)
-            full_path = base_path
+        if os.path.isfile(root_path):
+            filename = os.path.basename(root_path)
+            full_path = root_path
             dir_path = ""
         else:
             filename = "_".join(upload['filename'].strip().split()).lstrip("/")
             if dir_path:
                 filename = os.path.join(dir_path, filename)
-            full_path = os.path.normpath(os.path.join(base_path, filename))
+            full_path = os.path.normpath(os.path.join(root_path, filename))
         # Validate the path.  Don't allow uploads to a parent of the root
-        if not full_path.startswith(base_path):
+        if not full_path.startswith(root_path):
             raise self.server.error(
                 f"Cannot write to path: {full_path}")
         return {
@@ -423,25 +423,25 @@ class FileManager:
             except Exception:
                 logging.exception("Unable to write Image")
 
-    def get_file_list(self, base, list_format=False, notify=False):
+    def get_file_list(self, root, list_format=False, notify=False):
         # Use os.walk find files in sd path and subdirs
         filelist = {}
-        path = self.file_paths.get(base, None)
+        path = self.file_paths.get(root, None)
         if path is None or not os.path.isdir(path):
-            msg = f"Failed to build file list, invalid path: {base}: {path}"
+            msg = f"Failed to build file list, invalid path: {root}: {path}"
             logging.info(msg)
             raise self.server.error(msg)
-        logging.info(f"Updating File List <{base}>...")
+        logging.info(f"Updating File List <{root}>...")
         for root_path, dirs, files in os.walk(path, followlinks=True):
             for name in files:
                 ext = os.path.splitext(name)[-1].lower()
-                if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
+                if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 full_path = os.path.join(root_path, name)
                 fname = full_path[len(path) + 1:]
                 finfo = self._get_path_info(full_path)
                 filelist[fname] = finfo
-                if base == 'gcodes':
+                if root == 'gcodes':
                     self.gcode_metadata.parse_metadata(
                         fname, finfo['size'], finfo['modified'], notify)
         if list_format:
@@ -524,10 +524,10 @@ class FileManager:
         self.notify_filelist_changed('delete_file', filename, root)
         return filename
 
-    def notify_filelist_changed(self, action, fname, base, source_item={}):
-        flist = self.get_file_list(base, notify=True)
+    def notify_filelist_changed(self, action, fname, root, source_item={}):
+        flist = self.get_file_list(root, notify=True)
         file_info = flist.get(fname, {'size': 0, 'modified': 0})
-        file_info.update({'path': fname, 'root': base})
+        file_info.update({'path': fname, 'root': root})
         result = {'action': action, 'item': file_info}
         if source_item:
             result.update({'source_item': source_item})
