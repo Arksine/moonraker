@@ -10,7 +10,7 @@ import io
 import zipfile
 import logging
 import json
-from tornado.ioloop import IOLoop
+from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.locks import Lock
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
@@ -87,6 +87,8 @@ class FileManager:
         if path != self.file_paths.get(base, ""):
             self.file_paths[base] = path
             self.server.register_static_file_handler(base, path)
+            if base == "gcodes":
+                self.gcode_metadata.update_gcode_path(path)
             try:
                 self._update_file_list(base=base)
             except Exception:
@@ -106,8 +108,8 @@ class FileManager:
 
     async def _handle_metadata_request(self, path, method, args):
         requested_file = args.get('filename')
-        metadata = dict(self.gcode_metadata.get(requested_file, {}))
-        if not metadata:
+        metadata = self.gcode_metadata.get(requested_file, None)
+        if metadata is None:
             raise self.server.error(
                 f"Metadata not available for <{requested_file}>", 404)
         metadata['filename'] = requested_file
@@ -295,17 +297,19 @@ class FileManager:
             raise self.server.error(msg)
         logging.info(f"Updating File List <{base}>...")
         new_list = {}
-        for root, dirs, files in os.walk(path, followlinks=True):
+        for root_path, dirs, files in os.walk(path, followlinks=True):
             for name in files:
                 ext = os.path.splitext(name)[-1].lower()
                 if base == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
-                full_path = os.path.join(root, name)
-                r_path = full_path[len(path) + 1:]
-                new_list[r_path] = self._get_path_info(full_path)
+                full_path = os.path.join(root_path, name)
+                fname = full_path[len(path) + 1:]
+                finfo = self._get_path_info(full_path)
+                new_list[fname] = finfo
+                if base == 'gcodes':
+                    self.gcode_metadata.parse_metadata(
+                        fname, finfo['size'], finfo['modified'], do_notify)
         self.file_lists[base] = new_list
-        if base == 'gcodes':
-            self.gcode_metadata.refresh_metadata(new_list, path, do_notify)
         return dict(new_list)
 
     async def process_file_upload(self, request):
@@ -480,7 +484,7 @@ class FileManager:
             filename = filename[7:]
 
         flist = self.get_file_list()
-        return dict(self.gcode_metadata.get(filename, flist.get(filename, {})))
+        return self.gcode_metadata.get(filename, flist.get(filename, {}))
 
     def list_dir(self, directory, simple_format=False):
         # List a directory relative to its root.  Currently the only
@@ -551,18 +555,41 @@ class FileManager:
             result.update({'source_item': source_item})
         self.server.send_event("file_manager:filelist_changed", result)
 
+    def close(self):
+        self.gcode_metadata.close()
+
+
+METADATA_PRUNE_TIME = 600000
+
 class MetadataStorage:
     def __init__(self, server):
         self.server = server
-        self.lock = Lock()
         self.metadata = {}
+        self.pending_requests = {}
         self.script_response = None
+        self.busy = False
+        self.gc_path = os.path.expanduser("~")
+        self.prune_cb = PeriodicCallback(
+            self._prune_metadata, METADATA_PRUNE_TIME)
+
+    def update_gcode_path(self, path):
+        if path == self.gc_path:
+            return
+        self.metadata = {}
+        self.gc_path = path
+        if not self.prune_cb.is_running():
+            self.prune_cb.start()
+
+    def close(self):
+        self.prune_cb.stop()
 
     def get(self, key, default=None):
-        return self.metadata.get(key, default)
+        if key not in self.metadata:
+            return default
+        return dict(self.metadata[key])
 
     def __getitem__(self, key):
-        return self.metadata[key]
+        return dict(self.metadata[key])
 
     def _handle_script_response(self, result):
         try:
@@ -577,40 +604,52 @@ class MetadataStorage:
         if 'file' in proc_resp:
             self.script_response = proc_resp
 
-    def refresh_metadata(self, filelist, gc_path, do_notify=False):
-        IOLoop.current().spawn_callback(
-            self._do_metadata_update, filelist, gc_path, do_notify)
+    def _prune_metadata(self):
+        for fname in list(self.metadata.keys()):
+            fpath = os.path.join(self.gc_path, fname)
+            if not os.path.exists(fpath):
+                del self.metadata[fname]
+                logging.info(f"Pruned file: {fname}")
+                continue
 
-    async def _do_metadata_update(self, filelist, gc_path, do_notify=False):
-        async with self.lock:
-            exisiting_data = {}
-            update_list = []
-            for fname, fdata in filelist.items():
-                mdata = self.metadata.get(fname, {})
-                if mdata.get('size', "") == fdata.get('size') \
-                        and mdata.get('modified', 0) == fdata.get('modified'):
-                    # file metadata has already been extracted
-                    exisiting_data[fname] = mdata
-                else:
-                    update_list.append(fname)
-            self.metadata = exisiting_data
-            for fname in update_list:
-                retries = 3
-                while retries:
-                    try:
-                        await self._extract_metadata(fname, gc_path, do_notify)
-                    except Exception:
-                        logging.exception("Error running extract_metadata.py")
-                        retries -= 1
-                    else:
-                        break
-                else:
-                    logging.info(
-                        f"Unable to extract medatadata from file: {fname}")
+    def _has_valid_data(self, fname, fsize, modified):
+        mdata = self.metadata.get(fname, {'size': "", 'modified': 0})
+        return mdata['size'] == fsize and mdata['modified'] == modified
 
-    async def _extract_metadata(self, filename, path, do_notify=False):
+    def parse_metadata(self, fname, fsize, modified, notify=False):
+        if fname in self.pending_requests or \
+                self._has_valid_data(fname, fsize, modified):
+            # request already pending or not necessary
+            return
+        self.pending_requests[fname] = (fsize, modified, notify)
+        if self.busy:
+            return
+        self.busy = True
+        IOLoop.current().spawn_callback(self._process_metadata_update)
+
+    async def _process_metadata_update(self):
+        while self.pending_requests:
+            fname, (fsize, modified, notify) = self.pending_requests.popitem()
+            if self._has_valid_data(fname, fsize, modified):
+                continue
+            retries = 3
+            while retries:
+                try:
+                    await self._run_extract_metadata(fname, notify)
+                except Exception:
+                    logging.exception("Error running extract_metadata.py")
+                    retries -= 1
+                else:
+                    break
+            else:
+                self.metadata[fname] = {'size': fsize, 'modified': modified}
+                logging.info(
+                    f"Unable to extract medatadata from file: {fname}")
+        self.busy = False
+
+    async def _run_extract_metadata(self, filename, notify):
         cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
-                        path, "-f", "'" + filename + "'"])
+                        self.gc_path, "-f", "'" + filename + "'"])
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(
             cmd, self._handle_script_response)
@@ -625,7 +664,7 @@ class MetadataStorage:
             raise self.server.error("Unable to extract metadata")
         self.metadata[path] = dict(metadata)
         metadata['filename'] = path
-        if do_notify:
+        if notify:
             self.server.send_event(
                 "file_manager:metadata_update", metadata)
 
