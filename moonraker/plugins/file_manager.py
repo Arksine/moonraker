@@ -165,6 +165,8 @@ class FileManager:
                 # loaded by the virtual_sdcard
                 await self._handle_operation_check(dir_path)
                 shutil.rmtree(dir_path)
+                if root == "gcodes":
+                    self.gcode_metadata.prune_metadata()
             else:
                 try:
                     os.rmdir(dir_path)
@@ -237,6 +239,11 @@ class FileManager:
                 op_result = shutil.move(source_path, dest_path)
             except Exception as e:
                 raise self.server.error(str(e))
+            if source_root == "gcodes":
+                if os.path.isdir(op_result):
+                    self.gcode_metadata.prune_metadata()
+                else:
+                    self.gcode_metadata.remove_file(src_url_path)
             action = "move_item"
         elif path == "/server/files/copy":
             try:
@@ -520,6 +527,7 @@ class FileManager:
             except self.server.error as e:
                 if e.status_code == 403:
                     raise
+            self.gcode_metadata.remove_file(filename)
         os.remove(full_path)
         self.notify_filelist_changed('delete_file', filename, root)
         return filename
@@ -548,7 +556,7 @@ class MetadataStorage:
         self.busy = False
         self.gc_path = os.path.expanduser("~")
         self.prune_cb = PeriodicCallback(
-            self._prune_metadata, METADATA_PRUNE_TIME)
+            self.prune_metadata, METADATA_PRUNE_TIME)
 
     def update_gcode_path(self, path):
         if path == self.gc_path:
@@ -582,7 +590,7 @@ class MetadataStorage:
         if 'file' in proc_resp:
             self.script_response = proc_resp
 
-    def _prune_metadata(self):
+    def prune_metadata(self):
         for fname in list(self.metadata.keys()):
             fpath = os.path.join(self.gc_path, fname)
             if not os.path.exists(fpath):
@@ -593,6 +601,9 @@ class MetadataStorage:
     def _has_valid_data(self, fname, fsize, modified):
         mdata = self.metadata.get(fname, {'size': "", 'modified': 0})
         return mdata['size'] == fsize and mdata['modified'] == modified
+
+    def remove_file(self, fname):
+        self.metadata.pop(fname)
 
     def parse_metadata(self, fname, fsize, modified, notify=False):
         if fname in self.pending_requests or \
