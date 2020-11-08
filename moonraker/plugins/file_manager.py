@@ -117,7 +117,7 @@ class FileManager:
 
     async def _handle_directory_request(self, path, method, args):
         directory = args.get('path', "gcodes")
-        root, url_path, dir_path = self._convert_path(directory)
+        root, rel_path, dir_path = self._convert_path(directory)
         method = method.upper()
         if method == 'GET':
             is_extended = args.get('extended', False)
@@ -132,7 +132,7 @@ class FileManager:
             dir_info = self._list_directory(dir_path)
             # Check to see if a filelist update is necessary
             for f in dir_info['files']:
-                fname = os.path.join(url_path, f['filename'])
+                fname = os.path.join(rel_path, f['filename'])
                 ext = os.path.splitext(f['filename'])[-1].lower()
                 if root != 'gcodes' or ext not in VALID_GCODE_EXTS:
                     continue
@@ -148,7 +148,7 @@ class FileManager:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            self.notify_filelist_changed("create_dir", url_path, root)
+            self.notify_filelist_changed("create_dir", rel_path, root)
         elif method == 'DELETE' and root in FULL_ACCESS_ROOTS:
             # Remove a directory
             if directory.strip("/") == root:
@@ -172,7 +172,7 @@ class FileManager:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
-            self.notify_filelist_changed("delete_dir", url_path, root)
+            self.notify_filelist_changed("delete_dir", rel_path, root)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -196,19 +196,20 @@ class FileManager:
         ongoing = state in ["printing", "paused"]
         return ongoing
 
-    def _convert_path(self, url_path):
-        parts = url_path.strip("/").split("/")
+    def _convert_path(self, request_path):
+        # Parse the root, relative path, and disk path from a remote request
+        parts = request_path.strip("/").split("/")
         if not parts:
-            raise self.server.error(f"Invalid path: {url_path}")
+            raise self.server.error(f"Invalid path: {request_path}")
         root = parts[0]
         if root not in self.file_paths:
             raise self.server.error(f"Invalid root path ({root})")
-        root_path = local_path = self.file_paths[root]
-        url_path = ""
+        disk_path = self.file_paths[root]
+        rel_path = ""
         if len(parts) > 1:
-            url_path = "/".join(parts[1:])
-            local_path = os.path.join(root_path, url_path)
-        return root, url_path, local_path
+            rel_path = "/".join(parts[1:])
+            disk_path = os.path.join(disk_path, rel_path)
+        return root, rel_path, disk_path
 
     async def _handle_file_move_copy(self, path, method, args):
         source = args.get("source")
@@ -218,8 +219,8 @@ class FileManager:
         if destination is None:
             raise self.server.error(
                 "File move/copy request missing destination")
-        source_root, src_url_path, source_path = self._convert_path(source)
-        dest_root, dst_url_path, dest_path = self._convert_path(destination)
+        source_root, src_rel_path, source_path = self._convert_path(source)
+        dest_root, dst_rel_path, dest_path = self._convert_path(destination)
         if dest_root not in FULL_ACCESS_ROOTS:
             raise self.server.error(
                 f"Destination path is read-only: {dest_root}")
@@ -243,7 +244,7 @@ class FileManager:
                 if os.path.isdir(op_result):
                     self.gcode_metadata.prune_metadata()
                 else:
-                    self.gcode_metadata.remove_file(src_url_path)
+                    self.gcode_metadata.remove_file(src_rel_path)
             action = "move_item"
         elif path == "/server/files/copy":
             try:
@@ -255,11 +256,11 @@ class FileManager:
                 raise self.server.error(str(e))
             action = "copy_item"
         if op_result != dest_path:
-            dst_url_path = os.path.join(
-                dst_url_path, os.path.basename(op_result))
+            dst_rel_path = os.path.join(
+                dst_rel_path, os.path.basename(op_result))
         self.notify_filelist_changed(
-            action, dst_url_path, dest_root,
-            {'path': src_url_path, 'root': source_root})
+            action, dst_rel_path, dest_root,
+            {'path': src_rel_path, 'root': source_root})
         return "ok"
 
     def _list_directory(self, path):
