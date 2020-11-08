@@ -74,7 +74,7 @@ class JsonRPC:
         try:
             result = await method(*args, **kwargs)
         except TypeError as e:
-            return self.build_error(-32603, "Invalid params", req_id)
+            return self.build_error(-32603, f"Invalid params:\n{e}", req_id)
         except ServerError as e:
             return self.build_error(e.status_code, str(e), req_id)
         except Exception as e:
