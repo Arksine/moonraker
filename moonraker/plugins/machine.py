@@ -13,10 +13,11 @@ class Machine:
         self.server.register_endpoint(
             "/machine/shutdown", ['POST'], self._handle_machine_request)
 
-    async def _handle_machine_request(self, path, method, args):
-        if path == "/machine/shutdown":
+    async def _handle_machine_request(self, web_request):
+        ep = web_request.get_endpoint()
+        if ep == "/machine/shutdown":
             cmd = "sudo shutdown now"
-        elif path == "/machine/reboot":
+        elif ep == "/machine/reboot":
             cmd = "sudo shutdown -r now"
         else:
             raise self.server.error("Unsupported machine request")
