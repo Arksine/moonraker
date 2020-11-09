@@ -12,7 +12,7 @@ from inspect import isclass
 from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from utils import ServerError
-from websockets import WebsocketManager, WebSocket
+from websockets import WebRequest, WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from authorization import Authorization
 
@@ -270,7 +270,7 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
             args = self.query_parser(self.request)
         try:
             result = await self.server.make_request(
-                self.remote_callback, args)
+                WebRequest(self.remote_callback, args))
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
@@ -307,7 +307,8 @@ class LocalRequestHandler(AuthorizedRequestHandler):
         if self.request.query:
             args = self.query_parser(self.request)
         try:
-            result = await self.callback(self.request.path, method, args)
+            result = await self.callback(
+                WebRequest(self.request.path, args, method))
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
