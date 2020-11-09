@@ -38,7 +38,7 @@ class PrinterPower:
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.initialize_devices, devices)
 
-    async def _handle_list_devices(self, path, method, args):
+    async def _handle_list_devices(self, web_request):
         output = {"devices": []}
         for dev in self.devices:
             output['devices'].append({
@@ -47,15 +47,17 @@ class PrinterPower:
             })
         return output
 
-    async def _handle_power_request(self, path, method, args):
+    async def _handle_power_request(self, web_request):
+        args = web_request.get_args()
+        ep = web_request.get_endpoint()
         if len(args) == 0:
-            if path == "/machine/gpio_power/status":
+            if ep == "/machine/gpio_power/status":
                 args = self.devices
             else:
                 return "no_devices"
 
         result = {}
-        req = path.split("/")[-1]
+        req = ep.split("/")[-1]
         for dev in args:
             if req not in ("on", "off", "status"):
                 raise self.server.error("Unsupported power request")
