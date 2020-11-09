@@ -362,14 +362,16 @@ class Server:
                 self.klippy_state = state
         self.send_event("server:status_update", status)
 
-    async def make_request(self, rpc_method, params):
+    async def make_request(self, web_request):
         # XXX - This adds the "response_template" to a subscription
         # request and tracks all subscriptions so that each
         # client gets what its requesting.  In the future we should
         # track subscriptions per client and send clients only
         # the data they are asking for.
+        rpc_method = web_request.get_endpoint()
+        args = web_request.get_args()
         if rpc_method == "objects/subscribe":
-            for obj, items in params.get('objects', {}).items():
+            for obj, items in args.get('objects', {}).items():
                 if obj in self.all_subscriptions:
                     pi = self.all_subscriptions[obj]
                     if items is None or pi is None:
@@ -379,10 +381,11 @@ class Server:
                         self.all_subscriptions[obj] = uitems
                 else:
                     self.all_subscriptions[obj] = items
-            params['objects'] = dict(self.all_subscriptions)
-            params['response_template'] = {'method': "process_status_update"}
+            args['objects'] = dict(self.all_subscriptions)
+            args['response_template'] = {'method': "process_status_update"}
 
-        base_request = BaseRequest(rpc_method, params)
+        # Create a base klippy request
+        base_request = BaseRequest(rpc_method, args)
         self.pending_requests[base_request.id] = base_request
         self.ioloop.spawn_callback(
             self.klippy_connection.send_request, base_request)
@@ -402,11 +405,11 @@ class Server:
         await self.moonraker_app.close()
         self.ioloop.stop()
 
-    async def _handle_server_restart(self, path, method, args):
+    async def _handle_server_restart(self, web_request):
         self.ioloop.spawn_callback(self._stop_server)
         return "ok"
 
-    async def _handle_info_request(self, path, method, args):
+    async def _handle_info_request(self, web_request):
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
