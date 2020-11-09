@@ -14,6 +14,61 @@ from utils import ServerError
 class Sentinel:
     pass
 
+class WebRequest:
+    def __init__(self, endpoint, args, action=""):
+        self.endpoint = endpoint
+        self.action = action
+        self.args = args
+
+    def get_endpoint(self):
+        return self.endpoint
+
+    def get_action(self):
+        return self.action
+
+    def get_args(self):
+        return self.args
+
+    def _get_converted_arg(self, key, default=Sentinel, dtype=str):
+        if key not in self.args:
+            if default == Sentinel:
+                raise ServerError(f"No data for argument: {key}")
+            return default
+        val = self.args[key]
+        try:
+            if dtype != bool:
+                return dtype(val)
+            else:
+                if isinstance(val, str):
+                    val = val.lower()
+                    if val in ["true", "false"]:
+                        return True if val == "true" else False
+                elif isinstance(val, bool):
+                    return val
+                raise TypeError
+        except Exception:
+            raise ServerError(
+                f"Unable to convert argument [{key}] to {dtype}: "
+                f"value recieved: {val}")
+
+    def get(self, key, default=Sentinel):
+        val = self.args.get(key, default)
+        if val == Sentinel:
+            raise ServerError(f"No data for argument: {key}")
+        return val
+
+    def get_str(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default)
+
+    def get_int(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, int)
+
+    def get_float(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, float)
+
+    def get_boolean(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, bool)
+
 class JsonRPC:
     def __init__(self):
         self.methods = {}
@@ -155,13 +210,15 @@ class WebsocketManager:
 
     def _generate_callback(self, endpoint):
         async def func(**kwargs):
-            result = await self.server.make_request(endpoint, kwargs)
+            result = await self.server.make_request(
+                WebRequest(endpoint, kwargs))
             return result
         return func
 
     def _generate_local_callback(self, endpoint, request_method, callback):
         async def func(**kwargs):
-            result = await callback(endpoint, request_method, kwargs)
+            result = await callback(
+                WebRequest(endpoint, kwargs, request_method))
             return result
         return func
 
