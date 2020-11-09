@@ -71,12 +71,13 @@ class Authorization:
             "/access/oneshot_token", ['GET'],
             self._handle_token_request, protocol=['http'])
 
-    async def _handle_apikey_request(self, path, method, args):
-        if method.upper() == 'POST':
+    async def _handle_apikey_request(self, web_request):
+        action = web_request.get_action()
+        if action.upper() == 'POST':
             self.api_key = self._create_api_key()
         return self.api_key
 
-    async def _handle_token_request(self, path, method, args):
+    async def _handle_token_request(self, web_request):
         return self.get_access_token()
 
     def _read_api_key(self):
