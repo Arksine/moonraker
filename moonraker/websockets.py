@@ -173,8 +173,6 @@ class WebsocketManager:
         self.server.register_event_handler(
             "server:gcode_response", self._handle_gcode_response)
         self.server.register_event_handler(
-            "server:status_update", self._handle_status_update)
-        self.server.register_event_handler(
             "file_manager:filelist_changed", self._handle_filelist_changed)
         self.server.register_event_handler(
             "file_manager:metadata_update", self._handle_metadata_update)
@@ -186,9 +184,6 @@ class WebsocketManager:
 
     async def _handle_gcode_response(self, response):
         await self.notify_websockets("gcode_response", response)
-
-    async def _handle_status_update(self, status):
-        await self.notify_websockets("status_update", status)
 
     async def _handle_filelist_changed(self, flist):
         await self.notify_websockets("filelist_changed", flist)
@@ -240,17 +235,17 @@ class WebsocketManager:
         async with self.ws_lock:
             old_ws = self.websockets.pop(ws.uid, None)
             if old_ws is not None:
+                self.server.remove_subscription(old_ws)
                 logging.info(f"Websocket Removed: {ws.uid}")
 
     async def notify_websockets(self, name, data=Sentinel):
         msg = {'jsonrpc': "2.0", 'method': "notify_" + name}
         if data != Sentinel:
             msg['params'] = [data]
-        notification = json.dumps(msg)
         async with self.ws_lock:
             for ws in list(self.websockets.values()):
                 try:
-                    ws.write_message(notification)
+                    ws.write_message(msg)
                 except WebSocketClosedError:
                     self.websockets.pop(ws.uid, None)
                     logging.info(f"Websocket Removed: {ws.uid}")
@@ -285,6 +280,21 @@ class WebSocket(WebSocketHandler):
                 self.write_message(response)
         except Exception:
             logging.exception("Websocket Command Error")
+
+    def send_status(self, status):
+        if not status:
+            return
+        try:
+            self.write_message({
+                'jsonrpc': "2.0",
+                'method': "notify_status_update",
+                'params': [status]})
+        except WebSocketClosedError:
+            self.websockets.pop(self.uid, None)
+            logging.info(f"Websocket Removed: {self.uid}")
+        except Exception:
+            logging.exception(
+                f"Error sending data over websocket: {self.uid}")
 
     def on_close(self):
         io_loop = IOLoop.current()

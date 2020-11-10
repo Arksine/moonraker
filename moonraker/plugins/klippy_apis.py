@@ -23,6 +23,10 @@ class KlippyAPI:
     def __init__(self, config):
         self.server = config.get_server()
 
+        # Maintain a subscription for all moonraker requests, as
+        # we do not want to overwrite them
+        self.host_subscription = {}
+
         # Register GCode Aliases
         self.server.register_endpoint(
             "/printer/print/pause", ['POST'], self._gcode_pause)
@@ -59,7 +63,7 @@ class KlippyAPI:
     async def _send_klippy_request(self, method, params, default=Sentinel):
         try:
             result = await self.server.make_request(
-                WebRequest(method, params))
+                WebRequest(method, params, conn=self))
         except self.server.error as e:
             if default == Sentinel:
                 raise
@@ -119,7 +123,17 @@ class KlippyAPI:
         return result
 
     async def subscribe_objects(self, objects, default=Sentinel):
-        params = {'objects': objects}
+        for obj, items in objects.items():
+            if obj in self.host_subscription:
+                prev = self.host_subscription[obj]
+                if items is None or prev is None:
+                    self.host_subscription[obj] = None
+                else:
+                    uitems = list(set(prev) | set(items))
+                    self.host_subscription[obj] = uitems
+            else:
+                self.host_subscription[obj] = items
+        params = {'objects': self.host_subscription}
         result = await self._send_klippy_request(
             SUBSCRIPTION_ENDPOINT, params, default)
         if isinstance(result, dict) and 'status' in result:
@@ -137,6 +151,9 @@ class KlippyAPI:
             REG_METHOD_ENDPOINT,
             {'response_template': {"method": method_name},
              'remote_method': method_name})
+
+    def send_status(self, status):
+        self.server.send_event("server:status_update", status)
 
 def load_plugin(config):
     return KlippyAPI(config)

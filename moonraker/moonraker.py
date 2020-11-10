@@ -51,14 +51,7 @@ class Server:
         self.init_handle = None
         self.init_attempts = 0
         self.klippy_state = "disconnected"
-
-        # XXX - currently moonraker maintains a superset of all
-        # subscriptions, the results of which are forwarded to all
-        # connected websockets. A better implementation would open a
-        # unique unix domain socket for each websocket client and
-        # allow Klipper to forward only those subscriptions back to
-        # correct client.
-        self.all_subscriptions = {}
+        self.subscriptions = {}
 
         # Server/IOLoop
         self.server_running = False
@@ -221,6 +214,7 @@ class Server:
         for request in self.pending_requests.values():
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
+        self.subscriptions = {}
         logging.info("Klippy Connection Removed")
         self.send_event("server:klippy_disconnect")
         if self.init_handle is not None:
@@ -236,8 +230,6 @@ class Server:
         # Subscribe to "webhooks"
         # Register "webhooks" subscription
         if "webhooks_sub" not in self.init_list:
-            temp_subs = self.all_subscriptions
-            self.all_subscriptions = {}
             try:
                 await self.klippy_apis.subscribe_objects({'webhooks': None})
             except ServerError as e:
@@ -245,7 +237,6 @@ class Server:
             else:
                 logging.info("Webhooks Subscribed")
                 self.init_list.append("webhooks_sub")
-            self.all_subscriptions.update(temp_subs)
         # Subscribe to Gcode Output
         if "gcode_output_sub" not in self.init_list:
             try:
@@ -318,10 +309,6 @@ class Server:
             logging.info(
                 f"Unable to retreive Klipper Object List")
             return
-        # Remove stale objects from the persistent subscription dict
-        for name in list(self.all_subscriptions.keys()):
-            if name not in result:
-                del self.all_subscriptions[name]
         req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
         missing_objs = req_objs - set(result)
         if missing_objs:
@@ -360,28 +347,42 @@ class Server:
                     logging.info("Klippy has shutdown")
                     self.send_event("server:klippy_shutdown")
                 self.klippy_state = state
-        self.send_event("server:status_update", status)
+        for conn, sub in self.subscriptions.items():
+            conn_status = {}
+            for name, fields in sub.items():
+                if name in status:
+                    val = status[name]
+                    if fields is None:
+                        conn_status[name] = dict(val)
+                    else:
+                        conn_status[name] = {
+                            k: v for k, v in val.items() if k in fields}
+            conn.send_status(conn_status)
 
     async def make_request(self, web_request):
-        # XXX - This adds the "response_template" to a subscription
-        # request and tracks all subscriptions so that each
-        # client gets what its requesting.  In the future we should
-        # track subscriptions per client and send clients only
-        # the data they are asking for.
         rpc_method = web_request.get_endpoint()
         args = web_request.get_args()
         if rpc_method == "objects/subscribe":
-            for obj, items in args.get('objects', {}).items():
-                if obj in self.all_subscriptions:
-                    pi = self.all_subscriptions[obj]
-                    if items is None or pi is None:
-                        self.all_subscriptions[obj] = None
+            sub = args.get('objects', {})
+            conn = web_request.get_connection()
+            if conn is None:
+                raise self.error(
+                    "No connection associated with subscription request")
+            self.subscriptions[conn] = sub
+            all_subs = {}
+            # request superset of all client subscriptions
+            for sub in self.subscriptions.values():
+                for obj, items in sub.items():
+                    if obj in all_subs:
+                        pi = all_subs[obj]
+                        if items is None or pi is None:
+                            all_subs[obj] = None
+                        else:
+                            uitems = list(set(pi) | set(items))
+                            all_subs[obj] = uitems
                     else:
-                        uitems = list(set(pi) | set(items))
-                        self.all_subscriptions[obj] = uitems
-                else:
-                    self.all_subscriptions[obj] = items
-            args['objects'] = dict(self.all_subscriptions)
+                        all_subs[obj] = items
+            args['objects'] = all_subs
             args['response_template'] = {'method': "process_status_update"}
 
         # Create a base klippy request
@@ -391,6 +392,9 @@ class Server:
             self.klippy_connection.send_request, base_request)
         result = await base_request.wait()
         return result
+
+    def remove_subscription(self, conn):
+        self.subscriptions.pop(conn, None)
 
     async def _stop_server(self):
         self.server_running = False
