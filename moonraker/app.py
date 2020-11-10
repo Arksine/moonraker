@@ -23,29 +23,33 @@ RESERVED_ENDPOINTS = [
     "register_remote_method"
 ]
 
+EXCLUDED_ARGS = ["_", "token", "connection_id"]
 
 # Status objects require special parsing
-def _status_parser(request):
-    query_args = request.query_arguments
+def _status_parser(request_handler):
+    request = request_handler.request
+    arg_list = request.arguments.keys()
     args = {}
-    for key, vals in query_args.items():
-        parsed = []
-        for v in vals:
-            if v:
-                parsed += v.decode().split(',')
-        if parsed == []:
-            parsed = None
-        args[key] = parsed
+    for key in arg_list:
+        if key in EXCLUDED_ARGS:
+            continue
+        val = request_handler.get_argument(key)
+        if not val:
+            args[key] = None
+        else:
+            args[key] = val.split(',')
+    logging.debug(f"Parsed Arguments: {args}")
     return {'objects': args}
 
 # Built-in Query String Parser
-def _default_parser(request):
-    query_args = request.query_arguments
+def _default_parser(request_handler):
+    request = request_handler.request
+    arg_list = request.arguments.keys()
     args = {}
-    for key, vals in query_args.items():
-        if len(vals) != 1:
-            raise tornado.web.HTTPError(404, "Invalid Query String")
-        args[key] = vals[0].decode()
+    for key in arg_list:
+        if key in EXCLUDED_ARGS:
+            continue
+        args[key] = request_handler.get_argument(key)
     return args
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
@@ -271,9 +275,7 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
 
     async def _process_http_request(self):
         conn = self.get_associated_websocket()
-        args = {}
-        if self.request.query:
-            args = self.query_parser(self.request)
+        args = self.query_parser(self)
         try:
             result = await self.server.make_request(
                 WebRequest(self.remote_callback, args, conn=conn))
@@ -309,9 +311,7 @@ class LocalRequestHandler(AuthorizedRequestHandler):
 
     async def _process_http_request(self, method):
         conn = self.get_associated_websocket()
-        args = {}
-        if self.request.query:
-            args = self.query_parser(self.request)
+        args = self.query_parser(self)
         try:
             result = await self.callback(
                 WebRequest(self.request.path, args, method, conn=conn))
