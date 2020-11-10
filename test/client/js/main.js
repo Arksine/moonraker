@@ -302,6 +302,9 @@ function get_klippy_info() {
     json_rpc.call_method(api.printer_info.method)
     .then((result) => {
 
+        if (websocket.id == null)
+            get_websocket_id();
+
         if (result.state == "ready") {
             if (!klippy_ready) {
                 update_term("Klippy Hostname: " + result.hostname +
@@ -347,6 +350,19 @@ function get_klippy_info() {
         setTimeout(() => {
             get_klippy_info();
         }, 2000);
+    });
+}
+
+function get_websocket_id() {
+    json_rpc.call_method("server.websocket.id")
+    .then((result) => {
+        // result is an "ok" acknowledgment that the gcode has
+        // been successfully processed
+        websocket.id = result.websocket_id;
+        console.log(`Websocket ID Received: ${result.websocket_id}`);
+    })
+    .catch((error) => {
+        update_error("server.websocket.id", error);
     });
 }
 
@@ -818,53 +834,55 @@ function encode_filename(path) {
     }
     return fname;
 }
-function form_get_request(api_url, query_string="") {
-    let settings = {url: origin + api_url + query_string};
-    if (apikey != null)
-        settings.headers = {"X-Api-Key": apikey};
-    $.get(settings, (resp, status) => {
-            console.log(resp);
-            return false;
-    });
-}
 
-function form_post_request(api_url, query_string="") {
-    let settings = {url: origin + api_url + query_string};
-    if (apikey != null)
-        settings.headers = {"X-Api-Key": apikey};
-    $.post(settings, (resp, status) => {
-            console.log(resp);
-            return false;
-    });
-}
-
-function form_delete_request(api_url, query_string="") {
+function run_request(url, method, callback=null)
+{
     let settings = {
-        url: origin + api_url + query_string,
-        method: 'DELETE',
+        url: url,
+        method: method,
         success: (resp, status) => {
             console.log(resp);
+            if (callback != null)
+                callback(resp)
             return false;
-            }
-    };
+        }};
+    if (websocket.id != null) {
+        let fdata = new FormData();
+        fdata.append("connection_id", websocket.id);
+        settings.data = fdata
+        settings.contentType = false,
+        settings.processData = false
+    }
     if (apikey != null)
         settings.headers = {"X-Api-Key": apikey};
     $.ajax(settings);
 }
 
+function form_get_request(api_url, query_string="", callback=null) {
+    let url = origin + api_url + query_string;
+    run_request(url, 'GET', callback);
+}
+
+function form_post_request(api_url, query_string="", callback=null) {
+    let url = origin + api_url + query_string;
+    run_request(url, 'POST', callback);
+}
+
+function form_delete_request(api_url, query_string="", callback=null) {
+    let url = origin + api_url + query_string;
+    run_request(url, 'DELETE', callback);
+}
+
 function form_download_request(uri) {
     let dl_url = origin + uri;
     if (apikey != null) {
-        let settings = {
-            url: origin + api.oneshot_token.url,
-            headers: {"X-Api-Key": apikey}
-        };
-        $.get(settings, (resp, status) => {
-            let token = resp.result;
-            dl_url += "?token=" + token;
-            do_download(dl_url);
-            return false;
-        });
+        form_get_request(api.oneshot_token.url,
+            callback=(resp) => {
+                let token = resp.result;
+                dl_url += "?token=" + token;
+                do_download(dl_url);
+                return false;
+            });
     } else {
         do_download(dl_url);
     }
@@ -1092,6 +1110,7 @@ class KlippyWebsocket {
         this.ws = null;
         this.onmessage = null;
         this.onopen = null;
+        this.id = null;
         this.connect();
     }
 
@@ -1133,6 +1152,7 @@ class KlippyWebsocket {
         this.ws.onclose = (e) => {
             klippy_ready = false;
             this.connected = false;
+            this.id = null;
             console.log("Websocket Closed, reconnecting in 1s: ", e.reason);
             setTimeout(() => {
                 this.connect();
