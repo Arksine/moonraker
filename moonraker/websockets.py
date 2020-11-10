@@ -167,6 +167,8 @@ class WebsocketManager:
         self.ws_lock = tornado.locks.Lock()
         self.rpc = JsonRPC()
 
+        self.rpc.register_method("server.websocket.id", self._handle_id_request)
+
         # Register events
         self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_klippy_disconnect)
@@ -223,8 +225,14 @@ class WebsocketManager:
             return result
         return func
 
+    async def _handle_id_request(self, ws, **kwargs):
+        return {'websocket_id': ws.uid}
+
     def has_websocket(self, ws_id):
         return ws_id in self.websockets
+
+    def get_websocket(self, ws_id):
+        return self.websockets.get(ws_id, None)
 
     async def add_websocket(self, ws):
         async with self.ws_lock:
