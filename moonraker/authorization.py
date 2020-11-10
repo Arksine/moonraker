@@ -208,6 +208,20 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
         else:
             super(AuthorizedRequestHandler, self).options()
 
+    def get_associated_websocket(self):
+        # Return associated websocket connection if an id
+        # was provided by the request
+        conn = None
+        conn_id = self.get_argument('connection_id', None)
+        if conn_id is not None:
+            try:
+                conn_id = int(conn_id)
+            except Exception:
+                pass
+            else:
+                conn = self.wsm.get_websocket(conn_id)
+        return conn
+
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files
 class AuthorizedFileHandler(tornado.web.StaticFileHandler):

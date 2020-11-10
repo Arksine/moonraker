@@ -270,12 +270,13 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
         await self._process_http_request()
 
     async def _process_http_request(self):
+        conn = self.get_associated_websocket()
         args = {}
         if self.request.query:
             args = self.query_parser(self.request)
         try:
             result = await self.server.make_request(
-                WebRequest(self.remote_callback, args))
+                WebRequest(self.remote_callback, args, conn=conn))
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
@@ -307,12 +308,13 @@ class LocalRequestHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(405)
 
     async def _process_http_request(self, method):
+        conn = self.get_associated_websocket()
         args = {}
         if self.request.query:
             args = self.query_parser(self.request)
         try:
             result = await self.callback(
-                WebRequest(self.request.path, args, method))
+                WebRequest(self.request.path, args, method, conn=conn))
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
