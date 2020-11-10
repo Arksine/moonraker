@@ -268,9 +268,9 @@ class WebsocketManager:
             self.websockets = {}
 
 class WebSocket(WebSocketHandler):
-    def initialize(self, wsm, auth):
-        self.wsm = wsm
-        self.auth = auth
+    def initialize(self, main_app):
+        self.auth = main_app.get_auth()
+        self.wsm = main_app.get_websocket_manager()
         self.rpc = self.wsm.rpc
         self.uid = id(self)
 

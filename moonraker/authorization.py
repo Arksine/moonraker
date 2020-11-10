@@ -180,9 +180,10 @@ class Authorization:
         self.prune_handler.stop()
 
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
-    def initialize(self, server, auth):
-        self.server = server
-        self.auth = auth
+    def initialize(self, main_app):
+        self.server = main_app.get_server()
+        self.auth = main_app.get_auth()
+        self.wsm = main_app.get_websocket_manager()
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):
@@ -210,10 +211,10 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files
 class AuthorizedFileHandler(tornado.web.StaticFileHandler):
-    def initialize(self, server, auth, path, default_filename=None):
+    def initialize(self, main_app, path, default_filename=None):
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
-        self.server = server
-        self.auth = auth
+        self.server = main_app.get_server()
+        self.auth = main_app.get_auth()
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):

@@ -114,10 +114,8 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket,
-             {'wsm': self.wsm, 'auth': self.auth}),
-            (r"/api/version", EmulateOctoprintHandler,
-             {'server': self.server, 'auth': self.auth})]
+            (r"/websocket", WebSocket, {'main_app': self}),
+            (r"/api/version", EmulateOctoprintHandler, {'main_app': self})]
 
         self.app = tornado.web.Application(
             app_handlers,
@@ -136,6 +134,15 @@ class MoonrakerApp:
         self.tornado_server = self.app.listen(
             port, address=host, max_body_size=self.max_upload_size,
             xheaders=True)
+
+    def get_server(self):
+        return self.server
+
+    def get_auth(self):
+        return self.auth
+
+    def get_websocket_manager(self):
+        return self.wsm
 
     async def close(self):
         if self.tornado_server is not None:
@@ -156,8 +163,7 @@ class MoonrakerApp:
             f"Websocket: {', '.join(api_def.ws_methods)}")
         self.wsm.register_remote_handler(api_def)
         params = {}
-        params['server'] = self.server
-        params['auth'] = self.auth
+        params['main_app'] = self
         params['arg_parser'] = api_def.parser
         params['remote_callback'] = api_def.endpoint
         self.mutable_router.add_handler(
@@ -174,8 +180,7 @@ class MoonrakerApp:
         if "http" in protocol:
             msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
             params = {}
-            params['server'] = self.server
-            params['auth'] = self.auth
+            params['main_app'] = self
             params['methods'] = request_methods
             params['arg_parser'] = api_def.parser
             params['callback'] = callback
@@ -199,11 +204,11 @@ class MoonrakerApp:
             logging.info(f"Invalid file path: {file_path}")
             return
         logging.debug(f"Registering static file: ({pattern}) {file_path}")
-        params = {'server': self.server, 'auth': self.auth, 'path': file_path}
+        params = {'main_app': self, 'path': file_path}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
-        params = {'server': self.server, 'auth': self.auth}
+        params = {'main_app': self}
         self.mutable_router.add_handler(pattern, FileUploadHandler, params)
 
     def remove_handler(self, endpoint):
@@ -253,8 +258,8 @@ class MoonrakerApp:
 
 # ***** Dynamic Handlers*****
 class RemoteRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, remote_callback, server, auth, arg_parser):
-        super(RemoteRequestHandler, self).initialize(server, auth)
+    def initialize(self, main_app, remote_callback, arg_parser):
+        super(RemoteRequestHandler, self).initialize(main_app)
         self.remote_callback = remote_callback
         self.query_parser = arg_parser
 
@@ -277,9 +282,8 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
         self.finish({'result': result})
 
 class LocalRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, callback, server, auth,
-                   methods, arg_parser):
-        super(LocalRequestHandler, self).initialize(server, auth)
+    def initialize(self, main_app, callback, methods, arg_parser):
+        super(LocalRequestHandler, self).initialize(main_app)
         self.callback = callback
         self.methods = methods
         self.query_parser = arg_parser
@@ -339,9 +343,6 @@ class FileRequestHandler(AuthorizedFileHandler):
         self.finish({'result': filename})
 
 class FileUploadHandler(AuthorizedRequestHandler):
-    def initialize(self, server, auth):
-        super(FileUploadHandler, self).initialize(server, auth)
-
     async def post(self):
         file_manager = self.server.lookup_plugin('file_manager')
         try:
