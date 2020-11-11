@@ -721,11 +721,20 @@ function handle_klippy_disconnected() {
     // be a good place.
     klippy_ready = false;
     update_term("Klippy Disconnected");
-    setTimeout(() => {
-        get_klippy_info();
-    }, 2000);
 }
 json_rpc.register_method("notify_klippy_disconnected", handle_klippy_disconnected);
+
+function handle_klippy_ready() {
+    update_term("Klippy Is READY");
+    console.log("Klippy Ready Recieved");
+    get_klippy_info();
+}
+json_rpc.register_method("notify_klippy_ready", handle_klippy_ready);
+
+function handle_power_changed(power_status) {
+    console.log(`Power Changed: ${power_status}`);
+}
+json_rpc.register_method("notify_power_changed", handle_power_changed);
 
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed
