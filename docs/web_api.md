@@ -11,8 +11,9 @@ of:
 
 `{result: <response data>}`
 
-The command matches the original command request, the result is the return
-value generated from the request.
+Arguments sent via the HTTP APIs may either be included in the query string
+or as part of the request's body.  All of the examples in this document
+use the query string for arguments.
 
 Websocket requests are returned in JSON-RPC format:
 `{jsonrpc: "2.0", "result": <response data>, id: <request id>}`
@@ -143,15 +144,25 @@ available for query.
 
 ### Subscribe to printer object status:
 - HTTP command:\
-  `POST /printer/objects/subscribe?gcode=gcode_position,bus&extruder=target`
+  `POST /printer/objects/subscribe?connection_id=123456789&
+   gcode=gcode_position,bus&extruder=target`
+
+   Note:  The HTTP API requires that a `connection_id` is passed via the query
+   string or as part of the form.   This should be the
+   [ID reported](#get-websocket-id) from a currently connected websocket. A
+   request that includes only the `connection_id` argument will cancel the
+   subscription on the specified websocket.
 
 - Websocket command:\
   `{jsonrpc: "2.0", method: "printer.objects.subscribe", params:
     {objects: {gcode: null, toolhead: ["position", "status"]}},
     id: <request id>}`
 
+    Note that if `objects` is an empty object then the subscription will
+    be cancelled.
+
 - Returns:\
-  Status data for all currently subscribed objects, with the format matching that of
+  Status data for objects in the request, with the format matching that of
   the `/printer/objects/query`:
 
   ```json
@@ -172,12 +183,7 @@ available for query.
 See [printer_objects.md](printer_objects.md) for details on the printer objects
 available for subscription.
 
-Note that Moonraker's current behavior is to maintain a superset of all
-subscriptions, thus you may receive updates for objects that you did not
-request.  This behavior is subject to change in the future (where each
-client receives only the subscriptions it requested).
-
-Future updates for subscribed objects are sent asynchronously over the
+Status updates for subscribed objects are sent asynchronously over the
 websocket.  See the `notify_status_update` notification for details.
 
 ### Query Endstops
@@ -289,6 +295,23 @@ for (let resp of result.gcode_store) {
   is returns, the server will restart.  Any existing connection
   will be disconnected.  A restart will result in the creation
   of a new server instance where the configuration is reloaded.
+
+## Get Websocket ID
+- HTTP command:\
+  Not Available
+
+- Websocket command:
+  `{jsonrpc: "2.0", method: "server.websocket.id", id: <request id>}`
+
+- Returns:\
+  This connected websocket's unique identifer in the format shown below.
+  Note that this API call is only available over the websocket.
+
+```json
+  {
+    websocket_id: <int>
+  }
+```
 
 ## Gcode Controls
 

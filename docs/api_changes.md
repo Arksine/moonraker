@@ -1,6 +1,24 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### November 11th 2020
+- The `server.websocket.id` API has been added.  This returns a
+  unique ID that Moonraker uses to track each client connection.
+  As such, this API is only available over the websocket, there
+  is no complementary HTTP request.
+- All HTTP API request may now include arguments in either the
+  query string or in the request's body.
+- Subscriptions are now managed on a per connection basis.  Each
+  connection will only recieve updates for objects in which they
+  are currently subscribed.  If an "empty" request is sent, the
+  subscription will be cancelled.
+- The `POST /printer/object/subscribe` now requires a
+  `connection_id` argument.  This is used to identify which
+  connection's associated subscription should be updated.
+  Currenlty subscriptions are only supported over the a
+  websocket connection, one may use the id received from
+  `server.websocket.id`.
+
 ### November 2nd 2020
 - The `GET /server/files/directory` endpoint now accepts a new
   optional argument, `extended`.  If `extended=true`, then
