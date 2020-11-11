@@ -171,6 +171,8 @@ class WebsocketManager:
 
         # Register events
         self.server.register_event_handler(
+            "server:klippy_ready", self._handle_klippy_ready)
+        self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_klippy_disconnect)
         self.server.register_event_handler(
             "server:gcode_response", self._handle_gcode_response)
@@ -180,6 +182,9 @@ class WebsocketManager:
             "file_manager:metadata_update", self._handle_metadata_update)
         self.server.register_event_handler(
             "gpio_power:power_changed", self._handle_power_changed)
+
+    async def _handle_klippy_ready(self):
+        await self.notify_websockets("klippy_ready")
 
     async def _handle_klippy_disconnect(self):
         await self.notify_websockets("klippy_disconnected")
