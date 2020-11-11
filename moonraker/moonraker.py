@@ -183,10 +183,10 @@ class Server:
         method = cmd.get('method', None)
         if method is not None:
             # This is a remote method called from klippy
-            cb = self.remote_methods.get(method, None)
-            if cb is not None:
+            if method in self.remote_methods:
                 params = cmd.get('params', {})
-                cb(**params)
+                self.ioloop.spawn_callback(
+                    self._execute_method, method, **params)
             else:
                 logging.info(f"Unknown method received: {method}")
             return
@@ -206,6 +206,14 @@ class Server:
             err = cmd.get('error', "Malformed Klippy Response")
             result = ServerError(err, 400)
         request.notify(result)
+
+    async def _execute_method(self, method_name, **kwargs):
+        try:
+            ret = self.remote_methods[method_name](**kwargs)
+            if asyncio.iscoroutine(ret):
+                await ret
+        except Exception:
+            logging.exception(f"Error running remote method: {method_name}")
 
     def on_connection_closed(self):
         self.init_list = []
