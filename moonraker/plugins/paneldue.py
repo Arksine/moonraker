@@ -292,10 +292,9 @@ class PanelDue:
             else:
                 self.printer_state[obj] = items
 
-    def paneldue_beep(self, frequency, duration):
+    async def paneldue_beep(self, frequency, duration):
         duration = int(duration * 1000.)
-        self.ioloop.spawn_callback(
-            self.write_response,
+        await self.write_response(
             {'beep_freq': frequency, 'beep_length': duration})
 
     async def process_line(self, line):
