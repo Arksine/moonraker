@@ -816,6 +816,11 @@ Status Subscriptions arrive as a "notify_status_update" notification:
 The structure of the status data is identical to the structure that is
 returned from an object query's "status" attribute.
 
+### Klippy Ready:
+Notify clients when Klippy has reported a ready state
+
+`{jsonrpc: "2.0", method: "notify_klippy_ready"}`
+
 ### Klippy Disconnected:
 Notify clients when Moonraker's connection to Klippy has terminated
 

@@ -18,6 +18,8 @@ facing APIs.
   Currenlty subscriptions are only supported over the a
   websocket connection, one may use the id received from
   `server.websocket.id`.
+- The `notify_klippy_ready` websocket notification has been
+  added.
 
 ### November 2nd 2020
 - The `GET /server/files/directory` endpoint now accepts a new
