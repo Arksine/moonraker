@@ -361,37 +361,64 @@ class Server:
 
     async def make_request(self, web_request):
         rpc_method = web_request.get_endpoint()
-        args = web_request.get_args()
         if rpc_method == "objects/subscribe":
-            sub = args.get('objects', {})
-            conn = web_request.get_connection()
-            if conn is None:
-                raise self.error(
-                    "No connection associated with subscription request")
-            self.subscriptions[conn] = sub
-            all_subs = {}
-            # request superset of all client subscriptions
-            for sub in self.subscriptions.values():
-                for obj, items in sub.items():
-                    if obj in all_subs:
-                        pi = all_subs[obj]
-                        if items is None or pi is None:
-                            all_subs[obj] = None
-                        else:
-                            uitems = list(set(pi) | set(items))
-                            all_subs[obj] = uitems
-                    else:
-                        all_subs[obj] = items
-            args['objects'] = all_subs
-            args['response_template'] = {'method': "process_status_update"}
+            return await self._request_subscripton(web_request)
+        else:
+            return await self._request_standard(web_request)
 
+    async def _request_subscripton(self, web_request):
+        args = web_request.get_args()
+        conn = web_request.get_connection()
+
+        # Build the subscription request from a superset of all client
+        # subscriptions
+        sub = args.get('objects', {})
+        if conn is None:
+            raise self.error(
+                "No connection associated with subscription request")
+        self.subscriptions[conn] = sub
+        all_subs = {}
+        # request superset of all client subscriptions
+        for sub in self.subscriptions.values():
+            for obj, items in sub.items():
+                if obj in all_subs:
+                    pi = all_subs[obj]
+                    if items is None or pi is None:
+                        all_subs[obj] = None
+                    else:
+                        uitems = list(set(pi) | set(items))
+                        all_subs[obj] = uitems
+                else:
+                    all_subs[obj] = items
+        args['objects'] = all_subs
+        args['response_template'] = {'method': "process_status_update"}
+
+        result = await self._request_standard(web_request)
+
+        # prune the status response
+        pruned_status = {}
+        all_status = result['status']
+        sub = self.subscriptions.get(conn, {})
+        for obj, fields in all_status.items():
+            if obj in sub:
+                valid_fields = sub[obj]
+                if valid_fields is None:
+                    pruned_status[obj] = fields
+                else:
+                    pruned_status[obj] = {k: v for k, v in fields.items()
+                                          if k in valid_fields}
+        result['status'] = pruned_status
+        return result
+
+    async def _request_standard(self, web_request):
+        rpc_method = web_request.get_endpoint()
+        args = web_request.get_args()
         # Create a base klippy request
         base_request = BaseRequest(rpc_method, args)
         self.pending_requests[base_request.id] = base_request
         self.ioloop.spawn_callback(
             self.klippy_connection.send_request, base_request)
-        result = await base_request.wait()
-        return result
+        return await base_request.wait()
 
     def remove_subscription(self, conn):
         self.subscriptions.pop(conn, None)
