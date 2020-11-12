@@ -11,7 +11,7 @@ import zipfile
 import logging
 import json
 from tornado.ioloop import IOLoop, PeriodicCallback
-from tornado.locks import Lock
+from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
@@ -315,6 +315,11 @@ class FileManager:
         # Don't start if another print is currently in progress
         start_print = start_print and not print_ongoing
         self._write_file(upload, is_ufp)
+        # Fetch Metadata
+        finfo = self._get_path_info(upload['full_path'])
+        evt = self.gcode_metadata.parse_metadata(
+            upload['filename'], finfo['size'], finfo['modified'])
+        await evt.wait()
         if start_print:
             # Make a Klippy Request to "Start Print"
             klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -406,6 +411,7 @@ class FileManager:
             with open(gc_path, "wb") as gc_file:
                 gc_file.write(gc_bytes)
             # update upload file name to extracted gcode file
+            upload['full_path'] = gc_path
             upload['filename'] = os.path.join(
                 os.path.dirname(upload['filename']), gc_name)
         else:
@@ -545,6 +551,7 @@ class MetadataStorage:
         self.server = server
         self.metadata = {}
         self.pending_requests = {}
+        self.events = {}
         self.script_response = None
         self.busy = False
         self.gc_path = os.path.expanduser("~")
@@ -599,20 +606,25 @@ class MetadataStorage:
         self.metadata.pop(fname)
 
     def parse_metadata(self, fname, fsize, modified, notify=False):
+        evt = Event()
         if fname in self.pending_requests or \
                 self._has_valid_data(fname, fsize, modified):
             # request already pending or not necessary
-            return
-        self.pending_requests[fname] = (fsize, modified, notify)
+            evt.set()
+            return evt
+        self.pending_requests[fname] = (fsize, modified, notify, evt)
         if self.busy:
-            return
+            return evt
         self.busy = True
         IOLoop.current().spawn_callback(self._process_metadata_update)
+        return evt
 
     async def _process_metadata_update(self):
         while self.pending_requests:
-            fname, (fsize, modified, notify) = self.pending_requests.popitem()
+            fname, (fsize, modified, notify, evt) = \
+                self.pending_requests.popitem()
             if self._has_valid_data(fname, fsize, modified):
+                evt.set()
                 continue
             retries = 3
             while retries:
@@ -627,6 +639,7 @@ class MetadataStorage:
                 self.metadata[fname] = {'size': fsize, 'modified': modified}
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
+            evt.set()
         self.busy = False
 
     async def _run_extract_metadata(self, filename, notify):
