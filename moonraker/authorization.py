@@ -26,6 +26,11 @@ class Authorization:
         self.trusted_connections = {}
         self.access_tokens = {}
 
+        # Get allowed cors domains
+        cors_cfg = config.get('cors_domains', "").strip()
+        self.cors_domains = [d.strip() for d in cors_cfg.split('\n')
+                             if d.strip()]
+
         # Get Trusted Clients
         self.trusted_ips = []
         self.trusted_ranges = []
@@ -176,6 +181,28 @@ class Authorization:
             return True
         return False
 
+    def check_cors(self, origin, request=None):
+        if origin in self.cors_domains:
+            logging.debug(f"CORS Domain Allowed: {origin}")
+            self._set_cors_headers(origin, request)
+        elif "*" in self.cors_domains:
+            self._set_cors_headers("*", request)
+        else:
+            return False
+        return True
+
+    def _set_cors_headers(self, origin, request):
+        if request is None:
+            return
+        request.set_header("Access-Control-Allow-Origin", origin)
+        request.set_header(
+            "Access-Control-Allow-Methods",
+            "GET, POST, PUT, DELETE, OPTIONS")
+        request.set_header(
+            "Access-Control-Allow-Headers",
+            "Origin, Accept, Content-Type, X-Requested-With, "
+            "X-CRSF-Token")
+
     def close(self):
         self.prune_handler.stop()
 
@@ -184,25 +211,17 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
         self.server = main_app.get_server()
         self.auth = main_app.get_auth()
         self.wsm = main_app.get_websocket_manager()
+        self.cors_enabled = False
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):
             raise tornado.web.HTTPError(401, "Unauthorized")
-
-    def set_default_headers(self):
-        if self.settings['enable_cors']:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header(
-                "Access-Control-Allow-Methods",
-                "GET, POST, PUT, DELETE, OPTIONS")
-            self.set_header(
-                "Access-Control-Allow-Headers",
-                "Origin, Accept, Content-Type, X-Requested-With, "
-                "X-CRSF-Token")
+        origin = self.request.headers.get("Origin")
+        self.cors_enabled = self.auth.check_cors(origin, self)
 
     def options(self, *args, **kwargs):
         # Enable CORS if configured
-        if self.settings['enable_cors']:
+        if self.cors_enabled:
             self.set_status(204)
             self.finish()
         else:
@@ -229,25 +248,17 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
         self.server = main_app.get_server()
         self.auth = main_app.get_auth()
+        self.cors_enabled = False
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):
             raise tornado.web.HTTPError(401, "Unauthorized")
-
-    def set_default_headers(self):
-        if self.settings['enable_cors']:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header(
-                "Access-Control-Allow-Methods",
-                "GET, POST, PUT, DELETE, OPTIONS")
-            self.set_header(
-                "Access-Control-Allow-Headers",
-                "Origin, Accept, Content-Type, X-Requested-With, "
-                "X-CRSF-Token")
+        origin = self.request.headers.get("Origin")
+        self.cors_enabled = self.auth.check_cors(origin, self)
 
     def options(self, *args, **kwargs):
         # Enable CORS if configured
-        if self.settings['enable_cors']:
+        if self.cors_enabled:
             self.set_status(204)
             self.finish()
         else:

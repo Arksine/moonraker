@@ -112,7 +112,6 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
         debug = config.getboolean('enable_debug_logging', True)
-        enable_cors = config.getboolean('enable_cors', False)
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
@@ -125,8 +124,7 @@ class MoonrakerApp:
             app_handlers,
             serve_traceback=debug,
             websocket_ping_interval=10,
-            websocket_ping_timeout=30,
-            enable_cors=enable_cors)
+            websocket_ping_timeout=30)
         self.get_handler_delegate = self.app.get_handler_delegate
 
         # Register handlers
