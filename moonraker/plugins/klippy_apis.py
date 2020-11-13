@@ -80,7 +80,7 @@ class KlippyAPI:
         # XXX - validate that file is on disk
         if filename[0] == '/':
             filename = filename[1:]
-        script = "SDCARD_PRINT_FILE FILENAME=" + filename
+        script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         return await self.run_gcode(script)
 
     async def do_restart(self, gc):
