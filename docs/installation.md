@@ -162,9 +162,6 @@ klippy_uds_address: /tmp/klippy_uds
 #   is /tmp/klippy_uds
 max_upload_size: 200
 #   The maximum size allowed for a file upload.  Default is 200 MiB.
-enable_cors: False
-#   Enables CORS for all http requests.  This option is useful for web
-#   application development.  Default is False.
 enable_debug_logging: True
 #   When set to True Moonraker will log in verbose mode.  During this stage
 #   of development the default is True.  In the future this will change.
@@ -193,6 +190,11 @@ trusted_clients:
 #   192.168.1.254.  Note that when specifying IPv4 ranges the last segment
 #   of the ip address must be 0. The default is no clients or ranges are
 #   trusted.
+cors_domains:
+  http://klipper-printer.local
+  http://second-printer.local:7125
+#   Enables CORS for the specified domains.  One may specify * if they wish
+#   to allow all domains.
 ```
 
 For the moment, you need to restart the moonraker service to load a new
