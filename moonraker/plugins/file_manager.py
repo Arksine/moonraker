@@ -364,7 +364,8 @@ class FileManager:
             full_path = root_path
             dir_path = ""
         else:
-            filename = "_".join(upload['filename'].strip().split()).lstrip("/")
+            parts = os.path.split(upload['filename'].strip().lstrip("/"))
+            filename = os.path.join(parts[0], "_".join(parts[1].split()))
             if dir_path:
                 filename = os.path.join(dir_path, filename)
             full_path = os.path.normpath(os.path.join(root_path, filename))
