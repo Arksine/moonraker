@@ -489,6 +489,8 @@ path relative to the specified "root".  Note that if the query st
     object_height: <mm>,
     estimated_time: <time_in_seconds>,
     filament_total: <mm>,
+    gcode_start_byte: <byte_location_of_first_gcode_command>,
+    gcode_end_byte: <byte_location_of_last_gcode_command>,
     thumbnails: [
       {
         width: <in_pixels>,

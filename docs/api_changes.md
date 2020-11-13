@@ -1,6 +1,15 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### November 12th 2020
+- Two new fields have been added to the gcode metadata:
+  - `gcode_start_byte`:  Indicates the byte position in the
+    file where the first "Gxx" or "Mxx" command is detected.
+  - `gcode_end_byte`:  Indicates the byte position in the
+    file where the last "Gxx" or "Mxx" command is detected.
+  These fields may be used to more accurately predict print
+  progress based on the file size.
+
 ### November 11th 2020
 - The `server.websocket.id` API has been added.  This returns a
   unique ID that Moonraker uses to track each client connection.
