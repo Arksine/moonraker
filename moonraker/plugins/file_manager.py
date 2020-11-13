@@ -11,7 +11,7 @@ import zipfile
 import logging
 import json
 from tornado.ioloop import IOLoop, PeriodicCallback
-from tornado.locks import Lock
+from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
@@ -102,12 +102,12 @@ class FileManager:
     def get_fixed_path_args(self):
         return dict(self.fixed_path_args)
 
-    async def _handle_filelist_request(self, path, method, args):
-        root = args.get('root', "gcodes")
+    async def _handle_filelist_request(self, web_request):
+        root = web_request.get_str('root', "gcodes")
         return self.get_file_list(root, list_format=True, notify=True)
 
-    async def _handle_metadata_request(self, path, method, args):
-        requested_file = args.get('filename')
+    async def _handle_metadata_request(self, web_request):
+        requested_file = web_request.get_str('filename')
         metadata = self.gcode_metadata.get(requested_file, None)
         if metadata is None:
             raise self.server.error(
@@ -115,19 +115,12 @@ class FileManager:
         metadata['filename'] = requested_file
         return metadata
 
-    async def _handle_directory_request(self, path, method, args):
-        directory = args.get('path', "gcodes")
+    async def _handle_directory_request(self, web_request):
+        directory = web_request.get_str('path', "gcodes")
         root, rel_path, dir_path = self._convert_path(directory)
-        method = method.upper()
-        if method == 'GET':
-            is_extended = args.get('extended', False)
-            if isinstance(is_extended, str):
-                val = is_extended.lower()
-                if val in ["true", "false"]:
-                    is_extended = True if val == "true" else False
-            if not isinstance(is_extended, bool):
-                raise self.server.error(
-                    f"Invalid argument for 'extended': {is_extended}")
+        action = web_request.get_action()
+        if action == 'GET':
+            is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
             dir_info = self._list_directory(dir_path)
             # Check to see if a filelist update is necessary
@@ -142,14 +135,14 @@ class FileManager:
                 if metadata is not None and is_extended:
                     f.update(metadata)
             return dir_info
-        elif method == 'POST' and root in FULL_ACCESS_ROOTS:
+        elif action == 'POST' and root in FULL_ACCESS_ROOTS:
             # Create a new directory
             try:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
             self.notify_filelist_changed("create_dir", rel_path, root)
-        elif method == 'DELETE' and root in FULL_ACCESS_ROOTS:
+        elif action == 'DELETE' and root in FULL_ACCESS_ROOTS:
             # Remove a directory
             if directory.strip("/") == root:
                 raise self.server.error(
@@ -157,9 +150,7 @@ class FileManager:
             if not os.path.isdir(dir_path):
                 raise self.server.error(
                     f"Directory does not exist ({directory})")
-            force = args.get('force', False)
-            if isinstance(force, str):
-                force = force.lower() == "true"
+            force = web_request.get_boolean('force', False)
             if force:
                 # Make sure that the directory does not contain a file
                 # loaded by the virtual_sdcard
@@ -211,9 +202,10 @@ class FileManager:
             disk_path = os.path.join(disk_path, rel_path)
         return root, rel_path, disk_path
 
-    async def _handle_file_move_copy(self, path, method, args):
-        source = args.get("source")
-        destination = args.get("dest")
+    async def _handle_file_move_copy(self, web_request):
+        source = web_request.get_str("source")
+        destination = web_request.get_str("dest")
+        ep = web_request.get_endpoint()
         if source is None:
             raise self.server.error("File move/copy request issing source")
         if destination is None:
@@ -230,7 +222,7 @@ class FileManager:
         if os.path.exists(dest_path):
             await self._handle_operation_check(dest_path)
         action = op_result = ""
-        if path == "/server/files/move":
+        if ep == "/server/files/move":
             if source_root not in FULL_ACCESS_ROOTS:
                 raise self.server.error(
                     f"Source path is read-only, cannot move: {source_root}")
@@ -246,7 +238,7 @@ class FileManager:
                 else:
                     self.gcode_metadata.remove_file(src_rel_path)
             action = "move_item"
-        elif path == "/server/files/copy":
+        elif ep == "/server/files/copy":
             try:
                 if os.path.isdir(source_path):
                     op_result = shutil.copytree(source_path, dest_path)
@@ -323,6 +315,11 @@ class FileManager:
         # Don't start if another print is currently in progress
         start_print = start_print and not print_ongoing
         self._write_file(upload, is_ufp)
+        # Fetch Metadata
+        finfo = self._get_path_info(upload['full_path'])
+        evt = self.gcode_metadata.parse_metadata(
+            upload['filename'], finfo['size'], finfo['modified'])
+        await evt.wait()
         if start_print:
             # Make a Klippy Request to "Start Print"
             klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -367,7 +364,8 @@ class FileManager:
             full_path = root_path
             dir_path = ""
         else:
-            filename = "_".join(upload['filename'].strip().split()).lstrip("/")
+            parts = os.path.split(upload['filename'].strip().lstrip("/"))
+            filename = os.path.join(parts[0], "_".join(parts[1].split()))
             if dir_path:
                 filename = os.path.join(dir_path, filename)
             full_path = os.path.normpath(os.path.join(root_path, filename))
@@ -414,6 +412,7 @@ class FileManager:
             with open(gc_path, "wb") as gc_file:
                 gc_file.write(gc_bytes)
             # update upload file name to extracted gcode file
+            upload['full_path'] = gc_path
             upload['filename'] = os.path.join(
                 os.path.dirname(upload['filename']), gc_name)
         else:
@@ -504,8 +503,8 @@ class FileManager:
             return simple_list
         return flist
 
-    async def _handle_file_delete(self, path, method, args):
-        file_path = args.get("path")
+    async def _handle_file_delete(self, web_request):
+        file_path = web_request.get_str("path")
         return await self.delete_file(file_path)
 
     async def delete_file(self, path):
@@ -553,6 +552,7 @@ class MetadataStorage:
         self.server = server
         self.metadata = {}
         self.pending_requests = {}
+        self.events = {}
         self.script_response = None
         self.busy = False
         self.gc_path = os.path.expanduser("~")
@@ -607,20 +607,25 @@ class MetadataStorage:
         self.metadata.pop(fname)
 
     def parse_metadata(self, fname, fsize, modified, notify=False):
+        evt = Event()
         if fname in self.pending_requests or \
                 self._has_valid_data(fname, fsize, modified):
             # request already pending or not necessary
-            return
-        self.pending_requests[fname] = (fsize, modified, notify)
+            evt.set()
+            return evt
+        self.pending_requests[fname] = (fsize, modified, notify, evt)
         if self.busy:
-            return
+            return evt
         self.busy = True
         IOLoop.current().spawn_callback(self._process_metadata_update)
+        return evt
 
     async def _process_metadata_update(self):
         while self.pending_requests:
-            fname, (fsize, modified, notify) = self.pending_requests.popitem()
+            fname, (fsize, modified, notify, evt) = \
+                self.pending_requests.popitem()
             if self._has_valid_data(fname, fsize, modified):
+                evt.set()
                 continue
             retries = 3
             while retries:
@@ -635,6 +640,7 @@ class MetadataStorage:
                 self.metadata[fname] = {'size': fsize, 'modified': modified}
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
+            evt.set()
         self.busy = False
 
     async def _run_extract_metadata(self, filename, notify):

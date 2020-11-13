@@ -14,6 +14,65 @@ from utils import ServerError
 class Sentinel:
     pass
 
+class WebRequest:
+    def __init__(self, endpoint, args, action="", conn=None):
+        self.endpoint = endpoint
+        self.action = action
+        self.args = args
+        self.conn = conn
+
+    def get_endpoint(self):
+        return self.endpoint
+
+    def get_action(self):
+        return self.action
+
+    def get_args(self):
+        return self.args
+
+    def get_connection(self):
+        return self.conn
+
+    def _get_converted_arg(self, key, default=Sentinel, dtype=str):
+        if key not in self.args:
+            if default == Sentinel:
+                raise ServerError(f"No data for argument: {key}")
+            return default
+        val = self.args[key]
+        try:
+            if dtype != bool:
+                return dtype(val)
+            else:
+                if isinstance(val, str):
+                    val = val.lower()
+                    if val in ["true", "false"]:
+                        return True if val == "true" else False
+                elif isinstance(val, bool):
+                    return val
+                raise TypeError
+        except Exception:
+            raise ServerError(
+                f"Unable to convert argument [{key}] to {dtype}: "
+                f"value recieved: {val}")
+
+    def get(self, key, default=Sentinel):
+        val = self.args.get(key, default)
+        if val == Sentinel:
+            raise ServerError(f"No data for argument: {key}")
+        return val
+
+    def get_str(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default)
+
+    def get_int(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, int)
+
+    def get_float(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, float)
+
+    def get_boolean(self, key, default=Sentinel):
+        return self._get_converted_arg(key, default, bool)
+
 class JsonRPC:
     def __init__(self):
         self.methods = {}
@@ -24,7 +83,7 @@ class JsonRPC:
     def remove_method(self, name):
         self.methods.pop(name, None)
 
-    async def dispatch(self, data):
+    async def dispatch(self, data, ws):
         response = None
         try:
             request = json.loads(data)
@@ -37,19 +96,19 @@ class JsonRPC:
         if isinstance(request, list):
             response = []
             for req in request:
-                resp = await self.process_request(req)
+                resp = await self.process_request(req, ws)
                 if resp is not None:
                     response.append(resp)
             if not response:
                 response = None
         else:
-            response = await self.process_request(request)
+            response = await self.process_request(request, ws)
         if response is not None:
             response = json.dumps(response)
             logging.debug("Websocket Response::" + response)
         return response
 
-    async def process_request(self, request):
+    async def process_request(self, request, ws):
         req_id = request.get('id', None)
         rpc_version = request.get('jsonrpc', "")
         method_name = request.get('method', None)
@@ -61,18 +120,20 @@ class JsonRPC:
         if 'params' in request:
             params = request['params']
             if isinstance(params, list):
-                response = await self.execute_method(method, req_id, *params)
+                response = await self.execute_method(
+                    method, req_id, ws, *params)
             elif isinstance(params, dict):
-                response = await self.execute_method(method, req_id, **params)
+                response = await self.execute_method(
+                    method, req_id, ws, **params)
             else:
                 return self.build_error(-32600, "Invalid Request", req_id)
         else:
-            response = await self.execute_method(method, req_id)
+            response = await self.execute_method(method, req_id, ws)
         return response
 
-    async def execute_method(self, method, req_id, *args, **kwargs):
+    async def execute_method(self, method, req_id, ws, *args, **kwargs):
         try:
-            result = await method(*args, **kwargs)
+            result = await method(ws, *args, **kwargs)
         except TypeError as e:
             return self.build_error(-32603, f"Invalid params:\n{e}", req_id)
         except ServerError as e:
@@ -106,13 +167,15 @@ class WebsocketManager:
         self.ws_lock = tornado.locks.Lock()
         self.rpc = JsonRPC()
 
+        self.rpc.register_method("server.websocket.id", self._handle_id_request)
+
         # Register events
+        self.server.register_event_handler(
+            "server:klippy_ready", self._handle_klippy_ready)
         self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_klippy_disconnect)
         self.server.register_event_handler(
             "server:gcode_response", self._handle_gcode_response)
-        self.server.register_event_handler(
-            "server:status_update", self._handle_status_update)
         self.server.register_event_handler(
             "file_manager:filelist_changed", self._handle_filelist_changed)
         self.server.register_event_handler(
@@ -120,14 +183,14 @@ class WebsocketManager:
         self.server.register_event_handler(
             "gpio_power:power_changed", self._handle_power_changed)
 
+    async def _handle_klippy_ready(self):
+        await self.notify_websockets("klippy_ready")
+
     async def _handle_klippy_disconnect(self):
         await self.notify_websockets("klippy_disconnected")
 
     async def _handle_gcode_response(self, response):
         await self.notify_websockets("gcode_response", response)
-
-    async def _handle_status_update(self, status):
-        await self.notify_websockets("status_update", status)
 
     async def _handle_filelist_changed(self, flist):
         await self.notify_websockets("filelist_changed", flist)
@@ -154,19 +217,27 @@ class WebsocketManager:
         self.rpc.remove_method(ws_method)
 
     def _generate_callback(self, endpoint):
-        async def func(**kwargs):
-            result = await self.server.make_request(endpoint, kwargs)
+        async def func(ws, **kwargs):
+            result = await self.server.make_request(
+                WebRequest(endpoint, kwargs, conn=ws))
             return result
         return func
 
     def _generate_local_callback(self, endpoint, request_method, callback):
-        async def func(**kwargs):
-            result = await callback(endpoint, request_method, kwargs)
+        async def func(ws, **kwargs):
+            result = await callback(
+                WebRequest(endpoint, kwargs, request_method, ws))
             return result
         return func
 
+    async def _handle_id_request(self, ws, **kwargs):
+        return {'websocket_id': ws.uid}
+
     def has_websocket(self, ws_id):
         return ws_id in self.websockets
+
+    def get_websocket(self, ws_id):
+        return self.websockets.get(ws_id, None)
 
     async def add_websocket(self, ws):
         async with self.ws_lock:
@@ -177,17 +248,17 @@ class WebsocketManager:
         async with self.ws_lock:
             old_ws = self.websockets.pop(ws.uid, None)
             if old_ws is not None:
+                self.server.remove_subscription(old_ws)
                 logging.info(f"Websocket Removed: {ws.uid}")
 
     async def notify_websockets(self, name, data=Sentinel):
         msg = {'jsonrpc': "2.0", 'method': "notify_" + name}
         if data != Sentinel:
             msg['params'] = [data]
-        notification = json.dumps(msg)
         async with self.ws_lock:
             for ws in list(self.websockets.values()):
                 try:
-                    ws.write_message(notification)
+                    ws.write_message(msg)
                 except WebSocketClosedError:
                     self.websockets.pop(ws.uid, None)
                     logging.info(f"Websocket Removed: {ws.uid}")
@@ -202,9 +273,9 @@ class WebsocketManager:
             self.websockets = {}
 
 class WebSocket(WebSocketHandler):
-    def initialize(self, wsm, auth):
-        self.wsm = wsm
-        self.auth = auth
+    def initialize(self, main_app):
+        self.auth = main_app.get_auth()
+        self.wsm = main_app.get_websocket_manager()
         self.rpc = self.wsm.rpc
         self.uid = id(self)
 
@@ -217,18 +288,33 @@ class WebSocket(WebSocketHandler):
 
     async def _process_message(self, message):
         try:
-            response = await self.rpc.dispatch(message)
+            response = await self.rpc.dispatch(message, self)
             if response is not None:
                 self.write_message(response)
         except Exception:
             logging.exception("Websocket Command Error")
+
+    def send_status(self, status):
+        if not status:
+            return
+        try:
+            self.write_message({
+                'jsonrpc': "2.0",
+                'method': "notify_status_update",
+                'params': [status]})
+        except WebSocketClosedError:
+            self.websockets.pop(self.uid, None)
+            logging.info(f"Websocket Removed: {self.uid}")
+        except Exception:
+            logging.exception(
+                f"Error sending data over websocket: {self.uid}")
 
     def on_close(self):
         io_loop = IOLoop.current()
         io_loop.spawn_callback(self.wsm.remove_websocket, self)
 
     def check_origin(self, origin):
-        if self.settings['enable_cors']:
+        if self.auth.check_cors(origin):
             # allow CORS
             return True
         else:
