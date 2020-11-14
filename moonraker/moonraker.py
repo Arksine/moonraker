@@ -100,7 +100,7 @@ class Server:
             self.load_plugin(config, plugin)
 
         # check for optional plugins
-        opt_sections = set(config.sections()) - \
+        opt_sections = set([s.split()[0] for s in config.sections()]) - \
             set(['server', 'authorization', 'cmd_args'])
         for section in opt_sections:
             self.load_plugin(config, section, None)
@@ -119,9 +119,12 @@ class Server:
             return default
         module = importlib.import_module("plugins." + plugin_name)
         try:
-            if plugin_name not in CORE_PLUGINS:
+            func_name = "load_plugin"
+            if hasattr(module, "load_plugin_multi"):
+                func_name = "load_plugin_multi"
+            if plugin_name not in CORE_PLUGINS and func_name == "load_plugin":
                 config = config[plugin_name]
-            load_func = getattr(module, "load_plugin")
+            load_func = getattr(module, func_name)
             plugin = load_func(config)
         except Exception:
             msg = f"Unable to load plugin ({plugin_name})"
