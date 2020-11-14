@@ -117,14 +117,15 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket, {'main_app': self}),
-            (r"/api/version", EmulateOctoprintHandler, {'main_app': self})]
+            (r"/websocket", WebSocket),
+            (r"/api/version", EmulateOctoprintHandler)]
 
         self.app = tornado.web.Application(
             app_handlers,
             serve_traceback=debug,
             websocket_ping_interval=10,
-            websocket_ping_timeout=30)
+            websocket_ping_timeout=30,
+            parent=self)
         self.get_handler_delegate = self.app.get_handler_delegate
 
         # Register handlers
@@ -165,7 +166,6 @@ class MoonrakerApp:
             f"Websocket: {', '.join(api_def.ws_methods)}")
         self.wsm.register_remote_handler(api_def)
         params = {}
-        params['main_app'] = self
         params['arg_parser'] = api_def.parser
         params['remote_callback'] = api_def.endpoint
         self.mutable_router.add_handler(
@@ -182,7 +182,6 @@ class MoonrakerApp:
         if "http" in protocol:
             msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
             params = {}
-            params['main_app'] = self
             params['methods'] = request_methods
             params['arg_parser'] = api_def.parser
             params['callback'] = callback
@@ -206,12 +205,11 @@ class MoonrakerApp:
             logging.info(f"Invalid file path: {file_path}")
             return
         logging.debug(f"Registering static file: ({pattern}) {file_path}")
-        params = {'main_app': self, 'path': file_path}
+        params = {'path': file_path}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
-        params = {'main_app': self}
-        self.mutable_router.add_handler(pattern, FileUploadHandler, params)
+        self.mutable_router.add_handler(pattern, FileUploadHandler, {})
 
     def remove_handler(self, endpoint):
         api_def = self.api_cache.get(endpoint)
@@ -260,8 +258,8 @@ class MoonrakerApp:
 
 # ***** Dynamic Handlers*****
 class RemoteRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, main_app, remote_callback, arg_parser):
-        super(RemoteRequestHandler, self).initialize(main_app)
+    def initialize(self, remote_callback, arg_parser):
+        super(RemoteRequestHandler, self).initialize()
         self.remote_callback = remote_callback
         self.query_parser = arg_parser
 
@@ -283,8 +281,8 @@ class RemoteRequestHandler(AuthorizedRequestHandler):
         self.finish({'result': result})
 
 class LocalRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, main_app, callback, methods, arg_parser):
-        super(LocalRequestHandler, self).initialize(main_app)
+    def initialize(self, callback, methods, arg_parser):
+        super(LocalRequestHandler, self).initialize()
         self.callback = callback
         self.methods = methods
         self.query_parser = arg_parser
