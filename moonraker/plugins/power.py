@@ -6,6 +6,7 @@
 
 import logging
 import os
+import asyncio
 from tornado.ioloop import IOLoop
 from tornado import gen
 
@@ -29,22 +30,17 @@ class PrinterPower:
 
         self.current_dev = None
         self.devices = {}
-        dev_names = config.get('devices')
-        dev_names = [d.strip() for d in dev_names.split(',') if d.strip()]
-        logging.info("Power plugin loading devices: " + str(dev_names))
+        prefix_sections = config.get_prefix_sections("power")
+        logging.info(f"Power plugin loading devices: f{prefix_sections}")
         devices = {}
-        for dev in dev_names:
-            devices[dev] = GpioDevice(dev, config)
+        for section in prefix_sections:
+            dev = GpioDevice(config[section])
+            devices[dev.name] = dev
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.initialize_devices, devices)
 
     async def _handle_list_devices(self, web_request):
-        output = {"devices": []}
-        for dev in self.devices:
-            output['devices'].append({
-                "name": self.devices[dev].name,
-                "id": dev
-            })
+        output = {"devices": list(self.devices.keys())}
         return output
 
     async def _handle_power_request(self, web_request):
@@ -70,7 +66,6 @@ class PrinterPower:
     async def _power_dev(self, dev, req):
         if dev not in self.devices:
             return False
-
         if req in ["on", "off"]:
             await self.devices[dev].power(req)
 
@@ -80,8 +75,9 @@ class PrinterPower:
             })
         elif req != "status":
             raise self.server.error("Unsupported power request")
-
-        await self.devices[dev].refresh_status()
+        ret = self.devices[dev].refresh_status()
+        if asyncio.iscoroutine(ret):
+            await ret
         return True
 
     async def initialize_devices(self, devices):
@@ -109,9 +105,12 @@ class PrinterPower:
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self._power_dev, device, status)
 
-    async def add_device(self, dev, device):
+    async def add_device(self, name, device):
+        if name in self.devices:
+            raise self.server.error(
+                f"Device [{name}] already configured")
         await device.initialize()
-        self.devices[dev] = device
+        self.devices[name] = device
 
 
 class GPIO:
@@ -189,24 +188,44 @@ class GPIO:
 
 
 class GpioDevice:
-    def __init__(self, dev, config):
-        self.name = config.get(dev + "_name", dev)
+    def __init__(self, config):
+        name_parts = config.get_name().split(maxsplit=1)
+        if len(name_parts) != 2:
+            raise config.error(f"Invalid Section Name: {config.get_name()}")
+        self.name = name_parts[1]
         self.status = None
-        self.pin = config.getint(dev + "_pin")
-        self.active_low = int(config.getboolean(dev + "_active_low", False))
+        cfg_pin = pin = config.get("pin")
+        self.invert = False
+        if pin[0] == "!":
+            pin = pin[1:]
+            self.invert = True
+        self.consumer = "gpiochip0"
+        pin_parts = pin.split("/")
+        self.pin = ""
+        if len(pin_parts) == 2:
+            self.consumer, self.pin = pin_parts
+        elif len(pin_parts) == 1:
+            self.pin = pin_parts[0]
+        # Verify pin
+        if not self.consumer.startswith("gpiochip") or \
+                not self.consumer[-1].isdigit() or \
+                not self.pin.startswith("gpio") or \
+                not self.pin[4:].isdigit():
+            raise config.error(
+                f"Invalid Power Pin configuration: {cfg_pin}")
+        self.pin = int(self.pin[4:])
 
     async def initialize(self):
-        logging.debug(f"Attempting to configure pin GPIO{self.pin}")
-        await GPIO.setup_pin(self.pin, self.active_low)
-        await self.refresh_status()
+        await GPIO.setup_pin(self.pin, int(self.invert))
+        self.refresh_status()
 
-    async def refresh_status(self):
+    def refresh_status(self):
         self.status = GPIO.is_pin_on(self.pin)
 
     async def power(self, status):
-        await GPIO.verify_pin(self.pin, self.active_low)
+        await GPIO.verify_pin(self.pin, int(self.invert))
         GPIO.set_pin_value(self.pin, int(status == "on"))
 
-
-def load_plugin(config):
+# The power plugin has multiple configuration sections
+def load_plugin_multi(config):
     return PrinterPower(config)
