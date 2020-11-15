@@ -312,6 +312,7 @@ gcode:
 ```
 
 
+
 #### Timelapse Plugin
 Generate Timelapse of a Print 
 
@@ -320,7 +321,7 @@ is preinstalled in MainsailOs and FluidPI.
 If not you can install it manually using this Guide:  
 https://github.com/cncjs/cncjs/wiki/Setup-Guide:-Raspberry-Pi-%7C-MJPEG-Streamer-Install-&-Setup-&-FFMpeg-Recording#mjpeg-streamer-install--setup
 
-Activate and configure the plugin:
+##### Activate and configure the plugin:
 ```
 [timelapse]
 constant_rate_rate: 23
@@ -338,7 +339,7 @@ time_format_code: %Y%m%d_%H%M
 # see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
 ```
 
-then add the macros to your printer.cfg:
+##### Add the macros to your printer.cfg:
 ```
 [gcode_macro TIMELAPSE_TAKE_FRAME]
 gcode:
@@ -348,12 +349,10 @@ gcode:
 gcode:
  {action_call_remote_method("timelapse_finish")}
 ```
-Note: You could add extra gcode to the TAKE_FRAME macro if you like to move your 
+Note: You can add extra gcode to the TAKE_FRAME macro if you like to move your 
 printhead to a specific position, before taking a picture.
 
-Then add the macros to your Slicer:
-	***TIMELAPSE_TAKE_FRAME*** -> to before/after Layerchange
-	(or where you like the snapshot should be taken)
-    ***TIMELAPSE_FINISH*** -> to the end G-code
+##### Add the macros to your Slicer:
+``TIMELAPSE_TAKE_FRAME`` -> to before/after Layerchange (or where you like the snapshot should be taken)    
+``TIMELAPSE_FINISH`` -> to the end G-code
 	
-
