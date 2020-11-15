@@ -8,6 +8,7 @@ import uuid
 import os
 import time
 import ipaddress
+import re
 import logging
 import tornado
 from tornado.ioloop import IOLoop, PeriodicCallback
@@ -28,8 +29,8 @@ class Authorization:
 
         # Get allowed cors domains
         cors_cfg = config.get('cors_domains', "").strip()
-        self.cors_domains = [d.strip() for d in cors_cfg.split('\n')
-                             if d.strip()]
+        self.cors_domains = [d.strip().replace(".", "\\.").replace("*", ".*")
+                             for d in cors_cfg.split('\n')if d.strip()]
 
         # Get Trusted Clients
         self.trusted_ips = []
@@ -182,14 +183,18 @@ class Authorization:
         return False
 
     def check_cors(self, origin, request=None):
-        if origin in self.cors_domains:
-            logging.debug(f"CORS Domain Allowed: {origin}")
-            self._set_cors_headers(origin, request)
-        elif "*" in self.cors_domains:
-            self._set_cors_headers("*", request)
-        else:
+        if origin is None:
             return False
-        return True
+        for regex in self.cors_domains:
+            match = re.match(regex, origin)
+            if match is not None and match.group() == origin:
+                logging.debug(f"CORS Pattern Matched, origin: {origin} "
+                              f" | pattern: {regex}")
+                self._set_cors_headers(origin, request)
+                return True
+        else:
+            logging.debug(f"No CORS match for origin: {origin}")
+        return False
 
     def _set_cors_headers(self, origin, request):
         if request is None:

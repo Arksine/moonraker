@@ -315,12 +315,9 @@ class WebSocket(WebSocketHandler):
         io_loop.spawn_callback(self.wsm.remove_websocket, self)
 
     def check_origin(self, origin):
-        if self.auth.check_cors(origin):
-            # allow CORS
-            return True
-        else:
-            return super(WebSocket, self).check_origin(origin)
-
+        if not super(WebSocket, self).check_origin(origin):
+            return self.auth.check_cors(origin)
+        return True
     # Check Authorized User
     def prepare(self):
         if not self.auth.check_authorized(self.request):
