@@ -15,16 +15,16 @@ class PrinterPower:
     def __init__(self, config):
         self.server = config.get_server()
         self.server.register_endpoint(
-            "/machine/gpio_power/devices", ['GET'],
+            "/machine/device_power/devices", ['GET'],
             self._handle_list_devices)
         self.server.register_endpoint(
-            "/machine/gpio_power/status", ['GET'],
+            "/machine/device_power/status", ['GET'],
             self._handle_power_request)
         self.server.register_endpoint(
-            "/machine/gpio_power/on", ['POST'],
+            "/machine/device_power/on", ['POST'],
             self._handle_power_request)
         self.server.register_endpoint(
-            "/machine/gpio_power/off", ['POST'],
+            "/machine/device_power/off", ['POST'],
             self._handle_power_request)
         self.server.register_remote_method(
             "set_device_power", self.set_device_power)
@@ -35,7 +35,12 @@ class PrinterPower:
         prefix_sections = config.get_prefix_sections("power")
         logging.info(f"Power plugin loading devices: {prefix_sections}")
         for section in prefix_sections:
-            dev = GpioDevice(config[section], self.chip_factory)
+            cfg = config[section]
+            dev_type = cfg.get("type")
+            if dev_type == "gpio":
+                dev = GpioDevice(cfg, self.chip_factory)
+            else:
+                raise config.error(f"Unsupported Device Type: {dev_type}")
             self.devices[dev.get_name()] = dev
 
     async def _handle_list_devices(self, web_request):
