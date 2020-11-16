@@ -39,46 +39,40 @@ class PrinterPower:
             self.devices[dev.get_name()] = dev
 
     async def _handle_list_devices(self, web_request):
-        output = {"devices": list(self.devices.keys())}
+        dev_list = [d.get_device_info() for d in self.devices.values()]
+        output = {"devices": dev_list}
         return output
 
     async def _handle_power_request(self, web_request):
         args = web_request.get_args()
         ep = web_request.get_endpoint()
-        if len(args) == 0:
-            if ep == "/machine/gpio_power/status":
-                args = self.devices
-            else:
-                return "no_devices"
-
+        if not args:
+            raise self.server.error("No arguments provided")
+        requsted_devs = {k: self.devices.get(k, None) for k in args}
         result = {}
         req = ep.split("/")[-1]
-        for dev in args:
-            if req not in ("on", "off", "status"):
-                raise self.server.error("Unsupported power request")
-            if (await self._power_dev(dev, req)):
-                result[dev] = self.devices[dev].get_state()
+        for name, device in requsted_devs.items():
+            if device is not None:
+                result[name] = await self._process_request(device, req)
             else:
-                result[dev] = "device_not_found"
+                result[name] = "device_not_found"
         return result
 
-    async def _power_dev(self, dev, req):
-        if dev not in self.devices:
-            return False
+    async def _process_request(self, device, req):
         if req in ["on", "off"]:
-            ret = self.devices[dev].set_power(req)
+            ret = device.set_power(req)
             if asyncio.iscoroutine(ret):
                 await ret
-            self.server.send_event("gpio_power:power_changed", {
-                "device": dev,
-                "status": req
-            })
-        elif req != "status":
-            raise self.server.error("Unsupported power request")
-        ret = self.devices[dev].refresh_status()
-        if asyncio.iscoroutine(ret):
-            await ret
-        return True
+            dev_info = device.get_device_info()
+            self.server.send_event("gpio_power:power_changed", dev_info)
+        elif req == "status":
+            ret = device.refresh_status()
+            if asyncio.iscoroutine(ret):
+                await ret
+            dev_info = device.get_device_info()
+        else:
+            raise self.server.error(f"Unsupported power request: {req}")
+        return dev_info['status']
 
     def set_device_power(self, device, state):
         status = None
@@ -91,8 +85,12 @@ class PrinterPower:
         if status not in ["on", "off"]:
             logging.info(f"Invalid state received: {state}")
             return
+        if device not in self.devices:
+            logging.info(f"No device found: {device}")
+            return
         ioloop = IOLoop.current()
-        ioloop.spawn_callback(self._power_dev, device, status)
+        ioloop.spawn_callback(
+            self._process_request, self.devices[device], status)
 
     async def add_device(self, name, device):
         if name in self.devices:
@@ -181,8 +179,12 @@ class GpioDevice:
     def get_name(self):
         return self.name
 
-    def get_state(self):
-        return self.state
+    def get_device_info(self):
+        return {
+            'device': self.name,
+            'status': self.state,
+            'type': "gpio"
+        }
 
     def refresh_status(self):
         try:
