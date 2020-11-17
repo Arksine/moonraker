@@ -15,8 +15,8 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
-METADATA_SCRIPT = os.path.join(
-    os.path.dirname(__file__), "../../scripts/extract_metadata.py")
+METADATA_SCRIPT = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
 class FileManager:
     def __init__(self, config):
