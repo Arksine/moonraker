@@ -150,6 +150,7 @@ class MoonrakerApp:
     async def close(self):
         if self.tornado_server is not None:
             self.tornado_server.stop()
+            await self.tornado_server.close_all_connections()
         await self.wsm.close()
         self.auth.close()
 
