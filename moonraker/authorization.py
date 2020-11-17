@@ -58,11 +58,13 @@ class Authorization:
         t_clients = "\n".join(
             [str(ip) for ip in self.trusted_ips] +
             [str(rng) for rng in self.trusted_ranges])
+        c_domains = "\n".join(self.cors_domains)
 
         logging.info(
             f"Authorization Configuration Loaded\n"
             f"Auth Enabled: {self.auth_enabled}\n"
-            f"Trusted Clients:\n{t_clients}")
+            f"Trusted Clients:\n{t_clients}\n"
+            f"CORS Domains:\n{c_domains}")
 
         self.prune_handler = PeriodicCallback(
             self._prune_conn_handler, PRUNE_CHECK_TIME)
@@ -187,13 +189,17 @@ class Authorization:
             return False
         for regex in self.cors_domains:
             match = re.match(regex, origin)
-            if match is not None and match.group() == origin:
-                logging.debug(f"CORS Pattern Matched, origin: {origin} "
-                              f" | pattern: {regex}")
-                self._set_cors_headers(origin, request)
-                return True
+            if match is not None:
+                if match.group() == origin:
+                    logging.debug(f"CORS Pattern Matched, origin: {origin} "
+                                  f" | pattern: {regex}")
+                    self._set_cors_headers(origin, request)
+                    return True
+                else:
+                    logging.debug(f"Partial Cors Match: {match.group()}")
         else:
-            logging.debug(f"No CORS match for origin: {origin}")
+            logging.debug(f"No CORS match for origin: {origin}\n"
+                          f"Patterns: {self.cors_domains}")
         return False
 
     def _set_cors_headers(self, origin, request):
