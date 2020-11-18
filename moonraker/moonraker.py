@@ -287,13 +287,7 @@ class Server:
             return
         if send_id:
             self.init_list.append("identified")
-        self.klippy_info = result
-        # Update filemanager fixed paths
-        fixed_paths = {k: result[k] for k in
-                       ['klipper_path', 'python_path',
-                        'log_file', 'config_file']}
-        file_manager = self.lookup_plugin('file_manager')
-        file_manager.update_fixed_paths(fixed_paths)
+        self.klippy_info = dict(result)
         self.klippy_state = result.get('state', "unknown")
         if self.klippy_state == "ready":
             await self._verify_klippy_requirements()
