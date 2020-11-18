@@ -101,7 +101,7 @@ class Server:
 
         # check for optional plugins
         opt_sections = set([s.split()[0] for s in config.sections()]) - \
-            set(['server', 'authorization', 'cmd_args'])
+            set(['server', 'authorization', 'system_args'])
         for section in opt_sections:
             self.load_plugin(config, section, None)
 
@@ -550,11 +550,11 @@ def main():
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")
-    cmd_line_args = parser.parse_args()
+    system_args = parser.parse_args()
 
     # Setup Logging
-    log_file = os.path.normpath(os.path.expanduser(cmd_line_args.logfile))
-    cmd_line_args.logfile = log_file
+    log_file = os.path.normpath(os.path.expanduser(system_args.logfile))
+    system_args.logfile = log_file
     ql = utils.setup_logging(log_file)
 
     if sys.version_info < (3, 7):
@@ -570,7 +570,7 @@ def main():
     estatus = 0
     while True:
         try:
-            server = Server(cmd_line_args)
+            server = Server(system_args)
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1

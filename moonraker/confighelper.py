@@ -70,9 +70,9 @@ class ConfigHelper:
         return self._get_item(
             self.config[self.section].getfloat, option, default)
 
-def get_configuration(server, cmd_line_args):
+def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
-        cmd_line_args.configfile))
+        system_args.configfile))
     if not os.path.isfile(cfg_file_path):
         raise ConfigError(f"Configuration File Not Found: '{cfg_file_path}''")
     config = configparser.ConfigParser(interpolation=None)
@@ -89,5 +89,5 @@ def get_configuration(server, cmd_line_args):
     if server_cfg.get('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
-    config['cmd_args'] = {'logfile': cmd_line_args.logfile}
+    config['system_args'] = {'logfile': system_args.logfile}
     return ConfigHelper(server, config, 'server')
