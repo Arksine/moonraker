@@ -93,6 +93,20 @@ class ShellCommand:
             self.io_loop.remove_handler(fd)
         return complete
 
+    async def run_with_response(self, timeout=2.):
+        result = []
+
+        def cb(data):
+            data = data.strip()
+            if data:
+                result.append(data.decode())
+        prev_cb = self.output_cb
+        self.output_cb = cb
+        await self.run(timeout)
+        self.output_cb = prev_cb
+        return "\n".join(result)
+
+
 class ShellCommandFactory:
     def build_shell_command(self, cmd, callback):
         return ShellCommand(cmd, callback)
