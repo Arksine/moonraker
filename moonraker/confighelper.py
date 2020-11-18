@@ -89,5 +89,7 @@ def get_configuration(server, system_args):
     if server_cfg.get('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
-    config['system_args'] = {'logfile': system_args.logfile}
+    config['system_args'] = {
+        'logfile': system_args.logfile,
+        'software_version': system_args.software_version}
     return ConfigHelper(server, config, 'server')

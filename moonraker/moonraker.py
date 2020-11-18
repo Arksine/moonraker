@@ -553,9 +553,11 @@ def main():
     system_args = parser.parse_args()
 
     # Setup Logging
+    version = utils.get_software_version()
     log_file = os.path.normpath(os.path.expanduser(system_args.logfile))
     system_args.logfile = log_file
-    ql = utils.setup_logging(log_file)
+    system_args.software_version = version
+    ql = utils.setup_logging(log_file, version)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
