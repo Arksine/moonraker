@@ -47,6 +47,7 @@ class Server:
             'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_connection = KlippyConnection(
             self.process_command, self.on_connection_closed)
+        self.klippy_info = {}
         self.init_list = []
         self.init_handle = None
         self.init_attempts = 0
@@ -163,6 +164,9 @@ class Server:
     def get_host_info(self):
         hostname = socket.gethostname()
         return hostname, self.port
+
+    def get_klippy_info(self):
+        return dict(self.klippy_info)
 
     # ***** Klippy Connection *****
     async def _connect_klippy(self):
@@ -283,6 +287,7 @@ class Server:
             return
         if send_id:
             self.init_list.append("identified")
+        self.klippy_info = result
         # Update filemanager fixed paths
         fixed_paths = {k: result[k] for k in
                        ['klipper_path', 'python_path',
