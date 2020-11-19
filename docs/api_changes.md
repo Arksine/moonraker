@@ -1,6 +1,37 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### November 19th 2020
+- The path for the power APIs has changed from `gpio_power` to `device_power`:
+  - `GET /machine/device_power/devices`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.devices","id":"1"}`\
+    Returns an array of objects listing all detected devices.
+    Each object in the array is guaranteed to have the following
+    fields:
+    - `device`:  The device name
+    - `status`:  May be "init", "on", "off", or "error"
+    - `type`: May be "gpio" or "tplink_smartplug"
+  - `GET /machine/device_power/status?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.status","id":"1",
+    "params":{"dev_name":null}}`\
+    It is no longer possible to call this method with no arguments.
+    Status will only be returned for the requested device, to get
+    status of all devices use `/machine/device_power/devices`.  As
+    before, this returns an object in the format of
+    `{device_name: status}`, where device_name is the name of the device
+    and `status` is the devices current status.
+  - `POST /machine/device_power/on?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.on","id":"1",
+    "params":{"dev_name":null}}`\
+    Toggles device on.  Returns the current status of the device.
+  - `POST /machine/device_power/off?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.off","id":"1",
+    "params":{"dev_name":null}}`\
+    Toggles device off.  Returns the current status of the device.
+  - The `notify_power_changed` notification now includes an object
+    containing device info, matching that which would be recieved
+    from a single item in `/machine/power/devices`.
+
 ### November 12th 2020
 - Two new fields have been added to the gcode metadata:
   - `gcode_start_byte`:  Indicates the byte position in the
