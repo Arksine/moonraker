@@ -92,6 +92,12 @@ verify_ready()
     fi
 }
 
+# Allow user 'pi' to reboot and shutdown without password
+shutdown_sudo_fix()
+{
+    echo 'pi ALL=(ALL) NOPASSWD: /sbin/shutdown, /sbin/reboot'| sudo EDITOR='tee -a' visudo
+}
+
 # Force script to exit if an error occurs
 set -e
 
@@ -105,4 +111,5 @@ install_packages
 create_virtualenv
 install_script
 install_config
+shutdown_sudo_fix
 start_software
