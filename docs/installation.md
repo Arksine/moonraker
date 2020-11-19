@@ -314,23 +314,26 @@ gcode:
 
 
 #### Timelapse Plugin
-Generate Timelapse of a Print 
+Generate Timelapse of a Print
 
 This Plugin depends on FFMPEG and mjpegstreamer installed on the System which
 is preinstalled in MainsailOs and FluidPI.
-If not you can install it manually using this Guide:  
+If not you can install it manually using this Guide:
 https://github.com/cncjs/cncjs/wiki/Setup-Guide:-Raspberry-Pi-%7C-MJPEG-Streamer-Install-&-Setup-&-FFMpeg-Recording#mjpeg-streamer-install--setup
 
-##### Activate and configure the plugin:
+##### Activate and configure the plugin adding following to your moonraker.conf:
 ```
 [timelapse]
+enabled: true
+# If this set to false the Gcode macros are ignored and
+# The autorender on print finish is also deactivated
 constant_rate_rate: 23
 # The range of the CRF scale is 0–51, where 0 is lossless,
 # 23 is the default, and 51 is worst quality possible. 
 # A lower value generally leads to higher quality, and a 
 # subjectively sane range is 17–28.
 # more info: https://trac.ffmpeg.org/wiki/Encode/H.264
-output_framerate: 15
+output_framerate: 30
 # Output framerate of the generated video
 output_path: ~/timelapse/
 # Path where the generate video will be saved
@@ -344,15 +347,10 @@ time_format_code: %Y%m%d_%H%M
 [gcode_macro TIMELAPSE_TAKE_FRAME]
 gcode:
  {action_call_remote_method("timelapse_newframe")}
-
-[gcode_macro TIMELAPSE_FINISH]
-gcode:
- {action_call_remote_method("timelapse_finish")}
 ```
-Note: You can add extra gcode to the TAKE_FRAME macro if you like to move your 
+Note: You can add extra gcode to the TAKE_FRAME macro if you like to move your
 printhead to a specific position, before taking a picture.
 
 ##### Add the macros to your Slicer:
-``TIMELAPSE_TAKE_FRAME`` -> to before/after Layerchange (or where you like the snapshot should be taken)    
-``TIMELAPSE_FINISH`` -> to the end G-code
-	
+``TIMELAPSE_TAKE_FRAME`` -> to before or after Layerchange (where you like the snapshot should be taken)
+
