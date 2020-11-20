@@ -31,6 +31,12 @@ class ConfigHelper:
     def __contains__(self, key):
         return key in self.config
 
+    def get_name(self):
+        return self.section
+
+    def get_prefix_sections(self, prefix):
+        return [s for s in self.sections() if s.startswith(prefix)]
+
     def getsection(self, section):
         if section not in self.config:
             raise ConfigError(f"No section [{section}] in config")
