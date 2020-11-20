@@ -14,6 +14,7 @@ from tornado.ioloop import IOLoop
 class Timelapse:
     
     def __init__(self, config):
+        # setup global vars
         self.framecount = 0
         self.enabled = config.getboolean("enabled" , True) 
         self.crf = config.getint("constant_rate_factor" , 23) 
@@ -21,9 +22,13 @@ class Timelapse:
         self.timeformatcode = config.get("time_format_code", "%Y%m%d_%H%M")
         out_dir_cfg = config.get("output_path" , "~/timelapse/")
         self.out_dir = os.path.expanduser(out_dir_cfg)
-        self.temp_dir = "/tmp/timelapse/"        
+        self.temp_dir = "/tmp/timelapse/"
+        
+        # setup directories 
         os.makedirs(self.temp_dir, exist_ok=True)   
         os.makedirs(self.out_dir, exist_ok=True)
+        
+        # setup eventhandlers and endpoints
         self.server = config.get_server() 
         file_manager = self.server.lookup_plugin("file_manager")
         file_manager.register_directory("timelapses", self.out_dir)
@@ -57,30 +62,19 @@ class Timelapse:
             'constant_rate_factor': self.crf,
             'output_framerate': self.framerate
             }
-        
-    def handle_status_update(self, status):
-        #logging.info("statussi: " + status)
-        if status == "File selected":
-            #print_started
-            self.timelapse_cleanup()
-        elif status == "Done printing file":
-            #print_done
-            if self.enabled:
-                ioloop = IOLoop.current()
-                ioloop.spawn_callback(self.timelapse_finish)
   
     def call_timelapse_newframe(self):
         if self.enabled:
             ioloop = IOLoop.current()
             ioloop.spawn_callback(self.timelapse_newframe)
-        else:
-            logging.info("NEW_FRAME macro ignored timelapse is disabled")
+        # else:
+            # logging.info("NEW_FRAME macro ignored timelapse is disabled")
       
     async def timelapse_newframe(self):
         self.framecount += 1        
         framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
         cmd = "wget http://localhost:8080/?action=snapshot -O " \
-            + self.temp_dir + framefile
+              + self.temp_dir + framefile
         logging.info("cmd: " + cmd)
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
@@ -88,7 +82,6 @@ class Timelapse:
             await scmd.run(timeout=2., verbose=False)
         except Exception:
             logging.exception(f"Error running cmd '{cmd}'")
-
                
     def call_timelapse_finish(self):
         ioloop = IOLoop.current()
@@ -99,11 +92,29 @@ class Timelapse:
         ioloop.spawn_callback(self.timelapse_finish)
         return "ok"
             
+    def handle_status_update(self, status):
+        if status == "File selected":
+            #print_started
+            self.timelapse_cleanup()
+        elif status == "Done printing file":
+            #print_done
+            if self.enabled:
+                ioloop = IOLoop.current()
+                ioloop.spawn_callback(self.timelapse_finish)
+            
+    def timelapse_cleanup(self):
+        logging.info("timelapse_cleanup")
+        filelist = glob.glob(self.temp_dir + "frame*.jpg")
+        if filelist:
+            for filepath in filelist:
+                os.remove(filepath)
+        self.framecount = 0     
+        
     async def timelapse_finish(self):
         logging.info("timelapse_finish")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
         if not filelist:
-            logging.info("timelapse_finish: no frames, skip render video")
+            logging.info("timelapse_finish: no frames, skip video render ")
         else:
             self.framecount = 0
             klippy_apis = self.server.lookup_plugin("klippy_apis")
@@ -130,14 +141,6 @@ class Timelapse:
                 await scmd.run(timeout=None, verbose=False)
             except Exception:
                 logging.exception(f"Error running cmd '{cmd}'")
-            
-    def timelapse_cleanup(self):
-        logging.info("timelapse_cleanup")
-        filelist = glob.glob(self.temp_dir + "frame*.jpg")
-        if filelist:
-            for filepath in filelist:
-                os.remove(filepath)
-        self.framecount = 0  
             
 def load_plugin(config):
     return Timelapse(config)
