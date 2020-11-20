@@ -75,7 +75,7 @@ class Timelapse:
         framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
         cmd = "wget http://localhost:8080/?action=snapshot -O " \
               + self.temp_dir + framefile
-        logging.info("cmd: " + cmd)
+        # logging.info("cmd: " + cmd)
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
         try:
@@ -94,16 +94,16 @@ class Timelapse:
             
     def handle_status_update(self, status):
         if status == "File selected":
-            #print_started
+            # print_started
             self.timelapse_cleanup()
         elif status == "Done printing file":
-            #print_done
+            # print_done
             if self.enabled:
                 ioloop = IOLoop.current()
                 ioloop.spawn_callback(self.timelapse_finish)
             
     def timelapse_cleanup(self):
-        logging.info("timelapse_cleanup")
+        # logging.info("timelapse_cleanup")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
         if filelist:
             for filepath in filelist:
@@ -111,7 +111,7 @@ class Timelapse:
         self.framecount = 0     
         
     async def timelapse_finish(self):
-        logging.info("timelapse_finish")
+        # logging.info("timelapse_finish")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
         if not filelist:
             logging.info("timelapse_finish: no frames, skip video render ")
@@ -134,7 +134,7 @@ class Timelapse:
                   + " -crf " + str(self.crf) \
                   + " -vcodec libx264" \
                   + " '" + outfile + "' -y" 
-            logging.info("cmd: " + cmd)
+            logging.info("start FFMPEG: " + cmd)
             shell_command = self.server.lookup_plugin("shell_command")
             scmd = shell_command.build_shell_command(cmd, None)
             try:
