@@ -292,6 +292,9 @@ output_id:
 #   Provide a password if configured in Tasmota (default is empty). 
 #   Provided an output_id (relay id) if the Tasmota device supports
 #   more than one (default is 1).
+#   If your single-relay Tasmota device switches on/off successfully,
+#   but fails to report its state, ensure that 'SetOption26' is set in 
+#   Tasmota.
 
 ```
 Below are some potential examples:
