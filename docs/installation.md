@@ -265,10 +265,10 @@ a printer on/off regardless of Klippy's state.  GPIOs are toggled
 using libgpiod.  A configuration section should be added for each
 device as shown below:
 ```
-[power device name]
+[power device_name]
 type: gpio
-#   The type of device.  Can be either gpio or tplink_smartplug.  This
-#   parameter must be provided.
+#   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
+#   This parameter must be provided.
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -283,7 +283,15 @@ port:
 #   The above options are used for "tplink_smartplug" devices.  The
 #   address should be a valid ip or hostname for the tplink device.
 #   The port should be the port the device is configured to use.  The
-#   address must be provided.  The port defaults to 9999.
+#   address must be provided. The port defaults to 9999.
+address:
+password:
+output_id:
+#   The above options are used for "tasmota" devices.  The
+#   address should be a valid ip or hostname for the tasmota device.
+#   Provide a password if configured in Tasmota (default is empty). 
+#   Provided an output_id (relay id) if the Tasmota device supports
+#   more than one (default is 1).
 
 ```
 Below are some potential examples:
@@ -299,6 +307,11 @@ pin: !gpiochip0/gpio16
 [power wifi_switch]
 type: tplink_smartplug
 address: 192.168.1.123
+
+[power tasmota_plug]
+type: tasmota
+address: 192.168.1.124
+password: password1
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
