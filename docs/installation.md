@@ -338,11 +338,11 @@ is preinstalled in MainsailOs and FluidPI.
 If not you can install it manually using this Guide:
 https://github.com/cncjs/cncjs/wiki/Setup-Guide:-Raspberry-Pi-%7C-MJPEG-Streamer-Install-&-Setup-&-FFMpeg-Recording#mjpeg-streamer-install--setup
 
-
 You may want to change your Webcamstream to higher resolution, 
 depeding on your OS the mpjepg-streamer config file location differ:   
-	MainsailOS: /boot/mainsail.txt   
-	FluiddPI: 	/boot/fluiddpi.txt   
+- MainsailOS: /boot/mainsail.txt   
+- FluiddPI: 	/boot/fluiddpi.txt   
+    
 mjpeg-streamer options see:    
 https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimental/plugins/input_uvc/README.md
 
