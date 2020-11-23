@@ -338,6 +338,15 @@ is preinstalled in MainsailOs and FluidPI.
 If not you can install it manually using this Guide:
 https://github.com/cncjs/cncjs/wiki/Setup-Guide:-Raspberry-Pi-%7C-MJPEG-Streamer-Install-&-Setup-&-FFMpeg-Recording#mjpeg-streamer-install--setup
 
+
+You may want to change your Webcamstream to higher resolution, 
+depeding on your OS the mpjepg-streamer config file location differ:
+	MainsailOS: /boot/mainsail.txt
+	FluiddPI: 	/boot/fluiddpi.txt
+mjpeg-streamer options see:
+https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimental/plugins/input_uvc/README.md
+
+
 ##### Activate and configure the plugin adding following to your moonraker.conf:
 ```
 [timelapse]
@@ -357,6 +366,12 @@ output_path: ~/timelapse/
 time_format_code: %Y%m%d_%H%M
 # Manipulates datetime format of the output filename
 # see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
+snapshoturl: http://localhost:8080/?action=snapshot
+# url to your webcamstream
+extraoutputparams: 
+# here you can extra output parameters to FFMPEG 
+# further info: https://ffmpeg.org/ffmpeg.html 
+# eg rotate video by 180° "-vf transpose=2,transpose=2"
 ```
 
 ##### Add the macros to your printer.cfg:

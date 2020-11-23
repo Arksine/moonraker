@@ -20,6 +20,8 @@ class Timelapse:
         self.crf = config.getint("constant_rate_factor" , 23) 
         self.framerate = config.getint("output_framerate" , 30)
         self.timeformatcode = config.get("time_format_code", "%Y%m%d_%H%M")
+        self.snapshoturl = config.get("snapshoturl", "http://localhost:8080/?action=snapshot")
+        self.extraoutputparams = config.get("extraoutputparams", "")
         out_dir_cfg = config.get("output_path" , "~/timelapse/")
         self.out_dir = os.path.expanduser(out_dir_cfg)
         self.temp_dir = "/tmp/timelapse/"
@@ -45,22 +47,25 @@ class Timelapse:
         action = webrequest.get_action()
         if action == 'POST':
             args = webrequest.get_args()
-            logging.info("webreq_args: " + str(args))
+            #logging.info("webreq_args: " + str(args))
             for arg in args:
                 val = args.get(arg)
                 if arg == "enabled":
                     self.enabled = webrequest.get_boolean(arg)
-                    logging.info("enabled_new: " + str(self.enabled) + " type: " + str(type(self.enabled)))
                 if arg == "constant_rate_factor":
-                    self.crf = webrequest.get_int(arg)                
-                    logging.info("crf_new: " + str(self.crf) + " type: " + str(type(self.crf)))
+                    self.crf = webrequest.get_int(arg)
                 if arg == "output_framerate":
-                    self.framerate = webrequest.get_int(arg)                
-                    logging.info("framerate_new: " + str(self.framerate) + " type: " + str(type(self.framerate)))
+                    self.framerate = webrequest.get_int(arg)
+                if arg == "snapshoturl":
+                    self.snapshoturl = webrequest.get(arg)
+                if arg == "extraoutputparams":
+                    self.extraoutputparams = webrequest.get(arg)
         return {
             'enabled': self.enabled,
             'constant_rate_factor': self.crf,
-            'output_framerate': self.framerate
+            'output_framerate': self.framerate,
+            'snapshoturl': self.snapshoturl,
+            'extraoutputparams': self.extraoutputparams
             }
   
     def call_timelapse_newframe(self):
@@ -73,7 +78,7 @@ class Timelapse:
     async def timelapse_newframe(self):
         self.framecount += 1        
         framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
-        cmd = "wget http://localhost:8080/?action=snapshot -O " \
+        cmd = "wget " + self.snapshoturl + " -O " \
               + self.temp_dir + framefile
         # logging.info("cmd: " + cmd)
         shell_command = self.server.lookup_plugin('shell_command')
@@ -124,7 +129,7 @@ class Timelapse:
             #logging.info("gcodefile: " + gcodefile)
             now = datetime.now() 
             date_time = now.strftime(self.timeformatcode)
-            inputfiles = self.temp_dir + "frame%6d.jpg"        
+            inputfiles = self.temp_dir + "frame%6d.jpg"
             outsuffix = ".mp4"
             outfile = self.out_dir + "timelapse_" \
                     + gcodefile + "_" + date_time + outsuffix
@@ -133,14 +138,18 @@ class Timelapse:
                   + " -i '" + inputfiles + "'" \
                   + " -crf " + str(self.crf) \
                   + " -vcodec libx264" \
+                  + " " + self.extraoutputparams \
                   + " '" + outfile + "' -y" 
             logging.info("start FFMPEG: " + cmd)
             shell_command = self.server.lookup_plugin("shell_command")
-            scmd = shell_command.build_shell_command(cmd, None)
+            scmd = shell_command.build_shell_command(cmd, self.ffmpeg_response)
             try:
                 await scmd.run(timeout=None, verbose=False)
             except Exception:
-                logging.exception(f"Error running cmd '{cmd}'")
+                logging.exception(f"Error running cmd '{cmd}'")  
+                
+    def ffmpeg_response(self, response):
+        logging.info(response)
             
 def load_plugin(config):
     return Timelapse(config)
