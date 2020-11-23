@@ -1,6 +1,10 @@
 This document keeps a record of all changes to Moonraker's remote
 facing APIs.
 
+### November 23rd 2020
+- Moonraker now serves Klipper's "docs" directory.  This can be access
+  at `GET /server/files/docs/<filename>`.
+
 ### November 19th 2020
 - The path for the power APIs has changed from `gpio_power` to `device_power`:
   - `GET /machine/device_power/devices`\

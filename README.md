@@ -20,4 +20,4 @@ Users:\
 [user_changes.md](/docs/user_changes.md) - November 19th 2020
 
 Developers:\
-[api_changes.md](/docs/api_changes.md) - November 19th 2020
+[api_changes.md](/docs/api_changes.md) - November 23rd 2020

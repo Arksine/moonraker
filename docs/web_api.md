@@ -422,6 +422,7 @@ as the "gcodes" root.  The following roots are available:
 - gcodes
 - config
 - config_examples (read-only)
+- docs (read-only)
 
 Write operations (upload, delete, make directory, remove directory) are
 only available on the `gcodes` and config roots.  Note that the `config` root
@@ -715,6 +716,16 @@ to delete a file in a subdirectory.
 ### Download a config example
 - HTTP command:\
   `GET /server/files/config_examples/<file_name>`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  The requested file
+
+### Download Klipper documentation
+- HTTP command:\
+  `GET /server/files/docs/<file_name>`
 
 - Websocket command:\
   Not Available
