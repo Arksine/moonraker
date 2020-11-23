@@ -340,10 +340,10 @@ https://github.com/cncjs/cncjs/wiki/Setup-Guide:-Raspberry-Pi-%7C-MJPEG-Streamer
 
 
 You may want to change your Webcamstream to higher resolution, 
-depeding on your OS the mpjepg-streamer config file location differ:
-	MainsailOS: /boot/mainsail.txt
-	FluiddPI: 	/boot/fluiddpi.txt
-mjpeg-streamer options see:
+depeding on your OS the mpjepg-streamer config file location differ:   
+	MainsailOS: /boot/mainsail.txt   
+	FluiddPI: 	/boot/fluiddpi.txt   
+mjpeg-streamer options see:    
 https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimental/plugins/input_uvc/README.md
 
 
