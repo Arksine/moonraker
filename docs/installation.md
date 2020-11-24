@@ -351,27 +351,27 @@ https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimen
 ```
 [timelapse]
 enabled: true
-# If this set to false the Gcode macros are ignored and
-# The autorender on print finish is also deactivated
+#   If this set to false the Gcode macros are ignored and
+#   The autorender on print finish is also deactivated
 constant_rate_rate: 23
-# The range of the CRF scale is 0–51, where 0 is lossless,
-# 23 is the default, and 51 is worst quality possible. 
-# A lower value generally leads to higher quality, and a 
-# subjectively sane range is 17–28.
-# more info: https://trac.ffmpeg.org/wiki/Encode/H.264
+#   The range of the CRF scale is 0–51, where 0 is lossless,
+#   23 is the default, and 51 is worst quality possible. 
+#   A lower value generally leads to higher quality, and a 
+#   subjectively sane range is 17–28.
+#   more info: https://trac.ffmpeg.org/wiki/Encode/H.264
 output_framerate: 30
-# Output framerate of the generated video
+#   Output framerate of the generated video
 output_path: ~/timelapse/
-# Path where the generate video will be saved
+#   Path where the generate video will be saved
 time_format_code: %Y%m%d_%H%M
-# Manipulates datetime format of the output filename
-# see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
+#   Manipulates datetime format of the output filename
+#   see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
 snapshoturl: http://localhost:8080/?action=snapshot
-# url to your webcamstream
+#   url to your webcamstream
 extraoutputparams: 
-# here you can extra output parameters to FFMPEG 
-# further info: https://ffmpeg.org/ffmpeg.html 
-# eg rotate video by 180° "-vf transpose=2,transpose=2"
+#   here you can extra output parameters to FFMPEG 
+#   further info: https://ffmpeg.org/ffmpeg.html 
+#   eg rotate video by 180° "-vf transpose=2,transpose=2"
 ```
 
 ##### Add the macros to your printer.cfg:
