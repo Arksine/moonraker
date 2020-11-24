@@ -352,7 +352,9 @@ https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimen
 [timelapse]
 enabled: true
 #   If this set to false the Gcode macros are ignored and
-#   The autorender on print finish is also deactivated
+#   the autorender on print finish is also deactivated.
+#   The idea is to disable the plugin by default and only activate 
+#   it during runtime via the http endpoint if a timelapse is desired
 constant_rate_rate: 23
 #   The range of the CRF scale is 0–51, where 0 is lossless,
 #   23 is the default, and 51 is worst quality possible. 
@@ -362,7 +364,7 @@ constant_rate_rate: 23
 output_framerate: 30
 #   Output framerate of the generated video
 output_path: ~/timelapse/
-#   Path where the generate video will be saved
+#   Path where the generated video will be saved
 time_format_code: %Y%m%d_%H%M
 #   Manipulates datetime format of the output filename
 #   see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
