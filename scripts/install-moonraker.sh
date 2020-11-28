@@ -3,6 +3,9 @@
 # Raspbian/Raspberry Pi OS based distributions.
 
 PYTHONDIR="${HOME}/moonraker-env"
+REBUILD_ENV="n"
+FORCE_DEFAULTS="n"
+CONFIG_PATH="${HOME}/moonraker.conf"
 
 # Step 1:  Verify Klipper has been installed
 check_klipper()
@@ -19,7 +22,7 @@ check_klipper()
 # Step 2: Install packages
 install_packages()
 {
-    PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7"
+    PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
 
     # Update system package info
     report_status "Running apt-get update..."
@@ -33,10 +36,15 @@ install_packages()
 # Step 3: Create python virtual environment
 create_virtualenv()
 {
-    report_status "Updating python virtual environment..."
+    report_status "Installing python virtual environment..."
 
-    # Create virtualenv if it doesn't already exist
-    [ ! -d ${PYTHONDIR} ] && virtualenv -p /usr/bin/python3 ${PYTHONDIR}
+    # If venv exists and user prompts a rebuild, then do so
+    if [ -d ${PYTHONDIR} ] && [ $REBUILD_ENV = "y" ]; then
+        report_status "Removing old virtualenv"
+        rm -rf ${PYTHONDIR}
+    fi
+
+    [ ! -d ${PYTHONDIR} ] && virtualenv -p /usr/bin/python3 --system-site-packages ${PYTHONDIR}
 
     # Install/update dependencies
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
@@ -54,7 +62,7 @@ install_script()
 install_config()
 {
     DEFAULTS_FILE=/etc/default/moonraker
-    [ -f $DEFAULTS_FILE ] && return
+    [ -f $DEFAULTS_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
 
     report_status "Installing system start configuration..."
     sudo /bin/sh -c "cat > $DEFAULTS_FILE" <<EOF
@@ -64,7 +72,7 @@ MOONRAKER_USER=$USER
 
 MOONRAKER_EXEC=${PYTHONDIR}/bin/python
 
-MOONRAKER_ARGS="${SRCDIR}/moonraker/moonraker.py"
+MOONRAKER_ARGS="${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH}"
 
 EOF
 }
@@ -97,6 +105,15 @@ set -e
 
 # Find SRCDIR from the pathname of this script
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
+
+# Parse command line arguments
+while getopts "rfc:" arg; do
+    case $arg in
+        r) REBUILD_ENV="y";;
+        f) FORCE_DEFAULTS="y";;
+        c) CONFIG_PATH=$OPTARG;;
+    esac
+done
 
 # Run installation steps defined above
 verify_ready

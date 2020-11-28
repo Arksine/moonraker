@@ -732,7 +732,8 @@ function handle_klippy_ready() {
 json_rpc.register_method("notify_klippy_ready", handle_klippy_ready);
 
 function handle_power_changed(power_status) {
-    console.log(`Power Changed: ${power_status}`);
+    console.log(`Power Changed:`);
+    console.log(power_status)
 }
 json_rpc.register_method("notify_power_changed", handle_power_changed);
 

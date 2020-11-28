@@ -47,18 +47,24 @@ cd ~
 git clone https://github.com/Arksine/moonraker.git
 ```
 
-If you have an experimental verison of moonraker that pre-dates this repo,
-it must be uninstalled:
-```
-cd ~/moonraker/scripts
-./uninstall-moonraker.sh
-```
-
 Finally, run moonraker's install script:
 ```
 cd ~/moonraker/scripts
 ./install-moonraker.sh
 ```
+
+The install script has a few command line options that may be useful,
+particularly for those upgrading:
+- -r\
+  This will rebuild the virtual environment for existing installations.
+  Sometimes this is necessary when a dependency has been added.
+- -f\
+  This will tell the script to overwrite Moonraker's "defaults" file.
+  By default the script will not modify the "defaults" file if it is
+  detected as present.
+- -c /path/to/moonraker.conf\
+  This allows the user to specify the path to Moonraker's config file.
+  The default location is "/home/<user>/moonraker.conf".
 
 When the script completes it should start both Moonraker and Klipper. In
 `klippy.log` you should find the following entry:\
@@ -256,33 +262,60 @@ gcode:
 Power Plugin Configuration.  One may use this module to toggle the
 state of a relay using a linux GPIO, enabling the ability to power
 a printer on/off regardless of Klippy's state.  GPIOs are toggled
-using linux sysfs.
+using libgpiod.  A configuration section should be added for each
+device as shown below:
 ```
-[power]
-devices: printer, led
-#   A comma separated list of devices you wish to control. Device names may not
-#   contain whitespace.  This parameter must be provided.
-#
-# Each device specified in "devices" should define its own set of the below
-# options:
-{dev}_name: Friendly Name
-#   An optional alias for the device. The default is the name specifed in
-#   "devices".
-{dev}_pin: 23
-#   The sysfs GPIO pin number you wish to control.  This parameter must be
-#   provided.
-{dev}_active_low: False
-#   When set to true the pin signal is inverted.  Default is False.
+[power device_name]
+type: gpio
+#   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
+#   This parameter must be provided.
+pin: gpiochip0/gpio26
+#   The pin to use for GPIO devices.  The chip is optional, if left out
+#   then the module will default to gpiochip0.  If one wishes to invert
+#   the signal, a "!" may be prefixed to the pin.  Valid examples:
+#      gpiochip0/gpio26
+#      gpio26
+#      !gpiochip0/gpio26
+#      !gpio26
+#    This parameter must be provided for "gpio" type devices
+address:
+port:
+#   The above options are used for "tplink_smartplug" devices.  The
+#   address should be a valid ip or hostname for the tplink device.
+#   The port should be the port the device is configured to use.  The
+#   address must be provided. The port defaults to 9999.
+address:
+password:
+output_id:
+#   The above options are used for "tasmota" devices.  The
+#   address should be a valid ip or hostname for the tasmota device.
+#   Provide a password if configured in Tasmota (default is empty). 
+#   Provided an output_id (relay id) if the Tasmota device supports
+#   more than one (default is 1).
+#   If your single-relay Tasmota device switches on/off successfully,
+#   but fails to report its state, ensure that 'SetOption26' is set in 
+#   Tasmota.
+
 ```
+Below are some potential examples:
+```
+[power printer]
+type: gpio
+pin: gpio26
 
-Define the devices you wish to control under _devices_ with a comma separated
-list. For device specific configrations, swap {dev} for the name of the device
-that you listed under devices.
+[power printer_led]
+type: gpio
+pin: !gpiochip0/gpio16
 
-Each device can have a Friendly Name, pin, and activehigh set. Pin is the only
-required option. For devices that should be active when the signal is 0 or low,
-set {dev}_active_low to False, otherwise don't put the option in the
-configuration.
+[power wifi_switch]
+type: tplink_smartplug
+address: 192.168.1.123
+
+[power tasmota_plug]
+type: tasmota
+address: 192.168.1.124
+password: password1
+```
 
 It is possible to toggle device power from the Klippy host, this can be done
 with a gcode_macro, such as:

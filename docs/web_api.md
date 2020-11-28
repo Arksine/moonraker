@@ -422,6 +422,7 @@ as the "gcodes" root.  The following roots are available:
 - gcodes
 - config
 - config_examples (read-only)
+- docs (read-only)
 
 Write operations (upload, delete, make directory, remove directory) are
 only available on the `gcodes` and config roots.  Note that the `config` root
@@ -722,6 +723,16 @@ to delete a file in a subdirectory.
 - Returns:\
   The requested file
 
+### Download Klipper documentation
+- HTTP command:\
+  `GET /server/files/docs/<file_name>`
+
+- Websocket command:\
+  Not Available
+
+- Returns:\
+  The requested file
+
 ### Download klippy.log
 - HTTP command:\
   `GET /server/files/klippy.log`
@@ -787,6 +798,84 @@ only be used once, making them relatively for inclusion in the query string.
   A temporary token that may be added to a requests query string for access
   to any API endpoint.  The query string should be added in the form of:
   `?token=randomly_generated_token`
+
+## Power APIs
+The APIs below are available when the "power" plugin has been enabled.
+
+### Get Devices
+- HTTP command:\
+  `GET /machine/device_power/devices`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"machine.device_power.devices","id":"1"}`
+
+- Returns:\
+  An array of objects containing info for each configured device.
+  ```json
+  {
+    devices: [
+      {
+        device: <device_name>,
+        status: <device_status>,
+        type: <device_type>
+      }, ...
+    ]
+  }
+  ```
+
+### Get Device Status
+- HTTP command:\
+  `GET /machine/device_power/status?dev_one&dev_two`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"machine.device_power.status","id":"1",
+    "params":{"dev_one":null, "dev_two": null}}`
+
+- Returns:\
+  An object containing status for each requested device
+  ```json
+  {
+    dev_one: <device_status>,
+    dev_two: <device_status>,
+    ...
+  }
+  ```
+
+### Power On Device(s)
+- HTTP command:\
+  `POST /machine/device_power/on?dev_one&dev_two`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"machine.device_power.on","id":"1",
+    "params":{"dev_one":null, "dev_two": null}}`
+
+- Returns:\
+  An object containing status for each requested device
+  ```json
+  {
+    dev_one: <device_status>,
+    dev_two: <device_status>,
+    ...
+  }
+  ```
+
+### Power Off Device(s)
+- HTTP command:\
+  `POST /machine/device_power/off?dev_one&dev_two`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"machine.device_power.off","id":"1",
+    "params":{"dev_one":null, "dev_two": null}}`
+
+- Returns:\
+  An object containing status for each requested device
+  ```json
+  {
+    dev_one: <device_status>,
+    dev_two: <device_status>,
+    ...
+  }
+  ```
 
 ## Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
