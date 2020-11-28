@@ -44,6 +44,9 @@ class FileManager:
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
 
+        self.server.register_event_handler(
+            "server:klippy_ready", self._update_fixed_paths)
+
         # Register Klippy Configuration Path
         config_path = config.get('config_path', None)
         if config_path is not None:
@@ -52,11 +55,15 @@ class FileManager:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
 
-    def update_fixed_paths(self, paths):
+    def _update_fixed_paths(self):
+        kinfo = self.server.get_klippy_info()
+        paths = {k: kinfo.get(k) for k in
+                 ['klipper_path', 'python_path',
+                 'log_file', 'config_file']}
         if paths == self.fixed_path_args:
             # No change in fixed paths
             return
-        self.fixed_path_args = dict(paths)
+        self.fixed_path_args = paths
         str_paths = "\n".join([f"{k}: {v}" for k, v in paths.items()])
         logging.debug(f"\nUpdating Fixed Paths:\n{str_paths}")
 

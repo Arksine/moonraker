@@ -410,6 +410,20 @@ for (let resp of result.gcode_store) {
 - Returns:\
   No return value as the server will shut down upon execution
 
+### Restart a system service
+Restarts a system service via `sudo systemctl restart <name>`. Currently
+only `moonraker` and `klipper` are allowed.
+
+- HTTP command:\
+  `POST /machine/services/restart?service=<service_name>`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.services.restart",
+  params: {service: "service name"}, id: <request id>}`
+
+- Returns:\
+  `ok` when complete.  Note that if `moonraker` is chosen, the return
+  value will be sent prior to the restart.
 
 ## File Operations
 
@@ -799,8 +813,149 @@ only be used once, making them relatively for inclusion in the query string.
   to any API endpoint.  The query string should be added in the form of:
   `?token=randomly_generated_token`
 
+## Update Manager APIs
+The following endpoints are availabe when the `[update_manager]` plugin has
+been configured:
+
+### Get update status
+Retreives the current state of each "package" available for update.  Typically
+this will consist of information regarding `moonraker`, `klipper`, and
+a `client`.  If moonraker has not yet received information from Klipper then
+its status will be omitted.  If a client has not been configured then its
+status will also be omitted.  If the parameter "refresh" is passed and set
+to true then Moonraker will query Github for the most recent release
+information.
+
+- HTTP command:\
+  `GET /machine/update/status?refresh=false`
+
+  If the query string is omitted then "refresh" will default
+  to false.
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.update.status",
+   params: {refresh: false} , id: <request id>}`
+
+  If the "params" are omitted then "refresh" will default to false.
+
+- Returns:\
+  Status information in the following format:
+  ```json
+  {
+      'version_info': {
+          'moonraker': {
+              version: <string>,
+              current_hash: <string>,
+              remote_hash: <string>,
+              is_valid: <bool>,
+              is_dirty: <bool>
+          },
+          'klipper': {
+              version: <string>,
+              current_hash: <string>,
+              remote_hash: <string>,
+              is_valid: <bool>,
+              is_dirty: <bool>
+          }
+          'client': {
+              name: <string>,
+              version: <string>,
+              remote_version: <string>
+          }
+      },
+      busy: false
+  }
+  ```
+  - The `busy` field is set to true if an update is in progress.  Moonraker
+    will not allow concurrent updates.
+  - The `moonraker` and `klipper` objects have the following fields:
+    - `version`:  version of the current repo on disk
+    - `current_hash`: hash of the most recent commit on disk
+    - `remote_hash`: hash of the most recent commit pushed to the remote
+    - `is_valid`: True if installation is a valid git repo on the master branch
+      and an "origin" set to the official remote
+    - `is_dirty`: True if the repo has been modified
+  - The `client` object has the following fields:
+   `name`: Name of the configured client
+   `version`:  version of the installed client.
+   `remote_version`:  version of the latest release published to GitHub
+
+### Update Moonraker
+Pulls the most recent version of Moonraker from GitHub and restarts
+the service.  If "include_deps" is set to `true` an attempt will be made
+to install new packages (via apt-get) and python dependencies (via pip).
+Note that Moonraker uses semantic versioning to check for dependency changes
+automatically, so it is generally not necessary to set `include_deps`
+to `true`.
+
+- HTTP command:\
+  `POST /machine/update/moonraker?include_deps=false`
+
+  If the query string is omitted then "include_deps" will default
+  to false.
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.update.moonraker",
+   params: {include_deps: false}, id: <request id>}`
+
+  If the "params" are omitted then "include_deps" will default to false.
+
+- Returns:\
+  `ok` when complete
+
+### Update Klipper
+Pulls the most recent version of Klipper from GitHub and restarts
+the service.  If "include_deps" is set to `true` an attempt will be made
+to install new packages (via apt-get) and python dependencies (via pip).
+At the moment there is no method for automatically checking for updated
+Klipper dependencies, so clients might wish to make this option available
+to users via the UI.
+
+- HTTP command:\
+  `POST /machine/update/klipper?include_deps=false`
+
+  If the query string is omitted then "include_deps" will default
+  to false.
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.update.klipper",
+   params: {include_deps: false}, id: <request id>}`
+
+  If the "params" are omitted then "include_deps" will default to false.
+
+- Returns:\
+  `ok` when complete
+
+### Update Client
+If `client_repo` and `client_path` have been configured in `[update_manager]`
+this endpoint can be used to install the most recently publish release
+of the client.
+
+- HTTP command:\
+  `POST /machine/update/client`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.update.client",
+   id: <request id>}`
+
+- Returns:\
+  `ok` when complete
+
+### Update System Packages
+Upgrades the system packages.  Currently only `apt-get` is supported.
+
+- HTTP command:\
+  `POST /machine/update/system`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.update.system",
+   id: <request id>}`
+
+- Returns:\
+  `ok` when complete
+
 ## Power APIs
-The APIs below are available when the "power" plugin has been enabled.
+The APIs below are available when the `[power]` plugin has been configured.
 
 ### Get Devices
 - HTTP command:\
@@ -992,6 +1147,28 @@ Where `metadata` is an object in the following format:
   ]
 }
 ```
+
+### Update Manager Responses
+The update manager will send asyncronous messages to the client during an
+update:
+
+`{jsonrpc: "2.0", method: "notify_update_response", params: [response]}`
+
+Where `response` is an object int he following format:
+```json
+{
+    application: <string>,
+    proc_id: <int>,
+    message: <string>
+}
+```
+- The `application` field contains the name of application currently being
+  updated.  Generally this will be either "moonraker", "klipper", "system",
+  or "client".
+- The `proc_id` field contains a unique id associated with the current update
+  process.  This id is generated for each update request.
+- The `message` field contains an asyncronous message sent during the update
+  process.
 
 # Appendix
 

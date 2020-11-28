@@ -12,7 +12,7 @@ from tornado import gen
 from tornado.ioloop import IOLoop
 
 class ShellCommand:
-    def __init__(self, cmd, callback=None):
+    def __init__(self, cmd, callback):
         self.io_loop = IOLoop.current()
         self.name = cmd
         self.output_cb = callback
@@ -29,17 +29,13 @@ class ShellCommand:
         except Exception:
             return
         data = self.partial_output + data
-        if b'\n' not in data:
-            self.partial_output = data
-            return
-        elif data[-1] != b'\n':
-            split = data.rfind(b'\n') + 1
-            self.partial_output = data[split:]
-            data = data[:split]
-        try:
-            self.output_cb(data)
-        except Exception:
-            logging.exception("Error writing command output")
+        lines = data.split(b'\n')
+        self.partial_output = lines.pop()
+        for line in lines:
+            try:
+                self.output_cb(line)
+            except Exception:
+                logging.exception("Error writing command output")
 
     def cancel(self):
         self.cancelled = True
@@ -93,8 +89,22 @@ class ShellCommand:
             self.io_loop.remove_handler(fd)
         return complete
 
+    async def run_with_response(self, timeout=2.):
+        result = []
+
+        def cb(data):
+            data = data.strip()
+            if data:
+                result.append(data.decode())
+        prev_cb = self.output_cb
+        self.output_cb = cb
+        await self.run(timeout)
+        self.output_cb = prev_cb
+        return "\n".join(result)
+
+
 class ShellCommandFactory:
-    def build_shell_command(self, cmd, callback):
+    def build_shell_command(self, cmd, callback=None):
         return ShellCommand(cmd, callback)
 
 def load_plugin(config):
