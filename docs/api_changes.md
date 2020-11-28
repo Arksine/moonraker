@@ -1,5 +1,18 @@
-This document keeps a record of all changes to Moonraker's remote
-facing APIs.
+This document keeps a record of all changes to Moonraker's web APIs.
+
+### November 28th 2020
+- The following new endpoints are available when the `[update_manager]`
+  section has been configured:
+  - `GET /machine/update/status`
+  - `POST /machine/update/moonraker`
+  - `POST /machine/update/klipper`
+  - `POST /machine/update/client`
+  - `POST /machine/update/system`
+- The following endpoint has been added and is available as part of the
+  core API:
+  - `POST /machine/services/restart`
+
+See [web_api.md](web_api.md) for details on these new endpoints.
 
 ### November 23rd 2020
 - Moonraker now serves Klipper's "docs" directory.  This can be access
