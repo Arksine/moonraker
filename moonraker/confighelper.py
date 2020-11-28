@@ -31,6 +31,12 @@ class ConfigHelper:
     def __contains__(self, key):
         return key in self.config
 
+    def get_name(self):
+        return self.section
+
+    def get_prefix_sections(self, prefix):
+        return [s for s in self.sections() if s.startswith(prefix)]
+
     def getsection(self, section):
         if section not in self.config:
             raise ConfigError(f"No section [{section}] in config")
@@ -64,9 +70,9 @@ class ConfigHelper:
         return self._get_item(
             self.config[self.section].getfloat, option, default)
 
-def get_configuration(server, cmd_line_args):
+def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
-        cmd_line_args.configfile))
+        system_args.configfile))
     if not os.path.isfile(cfg_file_path):
         raise ConfigError(f"Configuration File Not Found: '{cfg_file_path}''")
     config = configparser.ConfigParser(interpolation=None)
@@ -83,5 +89,7 @@ def get_configuration(server, cmd_line_args):
     if server_cfg.get('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
-    config['cmd_args'] = {'logfile': cmd_line_args.logfile}
+    config['system_args'] = {
+        'logfile': system_args.logfile,
+        'software_version': system_args.software_version}
     return ConfigHelper(server, config, 'server')

@@ -1,5 +1,82 @@
-This document keeps a record of all changes to Moonraker's remote
-facing APIs.
+This document keeps a record of all changes to Moonraker's web APIs.
+
+### November 28th 2020
+- The following new endpoints are available when the `[update_manager]`
+  section has been configured:
+  - `GET /machine/update/status`
+  - `POST /machine/update/moonraker`
+  - `POST /machine/update/klipper`
+  - `POST /machine/update/client`
+  - `POST /machine/update/system`
+- The following endpoint has been added and is available as part of the
+  core API:
+  - `POST /machine/services/restart`
+
+See [web_api.md](web_api.md) for details on these new endpoints.
+
+### November 23rd 2020
+- Moonraker now serves Klipper's "docs" directory.  This can be access
+  at `GET /server/files/docs/<filename>`.
+
+### November 19th 2020
+- The path for the power APIs has changed from `gpio_power` to `device_power`:
+  - `GET /machine/device_power/devices`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.devices","id":"1"}`\
+    Returns an array of objects listing all detected devices.
+    Each object in the array is guaranteed to have the following
+    fields:
+    - `device`:  The device name
+    - `status`:  May be "init", "on", "off", or "error"
+    - `type`: May be "gpio" or "tplink_smartplug"
+  - `GET /machine/device_power/status?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.status","id":"1",
+    "params":{"dev_name":null}}`\
+    It is no longer possible to call this method with no arguments.
+    Status will only be returned for the requested device, to get
+    status of all devices use `/machine/device_power/devices`.  As
+    before, this returns an object in the format of
+    `{device_name: status}`, where device_name is the name of the device
+    and `status` is the devices current status.
+  - `POST /machine/device_power/on?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.on","id":"1",
+    "params":{"dev_name":null}}`\
+    Toggles device on.  Returns the current status of the device.
+  - `POST /machine/device_power/off?dev_name`\
+    `{"jsonrpc":"2.0","method":"machine.device_power.off","id":"1",
+    "params":{"dev_name":null}}`\
+    Toggles device off.  Returns the current status of the device.
+  - The `notify_power_changed` notification now includes an object
+    containing device info, matching that which would be recieved
+    from a single item in `/machine/power/devices`.
+
+### November 12th 2020
+- Two new fields have been added to the gcode metadata:
+  - `gcode_start_byte`:  Indicates the byte position in the
+    file where the first "Gxx" or "Mxx" command is detected.
+  - `gcode_end_byte`:  Indicates the byte position in the
+    file where the last "Gxx" or "Mxx" command is detected.
+  These fields may be used to more accurately predict print
+  progress based on the file size.
+
+### November 11th 2020
+- The `server.websocket.id` API has been added.  This returns a
+  unique ID that Moonraker uses to track each client connection.
+  As such, this API is only available over the websocket, there
+  is no complementary HTTP request.
+- All HTTP API request may now include arguments in either the
+  query string or in the request's body.
+- Subscriptions are now managed on a per connection basis.  Each
+  connection will only recieve updates for objects in which they
+  are currently subscribed.  If an "empty" request is sent, the
+  subscription will be cancelled.
+- The `POST /printer/object/subscribe` now requires a
+  `connection_id` argument.  This is used to identify which
+  connection's associated subscription should be updated.
+  Currenlty subscriptions are only supported over the a
+  websocket connection, one may use the id received from
+  `server.websocket.id`.
+- The `notify_klippy_ready` websocket notification has been
+  added.
 
 ### November 2nd 2020
 - The `GET /server/files/directory` endpoint now accepts a new

@@ -28,10 +28,10 @@ class LocalQueueHandler(logging.handlers.QueueHandler):
             self.handleError(record)
 
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
-    def __init__(self, filename, **kwargs):
+    def __init__(self, software_version, filename, **kwargs):
         super(MoonrakerLoggingHandler, self).__init__(filename, **kwargs)
         self.header = "Moonraker Log Start...\n"
-        self.header += "Git Version: " + get_software_version() + "\n"
+        self.header += f"Git Version: {software_version}\n"
         self.header += "="*80 + "\n"
         if self.stream is not None:
             self.stream.write(self.header)
@@ -67,14 +67,14 @@ def get_software_version():
 
     return "?"
 
-def setup_logging(log_file):
+def setup_logging(log_file, software_version):
     root_logger = logging.getLogger()
     queue = Queue()
     queue_handler = LocalQueueHandler(queue)
     root_logger.addHandler(queue_handler)
     root_logger.setLevel(logging.INFO)
     file_hdlr = MoonrakerLoggingHandler(
-        log_file, when='midnight', backupCount=2)
+        software_version, log_file, when='midnight', backupCount=2)
     formatter = logging.Formatter(
         '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
     file_hdlr.setFormatter(formatter)

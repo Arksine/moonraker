@@ -8,6 +8,7 @@ import uuid
 import os
 import time
 import ipaddress
+import re
 import logging
 import tornado
 from tornado.ioloop import IOLoop, PeriodicCallback
@@ -25,6 +26,11 @@ class Authorization:
         self.auth_enabled = config.getboolean('enabled', True)
         self.trusted_connections = {}
         self.access_tokens = {}
+
+        # Get allowed cors domains
+        cors_cfg = config.get('cors_domains', "").strip()
+        self.cors_domains = [d.strip().replace(".", "\\.").replace("*", ".*")
+                             for d in cors_cfg.split('\n')if d.strip()]
 
         # Get Trusted Clients
         self.trusted_ips = []
@@ -52,11 +58,13 @@ class Authorization:
         t_clients = "\n".join(
             [str(ip) for ip in self.trusted_ips] +
             [str(rng) for rng in self.trusted_ranges])
+        c_domains = "\n".join(self.cors_domains)
 
         logging.info(
             f"Authorization Configuration Loaded\n"
             f"Auth Enabled: {self.auth_enabled}\n"
-            f"Trusted Clients:\n{t_clients}")
+            f"Trusted Clients:\n{t_clients}\n"
+            f"CORS Domains:\n{c_domains}")
 
         self.prune_handler = PeriodicCallback(
             self._prune_conn_handler, PRUNE_CHECK_TIME)
@@ -71,12 +79,13 @@ class Authorization:
             "/access/oneshot_token", ['GET'],
             self._handle_token_request, protocol=['http'])
 
-    async def _handle_apikey_request(self, path, method, args):
-        if method.upper() == 'POST':
+    async def _handle_apikey_request(self, web_request):
+        action = web_request.get_action()
+        if action.upper() == 'POST':
             self.api_key = self._create_api_key()
         return self.api_key
 
-    async def _handle_token_request(self, path, method, args):
+    async def _handle_token_request(self, web_request):
         return self.get_access_token()
 
     def _read_api_key(self):
@@ -175,63 +184,100 @@ class Authorization:
             return True
         return False
 
+    def check_cors(self, origin, request=None):
+        if origin is None:
+            return False
+        for regex in self.cors_domains:
+            match = re.match(regex, origin)
+            if match is not None:
+                if match.group() == origin:
+                    logging.debug(f"CORS Pattern Matched, origin: {origin} "
+                                  f" | pattern: {regex}")
+                    self._set_cors_headers(origin, request)
+                    return True
+                else:
+                    logging.debug(f"Partial Cors Match: {match.group()}")
+        else:
+            logging.debug(f"No CORS match for origin: {origin}\n"
+                          f"Patterns: {self.cors_domains}")
+        return False
+
+    def _set_cors_headers(self, origin, request):
+        if request is None:
+            return
+        request.set_header("Access-Control-Allow-Origin", origin)
+        request.set_header(
+            "Access-Control-Allow-Methods",
+            "GET, POST, PUT, DELETE, OPTIONS")
+        request.set_header(
+            "Access-Control-Allow-Headers",
+            "Origin, Accept, Content-Type, X-Requested-With, "
+            "X-CRSF-Token")
+
     def close(self):
         self.prune_handler.stop()
 
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
-    def initialize(self, server, auth):
-        self.server = server
-        self.auth = auth
+    def initialize(self):
+        app = self.settings['parent']
+        self.server = app.get_server()
+        self.auth = app.get_auth()
+        self.wsm = app.get_websocket_manager()
+
+    def set_default_headers(self):
+        origin = self.request.headers.get("Origin")
+        # it is necessary to look up the parent app here,
+        # as initialize() may not yet be called
+        auth = self.settings['parent'].get_auth()
+        self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):
             raise tornado.web.HTTPError(401, "Unauthorized")
 
-    def set_default_headers(self):
-        if self.settings['enable_cors']:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header(
-                "Access-Control-Allow-Methods",
-                "GET, POST, PUT, DELETE, OPTIONS")
-            self.set_header(
-                "Access-Control-Allow-Headers",
-                "Origin, Accept, Content-Type, X-Requested-With, "
-                "X-CRSF-Token")
-
     def options(self, *args, **kwargs):
         # Enable CORS if configured
-        if self.settings['enable_cors']:
+        if self.cors_enabled:
             self.set_status(204)
             self.finish()
         else:
             super(AuthorizedRequestHandler, self).options()
 
+    def get_associated_websocket(self):
+        # Return associated websocket connection if an id
+        # was provided by the request
+        conn = None
+        conn_id = self.get_argument('connection_id', None)
+        if conn_id is not None:
+            try:
+                conn_id = int(conn_id)
+            except Exception:
+                pass
+            else:
+                conn = self.wsm.get_websocket(conn_id)
+        return conn
+
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files
 class AuthorizedFileHandler(tornado.web.StaticFileHandler):
-    def initialize(self, server, auth, path, default_filename=None):
+    def initialize(self, path, default_filename=None):
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
-        self.server = server
-        self.auth = auth
+        app = self.settings['parent']
+        self.server = app.get_server()
+        self.auth = app.get_auth()
+
+    def set_default_headers(self):
+        origin = self.request.headers.get("Origin")
+        auth = self.settings['parent'].get_auth()
+        self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self):
         if not self.auth.check_authorized(self.request):
             raise tornado.web.HTTPError(401, "Unauthorized")
 
-    def set_default_headers(self):
-        if self.settings['enable_cors']:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header(
-                "Access-Control-Allow-Methods",
-                "GET, POST, PUT, DELETE, OPTIONS")
-            self.set_header(
-                "Access-Control-Allow-Headers",
-                "Origin, Accept, Content-Type, X-Requested-With, "
-                "X-CRSF-Token")
-
     def options(self, *args, **kwargs):
         # Enable CORS if configured
-        if self.settings['enable_cors']:
+        if self.cors_enabled:
             self.set_status(204)
             self.finish()
         else:

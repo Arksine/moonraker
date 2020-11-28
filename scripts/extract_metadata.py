@@ -56,9 +56,10 @@ class BaseSlicer(object):
         self.path = file_path
         self.header_data = self.footer_data = self.log = None
 
-    def set_data(self, header_data, footer_data, log):
+    def set_data(self, header_data, footer_data, fsize, log):
         self.header_data = header_data
         self.footer_data = footer_data
+        self.size = fsize
         self.log = log
 
     def _parse_min_float(self, pattern, data, strict=False):
@@ -77,6 +78,19 @@ class BaseSlicer(object):
 
     def check_identity(self, data):
         return None
+
+    def parse_gcode_start_byte(self):
+        m = re.search(r"\n[MG]\d+\s.*\n", self.header_data)
+        if m is None:
+            return None
+        return m.start()
+
+    def parse_gcode_end_byte(self):
+        rev_data = self.footer_data[::-1]
+        m = re.search(r"\n.*\s\d+[MG]\n", rev_data)
+        if m is None:
+            return None
+        return self.size - m.start()
 
     def parse_first_layer_height(self):
         return None
@@ -518,7 +532,8 @@ SUPPORTED_SLICERS = [
 SUPPORTED_DATA = [
     'first_layer_height', 'layer_height', 'object_height',
     'filament_total', 'estimated_time', 'thumbnails',
-    'first_layer_bed_temp', 'first_layer_extr_temp']
+    'first_layer_bed_temp', 'first_layer_extr_temp',
+    'gcode_start_byte', 'gcode_end_byte']
 
 def extract_metadata(file_path, log):
     metadata = {}
@@ -548,7 +563,7 @@ def extract_metadata(file_path, log):
             footer_data = header_data[remaining - READ_SIZE:] + f.read()
         else:
             footer_data = header_data
-        slicer.set_data(header_data, footer_data, log)
+        slicer.set_data(header_data, footer_data, size, log)
         for key in SUPPORTED_DATA:
             func = getattr(slicer, "parse_" + key)
             result = func()

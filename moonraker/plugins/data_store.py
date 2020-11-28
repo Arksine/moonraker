@@ -98,7 +98,7 @@ class DataStore:
             self.temperature_store[sensor]['temperatures'].append(temp)
             self.temperature_store[sensor]['targets'].append(target)
 
-    async def _handle_temp_store_request(self, path, method, args):
+    async def _handle_temp_store_request(self, web_request):
         store = {}
         for name, sensor in self.temperature_store.items():
             store[name] = {k: list(v) for k, v in sensor.items()}
@@ -111,15 +111,9 @@ class DataStore:
         curtime = time.time()
         self.gcode_queue.append({'message': response, 'time': curtime})
 
-    async def _handle_gcode_store_request(self, path, method, args):
-        count = args.get("count", None)
+    async def _handle_gcode_store_request(self, web_request):
+        count = web_request.get_int("count", None)
         if count is not None:
-            try:
-                count = int(count)
-            except Exception:
-                raise self.server.error(
-                    "Parameter <count> must be an integer value, "
-                    f"received: {count}")
             res = list(self.gcode_queue)[-count:]
         else:
             res = list(self.gcode_queue)
