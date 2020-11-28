@@ -69,3 +69,4 @@ verify_ready
 stop_service
 remove_service
 remove_files
+remove_sudo_fix
