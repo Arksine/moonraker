@@ -224,7 +224,7 @@ client_path:
 
 ```
 
-#### Timelapse Plugin
+## Timelapse Plugin
 Generate Timelapse of a Print
 
 This Plugin depends on FFMPEG and mjpegstreamer installed on the System which
@@ -241,7 +241,7 @@ mjpeg-streamer options see:
 https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimental/plugins/input_uvc/README.md
 
 
-##### Activate and configure the plugin adding following to your moonraker.conf:
+### Activate and configure the plugin adding following to your moonraker.conf:
 ```
 [timelapse]
 enabled: true
@@ -270,7 +270,7 @@ extraoutputparams:
 #   eg rotate video by 180° "-vf transpose=2,transpose=2"
 ```
 
-##### Add the macros to your printer.cfg:
+### Add the macros to your printer.cfg:
 ```
 [gcode_macro TIMELAPSE_TAKE_FRAME]
 gcode:
@@ -279,5 +279,5 @@ gcode:
 Note: You can add extra gcode to the TAKE_FRAME macro if you like to move your
 printhead to a specific position, before taking a picture.
 
-##### Add the macros to your Slicer:
+### Add the macros to your Slicer:
 ``TIMELAPSE_TAKE_FRAME`` -> to before or after Layerchange (where you like the snapshot should be taken)
