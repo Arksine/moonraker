@@ -342,20 +342,6 @@ class GitUpdater:
     async def _update_virtualenv(self, rebuild_env=False):
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
-        if rebuild_env:
-            env_path = os.path.normpath(os.path.join(bin_dir, ".."))
-            env_args = REPO_DATA[self.name]['venv_args']
-            self._notify_status(f"Creating virtualenv at: {env_path}...")
-            if os.path.exists(env_path):
-                shutil.rmtree(env_path)
-            try:
-                await self.execute_cmd(
-                    f"virtualenv {env_args} {env_path}")
-            except Exception:
-                self._log_exc(f"Error creating virtualenv")
-                return
-            if not os.path.expanduser(self.env):
-                raise self._log_exc("Failed to create new virtualenv", False)
         reqs = os.path.join(
             self.repo_path, REPO_DATA[self.name]['requirements'])
         if not os.path.isfile(reqs):
