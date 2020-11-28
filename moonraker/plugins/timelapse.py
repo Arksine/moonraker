@@ -39,7 +39,7 @@ class Timelapse:
         self.server.register_remote_method(
             "timelapse_newframe", self.call_timelapse_newframe)
         self.server.register_endpoint(
-            "/machine/timelapse/finish", ['POST'], self.webrequest_timelapse_finish)
+            "/machine/timelapse/finish", ['POST'], self.timelapse_finish)
         self.server.register_endpoint(
             "/machine/timelapse/settings", ['GET', 'POST'], self.webrequest_timelapse_settings)
                 
@@ -80,17 +80,13 @@ class Timelapse:
         framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
         cmd = "wget " + self.snapshoturl + " -O " \
               + self.temp_dir + framefile
-        # logging.info("cmd: " + cmd)
+        # logging.info(f"cmd: {cmd}")
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
         try:
             await scmd.run(timeout=2., verbose=False)
         except Exception:
             logging.exception(f"Error running cmd '{cmd}'")
-               
-    def call_timelapse_finish(self):
-        ioloop = IOLoop.current()
-        ioloop.spawn_callback(self.timelapse_finish)
         
     async def webrequest_timelapse_finish(self, webrequest):
         ioloop = IOLoop.current()
@@ -115,18 +111,22 @@ class Timelapse:
                 os.remove(filepath)
         self.framecount = 0     
         
-    async def timelapse_finish(self):
+    async def timelapse_finish(self, webrequest=None):
         # logging.info("timelapse_finish")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
         if not filelist:
-            logging.info("timelapse_finish: no frames, skip video render ")
+            msg = "timelapse_finish: no frames, skip video render"
+            logging.info(msg)
+            status = "skipped"
+            cmd = None 
+            outfile = None
         else:
             self.framecount = 0
             klippy_apis = self.server.lookup_plugin("klippy_apis")
             result = await klippy_apis.query_objects({'print_stats': None})
             pstats = result.get("print_stats", {})
             gcodefile = pstats.get("filename", "") #.split(".", 1)[0]
-            #logging.info("gcodefile: " + gcodefile)
+            #logging.info(f"gcodefile: {gcodefile}")
             now = datetime.now() 
             date_time = now.strftime(self.timeformatcode)
             inputfiles = self.temp_dir + "frame%6d.jpg"
@@ -140,16 +140,33 @@ class Timelapse:
                   + " -vcodec libx264" \
                   + " " + self.extraoutputparams \
                   + " '" + outfile + "' -y" 
-            logging.info("start FFMPEG: " + cmd)
+            logging.info(f"start FFMPEG: {cmd}")
             shell_command = self.server.lookup_plugin("shell_command")
             scmd = shell_command.build_shell_command(cmd, self.ffmpeg_response)
             try:
-                await scmd.run(timeout=None, verbose=False)
+                cmdstatus = await scmd.run(timeout=None, verbose=False)
             except Exception:
-                logging.exception(f"Error running cmd '{cmd}'")  
+                logging.exception(f"Error running cmd '{cmd}'")
+            
+            # check completion of the Popen process
+            # warning for now this don't represent the real statuscode of the execution!
+            if cmdstatus:
+                status = "completed"
+                msg = f"Rendering Video completed: {outfile}"    
+            else:  
+                status = "error"
+                msg = f"Rendering Video failed"   
                 
-    def ffmpeg_response(self, response):
-        logging.info(response)
+        return {
+                'status': status,
+                'file': outfile,
+                'cmd': cmd,
+                'msg': msg
+            }
+            
+                
+    def ffmpeg_response(self, response, statuscode):
+        logging.info(f"ffmpegResponse: {response}")
             
 def load_plugin(config):
     return Timelapse(config)
