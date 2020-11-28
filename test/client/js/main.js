@@ -160,8 +160,8 @@ function update_term(msg) {
     let start = '<div id="line' + line_count + '">';
     $("#term").append(start + msg + "</div>");
     line_count++;
-    if (line_count >= 50) {
-        let rm = line_count - 50
+    if (line_count >= 200) {
+        let rm = line_count - 200
         $("#line" + rm).remove();
     }
     if ($("#cbxAuto").is(":checked")) {
@@ -736,6 +736,11 @@ function handle_power_changed(power_status) {
     console.log(power_status)
 }
 json_rpc.register_method("notify_power_changed", handle_power_changed);
+
+function handle_update_response(response) {
+    update_term(response.message)
+}
+json_rpc.register_method("notify_update_response", handle_update_response);
 
 function handle_file_list_changed(file_info) {
     // This event fires when a client has either added or removed

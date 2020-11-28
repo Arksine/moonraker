@@ -47,6 +47,7 @@ class Server:
             'klippy_uds_address', "/tmp/klippy_uds")
         self.klippy_connection = KlippyConnection(
             self.process_command, self.on_connection_closed)
+        self.klippy_info = {}
         self.init_list = []
         self.init_handle = None
         self.init_attempts = 0
@@ -101,7 +102,7 @@ class Server:
 
         # check for optional plugins
         opt_sections = set([s.split()[0] for s in config.sections()]) - \
-            set(['server', 'authorization', 'cmd_args'])
+            set(['server', 'authorization', 'system_args'])
         for section in opt_sections:
             self.load_plugin(config, section, None)
 
@@ -163,6 +164,9 @@ class Server:
     def get_host_info(self):
         hostname = socket.gethostname()
         return hostname, self.port
+
+    def get_klippy_info(self):
+        return dict(self.klippy_info)
 
     # ***** Klippy Connection *****
     async def _connect_klippy(self):
@@ -283,12 +287,7 @@ class Server:
             return
         if send_id:
             self.init_list.append("identified")
-        # Update filemanager fixed paths
-        fixed_paths = {k: result[k] for k in
-                       ['klipper_path', 'python_path',
-                        'log_file', 'config_file']}
-        file_manager = self.lookup_plugin('file_manager')
-        file_manager.update_fixed_paths(fixed_paths)
+        self.klippy_info = dict(result)
         self.klippy_state = result.get('state', "unknown")
         if self.klippy_state == "ready":
             await self._verify_klippy_requirements()
@@ -550,12 +549,14 @@ def main():
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")
-    cmd_line_args = parser.parse_args()
+    system_args = parser.parse_args()
 
     # Setup Logging
-    log_file = os.path.normpath(os.path.expanduser(cmd_line_args.logfile))
-    cmd_line_args.logfile = log_file
-    ql = utils.setup_logging(log_file)
+    version = utils.get_software_version()
+    log_file = os.path.normpath(os.path.expanduser(system_args.logfile))
+    system_args.logfile = log_file
+    system_args.software_version = version
+    ql = utils.setup_logging(log_file, version)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
@@ -570,7 +571,7 @@ def main():
     estatus = 0
     while True:
         try:
-            server = Server(cmd_line_args)
+            server = Server(system_args)
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1
