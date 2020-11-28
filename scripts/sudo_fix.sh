@@ -48,12 +48,12 @@ create_sudoers_file()
 
 Cmnd_Alias REBOOT = /sbin/shutdown -r now, /bin/systemctl "reboot"
 Cmnd_Alias SHUTDOWN = /sbin/shutdown now, /sbin/shutdown -h now, /bin/systemctl "poweroff"
+Cmnd_Alias APT = /usr/bin/apt-get
+Cmnd_Alias SYSTEMCTL = /bin/systemctl
 
-# Maybe useful in future
-#Cmnd_Alias APT = /usr/bin/apt "update", /usr/bin/apt "upgrade", /usr/bin/apt "list --upgradeable", /usr/bin/apt "full-upgrade", /usr/bin/apt "upgrade"
-#Cmnd_Alias SYSTEMCTL = /bin/systemctl  
+  
 
-%GROUPNAME ALL=(ALL) NOPASSWD: REBOOT, SHUTDOWN
+%GROUPNAME ALL=(ALL) NOPASSWD: REBOOT, SHUTDOWN, APT, SYSTEMCTL
 
 #EOF
  
