@@ -355,11 +355,10 @@ class GitUpdater:
                 shutil.rmtree(env_path)
             try:
                 await self.execute_cmd(
-                    f"virtualenv {env_args} {env_path}")
+                    f"virtualenv {env_args} {env_path}", timeout=300.)
             except Exception:
                 self._log_exc(f"Error creating virtualenv")
                 return
-            await tornado.gen.sleep(.5)
             if not os.path.expanduser(self.env):
                 raise self._log_exc("Failed to create new virtualenv", False)
         reqs = os.path.join(
