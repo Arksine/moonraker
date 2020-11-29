@@ -123,11 +123,16 @@ class UpdateManager:
             'version_info': vinfo,
             'busy': self.current_update is not None}
 
-    async def execute_cmd(self, cmd, timeout=10., notify=False):
+    async def execute_cmd(self, cmd, timeout=10., notify=False, retries=1):
         shell_command = self.server.lookup_plugin('shell_command')
         cb = self.notify_update_response if notify else None
         scmd = shell_command.build_shell_command(cmd, callback=cb)
-        await scmd.run(timeout=timeout, verbose=notify)
+        while retries:
+            if await scmd.run(timeout=timeout, verbose=notify):
+                break
+            retries -= 1
+        if not retries:
+            raise self.server.error("Shell Command Error")
 
     async def execute_cmd_with_response(self, cmd, timeout=10.):
         shell_command = self.server.lookup_plugin('shell_command')
@@ -342,6 +347,21 @@ class GitUpdater:
     async def _update_virtualenv(self, rebuild_env=False):
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
+        if rebuild_env:
+            env_path = os.path.normpath(os.path.join(bin_dir, ".."))
+            env_args = REPO_DATA[self.name]['venv_args']
+            self._notify_status(f"Creating virtualenv at: {env_path}...")
+            if os.path.exists(env_path):
+                shutil.rmtree(env_path)
+            try:
+                await self.execute_cmd(
+                    f"virtualenv {env_args} {env_path}")
+            except Exception:
+                self._log_exc(f"Error creating virtualenv")
+                return
+            await tornado.gen.sleep(.5)
+            if not os.path.expanduser(self.env):
+                raise self._log_exc("Failed to create new virtualenv", False)
         reqs = os.path.join(
             self.repo_path, REPO_DATA[self.name]['requirements'])
         if not os.path.isfile(reqs):
@@ -351,7 +371,8 @@ class GitUpdater:
         self._notify_status("Updating python packages...")
         try:
             await self.execute_cmd(
-                f"{pip} install -r {reqs}", timeout=1200., notify=True)
+                f"{pip} install -r {reqs}", timeout=1200., notify=True,
+                retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
 
