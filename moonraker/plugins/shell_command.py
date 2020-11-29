@@ -20,6 +20,7 @@ class ShellCommand:
         self.command = shlex.split(cmd)
         self.partial_output = b""
         self.cancelled = False
+        self.return_code = None
 
     def _process_output(self, fd, events):
         if events & IOLoop.ERROR:
@@ -40,8 +41,11 @@ class ShellCommand:
     def cancel(self):
         self.cancelled = True
 
+    def get_return_code(self):
+        return self.return_code
+
     async def run(self, timeout=2., verbose=True):
-        fd = None
+        self.return_code = fd = None
         if timeout is None:
             # Never timeout
             timeout = 9999999999999999.
@@ -87,7 +91,8 @@ class ShellCommand:
                 msg = f"Command ({self.name}) timed out"
             logging.info(msg)
             self.io_loop.remove_handler(fd)
-        return complete
+        self.return_code = proc.returncode
+        return self.return_code == 0 and complete
 
     async def run_with_response(self, timeout=2.):
         result = []
