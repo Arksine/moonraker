@@ -55,7 +55,7 @@ class ShellCommand:
         except Exception:
             logging.exception(
                 f"shell_command: Command ({self.name}) failed")
-            return
+            return False
         if verbose:
             fd = proc.stdout.fileno()
             self.io_loop.add_handler(
