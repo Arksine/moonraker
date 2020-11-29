@@ -20,6 +20,14 @@ remove_service() {
 
 }
 
+remove_sudo_fix() {
+    echo
+    echo "#### Removing sudo_fix"
+    sudo gpasswd -d $USER mnrkrsudo
+    sudo delgroup --only-if-empty mnrkrsudo
+    sudo rm -f /etc/sudoers.d/020-sudo-for-moonraker 
+}
+
 remove_files() {
     # Remove API Key file from older versions
     if [ -e ~/.klippy_api_key ]; then
@@ -61,3 +69,4 @@ verify_ready
 stop_service
 remove_service
 remove_files
+remove_sudo_fix
