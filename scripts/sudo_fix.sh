@@ -7,7 +7,7 @@
 #
 # Partially used functions from Arcsine
 #
-# Copyright (C) 2020 KwadFan <me@stephanwe.de>
+# Copyright (C) 2020 Stephan Wendel <me@stephanwe.de>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 
