@@ -75,7 +75,8 @@ functionality in moonraker.
 ## paneldue
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
-converter.
+converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
+releases may not behave correctly.
 
 ```
 [paneldue]
