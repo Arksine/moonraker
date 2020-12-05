@@ -8,7 +8,8 @@ Python 3 packages meet this requirement.
 
 Klipper should be installed prior to installing Moonraker.  Please see
 [Klipper's Documention](https://github.com/KevinOConnor/klipper/blob/master/docs/Installation.md)
-for instructions on how to do this.
+for instructions on how to do this.  After installation you should make
+sure that the [prerequistes](#prerequisites-klipper-configuration) are configured.
 
 After Klipper is installed, you need to modify its "default" file.  This file
 contains klipper's command line arguments, and you must add an argument that
@@ -38,8 +39,27 @@ KLIPPY_EXEC=/home/pi/klippy-env/bin/python
 KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer.cfg -l /tmp/klippy.log -a /tmp/klippy_uds"
 ```
 You may also want to take this opportunity to change the location of
-printer.cfg if you enable Moonraker's "config_path" option (see the
-[configuration section](#moonraker-configuration-moonrakerconf) for more information).
+printer.cfg to match Moonraker's "config_path" option (see the
+[configuration document](configuration.md#primary-configuration)
+for more information on the config_path). For example, if the `config_path`
+option is set to  `~/printer_config`, your klipper defaults file might look
+like the following:
+```
+# Configuration for /etc/init.d/klipper
+
+KLIPPY_USER=pi
+
+KLIPPY_EXEC=/home/pi/klippy-env/bin/python
+
+KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer_config/printer.cfg -l /tmp/klippy.log -a /tmp/klippy_uds"
+```
+
+If necessary, create the config directory and move printer.cfg to it:
+```
+cd ~
+mkdir printer_config
+mv printer.cfg printer_config
+```
 
 You can now install the Moonraker application:
 ```
@@ -47,10 +67,22 @@ cd ~
 git clone https://github.com/Arksine/moonraker.git
 ```
 
-Finally, run moonraker's install script:
+Prior to installation it is a good idea to create
+[moonraker.conf](configuration.md).  If you are using the `config_path`,
+create it in the specified directory otherwise create it in the HOME
+directory.  A sample `moonraker.conf` may be found in the `docs` folder
+of this repo.
+
+For a default installation run the following commands:
 ```
 cd ~/moonraker/scripts
 ./install-moonraker.sh
+```
+
+Or to install with `moonraker.conf` in the `config_path`:
+```
+cd ~/moonraker/scripts
+./install-moonraker.sh -f -c /home/pi/printer_config/moonraker.conf
 ```
 
 The install script has a few command line options that may be useful,
@@ -64,18 +96,15 @@ particularly for those upgrading:
   detected as present.
 - -c /path/to/moonraker.conf\
   This allows the user to specify the path to Moonraker's config file.
-  The default location is "/home/<user>/moonraker.conf".
+  The default location is `/home/<user>/moonraker.conf`.
 
 When the script completes it should start both Moonraker and Klipper. In
 `klippy.log` you should find the following entry:\
-`webhooks: New connection established`
+`webhooks client <uid>: Client info {'program': 'Moonraker', 'version': '<version>'}`\
 
-Now you may install a client, such as [Mainsail](
-https://github.com/meteyou/mainsail).
-- Note that as of the time of this writing (August 11 2020) the current version
-  of Mainsail (0.1.2) is not compatible with this repo.  Please give the
-  developer some time to bring up Mainsail in line with the latest release
-  of Moonraker.
+Now you may install a client, such as
+[Mainsail](https://github.com/meteyou/mainsail) or
+[Fluidd](https://github.com/cadriel/fluidd)
 
 ## Command line Usage
 The configuration and log file paths may be specified via the command
