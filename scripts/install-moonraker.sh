@@ -86,6 +86,13 @@ start_software()
     sudo systemctl start klipper
 }
 
+# Step 7: Install sudo_fix
+install_sudo_fix()
+{
+    report_status "\e[1;31mTo use [update_manager] sudo_fix.sh is required\e[0m"
+    source ./sudo_fix.sh
+}
+
 # Helper functions
 report_status()
 {
@@ -123,3 +130,4 @@ create_virtualenv
 install_script
 install_config
 start_software
+install_sudo_fix
