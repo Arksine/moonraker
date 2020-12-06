@@ -17,7 +17,7 @@ to see if any action is necessary on their part.  The date of the most
 recent change is included.
 
 Users:\
-[user_changes.md](/docs/user_changes.md) - November 19th 2020
+[user_changes.md](/docs/user_changes.md) - December 6th 2020
 
 Developers:\
 [api_changes.md](/docs/api_changes.md) - November 28th 2020
