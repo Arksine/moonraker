@@ -3,6 +3,7 @@
 # Raspbian/Raspberry Pi OS based distributions.
 
 PYTHONDIR="${HOME}/moonraker-env"
+SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="n"
 FORCE_DEFAULTS="n"
 CONFIG_PATH="${HOME}/moonraker.conf"
@@ -19,7 +20,19 @@ check_klipper()
 
 }
 
-# Step 2: Install packages
+# Step 2: Clean up legacy installation
+cleanup_legacy() {
+    if [ -f "/etc/init.d/moonraker" ]; then
+        # Stop Moonraker Service
+        echo "#### Cleanup legacy install script"
+        sudo systemctl stop moonraker
+        sudo update-rc.d -f moonraker remove
+        sudo rm -f /etc/init.d/moonraker
+        sudo rm -f /etc/default/moonraker
+    fi
+}
+
+# Step 3: Install packages
 install_packages()
 {
     PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
@@ -33,7 +46,7 @@ install_packages()
     sudo apt-get install --yes ${PKGLIST}
 }
 
-# Step 3: Create python virtual environment
+# Step 4: Create python virtual environment
 create_virtualenv()
 {
     report_status "Installing python virtual environment..."
@@ -50,39 +63,41 @@ create_virtualenv()
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
 }
 
-# Step 4: Install startup script
+# Step 5: Install startup script
 install_script()
 {
+# Create systemd service file
+    SERVICE_FILE="${SYSTEMDDIR}/moonraker.service"
+    [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
     report_status "Installing system start script..."
-    sudo cp "${SRCDIR}/scripts/moonraker-start.sh" /etc/init.d/moonraker
-    sudo update-rc.d moonraker defaults
-}
+    sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
+#Systemd service file for moonraker
+[Unit]
+Description=Starts Moonraker on startup
+After=network.target
 
-# Step 5: Install startup script config
-install_config()
-{
-    DEFAULTS_FILE=/etc/default/moonraker
-    [ -f $DEFAULTS_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
+[Install]
+WantedBy=multi-user.target
 
-    report_status "Installing system start configuration..."
-    sudo /bin/sh -c "cat > $DEFAULTS_FILE" <<EOF
-# Configuration for /etc/init.d/moonraker
-
-MOONRAKER_USER=$USER
-
-MOONRAKER_EXEC=${PYTHONDIR}/bin/python
-
-MOONRAKER_ARGS="${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH}"
-
+[Service]
+Type=simple
+User=$USER
+RemainAfterExit=yes
+ExecStart=${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH}
+Restart=always
+RestartSec=10
 EOF
+# Use systemctl to enable the klipper systemd service script
+    sudo systemctl enable moonraker.service
 }
+
 
 # Step 6: Start server
 start_software()
 {
     report_status "Launching Moonraker API Server..."
     sudo systemctl stop klipper
-    sudo /etc/init.d/moonraker restart
+    sudo systemctl restart moonraker
     sudo systemctl start klipper
 }
 
@@ -117,9 +132,9 @@ done
 
 # Run installation steps defined above
 verify_ready
+cleanup_legacy
 check_klipper
 install_packages
 create_virtualenv
 install_script
-install_config
 start_software
