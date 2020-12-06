@@ -132,8 +132,8 @@ done
 
 # Run installation steps defined above
 verify_ready
-cleanup_legacy
 check_klipper
+cleanup_legacy
 install_packages
 create_virtualenv
 install_script

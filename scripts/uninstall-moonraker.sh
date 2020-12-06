@@ -25,7 +25,7 @@ remove_sudo_fix() {
     echo "#### Removing sudo_fix"
     sudo gpasswd -d $USER mnrkrsudo
     sudo delgroup --only-if-empty mnrkrsudo
-    sudo rm -f /etc/sudoers.d/020-sudo-for-moonraker 
+    sudo rm -f /etc/sudoers.d/020-sudo-for-moonraker
 }
 
 remove_files() {
