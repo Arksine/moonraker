@@ -302,34 +302,52 @@ class Cura(BaseSlicer):
             os.path.basename(self.path))[0] + ".png"
         thumbPath = os.path.join(
             os.path.dirname(self.path), "thumbs", thumbName)
-        if not os.path.isfile(thumbPath):
-            return None
-        # read file
+        thumb_matches = re.findall(
+            r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", self.header_data)
         thumbs = []
-        try:
-            with open(thumbPath, 'rb') as thumbFile:
-                fbytes = thumbFile.read()
-                with Image.open(io.BytesIO(fbytes)) as im:
-                    thumbFull = base64.b64encode(fbytes).decode()
-                    thumbs.append({
-                        'width': im.width, 'height': im.height,
-                        'size': len(thumbFull), 'data': thumbFull
-                    })
-                    # Create 32x32 thumbnail
-                    im.thumbnail((32, 32), Image.ANTIALIAS)
-                    tmpThumb = io.BytesIO()
-                    im.save(tmpThumb, format="PNG")
-                    thumbSmall = base64.b64encode(
-                        tmpThumb.getbuffer()).decode()
-                    tmpThumb.close()
-                    thumbs.insert(0, {
-                        'width': im.width, 'height': im.height,
-                        'size': len(thumbSmall), 'data': thumbSmall
-                    })
-        except Exception as e:
-            self.log.append(str(e))
-            return None
-        return thumbs
+        if os.path.isfile(thumbPath):
+            # read file
+            try:
+                with open(thumbPath, 'rb') as thumbFile:
+                    fbytes = thumbFile.read()
+                    with Image.open(io.BytesIO(fbytes)) as im:
+                        thumbFull = base64.b64encode(fbytes).decode()
+                        thumbs.append({
+                            'width': im.width, 'height': im.height,
+                            'size': len(thumbFull), 'data': thumbFull
+                        })
+                        # Create 32x32 thumbnail
+                        im.thumbnail((32, 32), Image.ANTIALIAS)
+                        tmpThumb = io.BytesIO()
+                        im.save(tmpThumb, format="PNG")
+                        thumbSmall = base64.b64encode(
+                            tmpThumb.getbuffer()).decode()
+                        tmpThumb.close()
+                        thumbs.insert(0, {
+                            'width': im.width, 'height': im.height,
+                            'size': len(thumbSmall), 'data': thumbSmall
+                        })
+            except Exception as e:
+                self.log.append(str(e))
+        if thumb_matches:
+            for match in thumb_matches:
+                lines = re.split(r"\r?\n", match.replace('; ', ''))
+                info = _regex_find_ints(r".*", lines[0])
+                data = "".join(lines[1:-1])
+                if len(info) != 3:
+                    self.log.append(
+                        f"MetadataError: Error parsing thumbnail"
+                        f" header: {lines[0]}")
+                    continue
+                if len(data) != info[2]:
+                    self.log.append(
+                        f"MetadataError: Thumbnail Size Mismatch: "
+                        f"detected {info[2]}, actual {len(data)}")
+                    continue
+                thumbs.append({
+                    'width': info[0], 'height': info[1],
+                    'size': info[2], 'data': data})
+        return thumbs or None
 
 class Simplify3D(BaseSlicer):
     def check_identity(self, data):
