@@ -153,6 +153,7 @@ class PanelDue:
         self.heaters = []
         self.is_ready = False
         self.is_shutdown = False
+        self.initialized = False
         self.last_printer_state = 'C'
 
         # Set up macros
@@ -353,7 +354,8 @@ class PanelDue:
             for p in parts[1:]:
                 arg = p[0].lower() if p[0].lower() in "psr" else "p"
                 try:
-                    val = int(p[1:].strip()) if arg in "sr" else p[1:].strip()
+                    val = int(p[1:].strip()) if arg in "sr" \
+                        else p[1:].strip(" \"\t\n")
                 except Exception:
                     msg = f"paneldue: Error parsing direct gcode {script}"
                     self.handle_gcode_response("!! " + msg)
@@ -383,6 +385,8 @@ class PanelDue:
             logging.exception(msg)
 
     def _clean_filename(self, filename):
+        # Remove quotes and whitespace
+        filename.strip(" \"\t\n")
         # Remove drive number
         if filename.startswith("0:/"):
             filename = filename[3:]
@@ -399,15 +403,15 @@ class PanelDue:
         return filename
 
     def _prepare_M23(self, args):
-        filename = self._clean_filename(args[0].strip())
+        filename = self._clean_filename(args[0])
         return "M23 " + filename
 
     def _prepare_M32(self, args):
-        filename = self._clean_filename(args[0].strip())
+        filename = self._clean_filename(args[0])
         return "SDCARD_PRINT_FILE FILENAME=" + filename
 
     def _prepare_M98(self, args):
-        macro = args[0][1:].strip()
+        macro = args[0][1:].strip(" \"\t\n")
         name_start = macro.rfind('/') + 1
         macro = macro[name_start:]
         cmd = self.available_macros.get(macro)
@@ -499,8 +503,12 @@ class PanelDue:
         sequence = arg_r
         response_type = arg_s
 
+        if not self.initialized:
+            response['dir'] = "/macros"
+            response['files'] = list(self.available_macros.keys())
+            self.initialized = True
+
         if not self.is_ready:
-            # Klipper is still starting up, do not query status
             self.last_printer_state = 'S' if self.is_shutdown else 'C'
             response['status'] = self.last_printer_state
             await self.write_response(response)
