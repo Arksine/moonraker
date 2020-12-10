@@ -16,6 +16,7 @@ from tornado.ioloop import IOLoop
 from tornado.locks import Lock
 
 MIN_EST_TIME = 10.
+INITIALIZE_TIMEOUT = 10.
 
 class PanelDueError(ServerError):
     pass
@@ -47,6 +48,7 @@ class SerialConnection:
             self.ser.close()
             self.ser = None
             self.partial_input = b""
+            self.paneldue.initialized = False
             logging.info("PanelDue Disconnected")
         if reconnect and not self.attempting_connect:
             self.attempting_connect = True
@@ -170,6 +172,7 @@ class PanelDue:
         self.is_shutdown = False
         self.initialized = False
         self.last_printer_state = 'C'
+        self.last_update_time = 0.
 
         # Set up macros
         self.confirmed_gcode = ""
@@ -517,6 +520,11 @@ class PanelDue:
         response = {}
         sequence = arg_r
         response_type = arg_s
+
+        curtime = self.ioloop.time()
+        if curtime - self.last_update_time > INITIALIZE_TIMEOUT:
+            self.initialized = False
+        self.last_update_time = curtime
 
         if not self.initialized:
             response['dir'] = "/macros"
