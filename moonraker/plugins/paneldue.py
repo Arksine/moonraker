@@ -35,9 +35,10 @@ class SerialConnection:
         self.connected = False
         self.busy = False
         self.pending_lines = []
+        self.attempting_connect = True
         self.ioloop.spawn_callback(self._connect)
 
-    def disconnect(self):
+    def disconnect(self, reconnect=False):
         if self.connected:
             if self.fd is not None:
                 self.ioloop.remove_handler(self.fd)
@@ -45,7 +46,11 @@ class SerialConnection:
             self.connected = False
             self.ser.close()
             self.ser = None
+            self.partial_input = b""
             logging.info("PanelDue Disconnected")
+        if reconnect and not self.attempting_connect:
+            self.attempting_connect = True
+            self.ioloop.call_later(1., self._connect)
 
     async def _connect(self):
         start_time = connect_time = time.time()
@@ -71,11 +76,12 @@ class SerialConnection:
                 self.fd, self._handle_incoming, IOLoop.READ | IOLoop.ERROR)
             self.connected = True
             logging.info("PanelDue Connected")
+        self.attempting_connect = False
 
     def _handle_incoming(self, fd, events):
         if events & IOLoop.ERROR:
             logging.info("PanelDue Connection Error")
-            self.disconnect()
+            self.disconnect(reconnect=True)
             return
         # Process incoming data using same method as gcode.py
         try:
@@ -85,7 +91,7 @@ class SerialConnection:
 
         if not data:
             # possibly an error, disconnect
-            self.disconnect()
+            self.disconnect(reconnect=True)
             logging.info("serial_display: No data received, disconnecting")
             return
 
@@ -132,7 +138,7 @@ class SerialConnection:
                     else:
                         logging.exception(
                             "Error writing data, closing serial connection")
-                        self.disconnect()
+                        self.disconnect(reconnect=True)
                         return
 
 
