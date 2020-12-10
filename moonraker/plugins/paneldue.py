@@ -33,6 +33,8 @@ class SerialConnection:
         self.partial_input = b""
         self.ser = self.fd = None
         self.connected = False
+        self.busy = False
+        self.pending_lines = []
         self.ioloop.spawn_callback(self._connect)
 
     def disconnect(self):
@@ -86,25 +88,32 @@ class SerialConnection:
             self.disconnect()
             logging.info("serial_display: No data received, disconnecting")
             return
-        self.ioloop.spawn_callback(self._process_data, data)
 
-    async def _process_data(self, data):
         # Remove null bytes, separate into lines
-        data = data.strip(b'\x00')
+        data = data.strip(b'\x00\xFF')
         lines = data.split(b'\n')
         lines[0] = self.partial_input + lines[0]
         self.partial_input = lines.pop()
-        for line in lines:
+        self.pending_lines.extend(lines)
+        if self.busy:
+            return
+        self.busy = True
+        self.ioloop.spawn_callback(self._process_commands)
+
+    async def _process_commands(self):
+        while self.pending_lines:
+            line = self.pending_lines.pop(0)
             line = line.strip().decode()
             try:
                 await self.paneldue.process_line(line)
             except ServerError:
                 logging.exception(
-                    "GCode Processing Error: " + line)
+                    f"GCode Processing Error: {line}")
                 self.paneldue.handle_gcode_response(
-                    "!! GCode Processing Error: " + line)
+                    f"!! GCode Processing Error: {line}")
             except Exception:
                 logging.exception("Error during gcode processing")
+        self.busy = False
 
     async def send(self, data):
         if self.connected:
