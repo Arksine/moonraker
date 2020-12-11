@@ -9,6 +9,7 @@ import time
 import json
 import errno
 import logging
+import asyncio
 from collections import deque
 from utils import ServerError
 from tornado import gen
@@ -165,6 +166,9 @@ class PanelDue:
         self.is_ready = False
         self.is_shutdown = False
         self.initialized = False
+        self.cq_busy = self.gq_busy = False
+        self.command_queue = []
+        self.gc_queue = []
         self.last_printer_state = 'O'
         self.last_update_time = 0.
 
@@ -351,11 +355,9 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            self._run_gcode(line[line_index+1:cs_index])
+            script = line[line_index+1:cs_index]
         else:
-            self._run_gcode(line)
-
-    def _run_gcode(self, script):
+            script = line
         # Execute the gcode.  Check for special RRF gcodes that
         # require special handling
         parts = script.split()
@@ -376,7 +378,7 @@ class PanelDue:
                     return
                 params["arg_" + arg] = val
             func = self.direct_gcodes[cmd]
-            func(**params)
+            self.queue_command(func, **params)
             return
 
         # Prepare GCodes that require special handling
@@ -386,18 +388,44 @@ class PanelDue:
 
         if not script:
             return
-        elif script in RESTART_GCODES:
-            self.ioloop.spawn_callback(self.klippy_apis.do_restart, script)
-            return
-        self.ioloop.spawn_callback(self._send_klippy_gcode, script)
+        self.queue_gcode(script)
 
-    async def _send_klippy_gcode(self, script):
-        try:
-            await self.klippy_apis.run_gcode(script)
-        except self.server.error:
-            msg = f"Error executing script {script}"
-            self.handle_gcode_response("!! " + msg)
-            logging.exception(msg)
+    def queue_gcode(self, script):
+        self.gc_queue.append(script)
+        if not self.gq_busy:
+            self.gq_busy = True
+            self.ioloop.spawn_callback(self._process_gcode_queue)
+
+    async def _process_gcode_queue(self):
+        while self.gc_queue:
+            script = self.gc_queue.pop(0)
+            try:
+                if script in RESTART_GCODES:
+                    await self.klippy_apis.do_restart(script)
+                else:
+                    await self.klippy_apis.run_gcode(script)
+            except self.server.error:
+                msg = f"Error executing script {script}"
+                self.handle_gcode_response("!! " + msg)
+                logging.exception(msg)
+        self.gq_busy = False
+
+    def queue_command(self, cmd, *args, **kwargs):
+        self.command_queue.append((cmd, args, kwargs))
+        if not self.cq_busy:
+            self.cq_busy = True
+            self.ioloop.spawn_callback(self._process_command_queue)
+
+    async def _process_command_queue(self):
+        while self.command_queue:
+            cmd, args, kwargs = self.command_queue.pop(0)
+            try:
+                ret = cmd(*args, **kwargs)
+                if asyncio.iscoroutine(ret):
+                    await ret
+            except Exception:
+                logging.exception("Error processing command")
+        self.cq_busy = False
 
     def _clean_filename(self, filename):
         # Remove quotes and whitespace
@@ -419,11 +447,11 @@ class PanelDue:
 
     def _prepare_M23(self, args):
         filename = self._clean_filename(args[0])
-        return "M23 " + filename
+        return f"M23 {filename}"
 
     def _prepare_M32(self, args):
         filename = self._clean_filename(args[0])
-        return "SDCARD_PRINT_FILE FILENAME=" + filename
+        return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
 
     def _prepare_M98(self, args):
         macro = args[0][1:].strip(" \"\t\n")
@@ -463,6 +491,7 @@ class PanelDue:
         mbox['msgBox.title'] = title
         mbox['msgBox.controls'] = 0
         mbox['msgBox.timeout'] = 0
+        logging.debug(f"Creating PanelDue Confirmation: {mbox}")
         self.write_response(mbox)
 
     def handle_gcode_response(self, response):
@@ -490,8 +519,6 @@ class PanelDue:
             return 'S'
 
         printer_state = self.printer_state
-        p_busy = printer_state['idle_timeout'].get(
-            'state', 'Idle') == "Printing"
         sd_state = printer_state['print_stats'].get('state', "standby")
         if sd_state == "printing":
             if self.last_printer_state == 'A':
@@ -500,16 +527,14 @@ class PanelDue:
             # Printing
             return 'P'
         elif sd_state == "paused":
-            if p_busy and self.last_printer_state != 'A':
+            p_active = printer_state['idle_timeout'].get(
+                'state', 'Idle') == "Printing"
+            if p_active and self.last_printer_state != 'A':
                 # Pausing
                 return 'D'
             else:
                 # Paused
                 return 'A'
-
-        if p_busy:
-            # Printer is "busy"
-            return 'B'
 
         return 'I'
 
@@ -678,7 +703,7 @@ class PanelDue:
                 response['files'] = flist
         self.write_response(response)
 
-    def _run_paneldue_M30(self, arg_p=None):
+    async def _run_paneldue_M30(self, arg_p=None):
         # Delete a file.  Clean up the file name and make sure
         # it is relative to the "gcodes" root.
         path = arg_p
@@ -690,7 +715,7 @@ class PanelDue:
 
         if not path.startswith("gcodes/"):
             path = "gcodes/" + path
-        self.ioloop.spawn_callback(self.file_manager.delete_file, path)
+        await self.file_manager.delete_file(path)
 
     def _run_paneldue_M36(self, arg_p=None):
         response = {}
