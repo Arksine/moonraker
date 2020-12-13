@@ -309,8 +309,8 @@ class WebSocket(WebSocketHandler):
                 'method': "notify_status_update",
                 'params': [status]})
         except WebSocketClosedError:
-            self.websockets.pop(self.uid, None)
-            logging.info(f"Websocket Removed: {self.uid}")
+            logging.info(
+                f"Websocket Closed During Status Update: {self.uid}")
         except Exception:
             logging.exception(
                 f"Error sending data over websocket: {self.uid}")
