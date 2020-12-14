@@ -451,6 +451,8 @@ class PanelDue:
 
     def _prepare_M32(self, args):
         filename = self._clean_filename(args[0])
+        # Escape existing double quotes in the file name
+        filename = filename.replace("\"", "\\\"")
         return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
 
     def _prepare_M98(self, args):
