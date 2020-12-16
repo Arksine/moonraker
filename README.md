@@ -6,9 +6,10 @@ the Klippy host and Moonraker is done over a Unix Domain Socket.  Tornado
 is used to provide Moonraker's server functionality.
 
 Note that Moonraker does not come bundled with a client, you will need to
-install one.  The following web clients are currently available:
+install one.  The following clients are currently available:
 - [Mainsail](https://github.com/meteyou/mainsail) by Meteyou
 - [Fluidd](https://github.com/cadriel/fluidd) by Cadriel
+- [KlipperScreen](https://github.com/jordanruthe/KlipperScreen) by jordanruthe
 
 ### Changes
 
