@@ -25,14 +25,14 @@ REPO_PREFIX = "https://api.github.com/repos"
 REPO_DATA = {
     'moonraker': {
         'repo_url': f"{REPO_PREFIX}/arksine/moonraker/branches/master",
-        'origin': "https://github.com/Arksine/moonraker.git",
+        'origin': "https://github.com/arksine/moonraker.git",
         'install_script': "scripts/install-moonraker.sh",
         'requirements': "scripts/moonraker-requirements.txt",
         'venv_args': "-p python3 --system-site-packages"
     },
     'klipper': {
         'repo_url': f"{REPO_PREFIX}/kevinoconnor/klipper/branches/master",
-        'origin': "https://github.com/KevinOConnor/klipper.git",
+        'origin': "https://github.com/kevinoconnor/klipper.git",
         'install_script': "scripts/install-octopi.sh",
         'requirements': "scripts/klippy-requirements.txt",
         'venv_args': "-p python2"
@@ -256,11 +256,14 @@ class GitUpdater:
         if not branch.startswith("fatal:"):
             self.cur_hash = hash
             if branch == "master":
+                origin = origin.lower()
+                if origin[-4:] != ".git":
+                    origin += ".git"
                 if origin == REPO_DATA[self.name]['origin']:
                     self.is_valid = True
                     self._log_info("Validity check for git repo passed")
                 else:
-                    self._log_info(f"Invalid git origin '{origin}''")
+                    self._log_info(f"Invalid git origin '{origin}'")
             else:
                 self._log_info("Git repo not on master branch")
         else:
