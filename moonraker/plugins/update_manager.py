@@ -165,14 +165,15 @@ class UpdateManager:
             decoded = json.loads(resp.body)
             return decoded
 
-    def notify_update_response(self, resp):
+    def notify_update_response(self, resp, is_complete=False):
         resp = resp.strip()
         if isinstance(resp, bytes):
             resp = resp.decode()
         notification = {
             'message': resp,
             'application': None,
-            'proc_id': None}
+            'proc_id': None,
+            'complete': is_complete}
         if self.current_update is not None:
             notification['application'] = self.current_update[0]
             notification['proc_id'] = self.current_update[1]
@@ -228,10 +229,10 @@ class GitUpdater:
         log_msg = f"Repo {self.name}: {msg}"
         logging.info(log_msg)
 
-    def _notify_status(self, msg):
+    def _notify_status(self, msg, is_complete=False):
         log_msg = f"Repo {self.name}: {msg}"
         logging.debug(log_msg)
-        self.notify_update_response(log_msg)
+        self.notify_update_response(log_msg, is_complete)
 
     async def refresh_update_state(self):
         self.is_valid = False
@@ -318,9 +319,12 @@ class GitUpdater:
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
-            IOLoop.current().spawn_callback(self.restart_service)
+            self._notify_status("Update Finished...",
+                                is_complete=True)
+            IOLoop.current().call_later(.1, self.restart_service)
         else:
             await self.restart_service()
+            self._notify_status("Update Finished...", is_complete=True)
 
     async def _install_packages(self):
         # Open install file file and read
@@ -418,6 +422,8 @@ class PackageUpdater:
                 f"{APT_CMD} upgrade --yes", timeout=3600., notify=True)
         except Exception:
             raise self.server.error("Error updating system packages")
+        self.notify_update_response("Package update finished...",
+                                    is_complete=True)
 
 class ClientUpdater:
     def __init__(self, umgr, repo, path):
@@ -484,7 +490,8 @@ class ClientUpdater:
         if not os.path.exists(version_path):
             with open(version_path, "w") as f:
                 f.write(self.version)
-        self.notify_update_response(f"Client Updated: {self.name}")
+        self.notify_update_response(f"Client Updated Finished: {self.name}",
+                                    is_complete=True)
 
     def get_update_status(self):
         return {
