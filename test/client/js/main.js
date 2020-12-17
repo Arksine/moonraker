@@ -738,6 +738,10 @@ function handle_power_changed(power_status) {
 json_rpc.register_method("notify_power_changed", handle_power_changed);
 
 function handle_update_response(response) {
+    if (response.complete === true) {
+        console.log("Update complete");
+        console.log(response);
+    }
     update_term(response.message)
 }
 json_rpc.register_method("notify_update_response", handle_update_response);
