@@ -15,6 +15,7 @@ import asyncio
 import tornado.gen
 from tornado.ioloop import IOLoop
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.locks import Event
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../.."))
@@ -89,12 +90,6 @@ class UpdateManager:
         env = kinfo['python_path']
         self.updaters['klipper'] = GitUpdater(self, "klipper", kpath, env)
 
-    async def _refresh_git_repo_state(self):
-        for updater in self.updaters.values():
-            ret = updater.refresh_update_state()
-            if asyncio.iscoroutine(ret):
-                await ret
-
     async def _handle_update_request(self, web_request):
         app = web_request.get_endpoint().split("/")[-1]
         inc_deps = web_request.get_boolean('include_deps', False)
@@ -113,10 +108,14 @@ class UpdateManager:
         return "ok"
 
     async def _handle_status_request(self, web_request):
-        if web_request.get_boolean('refresh', False):
-            await self._refresh_git_repo_state()
+        refresh = web_request.get_boolean('refresh', False)
         vinfo = {}
         for name, updater in self.updaters.items():
+            await updater.check_initialized(10.)
+            if refresh:
+                ret = updater.refresh()
+                if asyncio.iscoroutine(ret):
+                    await ret
             if hasattr(updater, "get_update_status"):
                 vinfo[name] = updater.get_update_status()
         return {
@@ -195,8 +194,9 @@ class GitUpdater:
         self.repo_path = path
         self.env = env
         self.version = self.cur_hash = self.remote_hash = "?"
+        self.init_evt = Event()
         self.is_valid = self.is_dirty = False
-        IOLoop.current().spawn_callback(self.refresh_update_state)
+        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_version_info(self):
         ver_path = os.path.join(self.repo_path, "scripts/version.txt")
@@ -234,7 +234,14 @@ class GitUpdater:
         logging.debug(log_msg)
         self.notify_update_response(log_msg, is_complete)
 
-    async def refresh_update_state(self):
+    async def check_initialized(self, timeout=None):
+        if self.init_evt.is_set():
+            return
+        if timeout is not None:
+            to = IOLoop.current.time() + timeout
+        await self.init_evt.wait(to)
+
+    async def refresh(self):
         self.is_valid = False
         self.cur_hash = "?"
         try:
@@ -277,6 +284,7 @@ class GitUpdater:
             await self.check_remote_version()
         except Exception:
             pass
+        self.init_evt.set()
 
     async def check_remote_version(self):
         repo_url = REPO_DATA[self.name]['repo_url']
@@ -408,9 +416,12 @@ class PackageUpdater:
         self.execute_cmd = umgr.execute_cmd
         self.notify_update_response = umgr.notify_update_response
 
-    def refresh_update_state(self):
+    def refresh(self):
         # TODO: We should be able to determine if packages need to be
         # updated here
+        pass
+
+    async def check_initialized(self, timeout=None):
         pass
 
     async def update(self, *args):
@@ -434,11 +445,12 @@ class ClientUpdater:
         self.name = self.repo.split("/")[-1]
         self.path = path
         self.version = self.remote_version = self.dl_url = "?"
+        self.init_evt = Event()
         self._get_local_version()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\nversion: {self.version}"
                      f"\npath: {self.path}")
-        IOLoop.current().spawn_callback(self.refresh_update_state)
+        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_local_version(self):
         version_path = os.path.join(self.path, ".version")
@@ -447,7 +459,14 @@ class ClientUpdater:
                 v = f.read()
             self.version = v.strip()
 
-    async def refresh_update_state(self):
+    async def check_initialized(self, timeout=None):
+        if self.init_evt.is_set():
+            return
+        if timeout is not None:
+            to = IOLoop.current.time() + timeout
+        await self.init_evt.wait(to)
+
+    async def refresh(self):
         # Local state
         self._get_local_version()
 
@@ -465,10 +484,11 @@ class ClientUpdater:
             f"Github client Info Received: {self.name}, "
             f"version: {self.remote_version} "
             f"url: {self.dl_url}")
+        self.init_evt.set()
 
     async def update(self, *args):
         if self.remote_version == "?":
-            await self.check_remote_version()
+            await self.refresh()
             if self.remote_version == "?":
                 raise self.server.error(
                     f"Client {self.repo}: Unable to locate update")
