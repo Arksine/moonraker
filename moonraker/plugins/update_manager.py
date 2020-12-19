@@ -238,7 +238,7 @@ class GitUpdater:
         if self.init_evt.is_set():
             return
         if timeout is not None:
-            to = IOLoop.current.time() + timeout
+            to = IOLoop.current().time() + timeout
         await self.init_evt.wait(to)
 
     async def refresh(self):
@@ -463,7 +463,7 @@ class ClientUpdater:
         if self.init_evt.is_set():
             return
         if timeout is not None:
-            to = IOLoop.current.time() + timeout
+            to = IOLoop.current().time() + timeout
         await self.init_evt.wait(to)
 
     async def refresh(self):
