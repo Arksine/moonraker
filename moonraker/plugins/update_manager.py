@@ -242,6 +242,11 @@ class GitUpdater:
         await self.init_evt.wait(to)
 
     async def refresh(self):
+        await self._check_local_version()
+        await self._check_remote_version()
+        self.init_evt.set()
+
+    async def _check_local_version(self):
         self.is_valid = False
         self.cur_hash = "?"
         try:
@@ -280,13 +285,8 @@ class GitUpdater:
                 self._log_info("Git repo not on master branch")
         else:
             self._log_info(f"Invalid git repo at path '{self.repo_path}'")
-        try:
-            await self.check_remote_version()
-        except Exception:
-            pass
-        self.init_evt.set()
 
-    async def check_remote_version(self):
+    async def _check_remote_version(self):
         repo_url = REPO_DATA[self.name]['repo_url']
         try:
             branch_info = await self.github_request(repo_url)
@@ -307,7 +307,7 @@ class GitUpdater:
             raise self._log_exc(
                 "Update aborted, repo is has been modified", False)
         if self.remote_hash == "?":
-            await self.check_remote_version()
+            await self._check_remote_version()
         if self.remote_hash == self.cur_hash:
             # No need to update
             return
@@ -324,6 +324,8 @@ class GitUpdater:
         if update_deps:
             await self._install_packages()
             await self._update_virtualenv(need_env_rebuild)
+        # Refresh local repo state
+        await self._check_local_version()
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
