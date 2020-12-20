@@ -15,6 +15,7 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
+ETC_DIR = "/etc/moonraker"
 METADATA_SCRIPT = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
@@ -85,8 +86,8 @@ class FileManager:
             return False
         home = os.path.expanduser('~')
         path = os.path.normpath(os.path.expanduser(path))
-        if not os.path.isdir(path) or not path.startswith(home) or \
-                path == home:
+        if not os.path.isdir(path) or path == home or \
+                not (path.startswith(home) or path.startswith(ETC_DIR)):
             logging.info(
                 f"\nSupplied path ({path}) for ({root}) not valid. Please\n"
                 "check that the path exists and is a subfolder in the HOME\n"
