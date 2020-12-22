@@ -399,7 +399,7 @@ class GitUpdater:
                         src = os.path.join(dist_dir, f)
                         dest = os.path.join(env_path, site_path, f)
                         self._notify_status(f"Linking to dist package: {pkg}")
-                        os.symlink(f, dest)
+                        os.symlink(src, dest)
                         break
         reqs = os.path.join(
             self.repo_path, REPO_DATA[self.name]['requirements'])
