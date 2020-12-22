@@ -30,14 +30,20 @@ REPO_DATA = {
         'origin': "https://github.com/arksine/moonraker.git",
         'install_script': "scripts/install-moonraker.sh",
         'requirements': "scripts/moonraker-requirements.txt",
-        'venv_args': "-p python3 --system-site-packages"
+        'venv_args': "-p python3",
+        'dist_packages': ["gpiod"],
+        'dist_dir': "/usr/lib/python3/dist-packages",
+        'site_pkg_path': "lib/python3.7/site-packages",
     },
     'klipper': {
         'repo_url': f"{REPO_PREFIX}/kevinoconnor/klipper/branches/master",
         'origin': "https://github.com/kevinoconnor/klipper.git",
         'install_script': "scripts/install-octopi.sh",
         'requirements': "scripts/klippy-requirements.txt",
-        'venv_args': "-p python2"
+        'venv_args': "-p python2",
+        'dist_packages': [],
+        'dist_dir': "",
+        'site_pkg_path': "",
     }
 }
 
@@ -382,6 +388,17 @@ class GitUpdater:
                 return
             if not os.path.expanduser(self.env):
                 raise self._log_exc("Failed to create new virtualenv", False)
+            dist_pkgs = REPO_DATA[self.name]['dist_packages']
+            dist_dir = REPO_DATA[self.name]['dist_dir']
+            site_path = REPO_DATA[self.name]['site_pkg_path']
+            for pkg in dist_pkgs:
+                for f in os.listdir(dist_dir):
+                    if f.startswith(pkg):
+                        src = os.path.join(dist_dir, f)
+                        dest = os.path.join(env_path, site_path, f)
+                        self._notify_status(f"Linking to dist package: {pkg}")
+                        os.symlink(f, dest)
+                        break
         reqs = os.path.join(
             self.repo_path, REPO_DATA[self.name]['requirements'])
         if not os.path.isfile(reqs):
