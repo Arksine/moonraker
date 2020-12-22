@@ -57,7 +57,10 @@ create_virtualenv()
         rm -rf ${PYTHONDIR}
     fi
 
-    [ ! -d ${PYTHONDIR} ] && virtualenv -p /usr/bin/python3 --system-site-packages ${PYTHONDIR}
+    if [ ! -d ${PYTHONDIR} ]; then
+        virtualenv -p /usr/bin/python3 ${PYTHONDIR}
+        ln -s /usr/lib/python3/dist-packages/gpiod* ${PYTHONDIR}/lib/python*/site-packages
+    fi
 
     # Install/update dependencies
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
