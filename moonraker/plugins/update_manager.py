@@ -330,6 +330,8 @@ class GitUpdater:
         if update_deps:
             await self._install_packages()
             await self._update_virtualenv(need_env_rebuild)
+        elif need_env_rebuild:
+            await self._update_virtualenv(True)
         # Refresh local repo state
         await self._check_local_version()
         if self.name == "moonraker":
