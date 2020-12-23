@@ -1,2 +1,2 @@
-env_version=0.2.5
+env_version=0.2.6
 deps_version=0.2.2
