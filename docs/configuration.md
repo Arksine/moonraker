@@ -1,9 +1,14 @@
-This document describes Moonraker's full configuration.
+This document describes Moonraker's full configuration.  As this file
+references configuration for both Klipper (printer.cfg) and Moonraker
+(moonraker.conf), each example contains a commment indicating which
+configuration file is being refrenenced.
 
 # Primary Configuration
 The sections outlined here are required for Moonraker to function. A
 minimal functional configuration might look like the following:
 ```
+# moonraker.conf
+
 [server]
 host: 0.0.0.0
 port: 7125
@@ -19,6 +24,8 @@ trusted_clients:
 ## server
 
 ```
+# moonraker.conf
+
 [server]
 host: 0.0.0.0
 #  The host address in which to bind the HTTP server.  Default is to bind
@@ -34,15 +41,22 @@ enable_debug_logging: True
 #   When set to True Moonraker will log in verbose mode.  During this stage
 #   of development the default is True.  In the future this will change.
 config_path:
-#   An optional path where configuration files are located. If specified,
-#   Moonraker will serve this path allowing file and directory manipulation
-#   within it. This path must be located within the user's HOME directory,
-#   by may not be the home directory itself. The default is no path, which
-#   results in no configuration files being served.
+#   The path to a directory where configuration files are located. This
+#   directory may contain Klipper config files (printer.cfg) or Moonraker
+#   config files (moonraker.conf).  Clients may also write their own config
+#   files to this directory.  There are restrictions on the location of
+#   this path, it must be located within the users HOME directory or within
+#   "/etc/moonraker".  The path may not be the HOME directory itself.  It is
+#   valid for the path to be "/etc/moonraker", however this is not recommended.
+#   Something like "/etc/moonraker/config" would be a more appropriate option.
+#   If you choose to locate files in "/etc/moonraker" be sure that Moonraker
+#   has read/write permissions in this directory.
 ```
 ## authorization
 
 ```
+# moonraker.conf
+
 [authorization]
 enabled: True
 #   Enables authorization.  When set to true, requests must either contain
@@ -75,9 +89,12 @@ functionality in moonraker.
 ## paneldue
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
-converter.
+converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
+releases may not behave correctly.
 
 ```
+# moonraker.conf
+
 [paneldue]
 serial:
 #   The serial port in which the PanelDue is connected.  This parameter
@@ -110,6 +127,8 @@ in the PanelDue's "macro" menu.
 
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
 ```
+# printer.cfg
+
 [gcode_macro PANELDUE_BEEP]
 # Beep frequency
 default_parameter_FREQUENCY: 300
@@ -126,6 +145,8 @@ Enables device power control.  Currently GPIO (relays), TPLink Smartplug,
 and Tasmota (via http) devices are supported.
 
 ```
+# moonraker.conf
+
 [power device_name]
 type: gpio
 #   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
@@ -160,6 +181,8 @@ output_id:
 ```
 Below are some potential examples:
 ```
+# moonraker.conf
+
 [power printer]
 type: gpio
 pin: gpio26
@@ -181,6 +204,8 @@ password: password1
 It is possible to toggle device power from the Klippy host, this can be done
 with a gcode_macro, such as:
 ```
+# printer.cfg
+
 [gcode_macro POWER_OFF_PRINTER]
 gcode:
   {action_call_remote_method("set_device_power",
@@ -191,6 +216,8 @@ The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
 printer off when idle with a configuration similar to that of below:
 ```
+# printer.cfg
+
 [delayed_gcode delayed_printer_off]
 initial_duration: 0.
 gcode:
@@ -211,6 +238,8 @@ performed on pristine git repos.  Repos that have been modified on
 disk or cloned from unofficial sources are not supported.
 
 ```
+# moonraker.conf
+
 [update_manager]
 client_repo:
 #   This is the GitHub repo of the client, in the format of user/client.

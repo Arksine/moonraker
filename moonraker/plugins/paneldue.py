@@ -9,13 +9,14 @@ import time
 import json
 import errno
 import logging
+import asyncio
 from collections import deque
 from utils import ServerError
 from tornado import gen
 from tornado.ioloop import IOLoop
-from tornado.locks import Lock
 
 MIN_EST_TIME = 10.
+INITIALIZE_TIMEOUT = 10.
 
 class PanelDueError(ServerError):
     pass
@@ -29,13 +30,15 @@ class SerialConnection:
         self.paneldue = paneldue
         self.port = config.get('serial')
         self.baud = config.getint('baud', 57600)
-        self.sendlock = Lock()
         self.partial_input = b""
         self.ser = self.fd = None
         self.connected = False
+        self.send_busy = False
+        self.send_buffer = b""
+        self.attempting_connect = True
         self.ioloop.spawn_callback(self._connect)
 
-    def disconnect(self):
+    def disconnect(self, reconnect=False):
         if self.connected:
             if self.fd is not None:
                 self.ioloop.remove_handler(self.fd)
@@ -43,7 +46,13 @@ class SerialConnection:
             self.connected = False
             self.ser.close()
             self.ser = None
+            self.partial_input = b""
+            self.send_buffer = b""
+            self.paneldue.initialized = False
             logging.info("PanelDue Disconnected")
+        if reconnect and not self.attempting_connect:
+            self.attempting_connect = True
+            self.ioloop.call_later(1., self._connect)
 
     async def _connect(self):
         start_time = connect_time = time.time()
@@ -69,11 +78,12 @@ class SerialConnection:
                 self.fd, self._handle_incoming, IOLoop.READ | IOLoop.ERROR)
             self.connected = True
             logging.info("PanelDue Connected")
+        self.attempting_connect = False
 
     def _handle_incoming(self, fd, events):
         if events & IOLoop.ERROR:
             logging.info("PanelDue Connection Error")
-            self.disconnect()
+            self.disconnect(reconnect=True)
             return
         # Process incoming data using same method as gcode.py
         try:
@@ -83,49 +93,51 @@ class SerialConnection:
 
         if not data:
             # possibly an error, disconnect
-            self.disconnect()
+            self.disconnect(reconnect=True)
             logging.info("serial_display: No data received, disconnecting")
             return
-        self.ioloop.spawn_callback(self._process_data, data)
 
-    async def _process_data(self, data):
         # Remove null bytes, separate into lines
         data = data.strip(b'\x00')
         lines = data.split(b'\n')
         lines[0] = self.partial_input + lines[0]
         self.partial_input = lines.pop()
         for line in lines:
-            line = line.strip().decode()
             try:
-                await self.paneldue.process_line(line)
+                line = line.strip().decode('utf-8', 'ignore')
+                self.paneldue.process_line(line)
             except ServerError:
                 logging.exception(
-                    "GCode Processing Error: " + line)
+                    f"GCode Processing Error: {line}")
                 self.paneldue.handle_gcode_response(
-                    "!! GCode Processing Error: " + line)
+                    f"!! GCode Processing Error: {line}")
             except Exception:
                 logging.exception("Error during gcode processing")
 
-    async def send(self, data):
-        if self.connected:
-            async with self.sendlock:
-                while data:
-                    try:
-                        sent = os.write(self.fd, data)
-                    except os.error as e:
-                        if e.errno == errno.EBADF or e.errno == errno.EPIPE:
-                            sent = 0
-                        else:
-                            await gen.sleep(.001)
-                            continue
-                    if sent:
-                        data = data[sent:]
-                    else:
-                        logging.exception(
-                            "Error writing data, closing serial connection")
-                        self.disconnect()
-                        return
+    def send(self, data):
+        self.send_buffer += data
+        if not self.send_busy:
+            self.send_busy = True
+            self.ioloop.spawn_callback(self._do_send)
 
+    async def _do_send(self):
+        while self.send_buffer:
+            try:
+                sent = os.write(self.fd, self.send_buffer)
+            except os.error as e:
+                if e.errno == errno.EBADF or e.errno == errno.EPIPE:
+                    sent = 0
+                else:
+                    await gen.sleep(.001)
+                    continue
+            if sent:
+                self.send_buffer = self.send_buffer[sent:]
+            else:
+                logging.exception(
+                    "Error writing data, closing serial connection")
+                self.disconnect(reconnect=True)
+                return
+        self.send_busy = False
 
 class PanelDue:
     def __init__(self, config):
@@ -153,7 +165,12 @@ class PanelDue:
         self.heaters = []
         self.is_ready = False
         self.is_shutdown = False
-        self.last_printer_state = 'C'
+        self.initialized = False
+        self.cq_busy = self.gq_busy = False
+        self.command_queue = []
+        self.gc_queue = []
+        self.last_printer_state = 'O'
+        self.last_update_time = 0.
 
         # Set up macros
         self.confirmed_gcode = ""
@@ -277,31 +294,32 @@ class PanelDue:
         self.is_shutdown = False
         self.is_ready = True
 
-    async def _process_klippy_shutdown(self):
+    def _process_klippy_shutdown(self):
         self.is_shutdown = True
 
-    async def _process_klippy_disconnect(self):
-        # Tell the PD that we are shutting down
-        await self.write_response({'status': 'S'})
-        self.is_ready = False
+    def _process_klippy_disconnect(self):
+        # Tell the PD that the printer is "off"
+        self.write_response({'status': 'O'})
+        self.last_printer_state = 'O'
+        self.is_shutdown = self.is_shutdown = False
 
-    async def handle_status_update(self, status):
+    def handle_status_update(self, status):
         for obj, items in status.items():
             if obj in self.printer_state:
                 self.printer_state[obj].update(items)
             else:
                 self.printer_state[obj] = items
 
-    async def paneldue_beep(self, frequency, duration):
+    def paneldue_beep(self, frequency, duration):
         duration = int(duration * 1000.)
-        await self.write_response(
+        self.write_response(
             {'beep_freq': frequency, 'beep_length': duration})
 
-    async def process_line(self, line):
+    def process_line(self, line):
         self.debug_queue.append(line)
         # If we find M112 in the line then skip verification
         if "M112" in line.upper():
-            await self.klippy_apis.emergency_stop()
+            self.ioloop.spawn_callback(self.klippy_apis.emergency_stop)
             return
 
         if self.enable_checksum:
@@ -337,11 +355,9 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            await self._run_gcode(line[line_index+1:cs_index])
+            script = line[line_index+1:cs_index]
         else:
-            await self._run_gcode(line)
-
-    async def _run_gcode(self, script):
+            script = line
         # Execute the gcode.  Check for special RRF gcodes that
         # require special handling
         parts = script.split()
@@ -353,7 +369,8 @@ class PanelDue:
             for p in parts[1:]:
                 arg = p[0].lower() if p[0].lower() in "psr" else "p"
                 try:
-                    val = int(p[1:].strip()) if arg in "sr" else p[1:].strip()
+                    val = int(p[1:].strip()) if arg in "sr" \
+                        else p[1:].strip(" \"\t\n")
                 except Exception:
                     msg = f"paneldue: Error parsing direct gcode {script}"
                     self.handle_gcode_response("!! " + msg)
@@ -361,7 +378,7 @@ class PanelDue:
                     return
                 params["arg_" + arg] = val
             func = self.direct_gcodes[cmd]
-            await func(**params)
+            self.queue_command(func, **params)
             return
 
         # Prepare GCodes that require special handling
@@ -371,18 +388,48 @@ class PanelDue:
 
         if not script:
             return
-        elif script in RESTART_GCODES:
-            await self.klippy_apis.do_restart(script)
-            return
+        self.queue_gcode(script)
 
-        try:
-            await self.klippy_apis.run_gcode(script)
-        except self.server.error:
-            msg = f"Error executing script {script}"
-            self.handle_gcode_response("!! " + msg)
-            logging.exception(msg)
+    def queue_gcode(self, script):
+        self.gc_queue.append(script)
+        if not self.gq_busy:
+            self.gq_busy = True
+            self.ioloop.spawn_callback(self._process_gcode_queue)
+
+    async def _process_gcode_queue(self):
+        while self.gc_queue:
+            script = self.gc_queue.pop(0)
+            try:
+                if script in RESTART_GCODES:
+                    await self.klippy_apis.do_restart(script)
+                else:
+                    await self.klippy_apis.run_gcode(script)
+            except self.server.error:
+                msg = f"Error executing script {script}"
+                self.handle_gcode_response("!! " + msg)
+                logging.exception(msg)
+        self.gq_busy = False
+
+    def queue_command(self, cmd, *args, **kwargs):
+        self.command_queue.append((cmd, args, kwargs))
+        if not self.cq_busy:
+            self.cq_busy = True
+            self.ioloop.spawn_callback(self._process_command_queue)
+
+    async def _process_command_queue(self):
+        while self.command_queue:
+            cmd, args, kwargs = self.command_queue.pop(0)
+            try:
+                ret = cmd(*args, **kwargs)
+                if asyncio.iscoroutine(ret):
+                    await ret
+            except Exception:
+                logging.exception("Error processing command")
+        self.cq_busy = False
 
     def _clean_filename(self, filename):
+        # Remove quotes and whitespace
+        filename.strip(" \"\t\n")
         # Remove drive number
         if filename.startswith("0:/"):
             filename = filename[3:]
@@ -399,15 +446,17 @@ class PanelDue:
         return filename
 
     def _prepare_M23(self, args):
-        filename = self._clean_filename(args[0].strip())
-        return "M23 " + filename
+        filename = self._clean_filename(args[0])
+        return f"M23 {filename}"
 
     def _prepare_M32(self, args):
-        filename = self._clean_filename(args[0].strip())
-        return "SDCARD_PRINT_FILE FILENAME=" + filename
+        filename = self._clean_filename(args[0])
+        # Escape existing double quotes in the file name
+        filename = filename.replace("\"", "\\\"")
+        return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
 
     def _prepare_M98(self, args):
-        macro = args[0][1:].strip()
+        macro = args[0][1:].strip(" \"\t\n")
         name_start = macro.rfind('/') + 1
         macro = macro[name_start:]
         cmd = self.available_macros.get(macro)
@@ -444,7 +493,8 @@ class PanelDue:
         mbox['msgBox.title'] = title
         mbox['msgBox.controls'] = 0
         mbox['msgBox.timeout'] = 0
-        self.ioloop.spawn_callback(self.write_response, mbox)
+        logging.debug(f"Creating PanelDue Confirmation: {mbox}")
+        self.write_response(mbox)
 
     def handle_gcode_response(self, response):
         # Only queue up "non-trivial" gcode responses.  At the
@@ -458,9 +508,9 @@ class PanelDue:
                     self.last_gcode_response = response
                     return
 
-    async def write_response(self, response):
+    def write_response(self, response):
         byte_resp = json.dumps(response) + "\r\n"
-        await self.ser_conn.send(byte_resp.encode())
+        self.ser_conn.send(byte_resp.encode())
 
     def _get_printer_status(self):
         # PanelDue States applicable to Klipper:
@@ -471,8 +521,6 @@ class PanelDue:
             return 'S'
 
         printer_state = self.printer_state
-        p_busy = printer_state['idle_timeout'].get(
-            'state', 'Idle') == "Printing"
         sd_state = printer_state['print_stats'].get('state', "standby")
         if sd_state == "printing":
             if self.last_printer_state == 'A':
@@ -481,37 +529,41 @@ class PanelDue:
             # Printing
             return 'P'
         elif sd_state == "paused":
-            if p_busy and self.last_printer_state != 'A':
+            p_active = printer_state['idle_timeout'].get(
+                'state', 'Idle') == "Printing"
+            if p_active and self.last_printer_state != 'A':
                 # Pausing
                 return 'D'
             else:
                 # Paused
                 return 'A'
 
-        if p_busy:
-            # Printer is "busy"
-            return 'B'
-
         return 'I'
 
-    async def _run_paneldue_M408(self, arg_r=None, arg_s=1):
+    def _run_paneldue_M408(self, arg_r=None, arg_s=1):
         response = {}
         sequence = arg_r
         response_type = arg_s
 
-        if not self.is_ready:
-            # Klipper is still starting up, do not query status
-            self.last_printer_state = 'S' if self.is_shutdown else 'C'
-            response['status'] = self.last_printer_state
-            await self.write_response(response)
-            return
+        curtime = self.ioloop.time()
+        if curtime - self.last_update_time > INITIALIZE_TIMEOUT:
+            self.initialized = False
+        self.last_update_time = curtime
 
-        # Send gcode responses
+        if not self.initialized:
+            response['dir'] = "/macros"
+            response['files'] = list(self.available_macros.keys())
+            self.initialized = True
+        if not self.is_ready:
+            self.last_printer_state = 'O'
+            response['status'] = self.last_printer_state
+            self.write_response(response)
+            return
         if sequence is not None and self.last_gcode_response:
+            # Send gcode responses
             response['seq'] = sequence + 1
             response['resp'] = self.last_gcode_response
             self.last_gcode_response = None
-
         if response_type == 1:
             # Extended response Request
             response['myName'] = self.machine_name
@@ -611,9 +663,9 @@ class PanelDue:
             # is strange about this, and displays it as a full screen
             # notification
         self.last_message = msg
-        await self.write_response(response)
+        self.write_response(response)
 
-    async def _run_paneldue_M20(self, arg_p, arg_s=0):
+    def _run_paneldue_M20(self, arg_p, arg_s=0):
         response_type = arg_s
         if response_type != 2:
             logging.info(
@@ -651,7 +703,7 @@ class PanelDue:
             flist = self.file_manager.list_dir(path, simple_format=True)
             if flist:
                 response['files'] = flist
-        await self.write_response(response)
+        self.write_response(response)
 
     async def _run_paneldue_M30(self, arg_p=None):
         # Delete a file.  Clean up the file name and make sure
@@ -667,7 +719,7 @@ class PanelDue:
             path = "gcodes/" + path
         await self.file_manager.delete_file(path)
 
-    async def _run_paneldue_M36(self, arg_p=None):
+    def _run_paneldue_M36(self, arg_p=None):
         response = {}
         filename = arg_p
         sd_status = self.printer_state.get('virtual_sdcard', {})
@@ -682,11 +734,10 @@ class PanelDue:
             if not filename or not active:
                 # Either no file printing or no virtual_sdcard
                 response['err'] = 1
-                await self.write_response(response)
+                self.write_response(response)
                 return
             else:
                 response['fileName'] = filename.split("/")[-1]
-
 
         # For consistency make sure that the filename begins with the
         # "gcodes/" root.  The M20 HACK should add this in some cases.
@@ -718,9 +769,9 @@ class PanelDue:
                 response['printTime'] = int(est_time + .5)
         else:
             response['err'] = 1
-        await self.write_response(response)
+        self.write_response(response)
 
-    async def close(self):
+    def close(self):
         self.ser_conn.disconnect()
         msg = "\nPanelDue GCode Dump:"
         for i, gc in enumerate(self.debug_queue):

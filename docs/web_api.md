@@ -1159,7 +1159,8 @@ Where `response` is an object int he following format:
 {
     application: <string>,
     proc_id: <int>,
-    message: <string>
+    message: <string>,
+    complete: <boolean>
 }
 ```
 - The `application` field contains the name of application currently being
@@ -1169,6 +1170,9 @@ Where `response` is an object int he following format:
   process.  This id is generated for each update request.
 - The `message` field contains an asyncronous message sent during the update
   process.
+- The `complete` field is set to true on the final message sent during an
+  update, indicating that the update completed successfully.  Otherwise it
+  will be false.
 
 # Appendix
 

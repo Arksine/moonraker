@@ -46,6 +46,8 @@ create_sudoers_file()
 ###
 ### /sbin/systemctl "reboot", /sbin/apt "update", .....
 
+Defaults!/usr/bin/apt-get env_keep +="DEBIAN_FRONTEND"
+
 Cmnd_Alias REBOOT = /sbin/shutdown -r now, /bin/systemctl "reboot"
 Cmnd_Alias SHUTDOWN = /sbin/shutdown now, /sbin/shutdown -h now, /bin/systemctl "poweroff"
 Cmnd_Alias APT = /usr/bin/apt-get
@@ -58,6 +60,12 @@ Cmnd_Alias SYSTEMCTL = /bin/systemctl
 #EOF
  
     report_status "\e[1;32m...done\e[0m"
+}
+
+update_env()
+{
+    report_status "Export System Variable: DEBIAN_FRONTEND=noninteractive"
+    sudo /bin/sh -c 'echo "DEBIAN_FRONTEND=noninteractive" >> /etc/environment'
 }
 
 verify_syntax()
@@ -118,8 +126,7 @@ add_user_to_group()
 
 adduser_hint()
 {
-    report_status "\e[1;31mYou have to logout to take changes effect!\e[0m"
-    report_status "If you are lazy, issue a reboot :)"
+    report_status "\e[1;31mYou have to REBOOT to take changes effect!\e[0m"
 }
 
 # Helper functions
@@ -172,5 +179,6 @@ if [ -e "$SUDOERS_DIR/$SUDOERS_FILE" ] && [ $(sudo cat /etc/gshadow | grep -c "$
         fi
 fi
 
+update_env
 clean_temp
 exit 0

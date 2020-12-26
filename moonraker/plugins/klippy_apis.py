@@ -80,6 +80,8 @@ class KlippyAPI:
         # XXX - validate that file is on disk
         if filename[0] == '/':
             filename = filename[1:]
+        # Escape existing double quotes in the file name
+        filename = filename.replace("\"", "\\\"")
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         return await self.run_gcode(script)
 

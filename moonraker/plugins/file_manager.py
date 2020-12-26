@@ -15,6 +15,7 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
+ETC_DIR = "/etc/moonraker"
 METADATA_SCRIPT = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
@@ -85,8 +86,8 @@ class FileManager:
             return False
         home = os.path.expanduser('~')
         path = os.path.normpath(os.path.expanduser(path))
-        if not os.path.isdir(path) or not path.startswith(home) or \
-                path == home:
+        if not os.path.isdir(path) or path == home or \
+                not (path.startswith(home) or path.startswith(ETC_DIR)):
             logging.info(
                 f"\nSupplied path ({path}) for ({root}) not valid. Please\n"
                 "check that the path exists and is a subfolder in the HOME\n"
@@ -373,8 +374,7 @@ class FileManager:
             full_path = root_path
             dir_path = ""
         else:
-            parts = os.path.split(upload['filename'].strip().lstrip("/"))
-            filename = os.path.join(parts[0], "_".join(parts[1].split()))
+            filename = upload['filename'].strip().lstrip("/")
             if dir_path:
                 filename = os.path.join(dir_path, filename)
             full_path = os.path.normpath(os.path.join(root_path, filename))
@@ -653,8 +653,11 @@ class MetadataStorage:
         self.busy = False
 
     async def _run_extract_metadata(self, filename, notify):
+        # Escape single quotes in the file name so that it may be
+        # properly loaded
+        filename = filename.replace("\"", "\\\"")
         cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
-                        self.gc_path, "-f", "'" + filename + "'"])
+                        self.gc_path, "-f", f"\"{filename}\""])
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(
             cmd, self._handle_script_response)
