@@ -160,6 +160,10 @@ pin: gpiochip0/gpio26
 #      !gpiochip0/gpio26
 #      !gpio26
 #    This parameter must be provided for "gpio" type devices
+initial_state: off
+#    The initial state for GPIO type devices.  May be on or
+#    off.  When moonraker starts the device will be set to this
+#    state.  Default is off.
 address:
 port:
 #   The above options are used for "tplink_smartplug" devices.  The
@@ -186,10 +190,17 @@ Below are some potential examples:
 [power printer]
 type: gpio
 pin: gpio26
+initial_state: off
 
 [power printer_led]
 type: gpio
 pin: !gpiochip0/gpio16
+initial_state: off
+
+[power light_strip]
+type: gpio
+pin: gpiochip0/gpio17
+initial_state: on
 
 [power wifi_switch]
 type: tplink_smartplug
