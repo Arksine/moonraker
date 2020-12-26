@@ -164,7 +164,8 @@ class GpioDevice:
                 f"Unable to init {pin}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise config.error("Power GPIO Config Error")
-        self.set_power("off")
+        initial_state = config.getboolean('initial_state', False)
+        self.set_power("on" if initial_state else "off")
 
     def _parse_pin(self, config):
         pin = cfg_pin = config.get("pin")
