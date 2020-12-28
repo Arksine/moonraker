@@ -52,6 +52,9 @@ class UpdateManager:
         self.server = config.get_server()
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
+        self.repo_debug = config.getboolean('enable_repo_debug', False)
+        if self.repo_debug:
+            logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
         env = sys.executable
         self.updaters = {
             "system": PackageUpdater(self),
@@ -201,7 +204,11 @@ class GitUpdater:
         self.env = env
         self.version = self.cur_hash = self.remote_hash = "?"
         self.init_evt = Event()
-        self.is_valid = self.is_dirty = False
+        self.debug = umgr.repo_debug
+        self.remote = "origin"
+        self.branch = "master"
+        self.github_url = None
+        self.is_valid = self.is_dirty = self.detached = False
         IOLoop.current().spawn_callback(self.refresh)
 
     def _get_version_info(self):
@@ -253,13 +260,35 @@ class GitUpdater:
         self.init_evt.set()
 
     async def _check_local_version(self):
-        self.is_valid = False
-        self.cur_hash = "?"
+        self.is_valid = self.detached = False
+        self.cur_hash = self.branch = self.remote = "?"
         try:
-            branch = await self.execute_cmd_with_response(
-                f"git -C {self.repo_path} rev-parse --abbrev-ref HEAD")
-            origin = await self.execute_cmd_with_response(
-                f"git -C {self.repo_path} remote get-url origin")
+            blist = await self.execute_cmd_with_response(
+                f"git -C {self.repo_path} branch --list")
+            if blist.startswith("fatal:"):
+                self._log_info(f"Invalid git repo at path '{self.repo_path}'")
+                return
+            branch = None
+            for b in blist.split("\n"):
+                if b[0] == "*":
+                    branch = b[2:]
+                    break
+            if branch is None:
+                self._log_info(
+                    "Unable to retreive current branch from branch list\n"
+                    f"{branches}")
+                return
+            if "HEAD detached" in branch:
+                bparts = branch.split()[-1].strip("()")
+                self.remote, self.branch = bparts.split("/")
+                self.detached = True
+            else:
+                self.branch = branch.strip()
+                self.remote = await self.execute_cmd_with_response(
+                    f"git -C {self.repo_path} config --get"
+                    f" branch.{self.branch}.remote")
+            remote_url = await self.execute_cmd_with_response(
+                f"git -C {self.repo_path} remote get-url {self.remote}")
             hash = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} rev-parse HEAD")
             repo_version = await self.execute_cmd_with_response(
@@ -275,27 +304,41 @@ class GitUpdater:
         if ver_match:
             tag_version = ver_match.group()
         self.version = tag_version
-
-        if not branch.startswith("fatal:"):
-            self.cur_hash = hash
-            if branch == "master":
-                origin = origin.lower()
-                if origin[-4:] != ".git":
-                    origin += ".git"
-                if origin == REPO_DATA[self.name]['origin']:
-                    self.is_valid = True
-                    self._log_info("Validity check for git repo passed")
-                else:
-                    self._log_info(f"Invalid git origin '{origin}'")
+        self.cur_hash = hash
+        logging.info(
+            f"Repo Detected:\nPath: {self.path}\nRemote: {self.remote}\n"
+            f"Branch: {self.branch}\nHEAD SHA: {self.cur_hash}\n"
+            f"Version: {repo_version}")
+        url_info = re.match(r"https://github.com/(.*)/", remote_url)
+        if url_info is not None:
+            user = url_info.group(1)
+            self.github_url = f"{REPO_PREFIX}/{user}/{self.name}" \
+                f"/branches/{self.branch}"
+        if self.debug:
+            self.is_valid = True
+        elif self.branch == "master" and self.remote == "origin":
+            if self.detached:
+                self._log_info("Detached HEAD detected, repo invalid")
+                return
+            remote_url = remote_url.lower()
+            if remote_url[-4:] != ".git":
+                remote_url += ".git"
+            if remote_url == REPO_DATA[self.name]['origin']:
+                self.github_url = REPO_DATA[name]['repo_url']
+                self.is_valid = True
+                self._log_info("Validity check for git repo passed")
             else:
-                self._log_info("Git repo not on master branch")
+                self._log_info(f"Invalid git origin '{origin}'")
         else:
-            self._log_info(f"Invalid git repo at path '{self.repo_path}'")
+            self._log_info(
+                "Git repo not on offical remote/branch: "
+                f"{self.remote}/{self.branch}")
 
     async def _check_remote_version(self):
-        repo_url = REPO_DATA[self.name]['repo_url']
+        if self.github_url is None:
+            return
         try:
-            branch_info = await self.github_request(repo_url)
+            branch_info = await self.github_request(self.github_url)
         except Exception:
             raise self._log_exc(f"Error retreiving github info")
         commit_hash = branch_info.get('commit', {}).get('sha', None)
@@ -319,7 +362,16 @@ class GitUpdater:
             return
         self._notify_status("Updating Repo...")
         try:
-            await self.execute_cmd(f"git -C {self.repo_path} pull -q")
+            if self.detached:
+                await self.execute_cmd(
+                    f"git -C {self.repo_path} fetch {self.remote} -q",
+                    retries=3)
+                await self.execute_cmd(
+                    f"git -C {self.repo_path} checkout"
+                    f" {self.remote}/{self.branch} -q")
+            else:
+                await self.execute_cmd(
+                    f"git -C {self.repo_path} pull -q", retries=3)
         except Exception:
             raise self._log_exc("Error running 'git pull'")
         # Check Semantic Versions
@@ -424,11 +476,15 @@ class GitUpdater:
 
     def get_update_status(self):
         return {
+            'remote_alias': self.remote,
+            'branch': self.branch,
             'version': self.version,
             'current_hash': self.cur_hash,
             'remote_hash': self.remote_hash,
             'is_dirty': self.is_dirty,
-            'is_valid': self.is_valid}
+            'is_valid': self.is_valid,
+            'detached': self.detached,
+            'debug_enabled': self.debug}
 
 
 class PackageUpdater:
