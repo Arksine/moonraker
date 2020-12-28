@@ -46,6 +46,8 @@ class ShellCommand:
 
     async def run(self, timeout=2., verbose=True):
         self.return_code = fd = None
+        self.partial_output = b""
+        self.cancelled = False
         if timeout is None:
             # Never timeout
             timeout = 9999999999999999.
