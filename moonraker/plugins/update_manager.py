@@ -23,10 +23,8 @@ MOONRAKER_PATH = os.path.normpath(os.path.join(
 # TODO:  May want to attempt to look up the disto for the correct
 # klippy install script or have the user configure it
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
-REPO_PREFIX = "https://api.github.com/repos"
 REPO_DATA = {
     'moonraker': {
-        'repo_url': f"{REPO_PREFIX}/arksine/moonraker/branches/master",
         'origin': "https://github.com/arksine/moonraker.git",
         'install_script': "scripts/install-moonraker.sh",
         'requirements': "scripts/moonraker-requirements.txt",
@@ -36,7 +34,6 @@ REPO_DATA = {
         'site_pkg_path': "lib/python3.7/site-packages",
     },
     'klipper': {
-        'repo_url': f"{REPO_PREFIX}/kevinoconnor/klipper/branches/master",
         'origin': "https://github.com/kevinoconnor/klipper.git",
         'install_script': "scripts/install-octopi.sh",
         'requirements': "scripts/klippy-requirements.txt",
@@ -198,16 +195,15 @@ class GitUpdater:
         self.execute_cmd = umgr.execute_cmd
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
-        self.github_request = umgr.github_request
         self.name = name
         self.repo_path = path
         self.env = env
-        self.version = self.cur_hash = self.remote_hash = "?"
+        self.version = self.cur_hash = "?"
+        self.remote_version = self.remote_hash = "?"
         self.init_evt = Event()
         self.debug = umgr.repo_debug
         self.remote = "origin"
         self.branch = "master"
-        self.github_url = None
         self.is_valid = self.is_dirty = self.detached = False
         IOLoop.current().spawn_callback(self.refresh)
 
@@ -255,13 +251,13 @@ class GitUpdater:
         await self.init_evt.wait(to)
 
     async def refresh(self):
-        await self._check_local_version()
-        await self._check_remote_version()
+        await self._check_version()
         self.init_evt.set()
 
-    async def _check_local_version(self):
+    async def _check_version(self):
         self.is_valid = self.detached = False
         self.cur_hash = self.branch = self.remote = "?"
+        self.version = self.remote_version = "?"
         try:
             blist = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} branch --list")
@@ -270,6 +266,7 @@ class GitUpdater:
                 return
             branch = None
             for b in blist.split("\n"):
+                b = b.strip()
                 if b[0] == "*":
                     branch = b[2:]
                     break
@@ -287,35 +284,47 @@ class GitUpdater:
                 self.remote = await self.execute_cmd_with_response(
                     f"git -C {self.repo_path} config --get"
                     f" branch.{self.branch}.remote")
+            await self.execute_cmd(
+                f"git -C {self.repo_path} fetch {self.remote} --prune -q",
+                retries=3)
             remote_url = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} remote get-url {self.remote}")
-            hash = await self.execute_cmd_with_response(
+            cur_hash = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} rev-parse HEAD")
+            remote_hash = await self.execute_cmd_with_response(
+                f"git -C {self.repo_path} rev-parse "
+                f"{self.remote}/{self.branch}")
             repo_version = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} describe --always "
                 "--tags --long --dirty")
+            remote_version = await self.execute_cmd_with_response(
+                f"git -C {self.repo_path} describe {self.remote}/{self.branch}"
+                " --always --tags --long")
         except Exception:
             self._log_exc("Error retreiving git info")
             return
 
         self.is_dirty = repo_version.endswith("dirty")
-        tag_version = "?"
-        ver_match = re.match(r"v\d+\.\d+\.\d-\d+", repo_version)
-        if ver_match:
-            tag_version = ver_match.group()
-        self.version = tag_version
-        self.cur_hash = hash
-        logging.info(
-            f"Repo Detected:\nPath: {self.path}\nRemote: {self.remote}\n"
-            f"Branch: {self.branch}\nHEAD SHA: {self.cur_hash}\n"
-            f"Version: {repo_version}")
-        url_info = re.match(r"https://github.com/(.*)/", remote_url)
-        if url_info is not None:
-            user = url_info.group(1)
-            self.github_url = f"{REPO_PREFIX}/{user}/{self.name}" \
-                f"/branches/{self.branch}"
+        versions = []
+        for ver in [repo_version, remote_version]:
+            tag_version = "?"
+            ver_match = re.match(r"v\d+\.\d+\.\d-\d+", ver)
+            if ver_match:
+                tag_version = ver_match.group()
+            versions.append(tag_version)
+        self.version, self.remote_version = versions
+        self.cur_hash = cur_hash.strip()
+        self.remote_hash = remote_hash.strip()
+        self._log_info(
+            f"Repo Detected:\nPath: {self.repo_path}\nRemote: {self.remote}\n"
+            f"Branch: {self.branch}\nRemote URL: {remote_url}\n"
+            f"Current SHA: {self.cur_hash}\n"
+            f"Remote SHA: {self.remote_hash}\nVersion: {self.version}\n"
+            f"Remote Version: {self.remote_version}\n"
+            f"Is Dirty: {self.is_dirty}\nIs Detached: {self.detached}")
         if self.debug:
             self.is_valid = True
+            self._log_info("Debug enabled, bypassing official repo check")
         elif self.branch == "master" and self.remote == "origin":
             if self.detached:
                 self._log_info("Detached HEAD detected, repo invalid")
@@ -324,30 +333,14 @@ class GitUpdater:
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
             if remote_url == REPO_DATA[self.name]['origin']:
-                self.github_url = REPO_DATA[name]['repo_url']
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
-                self._log_info(f"Invalid git origin '{origin}'")
+                self._log_info(f"Invalid git origin url '{remote_url}'")
         else:
             self._log_info(
                 "Git repo not on offical remote/branch: "
                 f"{self.remote}/{self.branch}")
-
-    async def _check_remote_version(self):
-        if self.github_url is None:
-            return
-        try:
-            branch_info = await self.github_request(self.github_url)
-        except Exception:
-            raise self._log_exc(f"Error retreiving github info")
-        commit_hash = branch_info.get('commit', {}).get('sha', None)
-        if commit_hash is None:
-            self.is_valid = False
-            self.upstream_version = "?"
-            raise self._log_exc(f"Invalid github response", False)
-        self._log_info(f"Received latest commit hash: {commit_hash}")
-        self.remote_hash = commit_hash
 
     async def update(self, update_deps=False):
         if not self.is_valid:
@@ -355,8 +348,6 @@ class GitUpdater:
         if self.is_dirty:
             raise self._log_exc(
                 "Update aborted, repo is has been modified", False)
-        if self.remote_hash == "?":
-            await self._check_remote_version()
         if self.remote_hash == self.cur_hash:
             # No need to update
             return
@@ -385,7 +376,7 @@ class GitUpdater:
         elif need_env_rebuild:
             await self._update_virtualenv(True)
         # Refresh local repo state
-        await self._check_local_version()
+        await self._check_version()
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
@@ -479,6 +470,7 @@ class GitUpdater:
             'remote_alias': self.remote,
             'branch': self.branch,
             'version': self.version,
+            'remote_version': self.remote_version,
             'current_hash': self.cur_hash,
             'remote_hash': self.remote_hash,
             'is_dirty': self.is_dirty,
