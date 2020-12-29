@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Moonraker - HTTP/Websocket API Server for Klipper
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
