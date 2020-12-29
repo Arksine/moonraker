@@ -85,16 +85,20 @@ class ShellCommand:
             if self.partial_output:
                 self.output_cb(self.partial_output)
                 self.partial_output = b""
-            if complete:
-                msg = f"Command ({self.name}) finished"
-            elif self.cancelled:
-                msg = f"Command ({self.name}) cancelled"
-            else:
-                msg = f"Command ({self.name}) timed out"
-            logging.info(msg)
             self.io_loop.remove_handler(fd)
         self.return_code = proc.returncode
-        return self.return_code == 0 and complete
+        success = self.return_code == 0 and complete
+        if success:
+            msg = f"Command ({self.name}) successfully finished"
+        elif self.cancelled:
+            msg = f"Command ({self.name}) cancelled"
+        elif not complete:
+            msg = f"Command ({self.name}) timed out"
+        else:
+            msg = f"Command ({self.name}) exited with return code" \
+                f" {self.return_code}"
+        logging.info(msg)
+        return success
 
     async def run_with_response(self, timeout=2.):
         result = []
