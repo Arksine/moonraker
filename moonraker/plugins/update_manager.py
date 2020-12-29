@@ -150,20 +150,17 @@ class UpdateManager:
         if is_download:
             content_type = "application/zip"
             rto = 120.
-        timeout = cto + rto + 2.
         request = HTTPRequest(url, headers={"Accept": content_type},
                               connect_timeout=cto, request_timeout=rto)
         retries = 5
         while True:
-            to = IOLoop.current().time() + timeout
             try:
-                fut = self.http_client.fetch(request)
-                resp = await tornado.gen.with_timeout(to, fut)
+                resp = await self.http_client.fetch(request)
             except Exception as e:
                 retries -= 1
                 if not retries:
                     raise
-                logging.info(f"Github request error, retrying: {e}")
+                logging.exception(f"Github request error, retrying: {e}")
                 continue
             if is_download:
                 return resp.body
@@ -247,8 +244,8 @@ class GitUpdater:
         if self.init_evt.is_set():
             return
         if timeout is not None:
-            to = IOLoop.current().time() + timeout
-        await self.init_evt.wait(to)
+            timeout = IOLoop.current().time() + timeout
+        await self.init_evt.wait(timeout)
 
     async def refresh(self):
         await self._check_version()
@@ -273,7 +270,7 @@ class GitUpdater:
             if branch is None:
                 self._log_info(
                     "Unable to retreive current branch from branch list\n"
-                    f"{branches}")
+                    f"{blist}")
                 return
             if "HEAD detached" in branch:
                 bparts = branch.split()[-1].strip("()")
@@ -532,8 +529,8 @@ class ClientUpdater:
         if self.init_evt.is_set():
             return
         if timeout is not None:
-            to = IOLoop.current().time() + timeout
-        await self.init_evt.wait(to)
+            timeout = IOLoop.current().time() + timeout
+        await self.init_evt.wait(timeout)
 
     async def refresh(self):
         # Local state
