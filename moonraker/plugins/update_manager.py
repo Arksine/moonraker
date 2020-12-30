@@ -126,7 +126,7 @@ class UpdateManager:
         refresh = web_request.get_boolean('refresh', False)
         vinfo = {}
         for name, updater in self.updaters.items():
-            await updater.check_initialized(10.)
+            await updater.check_initialized(120.)
             if refresh:
                 ret = updater.refresh()
                 if asyncio.iscoroutine(ret):
@@ -577,15 +577,38 @@ class PackageUpdater:
     def __init__(self, umgr):
         self.server = umgr.server
         self.execute_cmd = umgr.execute_cmd
+        self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
+        self.available_packages = []
+        self.init_evt = Event()
+        IOLoop.current().spawn_callback(self.refresh)
 
-    def refresh(self):
-        # TODO: We should be able to determine if packages need to be
-        # updated here
-        pass
+    async def refresh(self):
+        # TODO: Use python-apt python lib rather than command line for updates
+        try:
+            await self.execute_cmd(f"{APT_CMD} update", timeout=300.)
+            res = await self.execute_cmd_with_response(
+                "apt list --upgradable")
+        except Exception:
+            logging.exception("Error Refreshing System Packages")
+        else:
+            pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
+            if pkg_list:
+                pkg_list = pkg_list[2:]
+                self.available_packages = [p.split("/", maxsplit=1)[0]
+                                           for p in pkg_list]
+            pkg_list = "\n".join(self.available_packages)
+            logging.info(
+                f"Detected {len(self.available_packages)} package updates:"
+                f"\n{pkg_list}")
+        self.init_evt.set()
 
     async def check_initialized(self, timeout=None):
-        pass
+        if self.init_evt.is_set():
+            return
+        if timeout is not None:
+            timeout = IOLoop.current().time() + timeout
+        await self.init_evt.wait(timeout)
 
     async def update(self, *args):
         self.notify_update_response("Updating packages...")
@@ -596,8 +619,15 @@ class PackageUpdater:
                 f"{APT_CMD} upgrade --yes", timeout=3600., notify=True)
         except Exception:
             raise self.server.error("Error updating system packages")
+        self.available_packages = []
         self.notify_update_response("Package update finished...",
                                     is_complete=True)
+
+    def get_update_status(self):
+        return {
+            'package_count': len(self.available_packages),
+            'package_list': self.available_packages
+        }
 
 class ClientUpdater:
     def __init__(self, umgr, repo, path):
