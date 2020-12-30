@@ -20,37 +20,22 @@ from tornado.locks import Event
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../.."))
-
-# TODO:  May want to attempt to look up the disto for the correct
-# klippy install script or have the user configure it
+SUPPLEMENTAL_CFG_PATH = os.path.join(
+    MOONRAKER_PATH, "scripts/update_manager.conf")
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
-REPO_DATA = {
-    'moonraker': {
-        'origin': "https://github.com/arksine/moonraker.git",
-        'install_script': "scripts/install-moonraker.sh",
-        'requirements': "scripts/moonraker-requirements.txt",
-        'venv_args': "-p python3",
-        'dist_packages': ["gpiod"],
-        'dist_dir': "/usr/lib/python3/dist-packages",
-        'site_pkg_path': "lib/python3.7/site-packages",
-    },
-    'klipper': {
-        'origin': "https://github.com/kevinoconnor/klipper.git",
-        'install_script': "scripts/install-octopi.sh",
-        'requirements': "scripts/klippy-requirements.txt",
-        'venv_args': "-p python2",
-        'dist_packages': [],
-        'dist_dir': "",
-        'site_pkg_path': "",
-    }
-}
+SUPPORTED_DISTROS = ["debian"]
 
 class UpdateManager:
     def __init__(self, config):
         self.server = config.get_server()
+        self.config = config
+        self.config.read_supplemental_config(SUPPLEMENTAL_CFG_PATH)
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
         self.repo_debug = config.getboolean('enable_repo_debug', False)
+        self.distro = config.get('distro', "debian").lower()
+        if self.distro not in SUPPORTED_DISTROS:
+            raise config.error(f"Unsupported distro: {self.distro}")
         if self.repo_debug:
             logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
         env = sys.executable
@@ -293,6 +278,10 @@ class GitUpdater:
         self.execute_cmd = umgr.execute_cmd
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
+        distro = umgr.distro
+        config = umgr.config
+        self.repo_info = config[f"repo_info {name}"].get_options()
+        self.dist_info = config[f"dist_info {distro} {name}"].get_options()
         self.name = name
         self.repo_path = path
         self.env = env
@@ -431,7 +420,7 @@ class GitUpdater:
             remote_url = remote_url.lower()
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
-            if remote_url == REPO_DATA[self.name]['origin']:
+            if remote_url == self.repo_info['origin']:
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
@@ -488,7 +477,7 @@ class GitUpdater:
 
     async def _install_packages(self):
         # Open install file file and read
-        inst_script = REPO_DATA[self.name]['install_script']
+        inst_script = self.dist_info['install_script']
         inst_path = os.path.join(self.repo_path, inst_script)
         if not os.path.isfile(inst_path):
             self._log_info(f"Unable to open install script: {inst_path}")
@@ -518,9 +507,9 @@ class GitUpdater:
     async def _update_virtualenv(self, rebuild_env=False):
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
+        env_path = os.path.normpath(os.path.join(bin_dir, ".."))
         if rebuild_env:
-            env_path = os.path.normpath(os.path.join(bin_dir, ".."))
-            env_args = REPO_DATA[self.name]['venv_args']
+            env_args = self.repo_info['venv_args']
             self._notify_status(f"Creating virtualenv at: {env_path}...")
             if os.path.exists(env_path):
                 shutil.rmtree(env_path)
@@ -532,19 +521,8 @@ class GitUpdater:
                 return
             if not os.path.expanduser(self.env):
                 raise self._log_exc("Failed to create new virtualenv", False)
-            dist_pkgs = REPO_DATA[self.name]['dist_packages']
-            dist_dir = REPO_DATA[self.name]['dist_dir']
-            site_path = REPO_DATA[self.name]['site_pkg_path']
-            for pkg in dist_pkgs:
-                for f in os.listdir(dist_dir):
-                    if f.startswith(pkg):
-                        src = os.path.join(dist_dir, f)
-                        dest = os.path.join(env_path, site_path, f)
-                        self._notify_status(f"Linking to dist package: {pkg}")
-                        os.symlink(src, dest)
-                        break
         reqs = os.path.join(
-            self.repo_path, REPO_DATA[self.name]['requirements'])
+            self.repo_path, self.repo_info['requirements'])
         if not os.path.isfile(reqs):
             self._log_exc(f"Invalid path to requirements_file '{reqs}'")
             return
@@ -556,6 +534,31 @@ class GitUpdater:
                 retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
+        self._install_python_dist_requirements(env_path)
+
+    def _install_python_dist_requirements(self, env_path):
+        dist_reqs = self.dist_info.get('python_dist_packages', None)
+        if dist_reqs is None:
+            return
+        dist_reqs = [r.strip() for r in dist_reqs.split("\n")
+                     if r.strip()]
+        dist_path = self.dist_info['python_dist_path']
+        site_path = os.path.join(env_path, self.dist_info['env_package_path'])
+        for pkg in dist_reqs:
+            for f in os.listdir(dist_path):
+                if f.startswith(pkg):
+                    src = os.path.join(dist_path, f)
+                    dest = os.path.join(site_path, f)
+                    self._notify_status(f"Linking to dist package: {pkg}")
+                    if os.path.islink(dest):
+                        os.remove(dest)
+                    elif os.path.exists(dest):
+                        self._notify_status(
+                            f"Error symlinking dist package: {pkg}, "
+                            f"file already exists: {dest}")
+                        continue
+                    os.symlink(src, dest)
+                    break
 
     async def restart_service(self):
         self._notify_status("Restarting Service...")
