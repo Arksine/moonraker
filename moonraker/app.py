@@ -329,7 +329,7 @@ class FileRequestHandler(AuthorizedFileHandler):
 
     async def delete(self, path):
         path = self.request.path.lstrip("/").split("/", 2)[-1]
-        path = url_unescape(path)
+        path = url_unescape(path, plus=False)
         file_manager = self.server.lookup_plugin('file_manager')
         try:
             filename = await file_manager.delete_file(path)
