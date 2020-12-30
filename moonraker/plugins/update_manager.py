@@ -92,7 +92,7 @@ class UpdateManager:
 
         # Register Ready Event
         self.server.register_event_handler(
-            "server:klippy_ready", self._set_klipper_repo)
+            "server:klippy_identified", self._set_klipper_repo)
         # Initialize GitHub API Rate Limits
         IOLoop.current().spawn_callback(self._init_api_rate_limit)
 
@@ -103,6 +103,11 @@ class UpdateManager:
             return
         kpath = kinfo['klipper_path']
         env = kinfo['python_path']
+        kupdater = self.updaters.get('klipper', None)
+        if kupdater is not None and kupdater.repo_path == kpath and \
+                kupdater.env == env:
+            # Current Klipper Updater is valid
+            return
         self.updaters['klipper'] = GitUpdater(self, "klipper", kpath, env)
 
     async def _handle_update_request(self, web_request):
