@@ -347,7 +347,7 @@ class GitUpdater:
         await self._check_version()
         self.init_evt.set()
 
-    async def _check_version(self):
+    async def _check_version(self, need_fetch=True):
         self.is_valid = self.detached = False
         self.cur_hash = self.branch = self.remote = "?"
         self.version = self.remote_version = "?"
@@ -377,9 +377,10 @@ class GitUpdater:
                 self.remote = await self.execute_cmd_with_response(
                     f"git -C {self.repo_path} config --get"
                     f" branch.{self.branch}.remote")
-            await self.execute_cmd(
-                f"git -C {self.repo_path} fetch {self.remote} --prune -q",
-                retries=3)
+            if need_fetch:
+                await self.execute_cmd(
+                    f"git -C {self.repo_path} fetch {self.remote} --prune -q",
+                    retries=3)
             remote_url = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} remote get-url {self.remote}")
             cur_hash = await self.execute_cmd_with_response(
@@ -469,7 +470,7 @@ class GitUpdater:
         elif need_env_rebuild:
             await self._update_virtualenv(True)
         # Refresh local repo state
-        await self._check_version()
+        await self._check_version(need_fetch=False)
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
