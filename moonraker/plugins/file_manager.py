@@ -46,7 +46,7 @@ class FileManager:
         self.server.register_upload_handler("/api/files/local")
 
         self.server.register_event_handler(
-            "server:klippy_ready", self._update_fixed_paths)
+            "server:klippy_identified", self._update_fixed_paths)
 
         # Register Klippy Configuration Path
         config_path = config.get('config_path', None)

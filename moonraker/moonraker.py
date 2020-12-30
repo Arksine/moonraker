@@ -286,10 +286,11 @@ class Server:
                     f"Klippy may have experienced an error during startup.\n"
                     f"Please check klippy.log for more information")
             return
-        if send_id:
-            self.init_list.append("identified")
         self.klippy_info = dict(result)
         self.klippy_state = result.get('state', "unknown")
+        if send_id:
+            self.init_list.append("identified")
+            self.send_event("server:klippy_identified")
         if self.klippy_state == "ready":
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
