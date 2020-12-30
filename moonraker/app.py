@@ -24,6 +24,7 @@ RESERVED_ENDPOINTS = [
 ]
 
 EXCLUDED_ARGS = ["_", "token", "connection_id"]
+DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 
 # Status objects require special parsing
 def _status_parser(request_handler):
@@ -131,6 +132,8 @@ class MoonrakerApp:
         # Register handlers
         logfile = config['system_args'].get('logfile')
         self.register_static_file_handler("moonraker.log", logfile)
+        self.register_static_file_handler(
+            "klippy.log", DEFAULT_KLIPPY_LOG_PATH)
         self.auth.register_handlers(self)
 
     def listen(self, host, port):
