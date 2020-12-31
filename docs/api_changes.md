@@ -1,4 +1,7 @@
 This document keeps a record of all changes to Moonraker's web APIs.
+### December 30th 2020
+- Some additional fields are now reported in the response to
+  `GET /machine/update/status`.
 
 ### November 28th 2020
 - The following new endpoints are available when the `[update_manager]`

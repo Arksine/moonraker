@@ -844,41 +844,78 @@ information.
   {
       'version_info': {
           'moonraker': {
+              branch: <string>,
+              remote_alias: <string>,
               version: <string>,
+              remote_version: <string>,
               current_hash: <string>,
               remote_hash: <string>,
               is_valid: <bool>,
-              is_dirty: <bool>
+              is_dirty: <bool>,
+              detached: <bool>,
+              debug_enabled: <bool>
           },
           'klipper': {
+              branch: <string>,
+              remote_alias: <string>,
               version: <string>,
+              remote_version: <string>,
               current_hash: <string>,
               remote_hash: <string>,
               is_valid: <bool>,
-              is_dirty: <bool>
-          }
+              is_dirty: <bool>,
+              detached: <bool>,
+              debug_enabled: <bool>
+          },
           'client': {
               name: <string>,
               version: <string>,
               remote_version: <string>
+          },
+          'system': {
+              package_count: <int>,
+              package_list: <array>
           }
       },
-      busy: false
+      busy: false,
+      github_rate_limit: <int>,
+      github_requests_remaining: <int>
+      github_limit_reset_time: <int>,
   }
   ```
   - The `busy` field is set to true if an update is in progress.  Moonraker
     will not allow concurrent updates.
+  - The `github_rate_limit` is the maximum number of github API requests
+    the user currently has.  An unathenticated user typically has 60
+    requests per hour.
+  - The `github_requests_remaining` is the number of API request the user
+    currently has remaining.
+  - The `github_limit_reset_time` is reported as seconds since the epoch.
+    When this time is reached the user's limit will be reset.
   - The `moonraker` and `klipper` objects have the following fields:
+    - `branch`: the name of the current git branch.  This should typically
+      be "master".
+    - `remote_alias`: the alias for the remote.  This should typically be
+      "origin".
     - `version`:  version of the current repo on disk
+    - `remote_version`: version of the latest available update
     - `current_hash`: hash of the most recent commit on disk
     - `remote_hash`: hash of the most recent commit pushed to the remote
     - `is_valid`: True if installation is a valid git repo on the master branch
       and an "origin" set to the official remote
     - `is_dirty`: True if the repo has been modified
+    - `detached`: True if the repo is currently in a detached state
+    - `debug_enabled`: True when "enable_repo_debug" has been configured.  This
+      will bypass repo validation, allowing detached updates, and updates from
+      a remote/origin other than "origin/master".
   - The `client` object has the following fields:
-   `name`: Name of the configured client
-   `version`:  version of the installed client.
-   `remote_version`:  version of the latest release published to GitHub
+    - `name`: Name of the configured client
+    - `version`:  version of the installed client.
+    - `remote_version`:  version of the latest release published to GitHub
+  - The `system` object has the following fields:
+    - `package_count`: The number of system packages available for update
+    - `package_list`: An array containing the names of packages available
+      for update
 
 ### Update Moonraker
 Pulls the most recent version of Moonraker from GitHub and restarts

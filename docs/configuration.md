@@ -252,6 +252,16 @@ disk or cloned from unofficial sources are not supported.
 # moonraker.conf
 
 [update_manager]
+enable_repo_debug: False
+#   When set to True moonraker will bypass repo validation and allow
+#   updates from unofficial remotes and/or branches.  Updates on
+#   detached repos are also allowed.  This option is intended for
+#   developers and should not be used on production machines.  The
+#   default is False.
+distro: debian
+#   The disto in which moonraker has been installed.  Currently the
+#   update manager only supports "debian", which encompasses all of
+#   its derivatives.  The default is debain.
 client_repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
