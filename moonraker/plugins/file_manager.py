@@ -15,7 +15,6 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
-ETC_DIR = "/etc/moonraker"
 METADATA_SCRIPT = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
@@ -84,14 +83,21 @@ class FileManager:
     def register_directory(self, root, path):
         if path is None:
             return False
-        home = os.path.expanduser('~')
         path = os.path.normpath(os.path.expanduser(path))
-        if not os.path.isdir(path) or path == home or \
-                not (path.startswith(home) or path.startswith(ETC_DIR)):
+        if os.path.islink(path):
+            path = os.path.realpath(path)
+        if not os.path.isdir(path) or path == "/":
             logging.info(
-                f"\nSupplied path ({path}) for ({root}) not valid. Please\n"
-                "check that the path exists and is a subfolder in the HOME\n"
-                "directory. Note that the path may not BE the home directory.")
+                f"\nSupplied path ({path}) for ({root}) a valid. Make sure\n"
+                "that the path exists and is not the file system root.")
+            return False
+        permissions = os.R_OK
+        if root in FULL_ACCESS_ROOTS:
+            permissions |= os.W_OK
+        if not os.access(path, permissions):
+            logging.info(
+                f"\nMoonraker does not have permission to access path "
+                f"({path}) for ({root}).")
             return False
         if path != self.file_paths.get(root, ""):
             self.file_paths[root] = path
@@ -448,12 +454,24 @@ class FileManager:
             logging.info(msg)
             raise self.server.error(msg)
         logging.info(f"Updating File List <{root}>...")
-        for root_path, dirs, files in os.walk(path, followlinks=True):
+        st = os.stat(path)
+        visited_dirs = {(st.st_dev, st.st_ino)}
+        for dir_path, dir_names, files in os.walk(path, followlinks=True):
+            scan_dirs = []
+            # Filter out directories that have already been visted. This
+            # prevents infinite recrusion "followlinks" is set to True
+            for dname in dir_names:
+                st = os.stat(os.path.join(dir_path, dname))
+                key = (st.st_dev, st.st_ino)
+                if key not in visited_dirs:
+                    visited_dirs.add(key)
+                    scan_dirs.append(dname)
+            dir_names[:] = scan_dirs
             for name in files:
                 ext = os.path.splitext(name)[-1].lower()
                 if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
-                full_path = os.path.join(root_path, name)
+                full_path = os.path.join(dir_path, name)
                 fname = full_path[len(path) + 1:]
                 finfo = self._get_path_info(full_path)
                 filelist[fname] = finfo
