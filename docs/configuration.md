@@ -44,13 +44,9 @@ config_path:
 #   The path to a directory where configuration files are located. This
 #   directory may contain Klipper config files (printer.cfg) or Moonraker
 #   config files (moonraker.conf).  Clients may also write their own config
-#   files to this directory.  There are restrictions on the location of
-#   this path, it must be located within the users HOME directory or within
-#   "/etc/moonraker".  The path may not be the HOME directory itself.  It is
-#   valid for the path to be "/etc/moonraker", however this is not recommended.
-#   Something like "/etc/moonraker/config" would be a more appropriate option.
-#   If you choose to locate files in "/etc/moonraker" be sure that Moonraker
-#   has read/write permissions in this directory.
+#   files to this directory.  Note that this may not be the system root
+#   (ie: "/") and moonraker must have read and write access permissions
+#   for this directory.
 ```
 ## authorization
 
