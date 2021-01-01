@@ -173,6 +173,8 @@ class WebsocketManager:
         self.server.register_event_handler(
             "server:klippy_ready", self._handle_klippy_ready)
         self.server.register_event_handler(
+            "server:klippy_shutdown", self._handle_klippy_shutdown)
+        self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_klippy_disconnect)
         self.server.register_event_handler(
             "server:gcode_response", self._handle_gcode_response)
@@ -187,6 +189,9 @@ class WebsocketManager:
 
     async def _handle_klippy_ready(self):
         await self.notify_websockets("klippy_ready")
+
+    async def _handle_klippy_shutdown(self):
+        await self.notify_websockets("klippy_shutdown")
 
     async def _handle_klippy_disconnect(self):
         await self.notify_websockets("klippy_disconnected")
