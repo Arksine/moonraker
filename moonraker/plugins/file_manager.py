@@ -285,6 +285,8 @@ class FileManager:
             elif os.path.isfile(full_path):
                 path_info['filename'] = fname
                 flist['files'].append(path_info)
+        usage = shutil.disk_usage(path)
+        flist['disk_usage'] = usage._asdict()
         return flist
 
     def _get_path_info(self, path):
