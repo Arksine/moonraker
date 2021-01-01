@@ -131,7 +131,8 @@ class MoonrakerApp:
 
         # Register handlers
         logfile = config['system_args'].get('logfile')
-        self.register_static_file_handler("moonraker.log", logfile)
+        if logfile:
+            self.register_static_file_handler("moonraker.log", logfile)
         self.register_static_file_handler(
             "klippy.log", DEFAULT_KLIPPY_LOG_PATH)
         self.auth.register_handlers(self)

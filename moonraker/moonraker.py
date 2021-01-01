@@ -551,11 +551,18 @@ def main():
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")
+    parser.add_argument(
+        "-n", "--nologfile", action='store_true',
+        help="disable logging to a file")
     system_args = parser.parse_args()
 
     # Setup Logging
     version = utils.get_software_version()
-    log_file = os.path.normpath(os.path.expanduser(system_args.logfile))
+    if system_args.nologfile:
+        log_file = ""
+    else:
+        log_file = os.path.normpath(os.path.expanduser(
+            system_args.logfile))
     system_args.logfile = log_file
     system_args.software_version = version
     ql = utils.setup_logging(log_file, version)

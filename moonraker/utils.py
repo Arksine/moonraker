@@ -74,16 +74,20 @@ def setup_logging(log_file, software_version):
     queue_handler = LocalQueueHandler(queue)
     root_logger.addHandler(queue_handler)
     root_logger.setLevel(logging.INFO)
-    file_hdlr = MoonrakerLoggingHandler(
-        software_version, log_file, when='midnight', backupCount=2)
     stdout_hdlr = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
-    file_hdlr.setFormatter(formatter)
     stdout_fmt = logging.Formatter(
         '[%(filename)s:%(funcName)s()] - %(message)s')
     stdout_hdlr.setFormatter(stdout_fmt)
-    listener = logging.handlers.QueueListener(
-        queue, file_hdlr, stdout_hdlr)
+    if log_file:
+        file_hdlr = MoonrakerLoggingHandler(
+            software_version, log_file, when='midnight', backupCount=2)
+        formatter = logging.Formatter(
+            '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
+        file_hdlr.setFormatter(formatter)
+        listener = logging.handlers.QueueListener(
+            queue, file_hdlr, stdout_hdlr)
+    else:
+        listener = logging.handlers.QueueListener(
+            queue, stdout_hdlr)
     listener.start()
     return listener
