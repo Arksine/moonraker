@@ -362,12 +362,18 @@ class PanelDue:
         # require special handling
         parts = script.split()
         cmd = parts[0].strip()
+        if cmd in ["M23", "M30", "M32", "M36", "M37", "M98"]:
+            arg = script[len(cmd):].strip()
+            parts = [cmd, arg]
 
         # Check for commands that query state and require immediate response
         if cmd in self.direct_gcodes:
             params = {}
             for p in parts[1:]:
-                arg = p[0].lower() if p[0].lower() in "psr" else "p"
+                if p[0] not in "PSR":
+                    params["arg_p"] = p.strip(" \"\t\n")
+                    continue
+                arg = p[0].lower()
                 try:
                     val = int(p[1:].strip()) if arg in "sr" \
                         else p[1:].strip(" \"\t\n")
@@ -376,7 +382,7 @@ class PanelDue:
                     self.handle_gcode_response("!! " + msg)
                     logging.exception(msg)
                     return
-                params["arg_" + arg] = val
+                params[f"arg_{arg}"] = val
             func = self.direct_gcodes[cmd]
             self.queue_command(func, **params)
             return
@@ -743,6 +749,8 @@ class PanelDue:
         # "gcodes/" root.  The M20 HACK should add this in some cases.
         # Ideally we would add support to the PanelDue firmware that
         # indicates Moonraker supports a "gcodes" directory.
+        if filename[0] == "/":
+            filename = filename[1:]
         if not filename.startswith("gcodes/"):
             filename = "gcodes/" + filename
 
