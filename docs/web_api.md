@@ -1104,6 +1104,11 @@ Notify clients when Klippy has reported a ready state
 
 `{jsonrpc: "2.0", method: "notify_klippy_ready"}`
 
+### Klippy Shutdown:
+Notify clients when Klippy has reported a shutdown state
+
+`{jsonrpc: "2.0", method: "notify_klippy_shutdown"}`
+
 ### Klippy Disconnected:
 Notify clients when Moonraker's connection to Klippy has terminated
 

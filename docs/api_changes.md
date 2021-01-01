@@ -1,4 +1,7 @@
 This document keeps a record of all changes to Moonraker's web APIs.
+### January 1st 2021
+- A `notify_klippy_shutdown` websocket notification has been added
+
 ### December 30th 2020
 - Some additional fields are now reported in the response to
   `GET /machine/update/status`.
