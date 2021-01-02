@@ -7,7 +7,6 @@ import os
 import shlex
 import subprocess
 import logging
-import tornado
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -100,7 +99,7 @@ class ShellCommand:
         logging.info(msg)
         return success
 
-    async def run_with_response(self, timeout=2.):
+    async def run_with_response(self, timeout=2., retries=1):
         result = []
 
         def cb(data):
@@ -109,7 +108,16 @@ class ShellCommand:
                 result.append(data.decode())
         prev_cb = self.output_cb
         self.output_cb = cb
-        await self.run(timeout)
+        while 1:
+            ret = await self.run(timeout)
+            if not ret or not result:
+                retries -= 1
+                if not retries:
+                    return None
+                await gen.sleep(.5)
+                result.clear()
+                continue
+            break
         self.output_cb = prev_cb
         return "\n".join(result)
 
