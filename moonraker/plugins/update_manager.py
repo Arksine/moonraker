@@ -16,7 +16,7 @@ import time
 import tornado.gen
 from tornado.ioloop import IOLoop
 from tornado.httpclient import AsyncHTTPClient
-from tornado.locks import Event
+from tornado.locks import Event, Condition
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../.."))
@@ -115,9 +115,11 @@ class UpdateManager:
     async def _handle_status_request(self, web_request):
         refresh = web_request.get_boolean('refresh', False)
         vinfo = {}
-        for name, updater in self.updaters.items():
+        for name, updater in list(self.updaters.items()):
             await updater.check_initialized(120.)
-            if refresh:
+            cur_update = self.current_update or ("", -1)
+            # Do not refresh if the current update is in progress
+            if refresh and name != cur_update[0]:
                 ret = updater.refresh()
                 if asyncio.iscoroutine(ret):
                     await ret
@@ -291,6 +293,7 @@ class GitUpdater:
         self.version = self.cur_hash = "?"
         self.remote_version = self.remote_hash = "?"
         self.init_evt = Event()
+        self.refresh_condition = None
         self.debug = umgr.repo_debug
         self.remote = "origin"
         self.branch = "master"
@@ -341,8 +344,19 @@ class GitUpdater:
         await self.init_evt.wait(timeout)
 
     async def refresh(self):
-        await self._check_version()
-        self.init_evt.set()
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
+        else:
+            self.refresh_condition.wait()
+            return
+        try:
+            await self._check_version()
+        except Exception:
+            logging.exception("Error Refreshing git state")
+        else:
+            self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
     async def _check_version(self, need_fetch=True):
         self.is_valid = self.detached = False
@@ -434,6 +448,9 @@ class GitUpdater:
                 f"{self.remote}/{self.branch}")
 
     async def update(self, update_deps=False):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            self.refresh_condition.wait()
         if not self.is_valid:
             raise self._log_exc("Update aborted, repo is not valid", False)
         if self.is_dirty:
@@ -592,17 +609,20 @@ class PackageUpdater:
         self.notify_update_response = umgr.notify_update_response
         self.available_packages = []
         self.init_evt = Event()
+        self.refresh_condition = None
         IOLoop.current().spawn_callback(self.refresh)
 
     async def refresh(self):
         # TODO: Use python-apt python lib rather than command line for updates
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
+        else:
+            self.refresh_condition.wait()
+            return
         try:
             await self.execute_cmd(f"{APT_CMD} update", timeout=300.)
             res = await self.execute_cmd_with_response(
                 "apt list --upgradable")
-        except Exception:
-            logging.exception("Error Refreshing System Packages")
-        else:
             pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
             if pkg_list:
                 pkg_list = pkg_list[2:]
@@ -612,7 +632,12 @@ class PackageUpdater:
             logging.info(
                 f"Detected {len(self.available_packages)} package updates:"
                 f"\n{pkg_list}")
-        self.init_evt.set()
+        except Exception:
+            logging.exception("Error Refreshing System Packages")
+        else:
+            self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
     async def check_initialized(self, timeout=None):
         if self.init_evt.is_set():
@@ -622,6 +647,9 @@ class PackageUpdater:
         await self.init_evt.wait(timeout)
 
     async def update(self, *args):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            self.refresh_condition.wait()
         self.notify_update_response("Updating packages...")
         try:
             await self.execute_cmd(
@@ -651,6 +679,7 @@ class ClientUpdater:
         self.version = self.remote_version = self.dl_url = "?"
         self.etag = None
         self.init_evt = Event()
+        self.refresh_condition = None
         self._get_local_version()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\nversion: {self.version}"
@@ -672,9 +701,22 @@ class ClientUpdater:
         await self.init_evt.wait(timeout)
 
     async def refresh(self):
-        # Local state
-        self._get_local_version()
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
+        else:
+            self.refresh_condition.wait()
+            return
+        try:
+            self._get_local_version()
+            await self._get_remote_version()
+        except Exception:
+            logging.exception("Error Refreshing Client")
+        else:
+            self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
+    async def _get_remote_version(self):
         # Remote state
         url = f"https://api.github.com/repos/{self.repo}/releases/latest"
         try:
@@ -684,7 +726,7 @@ class ClientUpdater:
             result = {}
         if result is None:
             # No change, update not necessary
-            return None
+            return
         self.etag = result.get('etag', None)
         self.remote_version = result.get('name', "?")
         release_assets = result.get('assets', [{}])[0]
@@ -694,9 +736,12 @@ class ClientUpdater:
             f"Local Version: {self.version}\n"
             f"Remote Version: {self.remote_version}\n"
             f"url: {self.dl_url}")
-        self.init_evt.set()
 
     async def update(self, *args):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            # wait for refresh if in progess
+            self.refresh_condition.wait()
         if self.remote_version == "?":
             await self.refresh()
             if self.remote_version == "?":
