@@ -16,7 +16,7 @@ import time
 import tornado.gen
 from tornado.ioloop import IOLoop
 from tornado.httpclient import AsyncHTTPClient
-from tornado.locks import Event, Condition
+from tornado.locks import Event, Condition, Lock
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../.."))
@@ -58,6 +58,8 @@ class UpdateManager:
         self.gh_limit_remaining = None
         self.gh_limit_reset_time = None
         self.gh_init_evt = Event()
+        self.cmd_request_lock = Lock()
+        self.is_refreshing = False
 
         self.server.register_endpoint(
             "/machine/update/moonraker", ["POST"],
@@ -98,33 +100,50 @@ class UpdateManager:
     async def _handle_update_request(self, web_request):
         app = web_request.get_endpoint().split("/")[-1]
         inc_deps = web_request.get_boolean('include_deps', False)
-        if self.current_update:
-            raise self.server.error("A current update is in progress")
+        if self.current_update is not None and \
+                self.current_update[0] == app:
+            return f"Object {app} is currently being updated"
         updater = self.updaters.get(app, None)
         if updater is None:
             raise self.server.error(f"Updater {app} not available")
-        self.current_update = (app, id(web_request))
-        try:
-            await updater.update(inc_deps)
-        except Exception:
-            self.current_update = None
-            raise
-        self.current_update = None
+        async with self.cmd_request_lock:
+            self.current_update = (app, id(web_request))
+            try:
+                await updater.update(inc_deps)
+            except Exception:
+                raise
+            finally:
+                self.current_update = None
         return "ok"
 
     async def _handle_status_request(self, web_request):
-        refresh = web_request.get_boolean('refresh', False)
+        check_refresh = web_request.get_boolean('refresh', False)
+        # Don't refresh if an update is currently in progress,
+        # just return current state
+        check_refresh &= self.current_update is None
+        need_refresh = False
+        if check_refresh:
+            # If there is an outstanding request processing a
+            # refresh, we don't need to do it again.
+            need_refresh = not self.is_refreshing
+            await self.cmd_request_lock.acquire()
+            self.is_refreshing = True
         vinfo = {}
-        for name, updater in list(self.updaters.items()):
-            await updater.check_initialized(120.)
-            cur_update = self.current_update or ("", -1)
-            # Do not refresh if the current update is in progress
-            if refresh and name != cur_update[0]:
-                ret = updater.refresh()
-                if asyncio.iscoroutine(ret):
-                    await ret
-            if hasattr(updater, "get_update_status"):
-                vinfo[name] = updater.get_update_status()
+        try:
+            for name, updater in list(self.updaters.items()):
+                await updater.check_initialized(120.)
+                if need_refresh:
+                    ret = updater.refresh()
+                    if asyncio.iscoroutine(ret):
+                        await ret
+                if hasattr(updater, "get_update_status"):
+                    vinfo[name] = updater.get_update_status()
+        except Exception:
+            raise
+        finally:
+            if check_refresh:
+                self.is_refreshing = False
+                self.cmd_request_lock.release()
         return {
             'version_info': vinfo,
             'github_rate_limit': self.gh_rate_limit,
