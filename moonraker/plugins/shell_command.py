@@ -7,7 +7,6 @@ import os
 import shlex
 import subprocess
 import logging
-import tornado
 from tornado import gen
 from tornado.ioloop import IOLoop
 
@@ -46,6 +45,8 @@ class ShellCommand:
 
     async def run(self, timeout=2., verbose=True):
         self.return_code = fd = None
+        self.partial_output = b""
+        self.cancelled = False
         if timeout is None:
             # Never timeout
             timeout = 9999999999999999.
@@ -83,18 +84,22 @@ class ShellCommand:
             if self.partial_output:
                 self.output_cb(self.partial_output)
                 self.partial_output = b""
-            if complete:
-                msg = f"Command ({self.name}) finished"
-            elif self.cancelled:
-                msg = f"Command ({self.name}) cancelled"
-            else:
-                msg = f"Command ({self.name}) timed out"
-            logging.info(msg)
             self.io_loop.remove_handler(fd)
         self.return_code = proc.returncode
-        return self.return_code == 0 and complete
+        success = self.return_code == 0 and complete
+        if success:
+            msg = f"Command ({self.name}) successfully finished"
+        elif self.cancelled:
+            msg = f"Command ({self.name}) cancelled"
+        elif not complete:
+            msg = f"Command ({self.name}) timed out"
+        else:
+            msg = f"Command ({self.name}) exited with return code" \
+                f" {self.return_code}"
+        logging.info(msg)
+        return success
 
-    async def run_with_response(self, timeout=2.):
+    async def run_with_response(self, timeout=2., retries=1):
         result = []
 
         def cb(data):
@@ -103,7 +108,16 @@ class ShellCommand:
                 result.append(data.decode())
         prev_cb = self.output_cb
         self.output_cb = cb
-        await self.run(timeout)
+        while 1:
+            ret = await self.run(timeout)
+            if not ret or not result:
+                retries -= 1
+                if not retries:
+                    return None
+                await gen.sleep(.5)
+                result.clear()
+                continue
+            break
         self.output_cb = prev_cb
         return "\n".join(result)
 

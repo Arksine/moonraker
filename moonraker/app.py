@@ -24,6 +24,7 @@ RESERVED_ENDPOINTS = [
 ]
 
 EXCLUDED_ARGS = ["_", "token", "connection_id"]
+DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 
 # Status objects require special parsing
 def _status_parser(request_handler):
@@ -130,7 +131,11 @@ class MoonrakerApp:
 
         # Register handlers
         logfile = config['system_args'].get('logfile')
-        self.register_static_file_handler("moonraker.log", logfile)
+        if logfile:
+            self.register_static_file_handler(
+                "moonraker.log", logfile, force=True)
+        self.register_static_file_handler(
+            "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
         self.auth.register_handlers(self)
 
     def listen(self, host, port):
@@ -193,10 +198,10 @@ class MoonrakerApp:
             self.wsm.register_local_handler(api_def, callback)
         logging.info(msg)
 
-    def register_static_file_handler(self, pattern, file_path):
+    def register_static_file_handler(self, pattern, file_path, force=False):
         if pattern[0] != "/":
             pattern = "/server/files/" + pattern
-        if os.path.isfile(file_path):
+        if os.path.isfile(file_path) or force:
             pattern += '()'
         elif os.path.isdir(file_path):
             if pattern[-1] != "/":
@@ -329,7 +334,7 @@ class FileRequestHandler(AuthorizedFileHandler):
 
     async def delete(self, path):
         path = self.request.path.lstrip("/").split("/", 2)[-1]
-        path = url_unescape(path)
+        path = url_unescape(path, plus=False)
         file_manager = self.server.lookup_plugin('file_manager')
         try:
             filename = await file_manager.delete_file(path)

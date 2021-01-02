@@ -164,7 +164,8 @@ class GpioDevice:
                 f"Unable to init {pin}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise config.error("Power GPIO Config Error")
-        self.set_power("off")
+        initial_state = config.getboolean('initial_state', False)
+        self.set_power("on" if initial_state else "off")
 
     def _parse_pin(self, config):
         pin = cfg_pin = config.get("pin")
@@ -351,11 +352,12 @@ class Tasmota:
         if command in ["on", "off"]:
             out_cmd = f"Power{self.output_id}%20{command}"
         elif command == "info":
-            out_cmd = "Power{self.output_id}"
+            out_cmd = f"Power{self.output_id}"
         else:
             raise self.server.error(f"Invalid tasmota command: {command}")
-        
-        url = f"http://{self.addr}/cm?user=admin&password={self.password}&cmnd={out_cmd}"
+
+        url = f"http://{self.addr}/cm?user=admin&password=" \
+            f"{self.password}&cmnd={out_cmd}"
         data = ""
         http_client = AsyncHTTPClient()
         try:

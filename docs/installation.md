@@ -110,7 +110,7 @@ Now you may install a client, such as
 The configuration and log file paths may be specified via the command
 line.
 ```
-usage: moonraker.py [-h] [-c <configfile>] [-l <logfile>]
+usage: moonraker.py [-h] [-c <configfile>] [-l <logfile>] [-n]
 
 Moonraker - Klipper API Server
 
@@ -120,14 +120,26 @@ optional arguments:
                         Location of moonraker configuration file
   -l <logfile>, --logfile <logfile>
                         log file name and location
+  -n, --nologfile       disable logging to a file
 ```
 
 The default configuration is:
-- config file - `~/moonraker.conf`
-- log file - `/tmp/moonraker.log`
+- config file path- `~/moonraker.conf`
+- log file path - `/tmp/moonraker.log`
+- logging to a file is enabled
 
-It is recommended to use the defaults, however one may change these
-arguments by editing `/etc/default/moonraker`.
+If one needs to start moonraker without generating a log file, the
+'-n' option may be used, for example:
+```
+~/moonraker-env/bin/python ~/moonraker/moonraker/moonraker.py -n -c /path/to/moonraker.conf
+```
+In general it is not recommended to install moonraker with this option.
+While moonraker will still log to stdout, all requests for support must
+be accompanied by moonraker.log.
+
+These options may be changed by editing
+`/etc/systemd/system/moonraker.service`.  The `install-moonraker.sh` script
+may also be used to modify the config file location.
 
 ## Prerequisites (Klipper Configuration)
 
@@ -149,15 +161,8 @@ missing one or both, you can simply add the bare sections to printer.cfg:
 path: ~/gcode_files
 ```
 NOTES:
-- While Klipper does not set any hard limits on the location of the
-  `path` option for the `virtual_sdcard`, Moonraker does have specific
-  requirements for the location of this folder:
-  - It must be directory located in the HOME path or in `/etc/moonraker`
-  - It may not be the HOME directory itself.  It is ok for this folder
-    to be `/etc/moonraker`, however that is not recommended.  Something
-    like `/etc/moonraker/gcode_files` would be more appropriate.
-  - If you choose to place files in `/etc/moonraker` you must be sure that
-    Moonraker has permission to read/write to the directory.
+- Make sure that Moonraker (and Klipper) has read and write access to the
+  directory set in the `path` option for the `virtual_sdcard`.
 - Upon first starting Moonraker is not aware of the gcode file path, thus
   it cannot serve gcode files, add directories, etc.  After Klippy enters
   the "ready" state it sends Moonraker the gcode file path.

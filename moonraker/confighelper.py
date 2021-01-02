@@ -34,6 +34,9 @@ class ConfigHelper:
     def get_name(self):
         return self.section
 
+    def get_options(self):
+        return dict(self.config[self.section])
+
     def get_prefix_sections(self, prefix):
         return [s for s in self.sections() if s.startswith(prefix)]
 
@@ -69,6 +72,16 @@ class ConfigHelper:
     def getfloat(self, option, default=Sentinel):
         return self._get_item(
             self.config[self.section].getfloat, option, default)
+
+    def read_supplemental_config(self, file_name):
+        cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
+        if not os.path.isfile(cfg_file_path):
+            raise ConfigError(
+                f"Configuration File Not Found: '{cfg_file_path}''")
+        try:
+            self.config.read(cfg_file_path)
+        except Exception:
+            raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
 
 def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(

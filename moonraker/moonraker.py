@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Moonraker - HTTP/Websocket API Server for Klipper
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
@@ -285,10 +286,11 @@ class Server:
                     f"Klippy may have experienced an error during startup.\n"
                     f"Please check klippy.log for more information")
             return
-        if send_id:
-            self.init_list.append("identified")
         self.klippy_info = dict(result)
         self.klippy_state = result.get('state', "unknown")
+        if send_id:
+            self.init_list.append("identified")
+            self.send_event("server:klippy_identified")
         if self.klippy_state == "ready":
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
@@ -549,11 +551,18 @@ def main():
     parser.add_argument(
         "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
         help="log file name and location")
+    parser.add_argument(
+        "-n", "--nologfile", action='store_true',
+        help="disable logging to a file")
     system_args = parser.parse_args()
 
     # Setup Logging
     version = utils.get_software_version()
-    log_file = os.path.normpath(os.path.expanduser(system_args.logfile))
+    if system_args.nologfile:
+        log_file = ""
+    else:
+        log_file = os.path.normpath(os.path.expanduser(
+            system_args.logfile))
     system_args.logfile = log_file
     system_args.software_version = version
     ql = utils.setup_logging(log_file, version)
