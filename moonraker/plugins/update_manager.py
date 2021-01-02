@@ -144,7 +144,10 @@ class UpdateManager:
     async def execute_cmd_with_response(self, cmd, timeout=10.):
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
-        return await scmd.run_with_response(timeout)
+        result = await scmd.run_with_response(timeout, retries=5)
+        if result is None:
+            raise self.server.error(f"Error Running Command: {cmd}")
+        return result
 
     async def _init_api_rate_limit(self):
         url = "https://api.github.com/rate_limit"
