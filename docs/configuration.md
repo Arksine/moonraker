@@ -290,33 +290,33 @@ https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimen
 ### Activate and configure the plugin adding following to your moonraker.conf:
 ```
 [timelapse]
-enabled: true
-#   If this set to false the Gcode macros are ignored and
-#   the autorender on print finish is also deactivated.
-#   The idea is to disable the plugin by default and only activate 
-#   it during runtime via the http endpoint if a timelapse is desired
-constant_rate_rate: 23
-#   The range of the CRF scale is 0–51, where 0 is lossless,
-#   23 is the default, and 51 is worst quality possible. 
-#   A lower value generally leads to higher quality, and a 
-#   subjectively sane range is 17–28.
-#   more info: https://trac.ffmpeg.org/wiki/Encode/H.264
-output_framerate: 30
-#   Output framerate of the generated video
-output_path: ~/timelapse/
-#   Path where the generated video will be saved
-time_format_code: %Y%m%d_%H%M
-#   Manipulates datetime format of the output filename
-#   see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
-snapshoturl: http://localhost:8080/?action=snapshot
-#   url to your webcamstream
-extraoutputparams: 
-#   here you can extra output parameters to FFMPEG 
-#   further info: https://ffmpeg.org/ffmpeg.html 
-#   eg rotate video by 180° "-vf transpose=2,transpose=2"
+# enabled: true
+##   If this set to false the Gcode macros are ignored and
+##   the autorender on print finish is also deactivated.
+##   The idea is to disable the plugin by default and only activate 
+##   it during runtime via the http endpoint if a timelapse is desired
+# constant_rate_rate: 23
+##   The range of the CRF scale is 0–51, where 0 is lossless,
+##   23 is the default, and 51 is worst quality possible. 
+##   A lower value generally leads to higher quality, and a 
+##   subjectively sane range is 17–28.
+##   more info: https://trac.ffmpeg.org/wiki/Encode/H.264
+# output_framerate: 30
+##   Output framerate of the generated video
+# output_path: ~/timelapse/
+##   Path where the generated video will be saved
+# time_format_code: %Y%m%d_%H%M
+##   Manipulates datetime format of the output filename
+##   see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
+# snapshoturl: http://localhost:8080/?action=snapshot
+##   url to your webcamstream
+# extraoutputparams: 
+##   here you can extra output parameters to FFMPEG 
+##   further info: https://ffmpeg.org/ffmpeg.html 
+##   eg rotate video by 180° "-vf transpose=2,transpose=2"
 ```
 
-### Add the macros to your printer.cfg:
+### Add the macro to your printer.cfg:
 ```
 [gcode_macro TIMELAPSE_TAKE_FRAME]
 gcode:
@@ -325,5 +325,5 @@ gcode:
 Note: You can add extra gcode to the TAKE_FRAME macro if you like to move your
 printhead to a specific position, before taking a picture.
 
-### Add the macros to your Slicer:
+### Add the macro to your Slicer:
 ``TIMELAPSE_TAKE_FRAME`` -> to before or after Layerchange (where you like the snapshot should be taken)
