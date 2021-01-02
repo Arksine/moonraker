@@ -77,8 +77,10 @@ class FileManager:
 
         # Register log path
         log_file = paths.get('log_file')
-        log_path = os.path.normpath(os.path.expanduser(log_file))
-        self.server.register_static_file_handler("klippy.log", log_path)
+        if log_file is not None:
+            log_path = os.path.normpath(os.path.expanduser(log_file))
+            self.server.register_static_file_handler(
+                "klippy.log", log_path, force=True)
 
     def register_directory(self, root, path):
         if path is None:

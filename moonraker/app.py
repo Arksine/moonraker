@@ -132,9 +132,10 @@ class MoonrakerApp:
         # Register handlers
         logfile = config['system_args'].get('logfile')
         if logfile:
-            self.register_static_file_handler("moonraker.log", logfile)
+            self.register_static_file_handler(
+                "moonraker.log", logfile, force=True)
         self.register_static_file_handler(
-            "klippy.log", DEFAULT_KLIPPY_LOG_PATH)
+            "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
         self.auth.register_handlers(self)
 
     def listen(self, host, port):
@@ -197,10 +198,10 @@ class MoonrakerApp:
             self.wsm.register_local_handler(api_def, callback)
         logging.info(msg)
 
-    def register_static_file_handler(self, pattern, file_path):
+    def register_static_file_handler(self, pattern, file_path, force=False):
         if pattern[0] != "/":
             pattern = "/server/files/" + pattern
-        if os.path.isfile(file_path):
+        if os.path.isfile(file_path) or force:
             pattern += '()'
         elif os.path.isdir(file_path):
             if pattern[-1] != "/":
