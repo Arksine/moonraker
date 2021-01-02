@@ -682,7 +682,7 @@ class MetadataStorage:
         scmd = shell_command.build_shell_command(
             cmd, self._handle_script_response)
         self.script_response = None
-        await scmd.run(timeout=4.)
+        await scmd.run(timeout=10.)
         if self.script_response is None:
             raise self.server.error("Unable to extract metadata")
         path = self.script_response['file']
