@@ -34,6 +34,8 @@ class PrinterPower:
             self._handle_power_request)
         self.server.register_remote_method(
             "set_device_power", self.set_device_power)
+        self.server.register_event_handler(
+            "server:klippy_shutdown", self._handle_klippy_shutdown)
 
         self.chip_factory = GpioChipFactory()
         self.current_dev = None
@@ -52,6 +54,15 @@ class PrinterPower:
             else:
                 raise config.error(f"Unsupported Device Type: {dev_type}")
             self.devices[dev.get_name()] = dev
+
+    async def _handle_klippy_shutdown(self):
+        for name, dev in self.devices.items():
+            if hasattr(dev, "off_when_shutdown"):
+                if dev.off_when_shutdown:
+                    logging.info(
+                        f"Powering off device [{name}] due to"
+                        " klippy shutdown")
+                    await self._process_request(dev, "off")
 
     async def _handle_list_devices(self, web_request):
         dev_list = [d.get_device_info() for d in self.devices.values()]
@@ -164,6 +175,7 @@ class GpioDevice:
                 f"Unable to init {pin}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise config.error("Power GPIO Config Error")
+        self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
         initial_state = config.getboolean('initial_state', False)
         self.set_power("on" if initial_state else "off")
 
@@ -238,6 +250,7 @@ class TPLinkSmartPlug:
         self.server = config.get_server()
         self.addr = config.get("address")
         self.port = config.getint("port", 9999)
+        self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
         name_parts = config.get_name().split(maxsplit=1)
         if len(name_parts) != 2:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
@@ -341,6 +354,7 @@ class Tasmota:
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
         self.password = config.get("password", "")
+        self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
         name_parts = config.get_name().split(maxsplit=1)
         if len(name_parts) != 2:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
