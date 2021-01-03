@@ -23,6 +23,7 @@ class Timelapse:
         self.timeformatcode = config.get("time_format_code", "%Y%m%d_%H%M")
         self.snapshoturl = config.get(
             "snapshoturl", "http://localhost:8080/?action=snapshot")
+        self.pixelformat = config.get("pixelformat", "yuv420p")
         self.extraoutputparams = config.get("extraoutputparams", "")
         out_dir_cfg = config.get("output_path", "~/timelapse/")
         self.out_dir = os.path.expanduser(out_dir_cfg)
@@ -62,6 +63,8 @@ class Timelapse:
                     self.framerate = webrequest.get_int(arg)
                 if arg == "snapshoturl":
                     self.snapshoturl = webrequest.get(arg)
+                if arg == "pixelformat":
+                    self.pixelformat = webrequest.get(arg)
                 if arg == "extraoutputparams":
                     self.extraoutputparams = webrequest.get(arg)
         return {
@@ -69,6 +72,7 @@ class Timelapse:
             'constant_rate_factor': self.crf,
             'output_framerate': self.framerate,
             'snapshoturl': self.snapshoturl,
+            'pixelformat': self.pixelformat,
             'extraoutputparams': self.extraoutputparams
             }
 
@@ -140,7 +144,7 @@ class Timelapse:
                   + " -i '" + inputfiles + "'" \
                   + " -crf " + str(self.crf) \
                   + " -vcodec libx264" \
-                  + " -pix_fmt yuv420p" \
+                  + " -pix_fmt " + self.pixelformat \
                   + " " + self.extraoutputparams \
                   + " '" + self.out_dir + outfile + "' -y"
             logging.info(f"start FFMPEG: {cmd}")

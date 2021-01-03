@@ -310,6 +310,10 @@ https://github.com/jacksonliam/mjpg-streamer/blob/master/mjpg-streamer-experimen
 ##   see: https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes
 # snapshoturl: http://localhost:8080/?action=snapshot
 ##   url to your webcamstream
+# pixelformat: yuv420p
+##   set pixelformat for output video
+##   default to yuv420p because eg. yuvj422p will not play on 
+##   on most smartphones or older media players
 # extraoutputparams: 
 ##   here you can extra output parameters to FFMPEG 
 ##   further info: https://ffmpeg.org/ffmpeg.html 
