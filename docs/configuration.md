@@ -147,6 +147,10 @@ and Tasmota (via http) devices are supported.
 type: gpio
 #   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
 #   This parameter must be provided.
+off_when_shutdown: False
+#   If set to True the device will be powered off when Klipper enters
+#   the "shutdown" state.  This option applies to all device types.
+#   The default is False.
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -186,6 +190,7 @@ Below are some potential examples:
 [power printer]
 type: gpio
 pin: gpio26
+off_when_shutdown: True
 initial_state: off
 
 [power printer_led]
