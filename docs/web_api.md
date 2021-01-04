@@ -819,12 +819,13 @@ been configured:
 
 ### Get update status
 Retreives the current state of each "package" available for update.  Typically
-this will consist of information regarding `moonraker`, `klipper`, and
-a `client`.  If moonraker has not yet received information from Klipper then
-its status will be omitted.  If a client has not been configured then its
-status will also be omitted.  If the parameter "refresh" is passed and set
-to true then Moonraker will query Github for the most recent release
-information.
+this will consist of information regarding `moonraker`, `klipper`, a `client`,
+and `system` packages.  If moonraker has not yet received information from
+Klipper then its status will be omitted.  If a client has not been configured
+then its status will also be omitted.  One may request that the update info
+be refreshed by sending a `refresh=true` argument.  Note that the refresh
+parameter is ignored if an update is in progress or if a print is in progress.
+In these cases the current status will be returned immediately.
 
 - HTTP command:\
   `GET /machine/update/status?refresh=false`
@@ -923,7 +924,8 @@ the service.  If "include_deps" is set to `true` an attempt will be made
 to install new packages (via apt-get) and python dependencies (via pip).
 Note that Moonraker uses semantic versioning to check for dependency changes
 automatically, so it is generally not necessary to set `include_deps`
-to `true`.
+to `true`.  If an update is requested while a print is in progress then
+this request will return an error.
 
 - HTTP command:\
   `POST /machine/update/moonraker?include_deps=false`
@@ -946,7 +948,8 @@ the service.  If "include_deps" is set to `true` an attempt will be made
 to install new packages (via apt-get) and python dependencies (via pip).
 At the moment there is no method for automatically checking for updated
 Klipper dependencies, so clients might wish to make this option available
-to users via the UI.
+to users via the UI. If an update is requested while a print is in progress
+then this request will return an error.
 
 - HTTP command:\
   `POST /machine/update/klipper?include_deps=false`
@@ -966,7 +969,8 @@ to users via the UI.
 ### Update Client
 If `client_repo` and `client_path` have been configured in `[update_manager]`
 this endpoint can be used to install the most recently publish release
-of the client.
+of the client.  If an update is requested while a print is in progress
+then this request will return an error.
 
 - HTTP command:\
   `POST /machine/update/client`
@@ -980,6 +984,8 @@ of the client.
 
 ### Update System Packages
 Upgrades the system packages.  Currently only `apt-get` is supported.
+If an update is requested while a print is in progress then this request
+will return an error.
 
 - HTTP command:\
   `POST /machine/update/system`
@@ -1215,6 +1221,16 @@ Where `response` is an object int he following format:
 - The `complete` field is set to true on the final message sent during an
   update, indicating that the update completed successfully.  Otherwise it
   will be false.
+
+### Update Manager Refreshed
+The update manager periodically auto refreshes the state of each application
+it is tracking.  After an auto refresh has completed the following
+notification is broadcast:
+
+`{jsonrpc: "2.0", method: "notify_update_refreshed", params: [update_info]}`
+
+Where `update_info` is an object that matches the response from an
+[update status](#get-update-status) request.
 
 # Appendix
 

@@ -1,4 +1,21 @@
 This document keeps a record of all changes to Moonraker's web APIs.
+
+### January 4th 2021
+- A `notify_update_refreshed` notification has been added.  Moonraker now
+  auto-refreshes the update status at roughly a 2 hour interval.  When
+  an auto-refresh is complete this notification is broadcast.  Included
+  is an object that matches the response from `/machine/update/status`.
+- The behavior of some of the `update_manager` APIs has changed:
+  - The `refresh` argument for `/machine/update/status` is now more
+    of a suggestion than a rule.  If an update or a print is in
+    progress then the request will ignore the refresh argument
+    and immediately return the current status.  Generally speaking requesting
+    a refresh should not be necessary with addition of auto refresh.
+  - The update requests (ie `/machine/update/klipper`) will now return
+    an error if a print is in progress.  If the requested update is in
+    progress then the request will return valid with a message stating
+    that the update is in progress.  If another object is being updated
+    then the request will be queued and block until it its complete.
 ### January 1st 2021
 - A `notify_klippy_shutdown` websocket notification has been added
 
