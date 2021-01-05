@@ -280,6 +280,8 @@ class FileManager:
         flist = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
+            if not os.path.exists(full_path):
+                continue
             path_info = self._get_path_info(full_path)
             if os.path.isdir(full_path):
                 path_info['dirname'] = fname
