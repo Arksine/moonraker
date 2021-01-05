@@ -15,7 +15,7 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
-METADATA_SCRIPT = os.path.normpath(os.path.join(
+METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
 class FileManager:
@@ -78,14 +78,14 @@ class FileManager:
         # Register log path
         log_file = paths.get('log_file')
         if log_file is not None:
-            log_path = os.path.normpath(os.path.expanduser(log_file))
+            log_path = os.path.abspath(os.path.expanduser(log_file))
             self.server.register_static_file_handler(
                 "klippy.log", log_path, force=True)
 
     def register_directory(self, root, path):
         if path is None:
             return False
-        path = os.path.normpath(os.path.expanduser(path))
+        path = os.path.abspath(os.path.expanduser(path))
         if os.path.islink(path):
             path = os.path.realpath(path)
         if not os.path.isdir(path) or path == "/":
@@ -389,7 +389,7 @@ class FileManager:
             filename = upload['filename'].strip().lstrip("/")
             if dir_path:
                 filename = os.path.join(dir_path, filename)
-            full_path = os.path.normpath(os.path.join(root_path, filename))
+            full_path = os.path.abspath(os.path.join(root_path, filename))
         # Validate the path.  Don't allow uploads to a parent of the root
         if not full_path.startswith(root_path):
             raise self.server.error(
