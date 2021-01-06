@@ -106,6 +106,7 @@ def get_configuration(server, system_args):
         logging.getLogger().setLevel(logging.DEBUG)
 
     config['system_args'] = {
+        'configfile': system_args.configfile,
         'logfile': system_args.logfile,
         'software_version': system_args.software_version}
     return ConfigHelper(server, config, 'server')
