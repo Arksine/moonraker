@@ -37,8 +37,6 @@ class UpdateManager:
         self.server = config.get_server()
         self.config = config
         self.config.read_supplemental_config(SUPPLEMENTAL_CFG_PATH)
-        AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
-        self.http_client = AsyncHTTPClient()
         self.repo_debug = config.getboolean('enable_repo_debug', False)
         self.distro = config.get('distro', "debian").lower()
         if self.distro not in SUPPORTED_DISTROS:
@@ -74,6 +72,9 @@ class UpdateManager:
             self._handle_auto_refresh, UPDATE_REFRESH_TIME)
         self.refresh_cb.start()
 
+        AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
+        self.http_client = AsyncHTTPClient()
+
         self.server.register_endpoint(
             "/machine/update/moonraker", ["POST"],
             self._handle_update_request)
@@ -93,8 +94,16 @@ class UpdateManager:
         # Register Ready Event
         self.server.register_event_handler(
             "server:klippy_identified", self._set_klipper_repo)
-        # Initialize GitHub API Rate Limits
-        IOLoop.current().spawn_callback(self._init_api_rate_limit)
+        # Initialize GitHub API Rate Limits and configured updaters
+        IOLoop.current().spawn_callback(
+            self._initalize_updaters, list(self.updaters.values()))
+
+    async def _initalize_updaters(self, initial_updaters):
+        await self._init_api_rate_limit()
+        for updater in initial_updaters:
+            ret = updater.refresh()
+            if asyncio.iscoroutine(ret):
+                await updater.refresh()
 
     async def _set_klipper_repo(self):
         kinfo = self.server.get_klippy_info()
@@ -109,6 +118,7 @@ class UpdateManager:
             # Current Klipper Updater is valid
             return
         self.updaters['klipper'] = GitUpdater(self, "klipper", kpath, env)
+        await self.updaters['klipper'].refresh()
 
     async def _check_klippy_printing(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -387,7 +397,6 @@ class GitUpdater:
         self.remote = "origin"
         self.branch = "master"
         self.is_valid = self.is_dirty = self.detached = False
-        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_version_info(self):
         ver_path = os.path.join(self.repo_path, "scripts/version.txt")
@@ -699,7 +708,6 @@ class PackageUpdater:
         self.available_packages = []
         self.init_evt = Event()
         self.refresh_condition = None
-        IOLoop.current().spawn_callback(self.refresh)
 
     async def refresh(self, fetch_packages=False):
         # TODO: Use python-apt python lib rather than command line for updates
@@ -774,7 +782,6 @@ class ClientUpdater:
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\nversion: {self.version}"
                      f"\npath: {self.path}")
-        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_local_version(self):
         version_path = os.path.join(self.path, ".version")
