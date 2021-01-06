@@ -140,18 +140,7 @@ class FileManager:
         if action == 'GET':
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
-            dir_info = self._list_directory(dir_path)
-            # Check to see if a filelist update is necessary
-            for f in dir_info['files']:
-                fname = os.path.join(rel_path, f['filename'])
-                ext = os.path.splitext(f['filename'])[-1].lower()
-                if root != 'gcodes' or ext not in VALID_GCODE_EXTS:
-                    continue
-                self.gcode_metadata.parse_metadata(
-                    fname, f['size'], f['modified'], notify=True)
-                metadata = self.gcode_metadata.get(fname, None)
-                if metadata is not None and is_extended:
-                    f.update(metadata)
+            dir_info = self._list_directory(dir_path, is_extended)
             return dir_info
         elif action == 'POST' and root in FULL_ACCESS_ROOTS:
             # Create a new directory
@@ -273,7 +262,7 @@ class FileManager:
             {'path': src_rel_path, 'root': source_root})
         return "ok"
 
-    def _list_directory(self, path):
+    def _list_directory(self, path, is_extended=False):
         if not os.path.isdir(path):
             raise self.server.error(
                 f"Directory does not exist ({path})")
@@ -288,6 +277,18 @@ class FileManager:
                 flist['dirs'].append(path_info)
             elif os.path.isfile(full_path):
                 path_info['filename'] = fname
+                # Check to see if a filelist update is necessary
+                ext = os.path.splitext(fname)[-1].lower()
+                gc_path = self.file_paths.get('gcodes', None)
+                if gc_path is not None and full_path.startswith(gc_path) and \
+                        ext in VALID_GCODE_EXTS:
+                    rel_path = os.path.relpath(full_path, start=gc_path)
+                    self.gcode_metadata.parse_metadata(
+                        rel_path, path_info['size'], path_info['modified'],
+                        notify=True)
+                    metadata = self.gcode_metadata.get(rel_path, None)
+                    if metadata is not None and is_extended:
+                        path_info.update(metadata)
                 flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
@@ -506,8 +507,7 @@ class FileManager:
         return self.gcode_metadata.get(filename, flist.get(filename, {}))
 
     def list_dir(self, directory, simple_format=False):
-        # List a directory relative to its root.  Currently the only
-        # Supported root is "gcodes"
+        # List a directory relative to its root.
         if directory[0] == "/":
             directory = directory[1:]
         parts = directory.split("/", 1)
