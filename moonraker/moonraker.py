@@ -64,6 +64,7 @@ class Server:
         self.init_attempts = 0
         self.klippy_state = "disconnected"
         self.subscriptions = {}
+        self.failed_plugins = []
 
         # Server/IOLoop
         self.server_running = False
@@ -132,11 +133,12 @@ class Server:
         if not os.path.exists(mod_path):
             msg = f"Plugin ({plugin_name}) does not exist"
             logging.info(msg)
+            self.failed_plugins.append(plugin_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
-        module = importlib.import_module("plugins." + plugin_name)
         try:
+            module = importlib.import_module("plugins." + plugin_name)
             func_name = "load_plugin"
             if hasattr(module, "load_plugin_multi"):
                 func_name = "load_plugin_multi"
@@ -147,6 +149,7 @@ class Server:
         except Exception:
             msg = f"Unable to load plugin ({plugin_name})"
             logging.exception(msg)
+            self.failed_plugins.append(plugin_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
@@ -464,7 +467,8 @@ class Server:
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
-            'plugins': list(self.plugins.keys())}
+            'plugins': list(self.plugins.keys()),
+            'failed_plugins': self.failed_plugins}
 
 class KlippyConnection:
     def __init__(self, on_recd, on_close):
