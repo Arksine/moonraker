@@ -503,8 +503,7 @@ class FileManager:
         if filename.startswith('gcodes/'):
             filename = filename[7:]
 
-        flist = self.get_file_list("gcodes")
-        return self.gcode_metadata.get(filename, flist.get(filename, {}))
+        return self.gcode_metadata.get(filename, {})
 
     def list_dir(self, directory, simple_format=False):
         # List a directory relative to its root.
