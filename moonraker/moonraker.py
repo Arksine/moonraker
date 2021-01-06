@@ -8,6 +8,7 @@ import argparse
 import sys
 import importlib
 import os
+import io
 import time
 import socket
 import logging
@@ -35,8 +36,17 @@ class Sentinel:
 
 class Server:
     error = ServerError
-    def __init__(self, args):
+    def __init__(self, args, file_logger):
+        self.file_logger = file_logger
         config = confighelper.get_configuration(self, args)
+        # log config file
+        strio = io.StringIO()
+        config.write_config(strio)
+        cfg_item = f"\n{'#'*20} Moonraker Configuration {'#'*20}\n\n"
+        cfg_item += strio.getvalue()
+        cfg_item += "#"*65
+        strio.close()
+        self.add_log_rollover_item('config', cfg_item)
         self.host = config.get('host', "0.0.0.0")
         self.port = config.getint('port', 7125)
 
@@ -94,6 +104,12 @@ class Server:
         self.moonraker_app.listen(self.host, self.port)
         self.server_running = True
         self.ioloop.spawn_callback(self._connect_klippy)
+
+    def add_log_rollover_item(self, name, item, log=True):
+        if self.file_logger is not None:
+            self.file_logger.set_rollover_info(name, item)
+        if log and item is not None:
+            logging.info(item)
 
     # ***** Plugin Management *****
     def _load_plugins(self, config):
@@ -565,7 +581,7 @@ def main():
             system_args.logfile))
     system_args.logfile = log_file
     system_args.software_version = version
-    ql = utils.setup_logging(log_file, version)
+    ql, file_logger = utils.setup_logging(log_file, version)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
@@ -580,7 +596,7 @@ def main():
     estatus = 0
     while True:
         try:
-            server = Server(system_args)
+            server = Server(system_args, file_logger)
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1
