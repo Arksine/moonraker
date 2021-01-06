@@ -83,6 +83,9 @@ class ConfigHelper:
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
 
+    def write_config(self, file_obj):
+        self.config.write(file_obj)
+
 def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
         system_args.configfile))
