@@ -186,7 +186,9 @@ class UpdateManager:
             self.current_update = (app, id(web_request))
             try:
                 await updater.update(inc_deps)
-            except Exception:
+            except Exception as e:
+                self.notify_update_response(f"Error updating {app}")
+                self.notify_update_response(str(e), is_complete=True)
                 raise
             finally:
                 self.current_update = None
