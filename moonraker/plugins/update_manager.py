@@ -295,9 +295,11 @@ class UpdateManager:
         retries = 5
         while retries:
             try:
-                resp = await self.http_client.fetch(
+                timeout = time.time() + 10.
+                fut = self.http_client.fetch(
                     url, headers=headers, connect_timeout=5.,
                     request_timeout=5., raise_error=False)
+                resp = await tornado.gen.with_timeout(timeout, fut)
             except Exception:
                 retries -= 1
                 msg = f"Error Processing GitHub API request: {url}"
@@ -346,9 +348,11 @@ class UpdateManager:
         retries = 5
         while retries:
             try:
-                resp = await self.http_client.fetch(
+                timeout = time.time() + 130.
+                fut = self.http_client.fetch(
                     url, headers={"Accept": "application/zip"},
                     connect_timeout=5., request_timeout=120.)
+                resp = await tornado.gen.with_timeout(timeout, fut)
             except Exception:
                 retries -= 1
                 logging.exception("Error Processing Download")
