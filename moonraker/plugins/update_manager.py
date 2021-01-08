@@ -49,14 +49,41 @@ class UpdateManager:
             "moonraker": GitUpdater(self, "moonraker", MOONRAKER_PATH, env)
         }
         self.current_update = None
-        client_repo = config.get("client_repo", None)
-        if client_repo is not None:
-            client_path = os.path.expanduser(config.get("client_path"))
-            if os.path.islink(client_path):
-                raise config.error(
-                    "Option 'client_path' cannot be set to a symbolic link")
-            self.updaters['client'] = ClientUpdater(
-                self, client_repo, client_path)
+
+        prefix_sections = config.get_prefix_sections("update_manager_client")
+        logging.info(f"Enabling client repos: {prefix_sections}")
+        logging.info(f"Enabling repos: %s" % config.get_prefix_sections("repo_info"))
+        try:
+            for section in prefix_sections:
+                cfg = config[section]
+                name = section[22:]
+                type = cfg.get("type", "client")
+                repo = cfg.get("repo", None)
+                path = cfg.get("path", None)
+                if path == None:
+                    logging.info(f"Update client {name} has no path configured")
+                    continue
+                path = os.path.expanduser(path)
+                if os.path.islink(path):
+                    raise config.error(
+                        f"{name} option 'path' cannot be a symbolic link")
+                logging.info(f"Adding updater: {name}")
+                if type == "client":
+                    if repo == None:
+                        #logging.info(f"Update client {name} has no repo " +
+                        #    "configured")
+                        continue
+                    self.updaters[name] = ClientUpdater(
+                        self, repo, path)
+                elif type == "git_repo":
+                    client_env = cfg.get("env", None)
+                    if client_env == None or not os.path.exists(
+                            client_env):
+                        raise config.error(f"{app} option 'env' invalid")
+                    logging.info("Creating thing")
+                    self.updaters[name] = GitUpdater(self, name, path, env)
+        except:
+            logging.exception("Error parsing update clients")
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit = None
@@ -75,18 +102,10 @@ class UpdateManager:
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
 
-        self.server.register_endpoint(
-            "/machine/update/moonraker", ["POST"],
-            self._handle_update_request)
-        self.server.register_endpoint(
-            "/machine/update/klipper", ["POST"],
-            self._handle_update_request)
-        self.server.register_endpoint(
-            "/machine/update/system", ["POST"],
-            self._handle_update_request)
-        self.server.register_endpoint(
-            "/machine/update/client", ["POST"],
-            self._handle_update_request)
+        for service in self.updaters.items():
+            self.server.register_endpoint(
+                "/machine/update/%s" % service[0], ["POST"],
+                self._handle_update_request)
         self.server.register_endpoint(
             "/machine/update/status", ["GET"],
             self._handle_status_request)
