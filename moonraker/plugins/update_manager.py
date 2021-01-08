@@ -556,7 +556,7 @@ class GitUpdater:
             remote_url = remote_url.lower()
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
-            if remote_url == self.repo_info['origin']:
+            if remote_url == self.repo_info['origin'].lower():
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
