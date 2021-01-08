@@ -263,14 +263,74 @@ distro: debian
 #   The disto in which moonraker has been installed.  Currently the
 #   update manager only supports "debian", which encompasses all of
 #   its derivatives.  The default is debain.
-client_repo:
+
+```
+
+## update_manager_client
+This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
+updated in addition to klipper, moonraker, and the system os. Repos that have
+been modified or cloned from unofficial sources are not supported.
+
+There are two types of update manager clients and each will be detailed
+separately. The first one is targeted towards releases that do not need a
+service restart such as Fluidd/Mainsail.
+
+```
+# moonraker.conf
+
+[update_manager_client fluidd]
+repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
 #   meteyou/mainsail to update Mainsail.  If this option is not set then
 #   the update manager will not attempt to update a client.
-client_path:
+path:
 #   The path to the client's files on disk.  This cannot be a symbolic link,
 #   it must be the real directory in which the client's files are located.
 #   If `client_repo` is set, this parameter must be provided
+```
+
+This second example is for git repositories that have a service that need
+updating.
+
+```
+# moonraker.conf
+
+# ServiceName must be the name of the systemd service
+[update_manager_client ServiceName]
+type: git_repo
+path:
+#   The path to the client's files on disk.  This cannot be a symbolic link,
+#   it must be the real directory in which the client's files are located.
+env:
+#   The path to the client's virtual environment on disk.  This cannot be a
+#   symbolic link, it must be the real directory in which the client's virtual
+#   environment are located. If `client_repo` is set, this parameter must be
+#   provided
+
+# Repo info defines the information for the client repository.
+# The last word must be the same as the above section.
+[repo_info ServiceName]
+origin:
+#   The full GitHub URL for the repository. This url must begin with https://
+#   and end in .git
+requirements:
+#  This is the location in the repository to the client's virtual environment
+#  requirements file. This location is relative to the root of the repository.
+venv_args: -p python3
+#  The arguments to pass to the virtual environment. This will be '-p python2'
+#  or '-p python3' for Python 2 or Python 3 respectivaly.
+
+# Dist info defines the information for any system packages that may be used for
+# the client repository.
+# The last word must be the same as the previous two sections.
+[dist_info debian ServiceName]
+install_script:
+#  The file location, relative to the repository, for the installation script.
+python_dist_path: /usr/lib/python3/dist-packages
+#  The file location to python's dist-packages folder on the system.
+env_package_path: lib/python3.7/site-packages
+#  The path to, relative to the virtual environment, where site-packages is
+#  located.
 
 ```
