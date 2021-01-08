@@ -44,19 +44,36 @@ class UpdateManager:
         if self.repo_debug:
             logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
         env = sys.executable
+        mooncfg = self.config[f"update_manager static {self.distro} moonraker"]
         self.updaters = {
             "system": PackageUpdater(self),
-            "moonraker": GitUpdater(self, "moonraker", MOONRAKER_PATH, env)
+            "moonraker": GitUpdater(self, mooncfg, MOONRAKER_PATH, env)
         }
         self.current_update = None
+        # TODO: Check for client config in [update_manager].  This is
+        # deprecated and will be removed.
         client_repo = config.get("client_repo", None)
         if client_repo is not None:
-            client_path = os.path.expanduser(config.get("client_path"))
-            if os.path.islink(client_path):
-                raise config.error(
-                    "Option 'client_path' cannot be set to a symbolic link")
-            self.updaters['client'] = ClientUpdater(
-                self, client_repo, client_path)
+            client_path = config.get("client_path")
+            name = client_repo.split("/")[-1]
+            self.updaters[name] = WebUpdater(
+                self, {'repo': client_repo, 'path': client_path})
+        client_sections = self.config.get_prefix_sections(
+            "update_manager client")
+        for section in client_sections:
+            cfg = self.config[section]
+            name = section.split()[-1]
+            if name in self.updaters:
+                raise config.error("Client repo named %s already added"
+                                   % (name,))
+            client_type = cfg.get("type")
+            if client_type == "git_repo":
+                self.updaters[name] = GitUpdater(self, cfg)
+            elif client_type == "web":
+                self.updaters[name] = WebUpdater(self, cfg)
+            else:
+                raise config.error("Invalid type '%s' for section [%s]"
+                                   % (client_type, section))
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit = None
@@ -117,7 +134,8 @@ class UpdateManager:
                 kupdater.env == env:
             # Current Klipper Updater is valid
             return
-        self.updaters['klipper'] = GitUpdater(self, "klipper", kpath, env)
+        kcfg = self.config[f"update_manager static {self.distro} klipper"]
+        self.updaters['klipper'] = GitUpdater(self, kcfg, kpath, env)
         await self.updaters['klipper'].refresh()
 
     async def _check_klippy_printing(self):
@@ -175,6 +193,8 @@ class UpdateManager:
         if await self._check_klippy_printing():
             raise self.server.error("Update Refused: Klippy is printing")
         app = web_request.get_endpoint().split("/")[-1]
+        if app == "client":
+            app = web_request.get('name')
         inc_deps = web_request.get_boolean('include_deps', False)
         if self.current_update is not None and \
                 self.current_update[0] == app:
@@ -383,18 +403,19 @@ class UpdateManager:
 
 
 class GitUpdater:
-    def __init__(self, umgr, name, path, env):
+    def __init__(self, umgr, config, path=None, env=None):
         self.server = umgr.server
         self.execute_cmd = umgr.execute_cmd
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
-        distro = umgr.distro
-        config = umgr.config
-        self.repo_info = config[f"repo_info {name}"].get_options()
-        self.dist_info = config[f"dist_info {distro} {name}"].get_options()
-        self.name = name
+        self.repo_info = config.get_options()
+        self.name = config.get_name().split()[-1]
         self.repo_path = path
+        if path is None:
+            self.repo_path = config.get('path')
         self.env = env
+        if env is None:
+            self.env = config.get('env')
         self.version = self.cur_hash = "?"
         self.remote_version = self.remote_hash = "?"
         self.init_evt = Event()
@@ -541,7 +562,7 @@ class GitUpdater:
             remote_url = remote_url.lower()
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
-            if remote_url == self.repo_info['origin']:
+            if remote_url == self.repo_info['origin'].lower():
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
@@ -601,7 +622,7 @@ class GitUpdater:
 
     async def _install_packages(self):
         # Open install file file and read
-        inst_script = self.dist_info['install_script']
+        inst_script = self.repo_info['install_script']
         inst_path = os.path.join(self.repo_path, inst_script)
         if not os.path.isfile(inst_path):
             self._log_info(f"Unable to open install script: {inst_path}")
@@ -661,13 +682,13 @@ class GitUpdater:
         self._install_python_dist_requirements(env_path)
 
     def _install_python_dist_requirements(self, env_path):
-        dist_reqs = self.dist_info.get('python_dist_packages', None)
+        dist_reqs = self.repo_info.get('python_dist_packages', None)
         if dist_reqs is None:
             return
         dist_reqs = [r.strip() for r in dist_reqs.split("\n")
                      if r.strip()]
-        dist_path = self.dist_info['python_dist_path']
-        site_path = os.path.join(env_path, self.dist_info['env_package_path'])
+        dist_path = self.repo_info['python_dist_path']
+        site_path = os.path.join(env_path, self.repo_info['env_package_path'])
         for pkg in dist_reqs:
             for f in os.listdir(dist_path):
                 if f.startswith(pkg):
@@ -772,14 +793,17 @@ class PackageUpdater:
             'package_list': self.available_packages
         }
 
-class ClientUpdater:
-    def __init__(self, umgr, repo, path):
+class WebUpdater:
+    def __init__(self, umgr, config):
         self.umgr = umgr
         self.server = umgr.server
         self.notify_update_response = umgr.notify_update_response
-        self.repo = repo.strip().strip("/")
+        self.repo = config.get('repo').strip().strip("/")
         self.name = self.repo.split("/")[-1]
-        self.path = path
+        if hasattr(config, "get_name"):
+            self.name = config.get_name().split()[-1]
+        self.path = os.path.realpath(os.path.expanduser(
+            config.get("path")))
         self.version = self.remote_version = self.dl_url = "?"
         self.etag = None
         self.init_evt = Event()
