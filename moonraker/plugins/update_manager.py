@@ -52,7 +52,6 @@ class UpdateManager:
 
         prefix_sections = config.get_prefix_sections("update_manager_client")
         logging.info(f"Enabling client repos: {prefix_sections}")
-        logging.info(f"Enabling repos: %s" % config.get_prefix_sections("repo_info"))
         try:
             for section in prefix_sections:
                 cfg = config[section]
