@@ -267,14 +267,57 @@ distro: debian
 #   The disto in which moonraker has been installed.  Currently the
 #   update manager only supports "debian", which encompasses all of
 #   its derivatives.  The default is debain.
-client_repo:
+```
+
+### Client Configuration
+This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
+updated in addition to klipper, moonraker, and the system os. Repos that have
+been modified or cloned from unofficial sources are not supported.
+
+There are two types of update manager clients and each will be detailed
+separately. The first one is targeted towards releases that do not need a
+service restart such as Fluidd/Mainsail.
+
+```
+# moonraker.conf
+
+[update_manager client client_name]
+type: web
+repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
-#   meteyou/mainsail to update Mainsail.  If this option is not set then
-#   the update manager will not attempt to update a client.
-client_path:
-#   The path to the client's files on disk.  This cannot be a symbolic link,
-#   it must be the real directory in which the client's files are located.
-#   If `client_repo` is set, this parameter must be provided
+#   meteyou/mainsail to update Mainsail.  This parameter must be provided.
+path:
+#   The path to the client's files on disk.  This parameter must be provided.
+```
 
+This second example is for git repositories that have a service that need
+updating.
+
+```
+# moonraker.conf
+
+# service_name must be the name of the systemd service
+[update_manager client service_name]
+type: git_repo
+path:
+#   The path to the client's files on disk.  This parameter must be provided.
+origin:
+#   The full GitHub URL of the "origin" remote for the repository.  This can
+#   be be viewed by navigating to your repository and running:
+#     git remote -v
+#   This parameter must be provided.
+env:
+#   The path to the client's virtual environment executable on disk.  For
+#   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
+#   The default is no env, which disables updating python packages.
+requirements:
+#  This is the location in the repository to the client's virtual environment
+#  requirements file. This location is relative to the root of the repository.
+#  This parameter must be provided if the "env" option is set, otherwise it
+#  should be omitted.
+install_script:
+#  The file location, relative to the repository, for the installation script.
+#  The update manager parses this file for "system" packages that need updating.
+#  The default is no install script, which disables system package updates
 ```
