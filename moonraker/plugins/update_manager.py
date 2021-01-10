@@ -7,6 +7,7 @@ import os
 import re
 import logging
 import json
+import re
 import sys
 import shutil
 import zipfile
@@ -75,11 +76,7 @@ class UpdateManager:
                     self.updaters[name] = ClientUpdater(
                         self, repo, path)
                 elif type == "git_repo":
-                    client_env = cfg.get("env", None)
-                    if client_env == None or not os.path.exists(
-                            client_env):
-                        raise config.error(f"{app} option 'env' invalid")
-                    logging.info("Creating thing")
+                    self._check_git_repo_config(name, cfg)
                     self.updaters[name] = GitUpdater(self, name, path, env)
         except:
             logging.exception("Error parsing update clients")
@@ -144,6 +141,27 @@ class UpdateManager:
             {'print_stats': None}, default={})
         pstate = result.get('print_stats', {}).get('state', "")
         return pstate.lower() == "printing"
+
+    def _check_git_repo_config(self, name, config):
+        if not re.match(r'^https://github.com/\w+/\w+(.git)?$',
+                config.get("origin", "")):
+            raise config.error("origin not valid for update_manager_client" +
+                f"{name}")
+        if config.get("env",None) is None or not os.path.exists(
+                config.get("env")):
+            raise config.error("env not valid for update_manager_client " +
+                f"{name}")
+        if (config.get("requirements",None) is None or not
+                os.path.exists(os.path.join(config.get("path"),
+                config.get("requirements","")))):
+            raise config.error("Requirements not valid for " +
+                f"update_manager_client {name}")
+        if (config.get("install_script",None) is None or not
+                os.path.exists(os.path.join(config.get("path"),
+                config.get("install_script","")))):
+            raise config.error("install_script not valid for " +
+                f"update_manager_client {name}")
+
 
     async def _handle_auto_refresh(self):
         if await self._check_klippy_printing():
@@ -404,8 +422,17 @@ class GitUpdater:
         self.notify_update_response = umgr.notify_update_response
         distro = umgr.distro
         config = umgr.config
-        self.repo_info = config[f"repo_info {name}"].get_options()
-        self.dist_info = config[f"dist_info {distro} {name}"].get_options()
+        if f"update_manager_client {name}" in config.sections():
+            self.repo_info = config[f"update_manager_client {name}"
+                ].get_options()
+            if f"dist_info {distro} {name}" in config.sections():
+                self.dist_info = config[f"dist_info {distro} {name}"
+                    ].get_options()
+            else:
+                self.dist_info = self.repo_info.copy()
+        else:
+            self.repo_info = config[f"repo_info {name}"].get_options()
+            self.dist_info = config[f"dist_info {distro} {name}"].get_options()
         self.name = name
         self.repo_path = path
         self.env = env

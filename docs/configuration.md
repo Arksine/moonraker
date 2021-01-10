@@ -307,10 +307,6 @@ env:
 #   symbolic link, it must be the real directory in which the client's virtual
 #   environment are located. If `client_repo` is set, this parameter must be
 #   provided
-
-# Repo info defines the information for the client repository.
-# The last word must be the same as the above section.
-[repo_info ServiceName]
 origin:
 #   The full GitHub URL for the repository. This url must begin with https://
 #   and end in .git
@@ -320,17 +316,14 @@ requirements:
 venv_args: -p python3
 #  The arguments to pass to the virtual environment. This will be '-p python2'
 #  or '-p python3' for Python 2 or Python 3 respectivaly.
-
-# Dist info defines the information for any system packages that may be used for
-# the client repository.
-# The last word must be the same as the previous two sections.
-[dist_info debian ServiceName]
 install_script:
 #  The file location, relative to the repository, for the installation script.
 python_dist_path: /usr/lib/python3/dist-packages
-#  The file location to python's dist-packages folder on the system.
+#  The file location to python's dist-packages folder on the system. This is
+#  only required if any packages are required from the system such as gpiod
 env_package_path: lib/python3.7/site-packages
 #  The path to, relative to the virtual environment, where site-packages is
-#  located.
+#  located. This is only required if any packages are required from the system
+#  such as gpiod
 
 ```
