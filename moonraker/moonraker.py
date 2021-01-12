@@ -387,6 +387,10 @@ class Server:
         if rpc_method == "objects/subscribe":
             return await self._request_subscripton(web_request)
         else:
+            if rpc_method == "gcode/script":
+                script = web_request.get_str('script', "")
+                data_store = self.lookup_plugin('data_store')
+                data_store.store_gcode_command(script)
             return await self._request_standard(web_request)
 
     async def _request_subscripton(self, web_request):

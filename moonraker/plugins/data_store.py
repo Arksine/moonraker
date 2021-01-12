@@ -87,7 +87,7 @@ class DataStore:
     def _set_current_temps(self, data):
         for sensor in self.temperature_store:
             if sensor in data:
-                last_temp, last_target, last_power  = self.last_temps[sensor]
+                last_temp, last_target, last_power = self.last_temps[sensor]
                 self.last_temps[sensor] = (
                     round(data[sensor].get('temperature', last_temp), 2),
                     data[sensor].get('target', last_target),
@@ -112,15 +112,25 @@ class DataStore:
 
     def _update_gcode_store(self, response):
         curtime = time.time()
-        self.gcode_queue.append({'message': response, 'time': curtime})
+        self.gcode_queue.append(
+            {'message': response, 'time': curtime, 'type': "response"})
+
+    def store_gcode_command(self, script):
+        curtime = time.time()
+        for cmd in script.split('\n'):
+            cmd = cmd.strip()
+            if not cmd:
+                continue
+            self.gcode_queue.append(
+                {'message': script, 'time': curtime, 'type': "command"})
 
     async def _handle_gcode_store_request(self, web_request):
         count = web_request.get_int("count", None)
         if count is not None:
-            res = list(self.gcode_queue)[-count:]
+            gc_responses = list(self.gcode_queue)[-count:]
         else:
-            res = list(self.gcode_queue)
-        return {'gcode_store': res}
+            gc_responses = list(self.gcode_queue)
+        return {'gcode_store': gc_responses}
 
 def load_plugin(config):
     return DataStore(config)
