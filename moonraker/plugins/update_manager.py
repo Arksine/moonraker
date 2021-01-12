@@ -50,36 +50,52 @@ class UpdateManager:
             "moonraker": GitUpdater(self, "moonraker", MOONRAKER_PATH, env)
         }
         self.current_update = None
+        # Load client repository information from update_manager
+        client_repo = config.get("client_repo", None)
+        if client_repo is not None:
+            client_path = os.path.expanduser(config.get("client_path"))
+            if os.path.islink(client_path):
+                raise config.error(
+                    "Option 'client_path' cannot be set to a symbolic link")
+            self.updaters['client'] = ClientUpdater(
+                self, client_repo, client_path)
 
+        # Load client repository information from update_manager_client
         prefix_sections = config.get_prefix_sections("update_manager_client")
         logging.info(f"Enabling client repos: {prefix_sections}")
-        try:
-            for section in prefix_sections:
-                cfg = config[section]
-                name = section[22:]
-                type = cfg.get("type", "client")
-                repo = cfg.get("repo", None)
-                path = cfg.get("path", None)
-                if path == None:
-                    logging.info(f"Update client {name} has no path configured")
+
+        for section in prefix_sections:
+            cfg = config[section]
+            name = section[22:]
+            if name == "client" and "client" in self.updaters:
+                logging.info(
+                    f"Updater 'client' already defined in update_manager")
+                continue
+            type = cfg.get("type", "client")
+            repo = cfg.get("repo", None)
+            path = cfg.get("path", None)
+            if path == None:
+                logging.info(f"Update client {name} has no path configured")
+                continue
+            path = os.path.expanduser(path)
+            if os.path.islink(path):
+                raise config.error(
+                    f"{name} option 'path' cannot be a symbolic link")
+            if type not in ['client','git_repo']:
+                logging.info(f"update_manager_client {name} has unsupported "+
+                    f"type: {type}")
+                continue
+            logging.info(f"Adding updater: {name}")
+            if type == "client":
+                if repo == None:
+                    logging.info(f"Update client {name} has no repo " +
+                        "configured")
                     continue
-                path = os.path.expanduser(path)
-                if os.path.islink(path):
-                    raise config.error(
-                        f"{name} option 'path' cannot be a symbolic link")
-                logging.info(f"Adding updater: {name}")
-                if type == "client":
-                    if repo == None:
-                        #logging.info(f"Update client {name} has no repo " +
-                        #    "configured")
-                        continue
-                    self.updaters[name] = ClientUpdater(
-                        self, repo, path)
-                elif type == "git_repo":
-                    self._check_git_repo_config(name, cfg)
-                    self.updaters[name] = GitUpdater(self, name, path, env)
-        except:
-            logging.exception("Error parsing update clients")
+                self.updaters[name] = ClientUpdater(
+                    self, repo, path)
+            elif type == "git_repo":
+                self._check_git_repo_config(name, cfg)
+                self.updaters[name] = GitUpdater(self, name, path, env)
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit = None
