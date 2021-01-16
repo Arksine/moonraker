@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # GCode metadata extraction utility
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
