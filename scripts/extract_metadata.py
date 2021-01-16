@@ -56,6 +56,7 @@ class BaseSlicer(object):
     def __init__(self, file_path):
         self.path = file_path
         self.header_data = self.footer_data = self.log = None
+        self.layer_height = None
 
     def set_data(self, header_data, footer_data, fsize, log):
         self.header_data = header_data
@@ -146,12 +147,22 @@ class PrusaSlicer(BaseSlicer):
         return None
 
     def parse_first_layer_height(self):
+        # Check percentage
+        pct = _regex_find_first(
+            r"; first_layer_height = (\d+)%", self.footer_data)
+        if pct is not None:
+            if self.layer_height is None:
+                # Failed to parse the original layer height, so it is not
+                # possible to calculate a percentage
+                return None
+            return round(pct / 100. * self.layer_height, 6)
         return _regex_find_first(
             r"; first_layer_height = (\d+\.?\d*)", self.footer_data)
 
     def parse_layer_height(self):
-        return _regex_find_first(
+        self.layer_height = _regex_find_first(
             r"; layer_height = (\d+\.?\d*)", self.footer_data)
+        return self.layer_height
 
     def parse_object_height(self):
         matches = re.findall(
@@ -274,8 +285,9 @@ class Cura(BaseSlicer):
         return _regex_find_first(r";MINZ:(\d+\.?\d*)", self.header_data)
 
     def parse_layer_height(self):
-        return _regex_find_first(
+        self.layer_height = _regex_find_first(
             r";Layer\sheight:\s(\d+\.?\d*)", self.header_data)
+        return self.layer_height
 
     def parse_object_height(self):
         return _regex_find_first(r";MAXZ:(\d+\.?\d*)", self.header_data)
@@ -346,8 +358,9 @@ class Simplify3D(BaseSlicer):
         return self._parse_min_float(r"G1\sZ\d+\.\d*", self.header_data)
 
     def parse_layer_height(self):
-        return _regex_find_first(
+        self.layer_height =  _regex_find_first(
             r";\s+layerHeight,(\d+\.?\d*)", self.header_data)
+        return self.layer_height
 
     def parse_object_height(self):
         return self._parse_max_float(r"G1\sZ\d+\.\d*", self.footer_data)
@@ -414,8 +427,9 @@ class KISSlicer(BaseSlicer):
             r";\s+first_layer_thickness_mm\s=\s(\d+\.?\d*)", self.header_data)
 
     def parse_layer_height(self):
-        return _regex_find_first(
+        self.layer_height = _regex_find_first(
             r";\s+max_layer_thickness_mm\s=\s(\d+\.?\d*)", self.header_data)
+        return self.layer_height
 
     def parse_object_height(self):
         return self._parse_max_float(
@@ -467,7 +481,8 @@ class IdeaMaker(BaseSlicer):
         layer_info = _regex_find_floats(
             r";LAYER:1\s*.*\s*;HEIGHT.*", self.header_data)
         if len(layer_info) >= 3:
-            return layer_info[2]
+            self.layer_height = layer_info[2]
+            return self.layer_height
         return None
 
     def parse_object_height(self):
@@ -509,9 +524,10 @@ class IceSL(BaseSlicer):
             self.header_data, float)
 
     def parse_layer_height(self):
-        return _regex_find_first(
+        self.layer_height = _regex_find_first(
             r"; z_layer_height_mm :\s+(\d+\.\d+)",
             self.header_data, float)
+        return self.layer_height
 
     def parse_object_height(self):
         return self._parse_max_float(
@@ -531,7 +547,7 @@ SUPPORTED_SLICERS = [
     PrusaSlicer, Slic3rPE, Slic3r, SuperSlicer,
     Cura, Simplify3D, KISSlicer, IdeaMaker, IceSL]
 SUPPORTED_DATA = [
-    'first_layer_height', 'layer_height', 'object_height',
+    'layer_height', 'first_layer_height', 'object_height',
     'filament_total', 'estimated_time', 'thumbnails',
     'first_layer_bed_temp', 'first_layer_extr_temp',
     'gcode_start_byte', 'gcode_end_byte']
