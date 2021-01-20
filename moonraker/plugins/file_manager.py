@@ -117,6 +117,9 @@ class FileManager:
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
 
+    def get_registered_dirs(self):
+        return list(self.file_paths.keys())
+
     def get_fixed_path_args(self):
         return dict(self.fixed_path_args)
 

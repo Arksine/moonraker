@@ -468,11 +468,16 @@ class Server:
         return "ok"
 
     async def _handle_info_request(self, web_request):
+        file_manager = self.lookup_plugin('file_manager', None)
+        reg_dirs = []
+        if file_manager is not None:
+            reg_dirs = file_manager.get_registered_dirs()
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
             'plugins': list(self.plugins.keys()),
-            'failed_plugins': self.failed_plugins}
+            'failed_plugins': self.failed_plugins,
+            'registered_directories': reg_dirs}
 
 class KlippyConnection:
     def __init__(self, on_recd, on_close):
