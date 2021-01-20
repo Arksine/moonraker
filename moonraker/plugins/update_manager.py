@@ -408,14 +408,47 @@ class GitUpdater:
         self.execute_cmd = umgr.execute_cmd
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
-        self.repo_info = config.get_options()
         self.name = config.get_name().split()[-1]
         self.repo_path = path
         if path is None:
             self.repo_path = config.get('path')
-        self.env = env
-        if env is None:
-            self.env = config.get('env')
+        self.env = config.get("env", env)
+        dist_packages = None
+        if self.env is not None:
+            self.env = os.path.expanduser(self.env)
+            dist_packages = config.get('python_dist_packages', None)
+            self.python_reqs = os.path.join(
+                self.repo_path, config.get("requirements"))
+        self.origin = config.get("origin").lower()
+        self.install_script = config.get('install_script', None)
+        if self.install_script is not None:
+            self.install_script = os.path.abspath(os.path.join(
+                self.repo_path, self.install_script))
+        self.venv_args = config.get('venv_args', None)
+        self.python_dist_packages = None
+        self.python_dist_path = None
+        self.env_package_path = None
+        if dist_packages is not None:
+            self.python_dist_packages = [
+                p.strip() for p in dist_packages.split('\n')
+                if p.strip()]
+            self.python_dist_path = os.path.abspath(
+                config.get('python_dist_path'))
+            if not os.path.exists(self.python_dist_path):
+                raise config.error(
+                    "Invalid path for option 'python_dist_path'")
+            self.env_package_path = os.path.abspath(os.path.join(
+                os.path.dirname(self.env), "..",
+                config.get('env_package_path')))
+        for opt in ["repo_path", "env", "python_reqs", "install_script",
+                    "python_dist_path", "env_package_path"]:
+            val = getattr(self, opt)
+            if val is None:
+                continue
+            if not os.path.exists(val):
+                raise config.error("Invalid path for option '%s': %s"
+                                   % (val, opt))
+
         self.version = self.cur_hash = "?"
         self.remote_version = self.remote_hash = "?"
         self.init_evt = Event()
@@ -562,7 +595,7 @@ class GitUpdater:
             remote_url = remote_url.lower()
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
-            if remote_url == self.repo_info['origin'].lower():
+            if remote_url == self.origin:
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
@@ -621,9 +654,10 @@ class GitUpdater:
             self._notify_status("Update Finished...", is_complete=True)
 
     async def _install_packages(self):
+        if self.install_script is None:
+            return
         # Open install file file and read
-        inst_script = self.repo_info['install_script']
-        inst_path = os.path.join(self.repo_path, inst_script)
+        inst_path = self.install_script
         if not os.path.isfile(inst_path):
             self._log_info(f"Unable to open install script: {inst_path}")
             return
@@ -650,24 +684,24 @@ class GitUpdater:
             return
 
     async def _update_virtualenv(self, rebuild_env=False):
+        if self.env is None:
+            return
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
         env_path = os.path.normpath(os.path.join(bin_dir, ".."))
         if rebuild_env:
-            env_args = self.repo_info['venv_args']
             self._notify_status(f"Creating virtualenv at: {env_path}...")
             if os.path.exists(env_path):
                 shutil.rmtree(env_path)
             try:
                 await self.execute_cmd(
-                    f"virtualenv {env_args} {env_path}", timeout=300.)
+                    f"virtualenv {self.venv_args} {env_path}", timeout=300.)
             except Exception:
                 self._log_exc(f"Error creating virtualenv")
                 return
-            if not os.path.expanduser(self.env):
+            if not os.path.exists(self.env):
                 raise self._log_exc("Failed to create new virtualenv", False)
-        reqs = os.path.join(
-            self.repo_path, self.repo_info['requirements'])
+        reqs = self.python_reqs
         if not os.path.isfile(reqs):
             self._log_exc(f"Invalid path to requirements_file '{reqs}'")
             return
@@ -679,16 +713,14 @@ class GitUpdater:
                 retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
-        self._install_python_dist_requirements(env_path)
+        self._install_python_dist_requirements()
 
-    def _install_python_dist_requirements(self, env_path):
-        dist_reqs = self.repo_info.get('python_dist_packages', None)
+    def _install_python_dist_requirements(self):
+        dist_reqs = self.python_dist_packages
         if dist_reqs is None:
             return
-        dist_reqs = [r.strip() for r in dist_reqs.split("\n")
-                     if r.strip()]
-        dist_path = self.repo_info['python_dist_path']
-        site_path = os.path.join(env_path, self.repo_info['env_package_path'])
+        dist_path = self.python_dist_path
+        site_path = self.env_package_path
         for pkg in dist_reqs:
             for f in os.listdir(dist_path):
                 if f.startswith(pkg):
