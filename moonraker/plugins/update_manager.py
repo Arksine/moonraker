@@ -25,12 +25,12 @@ SUPPLEMENTAL_CFG_PATH = os.path.join(
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
 SUPPORTED_DISTROS = ["debian"]
 
-# Check For Updates Every 2 Hours
-UPDATE_REFRESH_TIME = 7200000
-# Refresh APT Repo no sooner than 12 hours
-MIN_PKG_UPDATE_INTERVAL = 43200
-# Refresh APT Repo no later than 5am
-MAX_PKG_UPDATE_HOUR = 5
+# Check To see if Updates are necessary each hour
+UPDATE_REFRESH_INTERVAL_MS = 3600000
+# Perform auto refresh no sooner than 12 hours apart
+MIN_REFRESH_TIME = 43200
+# Perform auto refresh no later than 4am
+MAX_PKG_UPDATE_HOUR = 4
 
 class UpdateManager:
     def __init__(self, config):
@@ -38,6 +38,7 @@ class UpdateManager:
         self.config = config
         self.config.read_supplemental_config(SUPPLEMENTAL_CFG_PATH)
         self.repo_debug = config.getboolean('enable_repo_debug', False)
+        auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
         self.distro = config.get('distro', "debian").lower()
         if self.distro not in SUPPORTED_DISTROS:
             raise config.error(f"Unsupported distro: {self.distro}")
@@ -84,10 +85,12 @@ class UpdateManager:
         self.is_refreshing = False
 
         # Auto Status Refresh
-        self.last_package_refresh_time = 0
-        self.refresh_cb = PeriodicCallback(
-            self._handle_auto_refresh, UPDATE_REFRESH_TIME)
-        self.refresh_cb.start()
+        self.last_auto_update_time = 0
+        self.refresh_cb = None
+        if auto_refresh_enabled:
+            self.refresh_cb = PeriodicCallback(
+                self._handle_auto_refresh, UPDATE_REFRESH_INTERVAL_MS)
+            self.refresh_cb.start()
 
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
@@ -116,11 +119,16 @@ class UpdateManager:
             self._initalize_updaters, list(self.updaters.values()))
 
     async def _initalize_updaters(self, initial_updaters):
+        self.is_refreshing = True
         await self._init_api_rate_limit()
         for updater in initial_updaters:
-            ret = updater.refresh()
+            if isinstance(updater, PackageUpdater):
+                ret = updater.refresh(False)
+            else:
+                ret = updater.refresh()
             if asyncio.iscoroutine(ret):
                 await updater.refresh()
+        self.is_refreshing = False
 
     async def _set_klipper_repo(self):
         kinfo = self.server.get_klippy_info()
@@ -150,26 +158,21 @@ class UpdateManager:
             # Don't Refresh during a print
             logging.info("Klippy is printing, auto refresh aborted")
             return
+        cur_time = time.time()
+        cur_hour = time.localtime(cur_time).tm_hour
+        time_diff = cur_time - self.last_auto_update_time
+        # Update packages if it has been more than 12 hours
+        # and the local time is between 12AM and 5AM
+        if time_diff < MIN_REFRESH_TIME or cur_hour >= MAX_PKG_UPDATE_HOUR:
+            # Not within the update time window
+            return
+        self.last_auto_update_time = cur_time
         vinfo = {}
         need_refresh_all = not self.is_refreshing
         async with self.cmd_request_lock:
             self.is_refreshing = True
-            cur_time = time.time()
-            cur_hour = time.localtime(cur_time).tm_hour
-            time_diff = cur_time - self.last_package_refresh_time
             try:
-                # Update packages if it has been more than 12 hours
-                # and the local time is between 12AM and 5AM
-                if time_diff > MIN_PKG_UPDATE_INTERVAL and \
-                        cur_hour <= MAX_PKG_UPDATE_HOUR:
-                    self.last_package_refresh_time = cur_time
-                    sys_updater = self.updaters['system']
-                    await sys_updater.refresh(True)
-                    vinfo['system'] = sys_updater.get_update_status()
                 for name, updater in list(self.updaters.items()):
-                    if name in vinfo:
-                        # System was refreshed and added to version info
-                        continue
                     if need_refresh_all:
                         ret = updater.refresh()
                         if asyncio.iscoroutine(ret):
@@ -399,7 +402,8 @@ class UpdateManager:
 
     def close(self):
         self.http_client.close()
-        self.refresh_cb.stop()
+        if self.refresh_cb is not None:
+            self.refresh_cb.stop()
 
 
 class GitUpdater:
@@ -768,7 +772,7 @@ class PackageUpdater:
         self.init_evt = Event()
         self.refresh_condition = None
 
-    async def refresh(self, fetch_packages=False):
+    async def refresh(self, fetch_packages=True):
         # TODO: Use python-apt python lib rather than command line for updates
         if self.refresh_condition is None:
             self.refresh_condition = Condition()
