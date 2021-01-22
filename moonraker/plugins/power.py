@@ -106,8 +106,9 @@ class PrinterPower:
         if req in ["on", "off"]:
             printing = await self._check_klippy_printing()
             if device.get_locked_while_printing() and printing:
-                raise self.server.error(f"Unable to change power for {device} "
-                    + "while printing")
+                raise self.server.error(
+                    f"Unable to change power for {device.get_name()} "
+                    "while printing")
             ret = device.set_power(req)
             if asyncio.iscoroutine(ret):
                 await ret
@@ -165,7 +166,8 @@ class PowerDevice:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
         self.name = name_parts[1]
         self.state = "init"
-        self.locked_while_printing = config.getboolean('locked_while_printing', False)
+        self.locked_while_printing = config.getboolean(
+            'locked_while_printing', False)
         self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
 
     def get_name(self):
