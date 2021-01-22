@@ -178,7 +178,8 @@ class PowerDevice:
     def get_device_info(self):
         return {
             'device': self.name,
-            'status': self.state
+            'status': self.state,
+            'locked_while_printing': self.locked_while_printing
         }
 
     def get_locked_while_printing(self):
