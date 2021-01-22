@@ -164,6 +164,10 @@ initial_state: off
 #    The initial state for GPIO type devices.  May be on or
 #    off.  When moonraker starts the device will be set to this
 #    state.  Default is off.
+locked_while_printing: False
+#   If True, locks the device so that the power cannot be changed while the
+#   printer is printing. This is useful to avert an accidental shutdown to
+#   the printer's power.
 address:
 port:
 #   The above options are used for "tplink_smartplug" devices.  The
