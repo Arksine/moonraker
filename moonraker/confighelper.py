@@ -70,7 +70,7 @@ class ConfigHelper:
             self.config[self.section].getboolean, option, default)
 
     def getfloat(self, option, default=Sentinel):
-        return self._get_item(
+        return self._get_option(
             self.config[self.section].getfloat, option, default)
 
     def read_supplemental_config(self, file_name):
