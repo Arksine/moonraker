@@ -1,5 +1,15 @@
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### January 22nd 2021
+- The `POST /machine/update/client` endpoint now requires a `name`
+  argument.  This change added multiple client support
+- The response to `GET /machine/update/status` no longer returns a
+  `client` field.  Instead it will add fields matching the `name` of
+  each configured client.  Keep in mind that the client object could
+  have a different set of fields depending on the type of a client. The
+  easy way to check for this is to see if a `branch` field is present.
+  If so, this client is a `git repo`.  Otherwise it is a `web` client.
+
 ### January 4th 2021
 - A `notify_update_refreshed` notification has been added.  Moonraker now
   auto-refreshes the update status at roughly a 2 hour interval.  When

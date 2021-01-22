@@ -868,7 +868,7 @@ In these cases the current status will be returned immediately.
               detached: <bool>,
               debug_enabled: <bool>
           },
-          'client': {
+          'client_name_1': {
               name: <string>,
               version: <string>,
               remote_version: <string>
@@ -909,10 +909,13 @@ In these cases the current status will be returned immediately.
     - `debug_enabled`: True when "enable_repo_debug" has been configured.  This
       will bypass repo validation, allowing detached updates, and updates from
       a remote/origin other than "origin/master".
-  - The `client` object has the following fields:
+  - Multiple `client` fields may be present.  Web clients have the following
+    fields:
     - `name`: Name of the configured client
     - `version`:  version of the installed client.
     - `remote_version`:  version of the latest release published to GitHub
+    A `git_repo` client will have fields that match that of `klipper` and
+    `moonraker`
   - The `system` object has the following fields:
     - `package_count`: The number of system packages available for update
     - `package_list`: An array containing the names of packages available
@@ -967,17 +970,19 @@ then this request will return an error.
   `ok` when complete
 
 ### Update Client
-If `client_repo` and `client_path` have been configured in `[update_manager]`
-this endpoint can be used to install the most recently publish release
-of the client.  If an update is requested while a print is in progress
-then this request will return an error.
+If one more more `[update_manager client client_name]` sections have
+been configured this endpoint can be used to install the most recently
+published release of the client.  If an update is requested while a
+print is in progress then this request will return an error.  The
+`name` argument is requred, it's value should match the `client_name`
+of the configured section.
 
 - HTTP command:\
-  `POST /machine/update/client`
+  `POST /machine/update/client?name=client_name`
 
 - Websocket command:\
   `{jsonrpc: "2.0", method: "machine.update.client",
-   id: <request id>}`
+   params: {name: "client_name"}, id: <request id>}`
 
 - Returns:\
   `ok` when complete
