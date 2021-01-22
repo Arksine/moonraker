@@ -105,13 +105,9 @@ class PrinterPower:
     async def _process_request(self, device, req):
         if req in ["on", "off"]:
             printing = await self._check_klippy_printing()
-            logging.info("Device locked: %s" % device.get_locked_while_printing())
-            logging.info("Klippy printing: %s" % printing)
             if device.get_locked_while_printing() and printing:
-                self.server.error(f"Unable to change power for {device} " +
-                    "while printing")
-                dev_info = device.get_device_info()
-                return dev_info['status']
+                raise self.server.error(f"Unable to change power for {device} "
+                    + "while printing")
             ret = device.set_power(req)
             if asyncio.iscoroutine(ret):
                 await ret
