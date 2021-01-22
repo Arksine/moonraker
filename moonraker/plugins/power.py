@@ -377,6 +377,7 @@ class TPLinkSmartPlug(PowerDevice):
 
 class Tasmota(PowerDevice):
     def __init__(self, config):
+        super().__init__(config)
         self.server = config.get_server()
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
