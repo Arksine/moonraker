@@ -263,6 +263,12 @@ enable_repo_debug: False
 #   detached repos are also allowed.  This option is intended for
 #   developers and should not be used on production machines.  The
 #   default is False.
+enable_auto_refresh: False
+#   When set to True Moonraker will attempt to fetch status about
+#   available updates roughly every 24 hours, between 12am-4am.
+#   When set to False Moonraker will only fetch update state on startup
+#   and clients will need to request that Moonraker updates state.  The
+#   default is False.
 distro: debian
 #   The disto in which moonraker has been installed.  Currently the
 #   update manager only supports "debian", which encompasses all of
