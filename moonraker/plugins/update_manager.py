@@ -127,7 +127,7 @@ class UpdateManager:
             else:
                 ret = updater.refresh()
             if asyncio.iscoroutine(ret):
-                await updater.refresh()
+                await ret
         self.is_refreshing = False
 
     async def _set_klipper_repo(self):
@@ -515,8 +515,7 @@ class GitUpdater:
             await self._check_version()
         except Exception:
             logging.exception("Error Refreshing git state")
-        else:
-            self.init_evt.set()
+        self.init_evt.set()
         self.refresh_condition.notify_all()
         self.refresh_condition = None
 
@@ -781,9 +780,10 @@ class PackageUpdater:
             return
         try:
             if fetch_packages:
-                await self.execute_cmd(f"{APT_CMD} update", timeout=300.)
+                await self.execute_cmd(
+                    f"{APT_CMD} update", timeout=300., retries=3)
             res = await self.execute_cmd_with_response(
-                "apt list --upgradable")
+                "apt list --upgradable", timeout=60.)
             pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
             if pkg_list:
                 pkg_list = pkg_list[2:]
@@ -795,8 +795,7 @@ class PackageUpdater:
                 f"\n{pkg_list}")
         except Exception:
             logging.exception("Error Refreshing System Packages")
-        else:
-            self.init_evt.set()
+        self.init_evt.set()
         self.refresh_condition.notify_all()
         self.refresh_condition = None
 
@@ -874,8 +873,7 @@ class WebUpdater:
             await self._get_remote_version()
         except Exception:
             logging.exception("Error Refreshing Client")
-        else:
-            self.init_evt.set()
+        self.init_evt.set()
         self.refresh_condition.notify_all()
         self.refresh_condition = None
 
