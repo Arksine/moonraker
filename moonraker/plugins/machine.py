@@ -39,13 +39,15 @@ class Machine:
     async def reboot_machine(self):
         await self._execute_cmd("sudo shutdown -r now")
 
+    async def restart_service(self, service_name):
+        await self._execute_cmd(f'sudo systemctl restart {service_name}')
+
     async def _handle_service_restart(self, web_request):
         name = web_request.get('service')
         if name == "klipper":
-            await self._execute_cmd(f'sudo systemctl restart {name}')
+            await self.restart_service(name)
         elif name == "moonraker":
-            IOLoop.current().spawn_callback(
-                self._execute_cmd, f'sudo systemctl restart {name}')
+            IOLoop.current().spawn_callback(self.restart_service, name)
         else:
             raise self.sever.error(
                 f"Invalid argument recevied for 'name': {name}")
