@@ -158,7 +158,7 @@ locked_while_printing: False
 restart_klipper_when_powered: False
 #   If set to True, Moonraker will issue a "FIRMWARE_RESTART" to Klipper
 #   after the device has been powered on.  The default is False, thus no
-#   attempt to made to restart klipper after a restart.
+#   attempt to made to restart Klipper after power on.
 restart_delay: 1.
 #   If "restart_klipper_when_powered" is set, this option specifies the amount
 #   of time (in seconds) to delay the restart.  Default is 1 second.
