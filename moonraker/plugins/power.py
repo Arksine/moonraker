@@ -104,6 +104,10 @@ class PrinterPower:
 
     async def _process_request(self, device, req):
         if req in ["on", "off"]:
+            cur_state = device.get_device_info()['status']
+            if req == cur_state:
+                # device is already in requested state, do nothing
+                return cur_state
             printing = await self._check_klippy_printing()
             if device.get_locked_while_printing() and printing:
                 raise self.server.error(
@@ -114,6 +118,7 @@ class PrinterPower:
                 await ret
             dev_info = device.get_device_info()
             self.server.send_event("gpio_power:power_changed", dev_info)
+            device.run_power_changed_action()
         elif req == "status":
             ret = device.refresh_status()
             if asyncio.iscoroutine(ret):
@@ -164,11 +169,19 @@ class PowerDevice:
         name_parts = config.get_name().split(maxsplit=1)
         if len(name_parts) != 2:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
+        self.server = config.get_server()
         self.name = name_parts[1]
         self.state = "init"
         self.locked_while_printing = config.getboolean(
             'locked_while_printing', False)
         self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
+        self.restart_delay = 1.
+        self.klipper_restart = config.getboolean(
+                'restart_klipper_when_powered', False)
+        if self.klipper_restart:
+            self.restart_delay = config.getfloat('restart_delay', 1.)
+            if self.restart_delay < .000001:
+                raise config.error("Option 'restart_delay' must be above 0.0")
 
     def get_name(self):
         return self.name
@@ -182,6 +195,13 @@ class PowerDevice:
 
     def get_locked_while_printing(self):
         return self.locked_while_printing
+
+    def run_power_changed_action(self):
+        if self.state == "on" and self.klipper_restart:
+            ioloop = IOLoop.current()
+            klippy_apis = self.server.lookup_plugin("klippy_apis")
+            ioloop.call_later(self.restart_delay, klippy_apis.do_restart,
+                              "FIRMWARE_RESTART")
 
 class GpioChipFactory:
     def __init__(self):
