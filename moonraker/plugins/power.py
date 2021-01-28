@@ -177,7 +177,7 @@ class PowerDevice:
         self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
         self.restart_delay = 1.
         self.klipper_restart = config.getboolean(
-                'restart_klipper_when_powered', False)
+            'restart_klipper_when_powered', False)
         if self.klipper_restart:
             self.restart_delay = config.getfloat('restart_delay', 1.)
             if self.restart_delay < .000001:
