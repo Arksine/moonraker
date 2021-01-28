@@ -49,7 +49,7 @@ class Machine:
         elif name == "moonraker":
             IOLoop.current().spawn_callback(self.restart_service, name)
         else:
-            raise self.sever.error(
+            raise self.server.error(
                 f"Invalid argument recevied for 'name': {name}")
         return "ok"
 
