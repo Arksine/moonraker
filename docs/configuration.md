@@ -405,3 +405,5 @@ printhead to a specific position, before taking a picture.
 
 ### Add the macro to your Slicer:
 ``TIMELAPSE_TAKE_FRAME`` -> to before or after Layerchange (where you like the snapshot should be taken)
+
+![PrusaSlicer Configuration](assets/img/timelapse-PS-config.png)
