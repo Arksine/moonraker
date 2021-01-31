@@ -302,6 +302,10 @@ repo:
 #   meteyou/mainsail to update Mainsail.  This parameter must be provided.
 path:
 #   The path to the client's files on disk.  This parameter must be provided.
+persistent_files:
+#   A list of newline separated file names that should persist between
+#   updates.  This is useful for static configuration files, or perhaps
+#   themes.  The default is no persistent files.
 ```
 
 This second example is for git repositories that have a service that need

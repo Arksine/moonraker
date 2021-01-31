@@ -240,6 +240,23 @@ websocket.  See the `notify_status_update` notification for details.
   1 second by default, containing a total of 1200 values (20 minutes).  The
   array is organized from oldest temperature to most recent (left to right).
   Note that when the host starts each array is initialized to 0s.
+  ```json
+  {
+      extruder: {
+          temperatures: [],
+          targets: [],
+          powers: []
+      },
+      temperature_fan my_fan: {
+          temperatures: [],
+          targets: [],
+          speeds: [],
+      },
+      temperature_sensor my_sensor: {
+          temperatures: []
+      }
+  }
+  ```
 
 ### Fetch stored gcode info
 - HTTP command:\
@@ -267,7 +284,8 @@ websocket.  See the `notify_status_update` notification for details.
     gcode_store: [
       {
         message: <string>,
-        time: unix_time_stamp
+        time: unix_time_stamp,
+        type: <string>
       }, ...
     ]
   }
@@ -282,6 +300,7 @@ for (let resp of result.gcode_store) {
   // Do something with date and resp.message ...
 }
 ```
+The `type` field will either be "command" or "response".
 
 ### Restart Server
 - HTTP command:\
