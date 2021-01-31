@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os
+import glob
 import re
 import logging
 import json
@@ -439,12 +440,15 @@ class GitUpdater:
                 if p.strip()]
             self.python_dist_path = os.path.abspath(
                 config.get('python_dist_path'))
-            if not os.path.exists(self.python_dist_path):
-                raise config.error(
-                    "Invalid path for option 'python_dist_path'")
-            self.env_package_path = os.path.abspath(os.path.join(
+            env_package_path = os.path.abspath(os.path.join(
                 os.path.dirname(self.env), "..",
                 config.get('env_package_path')))
+            matches = glob.glob(env_package_path)
+            if len(matches) == 1:
+                self.env_package_path = matches[0]
+            else:
+                raise config.error("No match for 'env_package_path': %s"
+                                   % (env_package_path,))
         for opt in ["repo_path", "env", "python_reqs", "install_script",
                     "python_dist_path", "env_package_path"]:
             val = getattr(self, opt)
