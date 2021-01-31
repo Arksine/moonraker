@@ -14,9 +14,9 @@ import io
 import asyncio
 import time
 import tornado.gen
-from tornado.ioloop import IOLoop
+from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
-from tornado.locks import Event
+from tornado.locks import Event, Condition, Lock
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../.."))
@@ -25,39 +25,75 @@ SUPPLEMENTAL_CFG_PATH = os.path.join(
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
 SUPPORTED_DISTROS = ["debian"]
 
+# Check To see if Updates are necessary each hour
+UPDATE_REFRESH_INTERVAL_MS = 3600000
+# Perform auto refresh no sooner than 12 hours apart
+MIN_REFRESH_TIME = 43200
+# Perform auto refresh no later than 4am
+MAX_PKG_UPDATE_HOUR = 4
+
 class UpdateManager:
     def __init__(self, config):
         self.server = config.get_server()
         self.config = config
         self.config.read_supplemental_config(SUPPLEMENTAL_CFG_PATH)
-        AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
-        self.http_client = AsyncHTTPClient()
         self.repo_debug = config.getboolean('enable_repo_debug', False)
+        auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
         self.distro = config.get('distro', "debian").lower()
         if self.distro not in SUPPORTED_DISTROS:
             raise config.error(f"Unsupported distro: {self.distro}")
         if self.repo_debug:
             logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
         env = sys.executable
+        mooncfg = self.config[f"update_manager static {self.distro} moonraker"]
         self.updaters = {
             "system": PackageUpdater(self),
-            "moonraker": GitUpdater(self, "moonraker", MOONRAKER_PATH, env)
+            "moonraker": GitUpdater(self, mooncfg, MOONRAKER_PATH, env)
         }
         self.current_update = None
+        # TODO: Check for client config in [update_manager].  This is
+        # deprecated and will be removed.
         client_repo = config.get("client_repo", None)
         if client_repo is not None:
-            client_path = os.path.expanduser(config.get("client_path"))
-            if os.path.islink(client_path):
-                raise config.error(
-                    "Option 'client_path' cannot be set to a symbolic link")
-            self.updaters['client'] = ClientUpdater(
-                self, client_repo, client_path)
+            client_path = config.get("client_path")
+            name = client_repo.split("/")[-1]
+            self.updaters[name] = WebUpdater(
+                self, {'repo': client_repo, 'path': client_path})
+        client_sections = self.config.get_prefix_sections(
+            "update_manager client")
+        for section in client_sections:
+            cfg = self.config[section]
+            name = section.split()[-1]
+            if name in self.updaters:
+                raise config.error("Client repo named %s already added"
+                                   % (name,))
+            client_type = cfg.get("type")
+            if client_type == "git_repo":
+                self.updaters[name] = GitUpdater(self, cfg)
+            elif client_type == "web":
+                self.updaters[name] = WebUpdater(self, cfg)
+            else:
+                raise config.error("Invalid type '%s' for section [%s]"
+                                   % (client_type, section))
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit = None
         self.gh_limit_remaining = None
         self.gh_limit_reset_time = None
         self.gh_init_evt = Event()
+        self.cmd_request_lock = Lock()
+        self.is_refreshing = False
+
+        # Auto Status Refresh
+        self.last_auto_update_time = 0
+        self.refresh_cb = None
+        if auto_refresh_enabled:
+            self.refresh_cb = PeriodicCallback(
+                self._handle_auto_refresh, UPDATE_REFRESH_INTERVAL_MS)
+            self.refresh_cb.start()
+
+        AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
+        self.http_client = AsyncHTTPClient()
 
         self.server.register_endpoint(
             "/machine/update/moonraker", ["POST"],
@@ -78,8 +114,21 @@ class UpdateManager:
         # Register Ready Event
         self.server.register_event_handler(
             "server:klippy_identified", self._set_klipper_repo)
-        # Initialize GitHub API Rate Limits
-        IOLoop.current().spawn_callback(self._init_api_rate_limit)
+        # Initialize GitHub API Rate Limits and configured updaters
+        IOLoop.current().spawn_callback(
+            self._initalize_updaters, list(self.updaters.values()))
+
+    async def _initalize_updaters(self, initial_updaters):
+        self.is_refreshing = True
+        await self._init_api_rate_limit()
+        for updater in initial_updaters:
+            if isinstance(updater, PackageUpdater):
+                ret = updater.refresh(False)
+            else:
+                ret = updater.refresh()
+            if asyncio.iscoroutine(ret):
+                await ret
+        self.is_refreshing = False
 
     async def _set_klipper_repo(self):
         kinfo = self.server.get_klippy_info()
@@ -93,36 +142,112 @@ class UpdateManager:
                 kupdater.env == env:
             # Current Klipper Updater is valid
             return
-        self.updaters['klipper'] = GitUpdater(self, "klipper", kpath, env)
+        kcfg = self.config[f"update_manager static {self.distro} klipper"]
+        self.updaters['klipper'] = GitUpdater(self, kcfg, kpath, env)
+        await self.updaters['klipper'].refresh()
+
+    async def _check_klippy_printing(self):
+        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        result = await klippy_apis.query_objects(
+            {'print_stats': None}, default={})
+        pstate = result.get('print_stats', {}).get('state', "")
+        return pstate.lower() == "printing"
+
+    async def _handle_auto_refresh(self):
+        if await self._check_klippy_printing():
+            # Don't Refresh during a print
+            logging.info("Klippy is printing, auto refresh aborted")
+            return
+        cur_time = time.time()
+        cur_hour = time.localtime(cur_time).tm_hour
+        time_diff = cur_time - self.last_auto_update_time
+        # Update packages if it has been more than 12 hours
+        # and the local time is between 12AM and 5AM
+        if time_diff < MIN_REFRESH_TIME or cur_hour >= MAX_PKG_UPDATE_HOUR:
+            # Not within the update time window
+            return
+        self.last_auto_update_time = cur_time
+        vinfo = {}
+        need_refresh_all = not self.is_refreshing
+        async with self.cmd_request_lock:
+            self.is_refreshing = True
+            try:
+                for name, updater in list(self.updaters.items()):
+                    if need_refresh_all:
+                        ret = updater.refresh()
+                        if asyncio.iscoroutine(ret):
+                            await ret
+                    if hasattr(updater, "get_update_status"):
+                        vinfo[name] = updater.get_update_status()
+            except Exception:
+                logging.exception("Unable to Refresh Status")
+                return
+            finally:
+                self.is_refreshing = False
+        uinfo = {
+            'version_info': vinfo,
+            'github_rate_limit': self.gh_rate_limit,
+            'github_requests_remaining': self.gh_limit_remaining,
+            'github_limit_reset_time': self.gh_limit_reset_time,
+            'busy': self.current_update is not None}
+        self.server.send_event("update_manager:update_refreshed", uinfo)
 
     async def _handle_update_request(self, web_request):
+        if await self._check_klippy_printing():
+            raise self.server.error("Update Refused: Klippy is printing")
         app = web_request.get_endpoint().split("/")[-1]
+        if app == "client":
+            app = web_request.get('name')
         inc_deps = web_request.get_boolean('include_deps', False)
-        if self.current_update:
-            raise self.server.error("A current update is in progress")
+        if self.current_update is not None and \
+                self.current_update[0] == app:
+            return f"Object {app} is currently being updated"
         updater = self.updaters.get(app, None)
         if updater is None:
             raise self.server.error(f"Updater {app} not available")
-        self.current_update = (app, id(web_request))
-        try:
-            await updater.update(inc_deps)
-        except Exception:
-            self.current_update = None
-            raise
-        self.current_update = None
+        async with self.cmd_request_lock:
+            self.current_update = (app, id(web_request))
+            try:
+                await updater.update(inc_deps)
+            except Exception as e:
+                self.notify_update_response(f"Error updating {app}")
+                self.notify_update_response(str(e), is_complete=True)
+                raise
+            finally:
+                self.current_update = None
         return "ok"
 
     async def _handle_status_request(self, web_request):
-        refresh = web_request.get_boolean('refresh', False)
+        check_refresh = web_request.get_boolean('refresh', False)
+        # Don't refresh if a print is currently in progress or
+        # if an update is in progress.  Just return the current
+        # state
+        if self.current_update is not None or \
+                await self._check_klippy_printing():
+            check_refresh = False
+        need_refresh = False
+        if check_refresh:
+            # If there is an outstanding request processing a
+            # refresh, we don't need to do it again.
+            need_refresh = not self.is_refreshing
+            await self.cmd_request_lock.acquire()
+            self.is_refreshing = True
         vinfo = {}
-        for name, updater in self.updaters.items():
-            await updater.check_initialized(120.)
-            if refresh:
-                ret = updater.refresh()
-                if asyncio.iscoroutine(ret):
-                    await ret
-            if hasattr(updater, "get_update_status"):
-                vinfo[name] = updater.get_update_status()
+        try:
+            for name, updater in list(self.updaters.items()):
+                await updater.check_initialized(120.)
+                if need_refresh:
+                    ret = updater.refresh()
+                    if asyncio.iscoroutine(ret):
+                        await ret
+                if hasattr(updater, "get_update_status"):
+                    vinfo[name] = updater.get_update_status()
+        except Exception:
+            raise
+        finally:
+            if check_refresh:
+                self.is_refreshing = False
+                self.cmd_request_lock.release()
         return {
             'version_info': vinfo,
             'github_rate_limit': self.gh_rate_limit,
@@ -193,9 +318,11 @@ class UpdateManager:
         retries = 5
         while retries:
             try:
-                resp = await self.http_client.fetch(
+                timeout = time.time() + 10.
+                fut = self.http_client.fetch(
                     url, headers=headers, connect_timeout=5.,
                     request_timeout=5., raise_error=False)
+                resp = await tornado.gen.with_timeout(timeout, fut)
             except Exception:
                 retries -= 1
                 msg = f"Error Processing GitHub API request: {url}"
@@ -244,9 +371,11 @@ class UpdateManager:
         retries = 5
         while retries:
             try:
-                resp = await self.http_client.fetch(
+                timeout = time.time() + 130.
+                fut = self.http_client.fetch(
                     url, headers={"Accept": "application/zip"},
                     connect_timeout=5., request_timeout=120.)
+                resp = await tornado.gen.with_timeout(timeout, fut)
             except Exception:
                 retries -= 1
                 logging.exception("Error Processing Download")
@@ -273,29 +402,65 @@ class UpdateManager:
 
     def close(self):
         self.http_client.close()
+        if self.refresh_cb is not None:
+            self.refresh_cb.stop()
 
 
 class GitUpdater:
-    def __init__(self, umgr, name, path, env):
+    def __init__(self, umgr, config, path=None, env=None):
         self.server = umgr.server
         self.execute_cmd = umgr.execute_cmd
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
-        distro = umgr.distro
-        config = umgr.config
-        self.repo_info = config[f"repo_info {name}"].get_options()
-        self.dist_info = config[f"dist_info {distro} {name}"].get_options()
-        self.name = name
+        self.name = config.get_name().split()[-1]
         self.repo_path = path
-        self.env = env
+        if path is None:
+            self.repo_path = config.get('path')
+        self.env = config.get("env", env)
+        dist_packages = None
+        if self.env is not None:
+            self.env = os.path.expanduser(self.env)
+            dist_packages = config.get('python_dist_packages', None)
+            self.python_reqs = os.path.join(
+                self.repo_path, config.get("requirements"))
+        self.origin = config.get("origin").lower()
+        self.install_script = config.get('install_script', None)
+        if self.install_script is not None:
+            self.install_script = os.path.abspath(os.path.join(
+                self.repo_path, self.install_script))
+        self.venv_args = config.get('venv_args', None)
+        self.python_dist_packages = None
+        self.python_dist_path = None
+        self.env_package_path = None
+        if dist_packages is not None:
+            self.python_dist_packages = [
+                p.strip() for p in dist_packages.split('\n')
+                if p.strip()]
+            self.python_dist_path = os.path.abspath(
+                config.get('python_dist_path'))
+            if not os.path.exists(self.python_dist_path):
+                raise config.error(
+                    "Invalid path for option 'python_dist_path'")
+            self.env_package_path = os.path.abspath(os.path.join(
+                os.path.dirname(self.env), "..",
+                config.get('env_package_path')))
+        for opt in ["repo_path", "env", "python_reqs", "install_script",
+                    "python_dist_path", "env_package_path"]:
+            val = getattr(self, opt)
+            if val is None:
+                continue
+            if not os.path.exists(val):
+                raise config.error("Invalid path for option '%s': %s"
+                                   % (val, opt))
+
         self.version = self.cur_hash = "?"
         self.remote_version = self.remote_hash = "?"
         self.init_evt = Event()
+        self.refresh_condition = None
         self.debug = umgr.repo_debug
         self.remote = "origin"
         self.branch = "master"
         self.is_valid = self.is_dirty = self.detached = False
-        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_version_info(self):
         ver_path = os.path.join(self.repo_path, "scripts/version.txt")
@@ -341,8 +506,18 @@ class GitUpdater:
         await self.init_evt.wait(timeout)
 
     async def refresh(self):
-        await self._check_version()
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
+        else:
+            self.refresh_condition.wait()
+            return
+        try:
+            await self._check_version()
+        except Exception:
+            logging.exception("Error Refreshing git state")
         self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
     async def _check_version(self, need_fetch=True):
         self.is_valid = self.detached = False
@@ -423,7 +598,7 @@ class GitUpdater:
             remote_url = remote_url.lower()
             if remote_url[-4:] != ".git":
                 remote_url += ".git"
-            if remote_url == self.repo_info['origin']:
+            if remote_url == self.origin:
                 self.is_valid = True
                 self._log_info("Validity check for git repo passed")
             else:
@@ -434,6 +609,9 @@ class GitUpdater:
                 f"{self.remote}/{self.branch}")
 
     async def update(self, update_deps=False):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            self.refresh_condition.wait()
         if not self.is_valid:
             raise self._log_exc("Update aborted, repo is not valid", False)
         if self.is_dirty:
@@ -479,9 +657,10 @@ class GitUpdater:
             self._notify_status("Update Finished...", is_complete=True)
 
     async def _install_packages(self):
+        if self.install_script is None:
+            return
         # Open install file file and read
-        inst_script = self.dist_info['install_script']
-        inst_path = os.path.join(self.repo_path, inst_script)
+        inst_path = self.install_script
         if not os.path.isfile(inst_path):
             self._log_info(f"Unable to open install script: {inst_path}")
             return
@@ -508,24 +687,24 @@ class GitUpdater:
             return
 
     async def _update_virtualenv(self, rebuild_env=False):
+        if self.env is None:
+            return
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
         env_path = os.path.normpath(os.path.join(bin_dir, ".."))
         if rebuild_env:
-            env_args = self.repo_info['venv_args']
             self._notify_status(f"Creating virtualenv at: {env_path}...")
             if os.path.exists(env_path):
                 shutil.rmtree(env_path)
             try:
                 await self.execute_cmd(
-                    f"virtualenv {env_args} {env_path}", timeout=300.)
+                    f"virtualenv {self.venv_args} {env_path}", timeout=300.)
             except Exception:
                 self._log_exc(f"Error creating virtualenv")
                 return
-            if not os.path.expanduser(self.env):
+            if not os.path.exists(self.env):
                 raise self._log_exc("Failed to create new virtualenv", False)
-        reqs = os.path.join(
-            self.repo_path, self.repo_info['requirements'])
+        reqs = self.python_reqs
         if not os.path.isfile(reqs):
             self._log_exc(f"Invalid path to requirements_file '{reqs}'")
             return
@@ -537,16 +716,14 @@ class GitUpdater:
                 retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
-        self._install_python_dist_requirements(env_path)
+        self._install_python_dist_requirements()
 
-    def _install_python_dist_requirements(self, env_path):
-        dist_reqs = self.dist_info.get('python_dist_packages', None)
+    def _install_python_dist_requirements(self):
+        dist_reqs = self.python_dist_packages
         if dist_reqs is None:
             return
-        dist_reqs = [r.strip() for r in dist_reqs.split("\n")
-                     if r.strip()]
-        dist_path = self.dist_info['python_dist_path']
-        site_path = os.path.join(env_path, self.dist_info['env_package_path'])
+        dist_path = self.python_dist_path
+        site_path = self.env_package_path
         for pkg in dist_reqs:
             for f in os.listdir(dist_path):
                 if f.startswith(pkg):
@@ -592,17 +769,21 @@ class PackageUpdater:
         self.notify_update_response = umgr.notify_update_response
         self.available_packages = []
         self.init_evt = Event()
-        IOLoop.current().spawn_callback(self.refresh)
+        self.refresh_condition = None
 
-    async def refresh(self):
+    async def refresh(self, fetch_packages=True):
         # TODO: Use python-apt python lib rather than command line for updates
-        try:
-            await self.execute_cmd(f"{APT_CMD} update", timeout=300.)
-            res = await self.execute_cmd_with_response(
-                "apt list --upgradable")
-        except Exception:
-            logging.exception("Error Refreshing System Packages")
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
         else:
+            self.refresh_condition.wait()
+            return
+        try:
+            if fetch_packages:
+                await self.execute_cmd(
+                    f"{APT_CMD} update", timeout=300., retries=3)
+            res = await self.execute_cmd_with_response(
+                "apt list --upgradable", timeout=60.)
             pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
             if pkg_list:
                 pkg_list = pkg_list[2:]
@@ -612,7 +793,11 @@ class PackageUpdater:
             logging.info(
                 f"Detected {len(self.available_packages)} package updates:"
                 f"\n{pkg_list}")
+        except Exception:
+            logging.exception("Error Refreshing System Packages")
         self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
     async def check_initialized(self, timeout=None):
         if self.init_evt.is_set():
@@ -622,6 +807,9 @@ class PackageUpdater:
         await self.init_evt.wait(timeout)
 
     async def update(self, *args):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            self.refresh_condition.wait()
         self.notify_update_response("Updating packages...")
         try:
             await self.execute_cmd(
@@ -640,22 +828,25 @@ class PackageUpdater:
             'package_list': self.available_packages
         }
 
-class ClientUpdater:
-    def __init__(self, umgr, repo, path):
+class WebUpdater:
+    def __init__(self, umgr, config):
         self.umgr = umgr
         self.server = umgr.server
         self.notify_update_response = umgr.notify_update_response
-        self.repo = repo.strip().strip("/")
+        self.repo = config.get('repo').strip().strip("/")
         self.name = self.repo.split("/")[-1]
-        self.path = path
+        if hasattr(config, "get_name"):
+            self.name = config.get_name().split()[-1]
+        self.path = os.path.realpath(os.path.expanduser(
+            config.get("path")))
         self.version = self.remote_version = self.dl_url = "?"
         self.etag = None
         self.init_evt = Event()
+        self.refresh_condition = None
         self._get_local_version()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\nversion: {self.version}"
                      f"\npath: {self.path}")
-        IOLoop.current().spawn_callback(self.refresh)
 
     def _get_local_version(self):
         version_path = os.path.join(self.path, ".version")
@@ -672,9 +863,21 @@ class ClientUpdater:
         await self.init_evt.wait(timeout)
 
     async def refresh(self):
-        # Local state
-        self._get_local_version()
+        if self.refresh_condition is None:
+            self.refresh_condition = Condition()
+        else:
+            self.refresh_condition.wait()
+            return
+        try:
+            self._get_local_version()
+            await self._get_remote_version()
+        except Exception:
+            logging.exception("Error Refreshing Client")
+        self.init_evt.set()
+        self.refresh_condition.notify_all()
+        self.refresh_condition = None
 
+    async def _get_remote_version(self):
         # Remote state
         url = f"https://api.github.com/repos/{self.repo}/releases/latest"
         try:
@@ -684,7 +887,7 @@ class ClientUpdater:
             result = {}
         if result is None:
             # No change, update not necessary
-            return None
+            return
         self.etag = result.get('etag', None)
         self.remote_version = result.get('name', "?")
         release_assets = result.get('assets', [{}])[0]
@@ -694,9 +897,12 @@ class ClientUpdater:
             f"Local Version: {self.version}\n"
             f"Remote Version: {self.remote_version}\n"
             f"url: {self.dl_url}")
-        self.init_evt.set()
 
     async def update(self, *args):
+        await self.check_initialized(20.)
+        if self.refresh_condition is not None:
+            # wait for refresh if in progess
+            self.refresh_condition.wait()
         if self.remote_version == "?":
             await self.refresh()
             if self.remote_version == "?":

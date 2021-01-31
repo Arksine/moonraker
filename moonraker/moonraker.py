@@ -8,6 +8,7 @@ import argparse
 import sys
 import importlib
 import os
+import io
 import time
 import socket
 import logging
@@ -35,8 +36,17 @@ class Sentinel:
 
 class Server:
     error = ServerError
-    def __init__(self, args):
+    def __init__(self, args, file_logger):
+        self.file_logger = file_logger
         config = confighelper.get_configuration(self, args)
+        # log config file
+        strio = io.StringIO()
+        config.write_config(strio)
+        cfg_item = f"\n{'#'*20} Moonraker Configuration {'#'*20}\n\n"
+        cfg_item += strio.getvalue()
+        cfg_item += "#"*65
+        strio.close()
+        self.add_log_rollover_item('config', cfg_item)
         self.host = config.get('host', "0.0.0.0")
         self.port = config.getint('port', 7125)
 
@@ -54,6 +64,7 @@ class Server:
         self.init_attempts = 0
         self.klippy_state = "disconnected"
         self.subscriptions = {}
+        self.failed_plugins = []
 
         # Server/IOLoop
         self.server_running = False
@@ -95,6 +106,12 @@ class Server:
         self.server_running = True
         self.ioloop.spawn_callback(self._connect_klippy)
 
+    def add_log_rollover_item(self, name, item, log=True):
+        if self.file_logger is not None:
+            self.file_logger.set_rollover_info(name, item)
+        if log and item is not None:
+            logging.info(item)
+
     # ***** Plugin Management *****
     def _load_plugins(self, config):
         # load core plugins
@@ -116,11 +133,12 @@ class Server:
         if not os.path.exists(mod_path):
             msg = f"Plugin ({plugin_name}) does not exist"
             logging.info(msg)
+            self.failed_plugins.append(plugin_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
-        module = importlib.import_module("plugins." + plugin_name)
         try:
+            module = importlib.import_module("plugins." + plugin_name)
             func_name = "load_plugin"
             if hasattr(module, "load_plugin_multi"):
                 func_name = "load_plugin_multi"
@@ -131,6 +149,7 @@ class Server:
         except Exception:
             msg = f"Unable to load plugin ({plugin_name})"
             logging.exception(msg)
+            self.failed_plugins.append(plugin_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
@@ -368,6 +387,10 @@ class Server:
         if rpc_method == "objects/subscribe":
             return await self._request_subscripton(web_request)
         else:
+            if rpc_method == "gcode/script":
+                script = web_request.get_str('script', "")
+                data_store = self.lookup_plugin('data_store')
+                data_store.store_gcode_command(script)
             return await self._request_standard(web_request)
 
     async def _request_subscripton(self, web_request):
@@ -445,10 +468,16 @@ class Server:
         return "ok"
 
     async def _handle_info_request(self, web_request):
+        file_manager = self.lookup_plugin('file_manager', None)
+        reg_dirs = []
+        if file_manager is not None:
+            reg_dirs = file_manager.get_registered_dirs()
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
-            'plugins': list(self.plugins.keys())}
+            'plugins': list(self.plugins.keys()),
+            'failed_plugins': self.failed_plugins,
+            'registered_directories': reg_dirs}
 
 class KlippyConnection:
     def __init__(self, on_recd, on_close):
@@ -565,7 +594,7 @@ def main():
             system_args.logfile))
     system_args.logfile = log_file
     system_args.software_version = version
-    ql = utils.setup_logging(log_file, version)
+    ql, file_logger = utils.setup_logging(log_file, version)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
@@ -580,7 +609,7 @@ def main():
     estatus = 0
     while True:
         try:
-            server = Server(system_args)
+            server = Server(system_args, file_logger)
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1

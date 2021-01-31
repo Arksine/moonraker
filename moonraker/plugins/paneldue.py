@@ -143,7 +143,6 @@ class PanelDue:
     def __init__(self, config):
         self.server = config.get_server()
         self.ioloop = IOLoop.current()
-        self.ser_conn = SerialConnection(config, self)
         self.file_manager = self.server.lookup_plugin('file_manager')
         self.klippy_apis = self.server.lookup_plugin('klippy_apis')
         self.kinematics = "none"
@@ -195,6 +194,7 @@ class PanelDue:
 
         ntkeys = config.get('non_trivial_keys', "Klipper state")
         self.non_trivial_keys = [k for k in ntkeys.split('\n') if k.strip()]
+        self.ser_conn = SerialConnection(config, self)
         logging.info("PanelDue Configured")
 
         # Register server events

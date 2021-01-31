@@ -70,7 +70,7 @@ class ConfigHelper:
             self.config[self.section].getboolean, option, default)
 
     def getfloat(self, option, default=Sentinel):
-        return self._get_item(
+        return self._get_option(
             self.config[self.section].getfloat, option, default)
 
     def read_supplemental_config(self, file_name):
@@ -82,6 +82,9 @@ class ConfigHelper:
             self.config.read(cfg_file_path)
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
+
+    def write_config(self, file_obj):
+        self.config.write(file_obj)
 
 def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
@@ -103,6 +106,7 @@ def get_configuration(server, system_args):
         logging.getLogger().setLevel(logging.DEBUG)
 
     config['system_args'] = {
+        'configfile': system_args.configfile,
         'logfile': system_args.logfile,
         'software_version': system_args.software_version}
     return ConfigHelper(server, config, 'server')

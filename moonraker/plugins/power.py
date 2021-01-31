@@ -20,6 +20,27 @@ from tornado.escape import json_decode
 class PrinterPower:
     def __init__(self, config):
         self.server = config.get_server()
+        self.chip_factory = GpioChipFactory()
+        self.devices = {}
+        prefix_sections = config.get_prefix_sections("power")
+        logging.info(f"Power plugin loading devices: {prefix_sections}")
+        try:
+            for section in prefix_sections:
+                cfg = config[section]
+                dev_type = cfg.get("type")
+                if dev_type == "gpio":
+                    dev = GpioDevice(cfg, self.chip_factory)
+                elif dev_type == "tplink_smartplug":
+                    dev = TPLinkSmartPlug(cfg)
+                elif dev_type == "tasmota":
+                    dev = Tasmota(cfg)
+                else:
+                    raise config.error(f"Unsupported Device Type: {dev_type}")
+                self.devices[dev.get_name()] = dev
+        except Exception:
+            self.chip_factory.close()
+            raise
+
         self.server.register_endpoint(
             "/machine/device_power/devices", ['GET'],
             self._handle_list_devices)
@@ -34,24 +55,32 @@ class PrinterPower:
             self._handle_power_request)
         self.server.register_remote_method(
             "set_device_power", self.set_device_power)
+        self.server.register_event_handler(
+            "server:klippy_shutdown", self._handle_klippy_shutdown)
+        IOLoop.current().spawn_callback(
+            self._initalize_devices, list(self.devices.values()))
 
-        self.chip_factory = GpioChipFactory()
-        self.current_dev = None
-        self.devices = {}
-        prefix_sections = config.get_prefix_sections("power")
-        logging.info(f"Power plugin loading devices: {prefix_sections}")
-        for section in prefix_sections:
-            cfg = config[section]
-            dev_type = cfg.get("type")
-            if dev_type == "gpio":
-                dev = GpioDevice(cfg, self.chip_factory)
-            elif dev_type == "tplink_smartplug":
-                dev = TPLinkSmartPlug(cfg)
-            elif dev_type == "tasmota":
-                dev = Tasmota(cfg)
-            else:
-                raise config.error(f"Unsupported Device Type: {dev_type}")
-            self.devices[dev.get_name()] = dev
+    async def _check_klippy_printing(self):
+        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        result = await klippy_apis.query_objects(
+            {'print_stats': None}, default={})
+        pstate = result.get('print_stats', {}).get('state', "").lower()
+        return pstate == "printing"
+
+    async def _initalize_devices(self, inital_devs):
+        for dev in inital_devs:
+            ret = dev.initialize()
+            if asyncio.iscoroutine(ret):
+                await ret
+
+    async def _handle_klippy_shutdown(self):
+        for name, dev in self.devices.items():
+            if hasattr(dev, "off_when_shutdown"):
+                if dev.off_when_shutdown:
+                    logging.info(
+                        f"Powering off device [{name}] due to"
+                        " klippy shutdown")
+                    await self._process_request(dev, "off")
 
     async def _handle_list_devices(self, web_request):
         dev_list = [d.get_device_info() for d in self.devices.values()]
@@ -75,11 +104,21 @@ class PrinterPower:
 
     async def _process_request(self, device, req):
         if req in ["on", "off"]:
+            cur_state = device.get_device_info()['status']
+            if req == cur_state:
+                # device is already in requested state, do nothing
+                return cur_state
+            printing = await self._check_klippy_printing()
+            if device.get_locked_while_printing() and printing:
+                raise self.server.error(
+                    f"Unable to change power for {device.get_name()} "
+                    "while printing")
             ret = device.set_power(req)
             if asyncio.iscoroutine(ret):
                 await ret
             dev_info = device.get_device_info()
             self.server.send_event("gpio_power:power_changed", dev_info)
+            device.run_power_changed_action()
         elif req == "status":
             ret = device.refresh_status()
             if asyncio.iscoroutine(ret):
@@ -125,6 +164,45 @@ class PrinterPower:
         self.chip_factory.close()
 
 
+class PowerDevice:
+    def __init__(self, config):
+        name_parts = config.get_name().split(maxsplit=1)
+        if len(name_parts) != 2:
+            raise config.error(f"Invalid Section Name: {config.get_name()}")
+        self.server = config.get_server()
+        self.name = name_parts[1]
+        self.state = "init"
+        self.locked_while_printing = config.getboolean(
+            'locked_while_printing', False)
+        self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
+        self.restart_delay = 1.
+        self.klipper_restart = config.getboolean(
+            'restart_klipper_when_powered', False)
+        if self.klipper_restart:
+            self.restart_delay = config.getfloat('restart_delay', 1.)
+            if self.restart_delay < .000001:
+                raise config.error("Option 'restart_delay' must be above 0.0")
+
+    def get_name(self):
+        return self.name
+
+    def get_device_info(self):
+        return {
+            'device': self.name,
+            'status': self.state,
+            'locked_while_printing': self.locked_while_printing
+        }
+
+    def get_locked_while_printing(self):
+        return self.locked_while_printing
+
+    def run_power_changed_action(self):
+        if self.state == "on" and self.klipper_restart:
+            ioloop = IOLoop.current()
+            klippy_apis = self.server.lookup_plugin("klippy_apis")
+            ioloop.call_later(self.restart_delay, klippy_apis.do_restart,
+                              "FIRMWARE_RESTART")
+
 class GpioChipFactory:
     def __init__(self):
         self.chips = {}
@@ -140,13 +218,9 @@ class GpioChipFactory:
         for chip in self.chips.values():
             chip.close()
 
-class GpioDevice:
+class GpioDevice(PowerDevice):
     def __init__(self, config, chip_factory):
-        name_parts = config.get_name().split(maxsplit=1)
-        if len(name_parts) != 2:
-            raise config.error(f"Invalid Section Name: {config.get_name()}")
-        self.name = name_parts[1]
-        self.state = "init"
+        super().__init__(config)
         pin, chip_id, invert = self._parse_pin(config)
         try:
             chip = chip_factory.get_gpio_chip(chip_id)
@@ -164,8 +238,7 @@ class GpioDevice:
                 f"Unable to init {pin}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise config.error("Power GPIO Config Error")
-        initial_state = config.getboolean('initial_state', False)
-        self.set_power("on" if initial_state else "off")
+        self.initial_state = config.getboolean('initial_state', False)
 
     def _parse_pin(self, config):
         pin = cfg_pin = config.get("pin")
@@ -190,15 +263,11 @@ class GpioDevice:
         return pin, chip_id, invert
 
     def initialize(self):
-        pass
-
-    def get_name(self):
-        return self.name
+        self.set_power("on" if self.initial_state else "off")
 
     def get_device_info(self):
         return {
-            'device': self.name,
-            'status': self.state,
+            **super().get_device_info(),
             'type': "gpio"
         }
 
@@ -232,18 +301,13 @@ class GpioDevice:
 #  https://github.com/softScheck/tplink-smartplug
 #
 #  Copyright 2016 softScheck GmbH
-class TPLinkSmartPlug:
+class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config):
+        super().__init__(config)
         self.server = config.get_server()
         self.addr = config.get("address")
         self.port = config.getint("port", 9999)
-        name_parts = config.get_name().split(maxsplit=1)
-        if len(name_parts) != 2:
-            raise config.error(f"Invalid Section Name: {config.get_name()}")
-        self.name = name_parts[1]
-        self.state = "init"
-        IOLoop.current().spawn_callback(self.initialize)
 
     async def _send_tplink_command(self, command):
         out_cmd = {}
@@ -300,13 +364,9 @@ class TPLinkSmartPlug:
     async def initialize(self):
         await self.refresh_status()
 
-    def get_name(self):
-        return self.name
-
     def get_device_info(self):
         return {
-            'device': self.name,
-            'status': self.state,
+            **super().get_device_info(),
             'type': "tplink_smartplug"
         }
 
@@ -335,18 +395,13 @@ class TPLinkSmartPlug:
         self.state = state
 
 
-class Tasmota:
+class Tasmota(PowerDevice):
     def __init__(self, config):
+        super().__init__(config)
         self.server = config.get_server()
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
         self.password = config.get("password", "")
-        name_parts = config.get_name().split(maxsplit=1)
-        if len(name_parts) != 2:
-            raise config.error(f"Invalid Section Name: {config.get_name()}")
-        self.name = name_parts[1]
-        self.state = "init"
-        IOLoop.current().spawn_callback(self.initialize)
 
     async def _send_tasmota_command(self, command, password=None):
         if command in ["on", "off"]:
@@ -372,13 +427,9 @@ class Tasmota:
     async def initialize(self):
         await self.refresh_status()
 
-    def get_name(self):
-        return self.name
-
     def get_device_info(self):
         return {
-            'device': self.name,
-            'status': self.state,
+            **super().get_device_info(),
             'type': "tasmota"
         }
 

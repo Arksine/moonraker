@@ -1,7 +1,7 @@
 #  Moonraker - API Web Server for Klipper
 
 Moonraker is a Python 3 based web server that exposes APIs with which
-client applications may use to interact with Klipper. Communcation between
+client applications may use to interact with [Klipper](https://github.com/KevinOConnor/klipper). Communcation between
 the Klippy host and Moonraker is done over a Unix Domain Socket.  Tornado
 is used to provide Moonraker's server functionality.
 
@@ -21,4 +21,4 @@ Users:\
 [user_changes.md](/docs/user_changes.md) - December 31st 2020
 
 Developers:\
-[api_changes.md](/docs/api_changes.md) - January 1st 2021
+[api_changes.md](/docs/api_changes.md) - January 22nd 2021

@@ -186,6 +186,8 @@ class WebsocketManager:
             "gpio_power:power_changed", self._handle_power_changed)
         self.server.register_event_handler(
             "update_manager:update_response", self._handle_update_response)
+        self.server.register_event_handler(
+            "update_manager:update_refreshed", self._handle_update_refreshed)
 
     async def _handle_klippy_ready(self):
         await self.notify_websockets("klippy_ready")
@@ -210,6 +212,9 @@ class WebsocketManager:
 
     async def _handle_update_response(self, response):
         await self.notify_websockets("update_response", response)
+
+    async def _handle_update_refreshed(self, refresh_info):
+        await self.notify_websockets("update_refreshed", refresh_info)
 
     def register_local_handler(self, api_def, callback):
         for ws_method, req_method in \

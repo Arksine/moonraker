@@ -15,7 +15,7 @@ from tornado.locks import Event
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
-METADATA_SCRIPT = os.path.normpath(os.path.join(
+METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
 class FileManager:
@@ -78,14 +78,14 @@ class FileManager:
         # Register log path
         log_file = paths.get('log_file')
         if log_file is not None:
-            log_path = os.path.normpath(os.path.expanduser(log_file))
+            log_path = os.path.abspath(os.path.expanduser(log_file))
             self.server.register_static_file_handler(
                 "klippy.log", log_path, force=True)
 
     def register_directory(self, root, path):
         if path is None:
             return False
-        path = os.path.normpath(os.path.expanduser(path))
+        path = os.path.abspath(os.path.expanduser(path))
         if os.path.islink(path):
             path = os.path.realpath(path)
         if not os.path.isdir(path) or path == "/":
@@ -117,6 +117,9 @@ class FileManager:
     def get_sd_directory(self):
         return self.file_paths.get('gcodes', "")
 
+    def get_registered_dirs(self):
+        return list(self.file_paths.keys())
+
     def get_fixed_path_args(self):
         return dict(self.fixed_path_args)
 
@@ -140,18 +143,7 @@ class FileManager:
         if action == 'GET':
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
-            dir_info = self._list_directory(dir_path)
-            # Check to see if a filelist update is necessary
-            for f in dir_info['files']:
-                fname = os.path.join(rel_path, f['filename'])
-                ext = os.path.splitext(f['filename'])[-1].lower()
-                if root != 'gcodes' or ext not in VALID_GCODE_EXTS:
-                    continue
-                self.gcode_metadata.parse_metadata(
-                    fname, f['size'], f['modified'], notify=True)
-                metadata = self.gcode_metadata.get(fname, None)
-                if metadata is not None and is_extended:
-                    f.update(metadata)
+            dir_info = self._list_directory(dir_path, is_extended)
             return dir_info
         elif action == 'POST' and root in FULL_ACCESS_ROOTS:
             # Create a new directory
@@ -273,19 +265,33 @@ class FileManager:
             {'path': src_rel_path, 'root': source_root})
         return "ok"
 
-    def _list_directory(self, path):
+    def _list_directory(self, path, is_extended=False):
         if not os.path.isdir(path):
             raise self.server.error(
                 f"Directory does not exist ({path})")
         flist = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
+            if not os.path.exists(full_path):
+                continue
             path_info = self._get_path_info(full_path)
             if os.path.isdir(full_path):
                 path_info['dirname'] = fname
                 flist['dirs'].append(path_info)
             elif os.path.isfile(full_path):
                 path_info['filename'] = fname
+                # Check to see if a filelist update is necessary
+                ext = os.path.splitext(fname)[-1].lower()
+                gc_path = self.file_paths.get('gcodes', None)
+                if gc_path is not None and full_path.startswith(gc_path) and \
+                        ext in VALID_GCODE_EXTS:
+                    rel_path = os.path.relpath(full_path, start=gc_path)
+                    self.gcode_metadata.parse_metadata(
+                        rel_path, path_info['size'], path_info['modified'],
+                        notify=True)
+                    metadata = self.gcode_metadata.get(rel_path, None)
+                    if metadata is not None and is_extended:
+                        path_info.update(metadata)
                 flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
@@ -387,7 +393,7 @@ class FileManager:
             filename = upload['filename'].strip().lstrip("/")
             if dir_path:
                 filename = os.path.join(dir_path, filename)
-            full_path = os.path.normpath(os.path.join(root_path, filename))
+            full_path = os.path.abspath(os.path.join(root_path, filename))
         # Validate the path.  Don't allow uploads to a parent of the root
         if not full_path.startswith(root_path):
             raise self.server.error(
@@ -500,12 +506,10 @@ class FileManager:
         if filename.startswith('gcodes/'):
             filename = filename[7:]
 
-        flist = self.get_file_list("gcodes")
-        return self.gcode_metadata.get(filename, flist.get(filename, {}))
+        return self.gcode_metadata.get(filename, {})
 
     def list_dir(self, directory, simple_format=False):
-        # List a directory relative to its root.  Currently the only
-        # Supported root is "gcodes"
+        # List a directory relative to its root.
         if directory[0] == "/":
             directory = directory[1:]
         parts = directory.split("/", 1)

@@ -147,6 +147,21 @@ and Tasmota (via http) devices are supported.
 type: gpio
 #   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
 #   This parameter must be provided.
+off_when_shutdown: False
+#   If set to True the device will be powered off when Klipper enters
+#   the "shutdown" state.  This option applies to all device types.
+#   The default is False.
+locked_while_printing: False
+#   If True, locks the device so that the power cannot be changed while the
+#   printer is printing. This is useful to avert an accidental shutdown to
+#   the printer's power.  The default is False.
+restart_klipper_when_powered: False
+#   If set to True, Moonraker will issue a "FIRMWARE_RESTART" to Klipper
+#   after the device has been powered on.  The default is False, thus no
+#   attempt to made to restart Klipper after power on.
+restart_delay: 1.
+#   If "restart_klipper_when_powered" is set, this option specifies the amount
+#   of time (in seconds) to delay the restart.  Default is 1 second.
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -186,6 +201,7 @@ Below are some potential examples:
 [power printer]
 type: gpio
 pin: gpio26
+off_when_shutdown: True
 initial_state: off
 
 [power printer_led]
@@ -254,20 +270,69 @@ enable_repo_debug: False
 #   detached repos are also allowed.  This option is intended for
 #   developers and should not be used on production machines.  The
 #   default is False.
+enable_auto_refresh: False
+#   When set to True Moonraker will attempt to fetch status about
+#   available updates roughly every 24 hours, between 12am-4am.
+#   When set to False Moonraker will only fetch update state on startup
+#   and clients will need to request that Moonraker updates state.  The
+#   default is False.
 distro: debian
 #   The disto in which moonraker has been installed.  Currently the
 #   update manager only supports "debian", which encompasses all of
 #   its derivatives.  The default is debain.
-client_repo:
+```
+
+### Client Configuration
+This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
+updated in addition to klipper, moonraker, and the system os. Repos that have
+been modified or cloned from unofficial sources are not supported.
+
+There are two types of update manager clients and each will be detailed
+separately. The first one is targeted towards releases that do not need a
+service restart such as Fluidd/Mainsail.
+
+```
+# moonraker.conf
+
+[update_manager client client_name]
+type: web
+repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
-#   meteyou/mainsail to update Mainsail.  If this option is not set then
-#   the update manager will not attempt to update a client.
-client_path:
-#   The path to the client's files on disk.  This cannot be a symbolic link,
-#   it must be the real directory in which the client's files are located.
-#   If `client_repo` is set, this parameter must be provided
+#   meteyou/mainsail to update Mainsail.  This parameter must be provided.
+path:
+#   The path to the client's files on disk.  This parameter must be provided.
+```
 
+This second example is for git repositories that have a service that need
+updating.
+
+```
+# moonraker.conf
+
+# service_name must be the name of the systemd service
+[update_manager client service_name]
+type: git_repo
+path:
+#   The path to the client's files on disk.  This parameter must be provided.
+origin:
+#   The full GitHub URL of the "origin" remote for the repository.  This can
+#   be be viewed by navigating to your repository and running:
+#     git remote -v
+#   This parameter must be provided.
+env:
+#   The path to the client's virtual environment executable on disk.  For
+#   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
+#   The default is no env, which disables updating python packages.
+requirements:
+#  This is the location in the repository to the client's virtual environment
+#  requirements file. This location is relative to the root of the repository.
+#  This parameter must be provided if the "env" option is set, otherwise it
+#  should be omitted.
+install_script:
+#  The file location, relative to the repository, for the installation script.
+#  The update manager parses this file for "system" packages that need updating.
+#  The default is no install script, which disables system package updates
 ```
 
 ## Timelapse Plugin
