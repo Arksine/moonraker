@@ -13,6 +13,7 @@ import zipfile
 import io
 import asyncio
 import time
+import tempfile
 import tornado.gen
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
@@ -839,6 +840,16 @@ class WebUpdater:
             self.name = config.get_name().split()[-1]
         self.path = os.path.realpath(os.path.expanduser(
             config.get("path")))
+        self.persistent_files = []
+        pfiles = config.get('persistent_files', None)
+        if pfiles is not None:
+            self.persistent_files = [pf.strip().strip("/") for pf in
+                                     pfiles.split("\n") if pf.strip()]
+            if ".version" in self.persistent_files:
+                raise config.error(
+                    "Invalid value for option 'persistent_files': "
+                    "'.version' can not be persistent")
+
         self.version = self.remote_version = self.dl_url = "?"
         self.etag = None
         self.init_evt = Event()
@@ -914,13 +925,28 @@ class WebUpdater:
         if self.version == self.remote_version:
             # Already up to date
             return
-        if os.path.isdir(self.path):
-            shutil.rmtree(self.path)
-        os.mkdir(self.path)
-        self.notify_update_response(f"Downloading Client: {self.name}")
-        archive = await self.umgr.http_download_request(self.dl_url)
-        with zipfile.ZipFile(io.BytesIO(archive)) as zf:
-            zf.extractall(self.path)
+        with tempfile.TemporaryDirectory(
+                suffix=self.name, prefix="client") as tempdir:
+            if os.path.isdir(self.path):
+                # find and move persistent files
+                for fname in os.listdir(self.path):
+                    src_path = os.path.join(self.path, fname)
+                    if fname in self.persistent_files:
+                        dest_dir = os.path.dirname(os.path.join(tempdir, fname))
+                        os.makedirs(dest_dir, exist_ok=True)
+                        shutil.move(src_path, dest_dir)
+                shutil.rmtree(self.path)
+            os.mkdir(self.path)
+            self.notify_update_response(f"Downloading Client: {self.name}")
+            archive = await self.umgr.http_download_request(self.dl_url)
+            with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+                zf.extractall(self.path)
+            # Move temporary files back into
+            for fname in os.listdir(tempdir):
+                src_path = os.path.join(tempdir, fname)
+                dest_dir = os.path.dirname(os.path.join(self.path, fname))
+                os.makedirs(dest_dir, exist_ok=True)
+                shutil.move(src_path, dest_dir)
         self.version = self.remote_version
         version_path = os.path.join(self.path, ".version")
         if not os.path.exists(version_path):
