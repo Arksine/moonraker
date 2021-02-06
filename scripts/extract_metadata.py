@@ -271,7 +271,7 @@ class SuperSlicer(PrusaSlicer):
             }
         return None
 
-class Cura(BaseSlicer):
+class Cura(PrusaSlicer):
     def check_identity(self, data):
         match = re.search(r"Cura_SteamEngine\s(.*)", data)
         if match:
@@ -311,6 +311,11 @@ class Cura(BaseSlicer):
             r"M190 S(\d+\.?\d*)", self.header_data)
 
     def parse_thumbnails(self):
+        # Attempt to parse thumbnails from file metadata
+        thumbs = super().parse_thumbnails()
+        if thumbs is not None:
+            return thumbs
+        # Check for thumbnails extracted from the ufp
         thumbName = os.path.splitext(
             os.path.basename(self.path))[0] + ".png"
         thumbPath = os.path.join(
