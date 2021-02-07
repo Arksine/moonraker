@@ -192,6 +192,17 @@ output_id:
 #   If your single-relay Tasmota device switches on/off successfully,
 #   but fails to report its state, ensure that 'SetOption26' is set in
 #   Tasmota.
+address:
+user:
+password:
+output_id:
+#   The above options are used for "shelly" devices.  The
+#   address should be a valid ip or hostname for the Shelly device.
+#   Provide a user and password if configured in Shelly (default is empty).
+#   If password is set but user is empty the default user "admin" will be used
+#   Provided an output_id (relay id) if the Shelly device supports
+#   more than one (default is 0).
+
 
 ```
 Below are some potential examples:
@@ -222,6 +233,12 @@ address: 192.168.1.123
 type: tasmota
 address: 192.168.1.124
 password: password1
+
+[power shelly_plug]
+type: shelly
+address: 192.168.1.125
+user: user2
+password: password2
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
