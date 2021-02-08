@@ -4,20 +4,25 @@
 stop_service() {
     # Stop Moonraker Service
     echo "#### Stopping Moonraker Service.."
-    sudo service moonraker stop
+    sudo systemctl stop moonraker
 }
 
 remove_service() {
-    # Remove Moonraker from Startup
-    echo
-    echo "#### Removing Moonraker from Startup.."
-    sudo update-rc.d -f moonraker remove
-
-    # Remove Moonraker from Services
+    # Remove Moonraker LSB/systemd service
     echo
     echo "#### Removing Moonraker Service.."
-    sudo rm -f /etc/init.d/moonraker /etc/default/moonraker
-
+    if [ -f "/etc/init.d/moonraker" ]; then
+        # legacy installation, remove the LSB service
+        sudo update-rc.d -f moonraker remove
+        sudo rm -f /etc/init.d/moonraker
+        sudo rm -f /etc/default/moonraker
+    else
+        # Remove systemd installation
+        sudo systemctl disable moonraker
+        sudo rm -f /etc/systemd/system/moonraker.service
+        sudo systemctl daemon-reload
+        sudo systemctl reset-failed
+    fi
 }
 
 remove_sudo_fix() {
@@ -55,6 +60,9 @@ remove_files() {
     echo
     echo "The following command is typically used to remove source files:"
     echo "  rm -rf ~/moonraker"
+    echo
+    echo "You may also wish to uninstall nginx:"
+    echo "  sudo apt-get remove nginx"
 }
 
 verify_ready()
