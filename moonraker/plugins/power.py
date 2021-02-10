@@ -36,6 +36,8 @@ class PrinterPower:
                     dev = Tasmota(cfg)
                 elif dev_type == "shelly":
                     dev = Shelly(cfg)
+                elif dev_type == "loxonev1":
+                    dev = Loxonev1(cfg)
                 else:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 self.devices[dev.get_name()] = dev
@@ -520,6 +522,72 @@ class Shelly(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = "on" if state else "off"
+
+class Loxonev1(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.server = config.get_server()
+        self.addr = config.get("address")
+        self.output_id = config.get("output_id", "")
+        self.user = config.get("user", "admin")
+        self.password = config.get("password", "admin")
+
+    async def _send_loxonev1_command(self, command):
+        if command in ["on", "off"]:
+            out_cmd = f"jdev/sps/io/{self.output_id}/{command}"
+        elif command == "info":
+            out_cmd = f"jdev/sps/io/{self.output_id}"
+        else:
+            raise self.server.error(f"Invalid loxonev1 command: {command}")
+        if self.password != "":
+            out_pwd = f"{self.user}:{self.password}@"
+        else:
+            out_pwd = f""
+        url = f"http://{out_pwd}{self.addr}/{out_cmd}"
+        data = ""
+        http_client = AsyncHTTPClient()
+        try:
+            response = await http_client.fetch(url)
+            data = json_decode(response.body)
+        except Exception:
+            msg = f"Error sending loxonev1 command: {command}"
+            logging.exception(msg)
+            raise self.server.error(msg)
+        return data
+
+    async def initialize(self):
+        await self.refresh_status()
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "loxonev1"
+        }
+
+    async def refresh_status(self):
+        try:
+            res = await self._send_loxonev1_command("info")
+            msg = f"AZ: Status: {res}"
+            logging.info(msg)
+            state = res[f"LL"][f"value"]
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = "on" if int(state)== 1 else "off"
+
+    async def set_power(self, state):
+        try:
+            res = await self._send_loxonev1_command(state)
+            state = res[f"LL"][f"value"]
+        except Exception:
+            self.state = "error"
+            msg = f"Error Setting Device Status: {self.name} to {state}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = "on" if int(state)== 1 else "off"
+
 
 # The power plugin has multiple configuration sections
 def load_plugin_multi(config):
