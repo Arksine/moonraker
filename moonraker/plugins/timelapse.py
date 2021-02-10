@@ -43,7 +43,7 @@ class Timelapse:
         self.server.register_remote_method(
             "timelapse_newframe", self.call_timelapse_newframe)
         self.server.register_endpoint(
-            "/machine/timelapse/finish", ['POST'], self.timelapse_finish)
+            "/machine/timelapse/render", ['POST'], self.timelapse_render)
         self.server.register_endpoint(
             "/machine/timelapse/settings", ['GET', 'POST'],
             self.webrequest_timelapse_settings)
@@ -61,8 +61,6 @@ class Timelapse:
                     self.crf = webrequest.get_int(arg)
                 if arg == "output_framerate":
                     self.framerate = webrequest.get_int(arg)
-                if arg == "snapshoturl":
-                    self.snapshoturl = webrequest.get(arg)
                 if arg == "pixelformat":
                     self.pixelformat = webrequest.get(arg)
                 if arg == "extraoutputparams":
@@ -71,7 +69,6 @@ class Timelapse:
             'enabled': self.enabled,
             'constant_rate_factor': self.crf,
             'output_framerate': self.framerate,
-            'snapshoturl': self.snapshoturl,
             'pixelformat': self.pixelformat,
             'extraoutputparams': self.extraoutputparams
             }
@@ -96,9 +93,9 @@ class Timelapse:
         except Exception:
             logging.exception(f"Error running cmd '{cmd}'")
 
-    async def webrequest_timelapse_finish(self, webrequest):
+    async def webrequest_timelapse_render(self, webrequest):
         ioloop = IOLoop.current()
-        ioloop.spawn_callback(self.timelapse_finish)
+        ioloop.spawn_callback(self.timelapse_render)
         return "ok"
 
     def handle_status_update(self, status):
@@ -109,7 +106,7 @@ class Timelapse:
             # print_done
             if self.enabled:
                 ioloop = IOLoop.current()
-                ioloop.spawn_callback(self.timelapse_finish)
+                ioloop.spawn_callback(self.timelapse_render)
 
     def timelapse_cleanup(self):
         # logging.info("timelapse_cleanup")
@@ -119,8 +116,8 @@ class Timelapse:
                 os.remove(filepath)
         self.framecount = 0
 
-    async def timelapse_finish(self, webrequest=None):
-        # logging.info("timelapse_finish")
+    async def timelapse_render(self, webrequest=None):
+        # logging.info("timelapse_render")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
         if not filelist:
             msg = "no frames to render skipping"

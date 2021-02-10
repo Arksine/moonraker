@@ -437,6 +437,7 @@ as the "gcodes" root.  The following roots are available:
 - config
 - config_examples (read-only)
 - docs (read-only)
+- timelapses (if plugin is active)
 
 Write operations (upload, delete, make directory, remove directory) are
 only available on the `gcodes` and config roots.  Note that the `config` root
@@ -1237,6 +1238,50 @@ notification is broadcast:
 Where `update_info` is an object that matches the response from an
 [update status](#get-update-status) request.
 
+## Timelapse API
+The APIs below are available when the `[timelapse]` plugin has been configured.
+
+### Settings
+This Endpoint receive or alter Timelapse related settings during runtime (will reset to default after reboot/restart of moonraker)
+- HTTP command:\
+  `GET /machine/timelapse/settings`
+  
+  `POST /machine/timelapse/settings?enabled=true&constant_rate_factor=23&output_framerate=30&pixelformat=yuv420p&extraoutputparams=`
+  
+- Returns:\
+  the active Settings in following format:
+ ```json
+{
+	"result": {
+		"enabled": true,
+		"constant_rate_factor": 23,
+		"output_framerate": 30,
+		"pixelformat": "yuv420p",
+		"extraoutputparams": ""
+	}
+}
+```
+
+### Render
+This Endpoint restarts the Render Process of a Timelapse. So the User can Render a Timelapse if the default settings weren't optimal for the last Print / Timelapse. Warning: Start a new Print or Reboot your Raspberry will delete the Frames in the temporary folder!
+
+- HTTP command:\
+  `POST /machine/timelapse/render`
+  
+- Returns:\
+ After completion (may take a while) 
+ ```json
+{
+	"result": {
+		"status": "success",
+		"msg": "Rendering Video successful: timelapse_some.gcode_20210210_1514.mp4",
+		"file": "timelapse_some.gcode_20210210_1514.mp4",
+		"cmd": "ffmpeg -r 30 -i '/tmp/timelapse/frame%6d.jpg' -crf 23 -vcodec libx264 -pix_fmt yuv420p  '/home/pi/timelapse/timelapse_some.gcode_20210210_1514.mp4' -y"
+	}
+}
+```
+
+
 # Appendix
 
 ## Websocket setup
@@ -1396,3 +1441,4 @@ function process_mesh(result) {
 // Use the array of coordinates visualize the probed area
 // or mesh..
 ```
+
