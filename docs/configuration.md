@@ -202,7 +202,17 @@ output_id:
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
 #   more than one (default is 0).
-
+type: loxonev1
+address:
+user:
+password:
+output_id:
+#   The above options are used for "loxone smart home miniserver v1 " devices.
+#   The address should be a valid ip or hostname for the loxone miniserver v1 device.
+#   All entries must be configured in advance in the loxone config.
+#   Provide a user and password configured in loxone config. 
+#   The output_id is the name of a programmed output, virtual input or virtual output in the loxone config
+#   this output_id (name) may only be used once in the loxone config
 
 ```
 Below are some potential examples:
@@ -239,6 +249,14 @@ type: shelly
 address: 192.168.1.125
 user: user2
 password: password2
+
+[power loxonev1_plug]
+type: loxonev1
+address: 192.168.1.126
+user: user3
+password: password3
+output_id: virtualinput
+
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
