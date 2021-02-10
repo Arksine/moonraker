@@ -37,7 +37,7 @@ class Timelapse:
         # setup eventhandlers and endpoints
         self.server = config.get_server()
         file_manager = self.server.lookup_plugin("file_manager")
-        file_manager.register_directory("timelapses", self.out_dir)
+        file_manager.register_directory("timelapse", self.out_dir)
         self.server.register_event_handler(
             "server:gcode_response", self.handle_status_update)
         self.server.register_remote_method(

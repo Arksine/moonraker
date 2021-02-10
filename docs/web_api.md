@@ -437,7 +437,7 @@ as the "gcodes" root.  The following roots are available:
 - config
 - config_examples (read-only)
 - docs (read-only)
-- timelapses (if plugin is active)
+- timelapse (if plugin is active)
 
 Write operations (upload, delete, make directory, remove directory) are
 only available on the `gcodes` and config roots.  Note that the `config` root
