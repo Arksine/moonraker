@@ -61,15 +61,18 @@ class DataStore:
             logging.info(f"Configuring available sensors: {sensors}")
             new_store = {}
             for sensor in sensors:
+                fields = list(status.get(sensor, {}).keys())
                 if sensor in self.temperature_store:
                     new_store[sensor] = self.temperature_store[sensor]
                 else:
                     new_store[sensor] = {
-                        'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE),
-                        'targets': deque(maxlen=TEMPERATURE_STORE_SIZE),
-                        'powers': deque(maxlen=TEMPERATURE_STORE_SIZE)}
+                        'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE)}
+                    for item in ["target", "power", "speed"]:
+                        if item in fields:
+                            new_store[sensor][f"{item}s"] = deque(
+                                maxlen=TEMPERATURE_STORE_SIZE)
                 if sensor not in self.last_temps:
-                    self.last_temps[sensor] = (0., 0., 0.)
+                    self.last_temps[sensor] = (0., 0., 0., 0.)
             self.temperature_store = new_store
             # Prune unconfigured sensors in self.last_temps
             for sensor in list(self.last_temps.keys()):
@@ -87,19 +90,21 @@ class DataStore:
     def _set_current_temps(self, data):
         for sensor in self.temperature_store:
             if sensor in data:
-                last_temp, last_target, last_power = self.last_temps[sensor]
+                last_val = self.last_temps[sensor]
                 self.last_temps[sensor] = (
-                    round(data[sensor].get('temperature', last_temp), 2),
-                    data[sensor].get('target', last_target),
-                    data[sensor].get('power', last_power))
+                    round(data[sensor].get('temperature', last_val[0]), 2),
+                    data[sensor].get('target', last_val[1]),
+                    data[sensor].get('power', last_val[2]),
+                    data[sensor].get('speed', last_val[3]))
 
     def _update_temperature_store(self):
         # XXX - If klippy is not connected, set values to zero
         # as they are unknown?
-        for sensor, (temp, target, power) in self.last_temps.items():
-            self.temperature_store[sensor]['temperatures'].append(temp)
-            self.temperature_store[sensor]['targets'].append(target)
-            self.temperature_store[sensor]['powers'].append(power)
+        for sensor, vals in self.last_temps.items():
+            self.temperature_store[sensor]['temperatures'].append(vals[0])
+            for val, item in zip(vals[1:], ["targets", "powers", "speeds"]):
+                if item in self.temperature_store[sensor]:
+                    self.temperature_store[sensor][item].append(val)
 
     async def _handle_temp_store_request(self, web_request):
         store = {}

@@ -13,7 +13,7 @@ import json
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.locks import Event
 
-VALID_GCODE_EXTS = ['.gcode', '.g', '.gco']
+VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
@@ -285,6 +285,15 @@ class FileManager:
                 gc_path = self.file_paths.get('gcodes', None)
                 if gc_path is not None and full_path.startswith(gc_path) and \
                         ext in VALID_GCODE_EXTS:
+                    if ext == ".ufp":
+                        try:
+                            full_path = self._process_ufp_from_refresh(
+                                full_path)
+                        except Exception:
+                            logging.exception("Error processing ufp file")
+                            continue
+                        path_info = self._get_path_info(full_path)
+                        path_info['filename'] = os.path.split(full_path)[-1]
                     rel_path = os.path.relpath(full_path, start=gc_path)
                     self.gcode_metadata.parse_metadata(
                         rel_path, path_info['size'], path_info['modified'],
@@ -455,6 +464,19 @@ class FileManager:
             except Exception:
                 logging.exception("Unable to write Image")
 
+    def _process_ufp_from_refresh(self, ufp_path):
+        filename = os.path.split(ufp_path)[-1]
+        ul = {
+            'filename': filename,
+            'full_path': ufp_path
+        }
+        with open(ufp_path, 'rb') as ufp:
+            body = ufp.read()
+        ul['body'] = body
+        self._unzip_ufp(ul)
+        os.remove(ufp_path)
+        return ul['full_path']
+
     def get_file_list(self, root, list_format=False, notify=False):
         # Use os.walk find files in sd path and subdirs
         filelist = {}
@@ -482,6 +504,12 @@ class FileManager:
                 if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 full_path = os.path.join(dir_path, name)
+                if ext == ".ufp":
+                    try:
+                        full_path = self._process_ufp_from_refresh(full_path)
+                    except Exception:
+                        logging.exception("Error processing ufp file")
+                        continue
                 fname = full_path[len(path) + 1:]
                 finfo = self._get_path_info(full_path)
                 filelist[fname] = finfo

@@ -1,5 +1,12 @@
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### January 31st 2021
+- The `GET /server/temperature_store` endpoint now only returns fields
+  that each sensor reports.  For example, if a particuarly temperature
+  sensor does not report "target" or "power", then the corresponding
+  fields will not be reported for that sensor in response to the
+  `temperature_store` request.
+
 ### January 22nd 2021
 - The `POST /machine/update/client` endpoint now requires a `name`
   argument.  This change added multiple client support

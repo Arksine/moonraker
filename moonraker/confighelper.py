@@ -102,7 +102,7 @@ def get_configuration(server, system_args):
     except KeyError:
         raise ConfigError("No section [server] in config")
 
-    if server_cfg.get('enable_debug_logging', True):
+    if server_cfg.getboolean('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
     config['system_args'] = {
