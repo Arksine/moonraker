@@ -47,6 +47,13 @@ config_path:
 #   files to this directory.  Note that this may not be the system root
 #   (ie: "/") and moonraker must have read and write access permissions
 #   for this directory.
+temperature_store_size: 1200
+#   The maximum number of temperature values to store for each sensor. Note
+#   that this value also applies to the "target", "power", and "fan_speed"
+#   if the sensor reports them.  The default is 1200, which is enough to
+#   store approximately 20 minutes of data at one value per second.
+gcode_store_size:  1000
+#   The maximum number "gcode lines" to store.  The default is 1000.
 ```
 ## authorization
 
