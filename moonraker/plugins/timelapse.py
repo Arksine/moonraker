@@ -15,7 +15,8 @@ from tornado.ioloop import IOLoop
 class Timelapse:
 
     def __init__(self, config):
-        # setup global vars
+        # setup vars
+        self.renderisrunning = False
         self.framecount = 0
         self.enabled = config.getboolean("enabled", True)
         self.crf = config.getint("constant_rate_factor", 23)
@@ -66,11 +67,11 @@ class Timelapse:
                 if arg == "extraoutputparams":
                     self.extraoutputparams = webrequest.get(arg)
         return {
-            'enabled': self.enabled,
-            'constant_rate_factor': self.crf,
-            'output_framerate': self.framerate,
-            'pixelformat': self.pixelformat,
-            'extraoutputparams': self.extraoutputparams
+                'enabled': self.enabled,
+                'constant_rate_factor': self.crf,
+                'output_framerate': self.framerate,
+                'pixelformat': self.pixelformat,
+                'extraoutputparams': self.extraoutputparams
             }
 
     def call_timelapse_newframe(self):
@@ -124,7 +125,13 @@ class Timelapse:
             logging.info(msg)
             status = "skipped"
             cmd = outfile = None
+        if self.renderisrunning:
+            msg = "render is already running"
+            logging.info(msg)
+            status = "alreadyrunning"
+            cmd = outfile = None
         else:
+            self.renderisrunning = True
             self.framecount = 0
             klippy_apis = self.server.lookup_plugin("klippy_apis")
             result = await klippy_apis.query_objects({'print_stats': None})
@@ -156,10 +163,14 @@ class Timelapse:
             if cmdstatus:
                 status = "success"
                 msg = f"Rendering Video successful: {outfile}"
+                result = {'action': 'render', 'status': 'success', 'filename': outfile}
             else:
                 status = "error"
                 response = self.lastcmdreponse.decode("utf-8")
                 msg = f"Rendering Video failed: {response}"
+                result = {'action': 'render', 'status': 'error', 'response': response}
+                                      
+            self.renderisrunning = False
 
         return {
                 'status': status,
@@ -171,7 +182,6 @@ class Timelapse:
     def ffmpeg_response(self, response):
         # logging.info(f"ffmpegResponse: {response}")
         self.lastcmdreponse = response
-
 
 def load_plugin(config):
     return Timelapse(config)
