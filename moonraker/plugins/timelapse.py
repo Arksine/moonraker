@@ -149,6 +149,7 @@ class Timelapse:
                   + " -crf " + str(self.crf) \
                   + " -vcodec libx264" \
                   + " -pix_fmt " + self.pixelformat \
+                  + " -an" \
                   + " " + self.extraoutputparams \
                   + " '" + self.out_dir + outfile + "' -y"
             logging.info(f"start FFMPEG: {cmd}")
