@@ -8,6 +8,7 @@
 import logging
 import os
 import glob
+import re
 from datetime import datetime
 from tornado.ioloop import IOLoop
 
@@ -87,6 +88,8 @@ class Timelapse:
         cmd = "wget " + self.snapshoturl + " -O " \
               + self.temp_dir + framefile
         # logging.info(f"cmd: {cmd}")
+        result = {'action': 'newframe', 'frame': self.framecount}
+        self.notify_timelapse_event(result)
         shell_command = self.server.lookup_plugin('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
         try:
@@ -120,19 +123,32 @@ class Timelapse:
     async def timelapse_render(self, webrequest=None):
         # logging.info("timelapse_render")
         filelist = glob.glob(self.temp_dir + "frame*.jpg")
+        self.framecount = len(filelist)
         if not filelist:
             msg = "no frames to render skipping"
             logging.info(msg)
             status = "skipped"
             cmd = outfile = None
-        if self.renderisrunning:
+            result = {'action': 'render', 'status': status}
+            self.notify_timelapse_event(result)
+        elif self.renderisrunning:
             msg = "render is already running"
             logging.info(msg)
             status = "alreadyrunning"
             cmd = outfile = None
         else:
             self.renderisrunning = True
-            self.framecount = 0
+            result = {
+                        'action': 'render',
+                        'status': 'started',
+                        'framecount': self.framecount,
+                        'settings': {
+                            'framerate': self.framerate,
+                            'crf': self.crf,
+                            'pixelformat': self.pixelformat
+                        }
+                    }
+            self.notify_timelapse_event(result)
             klippy_apis = self.server.lookup_plugin("klippy_apis")
             result = await klippy_apis.query_objects({'print_stats': None})
             pstats = result.get("print_stats", {})
@@ -164,13 +180,22 @@ class Timelapse:
             if cmdstatus:
                 status = "success"
                 msg = f"Rendering Video successful: {outfile}"
-                result = {'action': 'render', 'status': 'success', 'filename': outfile}
+                result = {
+                        'action': 'render',
+                        'status': 'success',
+                        'filename': outfile
+                    }
             else:
                 status = "error"
-                response = self.lastcmdreponse.decode("utf-8")
+                response = self.lastcmdreponse
                 msg = f"Rendering Video failed: {response}"
-                result = {'action': 'render', 'status': 'error', 'response': response}
-                                      
+                result = {
+                        'action': 'render',
+                        'status': 'error',
+                        'response': response
+                    }
+
+            self.notify_timelapse_event(result)
             self.renderisrunning = False
 
         return {
@@ -182,7 +207,26 @@ class Timelapse:
 
     def ffmpeg_response(self, response):
         # logging.info(f"ffmpegResponse: {response}")
-        self.lastcmdreponse = response
+        self.lastcmdreponse = response.decode("utf-8")
+        try:
+            temp = re.search('frame=(.+?)fps', self.lastcmdreponse).group(1)
+        except AttributeError:
+            return
+        if temp:
+            frame = re.search(r'\d+', temp).group()
+            percent = int(frame) / self.framecount * 100
+            # logging.info(f"ffmpeg Progress: {int(percent)}% ")
+            result = {
+                    'action': 'render',
+                    'status': 'running',
+                    'progress': int(percent)
+                }
+            self.notify_timelapse_event(result)
+
+    def notify_timelapse_event(self, result):
+        # logging.info(f"notify_timelapse_event: {result}")
+        self.server.send_event("timelapse:timelapse_event", result)
+
 
 def load_plugin(config):
     return Timelapse(config)
