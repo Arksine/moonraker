@@ -276,6 +276,7 @@ class WebsocketManager:
                     ws.write_message(msg)
                 except WebSocketClosedError:
                     self.websockets.pop(ws.uid, None)
+                    self.server.remove_subscription(ws)
                     logging.info(f"Websocket Removed: {ws.uid}")
                 except Exception:
                     logging.exception(
@@ -294,6 +295,7 @@ class WebSocket(WebSocketHandler):
         self.wsm = app.get_websocket_manager()
         self.rpc = self.wsm.rpc
         self.uid = id(self)
+        self.is_closed = False
 
     async def open(self):
         await self.wsm.add_websocket(self)
@@ -311,7 +313,7 @@ class WebSocket(WebSocketHandler):
             logging.exception("Websocket Command Error")
 
     def send_status(self, status):
-        if not status:
+        if not status or self.is_closed:
             return
         try:
             self.write_message({
@@ -319,6 +321,7 @@ class WebSocket(WebSocketHandler):
                 'method': "notify_status_update",
                 'params': [status]})
         except WebSocketClosedError:
+            self.is_closed = True
             logging.info(
                 f"Websocket Closed During Status Update: {self.uid}")
         except Exception:
