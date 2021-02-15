@@ -9,17 +9,16 @@ from collections import deque
 from tornado.ioloop import IOLoop, PeriodicCallback
 
 TEMPERATURE_UPDATE_MS = 1000
-TEMPERATURE_STORE_SIZE = 20 * 60
-
-MAX_GCODE_LINES = 1000
 
 class DataStore:
     def __init__(self, config):
         self.server = config.get_server()
+        self.temp_store_size = config.getint('temperature_store_size', 1200)
+        self.gcode_store_size = config.getint('gcode_store_size', 1000)
 
         # Temperature Store Tracking
         self.last_temps = {}
-        self.gcode_queue = deque(maxlen=MAX_GCODE_LINES)
+        self.gcode_queue = deque(maxlen=self.gcode_store_size)
         self.temperature_store = {}
         self.temp_update_cb = PeriodicCallback(
             self._update_temperature_store, TEMPERATURE_UPDATE_MS)
@@ -66,11 +65,11 @@ class DataStore:
                     new_store[sensor] = self.temperature_store[sensor]
                 else:
                     new_store[sensor] = {
-                        'temperatures': deque(maxlen=TEMPERATURE_STORE_SIZE)}
+                        'temperatures': deque(maxlen=self.temp_store_size)}
                     for item in ["target", "power", "speed"]:
                         if item in fields:
                             new_store[sensor][f"{item}s"] = deque(
-                                maxlen=TEMPERATURE_STORE_SIZE)
+                                maxlen=self.temp_store_size)
                 if sensor not in self.last_temps:
                     self.last_temps[sensor] = (0., 0., 0., 0.)
             self.temperature_store = new_store
