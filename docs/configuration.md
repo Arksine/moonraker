@@ -152,7 +152,8 @@ and Tasmota (via http) devices are supported.
 
 [power device_name]
 type: gpio
-#   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
+#   The type of device.  Can be either gpio, tplink_smartplug, meross_smartplug
+#   or tasmota.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -209,7 +210,16 @@ output_id:
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
 #   more than one (default is 0).
-
+email: 
+password:
+name:
+channel:
+#   The above options are used for "meross_smartplug" devices. The email and
+#   password refer to the credentials registered with the Meross device
+#   (through a mobile app for instance). Name is the device name and channel
+#   refers to the specific outlet to use. 0 = Main switch (toggles every
+#   outlets at the same time when using a multi-plug device). 1 = First outlet,
+#   2 = Second outlet...
 
 ```
 Below are some potential examples:
@@ -246,6 +256,13 @@ type: shelly
 address: 192.168.1.125
 user: user2
 password: password2
+
+[power meross_plug_firstchannel]
+type: merros_smartplug
+email: my@email.com
+password: mypassword
+name: SmartPlugOrPowerStripName
+channel: 1
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
