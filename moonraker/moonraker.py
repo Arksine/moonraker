@@ -98,6 +98,7 @@ class Server:
         self.plugins = {}
         self.klippy_apis = self.load_plugin(config, 'klippy_apis')
         self._load_plugins(config)
+        config.validate_config()
 
     def start(self):
         hostname, hostport = self.get_host_info()
