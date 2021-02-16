@@ -95,6 +95,21 @@ class ConfigHelper:
     def get_parsed_config(self):
         return dict(self.parsed)
 
+    def validate_config(self):
+        for sect in self.orig_sections:
+            if sect not in self.parsed:
+                logging.warn(
+                    f"Invalid config section [{sect}] detected. In "
+                    "the future this will result in a startup error")
+                continue
+            parsed_opts = self.parsed[sect]
+            for opt, val in self.config.items(sect):
+                if opt not in parsed_opts:
+                    logging.warn(
+                        f"Invalid option '{opt}' detected in section "
+                        f"[{sect}].  In the future this will result in a "
+                        "startup error.")
+
 def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
         system_args.configfile))
