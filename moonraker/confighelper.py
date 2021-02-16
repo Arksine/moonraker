@@ -15,10 +15,12 @@ class Sentinel:
 
 class ConfigHelper:
     error = ConfigError
-    def __init__(self, server, config, section):
+    def __init__(self, server, config, section, orig_sects, parsed={}):
         self.server = server
         self.config = config
         self.section = section
+        self.orig_sections = orig_sects
+        self.parsed = parsed
         self.sections = config.sections
         self.has_section = config.has_section
 
@@ -43,7 +45,8 @@ class ConfigHelper:
     def getsection(self, section):
         if section not in self.config:
             raise ConfigError(f"No section [{section}] in config")
-        return ConfigHelper(self.server, self.config, section)
+        return ConfigHelper(self.server, self.config, section,
+                            self.orig_sections, self.parsed)
 
     def _get_option(self, func, option, default):
         try:
@@ -55,6 +58,9 @@ class ConfigHelper:
         if val == Sentinel:
             raise ConfigError(
                 f"No option found ({option}) in section [{self.section}]")
+        if self.section in self.orig_sections:
+            # Only track sections included in the original config
+            self.parsed.setdefault(self.section, {})[option] = val
         return val
 
     def get(self, option, default=Sentinel):
@@ -86,6 +92,9 @@ class ConfigHelper:
     def write_config(self, file_obj):
         self.config.write(file_obj)
 
+    def get_parsed_config(self):
+        return dict(self.parsed)
+
 def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
         system_args.configfile))
@@ -102,6 +111,12 @@ def get_configuration(server, system_args):
     except KeyError:
         raise ConfigError("No section [server] in config")
 
+    orig_sections = config.sections()
+    try:
+        orig_sections.remove("DEFAULT")
+    except Exception:
+        pass
+
     if server_cfg.getboolean('enable_debug_logging', True):
         logging.getLogger().setLevel(logging.DEBUG)
 
@@ -109,4 +124,4 @@ def get_configuration(server, system_args):
         'configfile': system_args.configfile,
         'logfile': system_args.logfile,
         'software_version': system_args.software_version}
-    return ConfigHelper(server, config, 'server')
+    return ConfigHelper(server, config, 'server', orig_sections)
