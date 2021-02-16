@@ -2,3 +2,4 @@
 tornado==6.1.0
 pyserial==3.4
 pillow==8.0.1
+meross_iot==0.4.1.1rc1 

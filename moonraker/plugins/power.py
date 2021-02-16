@@ -16,6 +16,8 @@ from tornado.iostream import IOStream
 from tornado import gen
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
+from meross_iot.http_api import MerossHttpClient
+from meross_iot.manager import MerossManager
 
 class PrinterPower:
     def __init__(self, config):
@@ -32,6 +34,8 @@ class PrinterPower:
                     dev = GpioDevice(cfg, self.chip_factory)
                 elif dev_type == "tplink_smartplug":
                     dev = TPLinkSmartPlug(cfg)
+                elif dev_type == "meross_smartplug":
+                    dev = MerossSmartPlug(cfg)
                 elif dev_type == "tasmota":
                     dev = Tasmota(cfg)
                 elif dev_type == "shelly":
@@ -396,6 +400,66 @@ class TPLinkSmartPlug(PowerDevice):
                 f"Error Toggling Device Power: {self.name}")
         self.state = state
 
+
+class MerossSmartPlug(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.email = config.get("email")
+        self.password = config.get("password")
+        self.devname = config.get("name")
+        self.channel = config.getint("channel")
+
+    async def _send_meross_command(self, command):
+        try:
+            http_api_client = await MerossHttpClient.async_from_user_password(email=self.email, password=self.password)
+            manager = MerossManager(http_client=http_api_client)
+            await manager.async_init()
+            await manager.async_device_discovery()
+            dev = manager.find_devices(device_name=self.devname)[0]
+            await dev.async_update()
+
+            if command == "on":
+                await dev.async_turn_on(channel=self.channel)
+            elif command == "off":
+                await dev.async_turn_off(channel=self.channel)
+            elif command != "info":
+                raise self.server.error(f"Invalid Meross command: {command}")
+        except Exception:
+            msg = f"Error sending Meross command: {command}"
+            logging.exception(msg)
+            raise self.server.error(msg)
+        finally:
+            manager.close()
+            await http_api_client.async_logout()
+        state = dev.is_on(self.channel)
+        return state
+
+    async def initialize(self):
+        await self.refresh_status()
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "meross_smartplug"
+        }
+
+    async def refresh_status(self):
+        try:
+            state = await self._send_meross_command("info")
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = "on" if state else "off"
+
+    async def set_power(self, state):
+        try:
+            state = await self._send_meross_command(state)
+        except Exception:
+            self.state = "error"
+            logging.exception(f"Power Toggle Error: {self.name}")
+        self.state = "on" if state else "off"
 
 class Tasmota(PowerDevice):
     def __init__(self, config):
