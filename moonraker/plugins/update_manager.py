@@ -112,6 +112,8 @@ class UpdateManager:
         self.server.register_endpoint(
             "/machine/update/status", ["GET"],
             self._handle_status_request)
+        self.server.register_notification("update_manager:update_response")
+        self.server.register_notification("update_manager:update_refreshed")
 
         # Register Ready Event
         self.server.register_event_handler(
