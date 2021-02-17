@@ -81,6 +81,12 @@ class Server:
         self.register_endpoint(
             "/server/restart", ['POST'], self._handle_server_restart)
 
+        self.register_notification("server:klippy_ready")
+        self.register_notification("server:klippy_shutdown")
+        self.register_notification("server:klippy_disconnect",
+                                   "klippy_disconnected")
+        self.register_notification("server:gcode_response")
+
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
         # they do not return a response to Klippy after execution
@@ -165,6 +171,10 @@ class Server:
         if plugin == Sentinel:
             raise ServerError(f"Plugin ({plugin_name}) not found")
         return plugin
+
+    def register_notification(self, event_name, notify_name=None):
+        wsm = self.moonraker_app.get_websocket_manager()
+        wsm.register_notification(event_name, notify_name)
 
     def register_event_handler(self, event, callback):
         self.events.setdefault(event, []).append(callback)
