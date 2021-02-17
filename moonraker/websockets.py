@@ -169,52 +169,14 @@ class WebsocketManager:
 
         self.rpc.register_method("server.websocket.id", self._handle_id_request)
 
-        # Register events
-        self.server.register_event_handler(
-            "server:klippy_ready", self._handle_klippy_ready)
-        self.server.register_event_handler(
-            "server:klippy_shutdown", self._handle_klippy_shutdown)
-        self.server.register_event_handler(
-            "server:klippy_disconnect", self._handle_klippy_disconnect)
-        self.server.register_event_handler(
-            "server:gcode_response", self._handle_gcode_response)
-        self.server.register_event_handler(
-            "file_manager:filelist_changed", self._handle_filelist_changed)
-        self.server.register_event_handler(
-            "file_manager:metadata_update", self._handle_metadata_update)
-        self.server.register_event_handler(
-            "gpio_power:power_changed", self._handle_power_changed)
-        self.server.register_event_handler(
-            "update_manager:update_response", self._handle_update_response)
-        self.server.register_event_handler(
-            "update_manager:update_refreshed", self._handle_update_refreshed)
+    def register_notification(self, event_name, notify_name=None):
+        if notify_name is None:
+            notify_name = event_name.split(':')[-1]
 
-    async def _handle_klippy_ready(self):
-        await self.notify_websockets("klippy_ready")
-
-    async def _handle_klippy_shutdown(self):
-        await self.notify_websockets("klippy_shutdown")
-
-    async def _handle_klippy_disconnect(self):
-        await self.notify_websockets("klippy_disconnected")
-
-    async def _handle_gcode_response(self, response):
-        await self.notify_websockets("gcode_response", response)
-
-    async def _handle_filelist_changed(self, flist):
-        await self.notify_websockets("filelist_changed", flist)
-
-    async def _handle_metadata_update(self, metadata):
-        await self.notify_websockets("metadata_update", metadata)
-
-    async def _handle_power_changed(self, pstatus):
-        await self.notify_websockets("power_changed", pstatus)
-
-    async def _handle_update_response(self, response):
-        await self.notify_websockets("update_response", response)
-
-    async def _handle_update_refreshed(self, refresh_info):
-        await self.notify_websockets("update_refreshed", refresh_info)
+        async def notify_handler(*args):
+            await self.notify_websockets(notify_name, *args)
+        self.server.register_event_handler(
+            event_name, notify_handler)
 
     def register_local_handler(self, api_def, callback):
         for ws_method, req_method in \
