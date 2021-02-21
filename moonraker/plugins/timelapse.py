@@ -18,6 +18,7 @@ class Timelapse:
     def __init__(self, config):
         # setup vars
         self.renderisrunning = False
+        self.takingframe = False
         self.framecount = 0
         self.enabled = config.getboolean("enabled", True)
         self.crf = config.getint("constant_rate_factor", 23)
@@ -83,20 +84,35 @@ class Timelapse:
             # logging.info("NEW_FRAME macro ignored timelapse is disabled")
 
     async def timelapse_newframe(self):
-        self.framecount += 1
-        framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
-        cmd = "wget " + self.snapshoturl + " -O " \
-              + self.temp_dir + framefile
-        # logging.info(f"cmd: {cmd}")
-        result = {'action': 'newframe', 'frame': self.framecount}
-        self.notify_timelapse_event(result)
-        shell_command = self.server.lookup_plugin('shell_command')
-        scmd = shell_command.build_shell_command(cmd, None)
-        try:
-            await scmd.run(timeout=2., verbose=False)
-        except Exception:
-            logging.exception(f"Error running cmd '{cmd}'")
-
+        if not self.takingframe:
+            self.takingframe = True
+            self.framecount += 1
+            framefile = "frame" + str(self.framecount).zfill(6) + ".jpg"
+            cmd = "wget " + self.snapshoturl + " -O " \
+                  + self.temp_dir + framefile
+            # logging.info(f"cmd: {cmd}")
+            
+            shell_command = self.server.lookup_plugin('shell_command')
+            scmd = shell_command.build_shell_command(cmd, None)
+            try:
+                cmdstatus = await scmd.run(timeout=2., verbose=False)
+            except Exception:
+                logging.exception(f"Error running cmd '{cmd}'")
+                
+            result = {'action': 'newframe'}
+            if cmdstatus:
+                result.update({
+                                'frame': self.framecount,
+                                'framefile': framefile,
+                                'status': 'success'
+                            })
+            else:
+                self.framecount -= 1
+                result.update({'framefile': framefile, 'status': 'error'})         
+                
+            self.notify_timelapse_event(result)
+            self.takingframe = False
+        
     async def webrequest_timelapse_render(self, webrequest):
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.timelapse_render)
