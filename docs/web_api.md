@@ -227,6 +227,30 @@ websocket.  See the `notify_status_update` notification for details.
   enabled plugins.  This can be used by clients to check if an optional
   plugin is available.
 
+### Get Server Configuration
+- HTTP command:\
+  `GET /server/config`
+
+- Websocket command:
+  `{jsonrpc: "2.0", method: "server.config", id: <request id>}`
+
+- Returns:\
+  An object containing the server's configuration, structured as follows:
+
+```json
+{
+    config: {
+        server: {
+            ...
+        },
+        authorization: {
+            ...
+        },
+        ...
+    }
+}
+```
+
 ### Fetch stored temperature data
 - HTTP command:\
   `GET /server/temperature_store`
