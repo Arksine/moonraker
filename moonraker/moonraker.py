@@ -105,8 +105,8 @@ class Server:
 
         # Plugin initialization
         self.plugins = {}
-        self.klippy_apis = self.load_plugin(config, 'klippy_apis')
         self._load_plugins(config)
+        self.klippy_apis = self.lookup_plugin('klippy_apis')
         config.validate_config()
 
     def start(self):
