@@ -50,6 +50,7 @@ class Timelapse:
         self.server.register_endpoint(
             "/machine/timelapse/settings", ['GET', 'POST'],
             self.webrequest_timelapse_settings)
+        self.server.register_notification("timelapse:timelapse_event")
 
     async def webrequest_timelapse_settings(self, webrequest):
         action = webrequest.get_action()
