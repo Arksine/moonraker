@@ -59,6 +59,7 @@ class PrinterPower:
             "set_device_power", self.set_device_power)
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_klippy_shutdown)
+        self.server.register_notification("power:power_changed")
         IOLoop.current().spawn_callback(
             self._initalize_devices, list(self.devices.values()))
 
@@ -119,7 +120,7 @@ class PrinterPower:
             if asyncio.iscoroutine(ret):
                 await ret
             dev_info = device.get_device_info()
-            self.server.send_event("gpio_power:power_changed", dev_info)
+            self.server.send_event("power:power_changed", dev_info)
             device.run_power_changed_action()
         elif req == "status":
             ret = device.refresh_status()

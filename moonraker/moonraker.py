@@ -38,7 +38,7 @@ class Server:
     error = ServerError
     def __init__(self, args, file_logger):
         self.file_logger = file_logger
-        config = confighelper.get_configuration(self, args)
+        self.config = config = confighelper.get_configuration(self, args)
         # log config file
         strio = io.StringIO()
         config.write_config(strio)
@@ -77,7 +77,15 @@ class Server:
         self.register_endpoint(
             "/server/info", ['GET'], self._handle_info_request)
         self.register_endpoint(
+            "/server/config", ['GET'], self._handle_config_request)
+        self.register_endpoint(
             "/server/restart", ['POST'], self._handle_server_restart)
+
+        self.register_notification("server:klippy_ready")
+        self.register_notification("server:klippy_shutdown")
+        self.register_notification("server:klippy_disconnect",
+                                   "klippy_disconnected")
+        self.register_notification("server:gcode_response")
 
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
@@ -96,6 +104,7 @@ class Server:
         self.plugins = {}
         self.klippy_apis = self.load_plugin(config, 'klippy_apis')
         self._load_plugins(config)
+        config.validate_config()
 
     def start(self):
         hostname, hostport = self.get_host_info()
@@ -162,6 +171,10 @@ class Server:
         if plugin == Sentinel:
             raise ServerError(f"Plugin ({plugin_name}) not found")
         return plugin
+
+    def register_notification(self, event_name, notify_name=None):
+        wsm = self.moonraker_app.get_websocket_manager()
+        wsm.register_notification(event_name, notify_name)
 
     def register_event_handler(self, event, callback):
         self.events.setdefault(event, []).append(callback)
@@ -478,6 +491,11 @@ class Server:
             'plugins': list(self.plugins.keys()),
             'failed_plugins': self.failed_plugins,
             'registered_directories': reg_dirs}
+
+    async def _handle_config_request(self, web_request):
+        return {
+            'config': self.config.get_parsed_config()
+        }
 
 class KlippyConnection:
     def __init__(self, on_recd, on_close):

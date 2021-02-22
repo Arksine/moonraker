@@ -40,6 +40,9 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/delete_file", ['DELETE'], self._handle_file_delete,
             protocol=["websocket"])
+        # register client notificaitons
+        self.server.register_notification("file_manager:filelist_changed")
+        self.server.register_notification("file_manager:metadata_update")
         # Register APIs to handle file uploads
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
