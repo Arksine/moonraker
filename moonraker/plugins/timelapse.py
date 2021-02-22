@@ -3,8 +3,6 @@
 # Copyright (C) 2020 Christoph Frei <fryakatkop@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-#
-###################################
 import logging
 import os
 import glob
@@ -41,6 +39,7 @@ class Timelapse:
         self.server = config.get_server()
         file_manager = self.server.lookup_plugin("file_manager")
         file_manager.register_directory("timelapse", self.out_dir)
+        self.server.register_notification("timelapse:timelapse_event")
         self.server.register_event_handler(
             "server:gcode_response", self.handle_status_update)
         self.server.register_remote_method(
@@ -50,7 +49,6 @@ class Timelapse:
         self.server.register_endpoint(
             "/machine/timelapse/settings", ['GET', 'POST'],
             self.webrequest_timelapse_settings)
-        self.server.register_notification("timelapse:timelapse_event")
 
     async def webrequest_timelapse_settings(self, webrequest):
         action = webrequest.get_action()
@@ -92,14 +90,14 @@ class Timelapse:
             cmd = "wget " + self.snapshoturl + " -O " \
                   + self.temp_dir + framefile
             # logging.info(f"cmd: {cmd}")
-            
+
             shell_command = self.server.lookup_plugin('shell_command')
             scmd = shell_command.build_shell_command(cmd, None)
             try:
                 cmdstatus = await scmd.run(timeout=2., verbose=False)
             except Exception:
                 logging.exception(f"Error running cmd '{cmd}'")
-                
+
             result = {'action': 'newframe'}
             if cmdstatus:
                 result.update({
@@ -108,12 +106,13 @@ class Timelapse:
                                 'status': 'success'
                             })
             else:
+                logging.info(f"getting newframe failed: {cmd}")
                 self.framecount -= 1
-                result.update({'framefile': framefile, 'status': 'error'})         
-                
+                result.update({'status': 'error'})
+
             self.notify_timelapse_event(result)
             self.takingframe = False
-        
+
     async def webrequest_timelapse_render(self, webrequest):
         ioloop = IOLoop.current()
         ioloop.spawn_callback(self.timelapse_render)
