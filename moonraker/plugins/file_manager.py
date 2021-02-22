@@ -10,6 +10,8 @@ import io
 import zipfile
 import logging
 import json
+import subprocess
+import threading
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.locks import Event
 
@@ -21,9 +23,11 @@ METADATA_SCRIPT = os.path.abspath(os.path.join(
 class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
+        self.file_changes_ignore = []
         self.file_paths = {}
         self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
+        self.inotify_processes = []
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -105,6 +109,12 @@ class FileManager:
                 f"({path}) for ({root}).")
             return False
         if path != self.file_paths.get(root, ""):
+            if root in self.file_paths and root == "gcodes":
+                for inotify in self.inotify_processes:
+                    if inotify[0] == root and inotify[1] != path:
+                        inotify[2].stop()
+                        self.inotify_processes.remove(inotify)
+                        break
             self.file_paths[root] = path
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
@@ -115,6 +125,8 @@ class FileManager:
                 except Exception:
                     logging.exception(
                         f"Unable to initialize gcode metadata")
+                logging.info("Adding inotify for %s: %s" % (root, path))
+                self.create_inotify_subprocess(root, path)
         return True
 
     def get_sd_directory(self):
@@ -352,12 +364,13 @@ class FileManager:
                 start_print = False
         # Don't start if another print is currently in progress
         start_print = start_print and not print_ongoing
+        self.file_changes_ignore.append(upload['filename'])
         self._write_file(upload, is_ufp)
+        IOLoop.current().call_later(1, self.file_changes_ignore.remove,
+            upload['filename'])
         # Fetch Metadata
-        finfo = self._get_path_info(upload['full_path'])
-        evt = self.gcode_metadata.parse_metadata(
-            upload['filename'], finfo['size'], finfo['modified'])
-        await evt.wait()
+        self.update_file_info("gcodes", upload['filename'])
+
         if start_print:
             # Make a Klippy Request to "Start Print"
             klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -369,6 +382,25 @@ class FileManager:
         self.notify_filelist_changed(
             'upload_file', upload['filename'], "gcodes")
         return {'result': upload['filename'], 'print_started': start_print}
+
+    def create_inotify_subprocess(self, root, path):
+        for inotify in self.inotify_processes:
+            iroot, ipath, ithread = inotify
+            if root == iroot and ipath == ipath:
+                return
+
+        inotify = [root, path,
+            InotifyThread(self, IOLoop.current(), root, path)]
+        self.inotify_processes.append(inotify)
+        inotify[2].start()
+
+    async def update_file_info(self, root, file):
+        finfo = self._get_path_info(os.path.join(self.file_paths[root], file))
+        if root == "gcodes":
+            evt = self.gcode_metadata.parse_metadata(
+                file, finfo['size'], finfo['modified'])
+            await evt.wait()
+        self.notify_filelist_changed('upload_file', file, root)
 
     def _do_standard_upload(self, request, root):
         path = self.file_paths.get(root, None)
@@ -610,6 +642,52 @@ class FileManager:
     def close(self):
         self.gcode_metadata.close()
 
+
+class InotifyThread(threading.Thread):
+    def __init__(self, file_manager, ioloop, root, path):
+        super().__init__()
+        self.fm = file_manager
+        self.ioloop = ioloop
+        self.path = path
+        self.root = root
+        self.stop_thread = False
+
+    def create_process(self):
+        self.process = subprocess.Popen(["inotifywait","-m","-q","-r",
+            "--format","%:e %f","-e","create","-e","delete", self.path],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    def run(self):
+        self.create_process()
+        while True:
+            if self.stop_thread == True:
+                return
+
+            if self.process.poll() is not None:
+                if self.fm.file_paths[root] == path:
+                    logging.info(f"Recreating inotify procress for root "
+                        f"{self.root}")
+                    if (self.root in self.fm.file_paths and
+                            self.fm.file_paths[self.root] == self.path):
+                        self.create_process()
+                return
+
+            evt = self.process.stdout.readline().decode('ascii').strip(
+                ).split(' ')
+            action = evt[0]
+            file = " ".join(evt[1:])
+            if file in self.fm.file_changes_ignore:
+                continue
+
+            if action in ['CREATE','MODIFY']:
+                self.ioloop.spawn_callback(self.fm.update_file_info, self.root,
+                    file)
+            elif action == "DELETE":
+                self.fm.notify_filelist_changed('delete_file', file, self.root)
+
+    def stop(self):
+        self.process.kill()
+        self.stop_thread = True
 
 METADATA_PRUNE_TIME = 600000
 
