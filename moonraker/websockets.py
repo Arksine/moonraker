@@ -188,8 +188,6 @@ class WebsocketManager:
             "update_manager:update_response", self._handle_update_response)
         self.server.register_event_handler(
             "update_manager:update_refreshed", self._handle_update_refreshed)
-        self.server.register_event_handler(
-            "timelapse:timelapse_event", self._handle_timelapse_event)
 
     async def _handle_klippy_ready(self):
         await self.notify_websockets("klippy_ready")
