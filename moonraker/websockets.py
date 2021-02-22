@@ -135,11 +135,12 @@ class JsonRPC:
         try:
             result = await method(ws, *args, **kwargs)
         except TypeError as e:
-            return self.build_error(-32603, f"Invalid params:\n{e}", req_id)
+            return self.build_error(
+                -32603, f"Invalid params:\n{e}", req_id, True)
         except ServerError as e:
-            return self.build_error(e.status_code, str(e), req_id)
+            return self.build_error(e.status_code, str(e), req_id, True)
         except Exception as e:
-            return self.build_error(-31000, str(e), req_id)
+            return self.build_error(-31000, str(e), req_id, True)
 
         if req_id is None:
             return None
@@ -153,7 +154,12 @@ class JsonRPC:
             'id': req_id
         }
 
-    def build_error(self, code, msg, req_id=None):
+    def build_error(self, code, msg, req_id=None, is_exc=False):
+        log_msg = f"JSON-RPC Request Error: {code}\n{msg}"
+        if is_exc:
+            logging.exception(log_msg)
+        else:
+            logging.info(log_msg)
         return {
             'jsonrpc': "2.0",
             'error': {'code': code, 'message': msg},
