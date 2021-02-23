@@ -13,6 +13,7 @@ import time
 import socket
 import logging
 import json
+import signal
 import confighelper
 import utils
 import asyncio
@@ -49,6 +50,7 @@ class Server:
         self.add_log_rollover_item('config', cfg_item)
         self.host = config.get('host', "0.0.0.0")
         self.port = config.getint('port', 7125)
+        self.exit_reason = ""
 
         # Event initialization
         self.events = {}
@@ -63,6 +65,7 @@ class Server:
         self.init_handle = None
         self.init_attempts = 0
         self.klippy_state = "disconnected"
+        self.klippy_disconnect_evt = None
         self.subscriptions = {}
         self.failed_plugins = []
 
@@ -113,7 +116,13 @@ class Server:
             f"Hostname: {hostname}")
         self.moonraker_app.listen(self.host, self.port)
         self.server_running = True
+        self.ioloop.spawn_callback(self._init_signals)
         self.ioloop.spawn_callback(self._connect_klippy)
+
+    def _init_signals(self):
+        aioloop = asyncio.get_event_loop()
+        aioloop.add_signal_handler(
+            signal.SIGTERM, self._handle_term_signal)
 
     def add_log_rollover_item(self, name, item, log=True):
         if self.file_logger is not None:
@@ -261,6 +270,8 @@ class Server:
             self.ioloop.remove_timeout(self.init_handle)
         if self.server_running:
             self.ioloop.call_later(.25, self._connect_klippy)
+        if self.klippy_disconnect_evt is not None:
+            self.klippy_disconnect_evt.set()
 
     async def _initialize(self):
         if not self.server_running:
@@ -463,17 +474,39 @@ class Server:
     def remove_subscription(self, conn):
         self.subscriptions.pop(conn, None)
 
-    async def _stop_server(self):
+    def _handle_term_signal(self):
+        logging.info(f"Exiting with signal SIGTERM")
+        self.ioloop.spawn_callback(self._stop_server, "terminate")
+
+    async def _stop_server(self, exit_reason="restart"):
         self.server_running = False
         for name, plugin in self.plugins.items():
             if hasattr(plugin, "close"):
-                ret = plugin.close()
-                if asyncio.iscoroutine(ret):
-                    await ret
-        self.klippy_connection.close()
-        while self.klippy_state != "disconnected":
-            await gen.sleep(.1)
-        await self.moonraker_app.close()
+                try:
+                    ret = plugin.close()
+                    if asyncio.iscoroutine(ret):
+                        await ret
+                except Exception:
+                    logging.exception(f"Error closing plugin: {name}")
+        try:
+            if self.klippy_connection.is_connected():
+                self.klippy_disconnect_evt = Event()
+                self.klippy_connection.close()
+                timeout = time.time() + 2.
+                await self.klippy_disconnect_evt.wait(timeout)
+                self.klippy_disconnect_evt = None
+        except Exception:
+            logging.exception("Klippy Disconnect Error")
+        # Sleep for 100ms to allow connected websockets
+        # to write out remaining data
+        await gen.sleep(.1)
+        try:
+            await self.moonraker_app.close()
+        except Exception:
+            logging.exception("Error Closing App")
+        self.exit_reason = exit_reason
+        aioloop = asyncio.get_event_loop()
+        aioloop.remove_signal_handler(signal.SIGTERM)
         self.ioloop.stop()
 
     async def _handle_server_restart(self, web_request):
@@ -638,6 +671,8 @@ def main():
         except Exception:
             logging.exception("Server Running Error")
             estatus = 1
+            break
+        if server.exit_reason == "terminate":
             break
         # Since we are running outside of the the server
         # it is ok to use a blocking sleep here
