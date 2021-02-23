@@ -619,7 +619,6 @@ class MetadataStorage:
         self.metadata = {}
         self.pending_requests = {}
         self.events = {}
-        self.script_response = None
         self.busy = False
         self.gc_path = os.path.expanduser("~")
         self.prune_cb = PeriodicCallback(
@@ -643,19 +642,6 @@ class MetadataStorage:
 
     def __getitem__(self, key):
         return dict(self.metadata[key])
-
-    def _handle_script_response(self, result):
-        try:
-            proc_resp = json.loads(result.strip())
-        except Exception:
-            logging.exception("file_manager: unable to load metadata")
-            logging.debug(result)
-            return
-        proc_log = proc_resp.get('log', [])
-        for log_msg in proc_log:
-            logging.info(log_msg)
-        if 'file' in proc_resp:
-            self.script_response = proc_resp
 
     def prune_metadata(self):
         for fname in list(self.metadata.keys()):
@@ -716,14 +702,17 @@ class MetadataStorage:
         cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
                         self.gc_path, "-f", f"\"{filename}\""])
         shell_command = self.server.lookup_plugin('shell_command')
-        scmd = shell_command.build_shell_command(
-            cmd, self._handle_script_response)
-        self.script_response = None
-        await scmd.run(timeout=10.)
-        if self.script_response is None:
-            raise self.server.error("Unable to extract metadata")
-        path = self.script_response['file']
-        metadata = self.script_response['metadata']
+        scmd = shell_command.build_shell_command(cmd, log_stderr=True)
+        result = await scmd.run_with_response(timeout=10.)
+        if result is None:
+            raise self.server.error(f"Metadata extraction error")
+        try:
+            decoded_resp = json.loads(result.strip())
+        except Exception:
+            logging.debug(f"Invalid metadata response:\n{result}")
+            raise
+        path = decoded_resp['file']
+        metadata = decoded_resp['metadata']
         if not metadata:
             # This indicates an error, do not add metadata for this
             raise self.server.error("Unable to extract metadata")
