@@ -122,6 +122,8 @@ class SerialConnection:
 
     async def _do_send(self):
         while self.send_buffer:
+            if not self.connected:
+                break
             try:
                 sent = os.write(self.fd, self.send_buffer)
             except os.error as e:
