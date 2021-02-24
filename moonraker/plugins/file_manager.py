@@ -10,24 +10,27 @@ import io
 import zipfile
 import logging
 import json
-import subprocess
-import threading
+import tornado.gen
+from inotify_simple import INotify, flags
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.locks import Event
 
+INOTIFY_PERIODIC_TIME = 1
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
 class FileManager:
+    inotify_flags = flags.CREATE | flags.DELETE | flags.MODIFY | flags.MOVED_TO | flags.MOVED_FROM
+
     def __init__(self, config):
         self.server = config.get_server()
         self.file_changes_ignore = []
         self.file_paths = {}
         self.gcode_metadata = MetadataStorage(self.server)
         self.fixed_path_args = {}
-        self.inotify_processes = []
+        self.inotify_watches = {}
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -61,6 +64,10 @@ class FileManager:
             if not ret:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
+
+        self.ioloop = IOLoop.current()
+        self.inotify = INotify()
+        self.inotify_poll = None
 
     def _update_fixed_paths(self):
         kinfo = self.server.get_klippy_info()
@@ -109,12 +116,6 @@ class FileManager:
                 f"({path}) for ({root}).")
             return False
         if path != self.file_paths.get(root, ""):
-            if root in self.file_paths and root == "gcodes":
-                for inotify in self.inotify_processes:
-                    if inotify[0] == root and inotify[1] != path:
-                        inotify[2].stop()
-                        self.inotify_processes.remove(inotify)
-                        break
             self.file_paths[root] = path
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
@@ -126,7 +127,12 @@ class FileManager:
                     logging.exception(
                         f"Unable to initialize gcode metadata")
                 logging.info("Adding inotify for %s: %s" % (root, path))
-                self.create_inotify_subprocess(root, path)
+                if root in self.inotify_watches:
+                    for wd, path in self.inotify_watches[root].items():
+                        self.del_inotify_dir(root, path)
+
+                self.inotify_watches[root] = {}
+                self.add_inotify_dir(root, path)
         return True
 
     def get_sd_directory(self):
@@ -166,7 +172,6 @@ class FileManager:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            self.notify_filelist_changed("create_dir", rel_path, root)
         elif action == 'DELETE' and root in FULL_ACCESS_ROOTS:
             # Remove a directory
             if directory.strip("/") == root:
@@ -188,7 +193,6 @@ class FileManager:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
-            self.notify_filelist_changed("delete_dir", rel_path, root)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -275,9 +279,6 @@ class FileManager:
         if op_result != dest_path:
             dst_rel_path = os.path.join(
                 dst_rel_path, os.path.basename(op_result))
-        self.notify_filelist_changed(
-            action, dst_rel_path, dest_root,
-            {'path': src_rel_path, 'root': source_root})
         return "ok"
 
     def _list_directory(self, path, is_extended=False):
@@ -379,8 +380,6 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        self.notify_filelist_changed(
-            'upload_file', upload['filename'], "gcodes")
         return {'result': upload['filename'], 'print_started': start_print}
 
     def create_inotify_subprocess(self, root, path):
@@ -394,13 +393,117 @@ class FileManager:
         self.inotify_processes.append(inotify)
         inotify[2].start()
 
+    def add_inotify_dir(self, root, path, root_dir=False):
+        if self.inotify_poll == None:
+            self.inotify_poll = True
+            self.ioloop.spawn_callback(self._poll_inotify)
+
+        rel_path = path if root_dir is False else path[len(root_dir)+1:]
+        wd = self.inotify.add_watch(path, self.inotify_flags)
+        self.inotify_watches[root][wd] = rel_path
+
+        for dir in os.listdir(path):
+            d = os.path.join(path, dir)
+            if os.path.isdir(d):
+                self.add_inotify_dir(root, d,
+                    path if root_dir == False else root_dir)
+
+    def del_inotify_dir(self, root, path):
+        for wd, p in self.inotify_watches.items():
+            if path == p:
+                break
+        if path != p:
+            return
+        self.inotify.rm_watch(wd)
+        del self.inotify_watches[root][wd]
+
+    async def _poll_inotify(self):
+        while self.inotify_poll != None:
+            await self._poll_inotify_work()
+            await tornado.gen.sleep(INOTIFY_PERIODIC_TIME)
+
+    async def _poll_inotify_work(self):
+        # Loop through inotify events. If no events, timeout after 2ms
+        events = [e for e in self.inotify.read(2)]
+        for event in events:
+            par_dir = False
+            for root in self.file_paths.keys():
+                if (root in self.inotify_watches and event.wd in
+                        self.inotify_watches[root]):
+                    par_dir = self.inotify_watches[root][event.wd]
+                    break
+            if par_dir == False:
+                continue
+
+            logging.info("Event: %s" % str(event))
+            event_flags = flags.from_mask(event.mask)
+            if flags.MOVED_FROM in event_flags:
+                event2 = None
+                for e in events[events.index(event):]:
+                    if (event.cookie == e.cookie and
+                            flags.MOVED_TO in flags.from_mask(e.mask)):
+                        event2 = e
+                        events.remove(e)
+                        break
+                if event2 == None:
+                    event_flags = [flags.DELETE]
+                else:
+                    par_dir2 = None
+                    for root2 in self.file_paths.keys():
+                        if (root2 in self.inotify_watches and event2.wd in
+                                self.inotify_watches[root2]):
+                            par_dir2 = self.inotify_watches[root2][event2.wd]
+                            break
+                    if par_dir2 == None:
+                        event_flags = [flags.DELETE]
+                    elif flags.ISDIR in event_flags:
+                        logging.info("Moving directory from %s to %s" %
+                            (os.path.join(par_dir,event.name),
+                            os.path.join(par_dir2, event2.name)))
+                        self.del_inotify_dir(root,
+                            os.path.join(par_dir,event.name))
+                        self.add_inotify_dir(root2, os.path.join(
+                            self.file_paths[root2], par_dir2, event2.name),
+                            self.file_paths[root2])
+                        # Need to enumerate moved files
+                        continue
+                    else:
+                        self.notify_filelist_changed(
+                            "move_item", os.path.join(par_dir,event.name), root,
+                            {'path': os.path.join(par_dir2,event2.name),
+                             'root': root2})
+                        continue
+            if flags.ISDIR in event_flags:
+                continue
+                if flags.CREATE in event_flags:
+                    self.add_inotify_dir(root, os.path.join(
+                        self.file_paths[root], par_dir, event.name),
+                        self.file_paths[root])
+                elif flags.DELETE in event_flags:
+                    self.del_inotify_dir(root, os.path.join(par_dir,event.name))
+                continue
+            if flags.CREATE in event_flags:
+                self.ioloop.spawn_callback(self.update_file_info, root,
+                    os.path.join(par_dir, event.name))
+                self.notify_filelist_changed('upload_item',
+                    os.path.join(par_dir, event.name), root)
+            elif flags.MODIFY in event_flags:
+                self.ioloop.spawn_callback(self.update_file_info, root,
+                    os.path.join(par_dir, event.name))
+                self.notify_filelist_changed('modify_item',
+                    os.path.join(par_dir, event.name), root)
+            elif flags.DELETE in event_flags:
+                self.notify_filelist_changed('delete_item',
+                    os.path.join(par_dir, event.name), root)
+
+
+
     async def update_file_info(self, root, file):
         finfo = self._get_path_info(os.path.join(self.file_paths[root], file))
         if root == "gcodes":
             evt = self.gcode_metadata.parse_metadata(
                 file, finfo['size'], finfo['modified'])
             await evt.wait()
-        self.notify_filelist_changed('upload_file', file, root)
 
     def _do_standard_upload(self, request, root):
         path = self.file_paths.get(root, None)
@@ -408,7 +511,6 @@ class FileManager:
             raise self.server.error(f"Unknown root path: {root}")
         upload = self._get_upload_info(request, path)
         self._write_file(upload)
-        self.notify_filelist_changed('upload_file', upload['filename'], root)
         return {'result': upload['filename']}
 
     def _get_argument(self, request, name, default=None):
@@ -627,7 +729,6 @@ class FileManager:
                     raise
             self.gcode_metadata.remove_file(filename)
         os.remove(full_path)
-        self.notify_filelist_changed('delete_file', filename, root)
         return filename
 
     def notify_filelist_changed(self, action, fname, root, source_item={}):
@@ -641,53 +742,6 @@ class FileManager:
 
     def close(self):
         self.gcode_metadata.close()
-
-
-class InotifyThread(threading.Thread):
-    def __init__(self, file_manager, ioloop, root, path):
-        super().__init__()
-        self.fm = file_manager
-        self.ioloop = ioloop
-        self.path = path
-        self.root = root
-        self.stop_thread = False
-
-    def create_process(self):
-        self.process = subprocess.Popen(["inotifywait","-m","-q","-r",
-            "--format","%:e %f","-e","create","-e","delete", self.path],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-    def run(self):
-        self.create_process()
-        while True:
-            if self.stop_thread == True:
-                return
-
-            if self.process.poll() is not None:
-                if self.fm.file_paths[root] == path:
-                    logging.info(f"Recreating inotify procress for root "
-                        f"{self.root}")
-                    if (self.root in self.fm.file_paths and
-                            self.fm.file_paths[self.root] == self.path):
-                        self.create_process()
-                return
-
-            evt = self.process.stdout.readline().decode('ascii').strip(
-                ).split(' ')
-            action = evt[0]
-            file = " ".join(evt[1:])
-            if file in self.fm.file_changes_ignore:
-                continue
-
-            if action in ['CREATE','MODIFY']:
-                self.ioloop.spawn_callback(self.fm.update_file_info, self.root,
-                    file)
-            elif action == "DELETE":
-                self.fm.notify_filelist_changed('delete_file', file, self.root)
-
-    def stop(self):
-        self.process.kill()
-        self.stop_thread = True
 
 METADATA_PRUNE_TIME = 600000
 
