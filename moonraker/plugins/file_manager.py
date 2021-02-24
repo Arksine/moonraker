@@ -22,7 +22,9 @@ class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
         self.file_paths = {}
-        self.gcode_metadata = MetadataStorage(self.server)
+        database = self.server.load_plugin(config, "database")
+        gc_path = database.get_item("moonraker", "file_manager.gcode_path", "")
+        self.gcode_metadata = MetadataStorage(self.server, gc_path, database)
         self.fixed_path_args = {}
 
         # Register file management endpoints
@@ -57,6 +59,10 @@ class FileManager:
             if not ret:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
+
+        # If gcode path is in the database, register it
+        if gc_path:
+            self.register_directory('gcodes', gc_path)
 
     def _update_fixed_paths(self):
         kinfo = self.server.get_klippy_info()
@@ -108,7 +114,10 @@ class FileManager:
             self.file_paths[root] = path
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
-                # scan metadata
+                database = self.server.lookup_plugin(
+                    "database").wrap_namespace("moonraker")
+                database["file_manager.gcode_path"] = path
+                # scan for metadata changes
                 self.gcode_metadata.update_gcode_path(path)
                 try:
                     self.get_file_list("gcodes")
@@ -612,22 +621,25 @@ class FileManager:
 
 
 METADATA_PRUNE_TIME = 600000
+METADATA_NAMESPACE = "gcode_metadata"
 
 class MetadataStorage:
-    def __init__(self, server):
+    def __init__(self, server, gc_path, database):
         self.server = server
-        self.metadata = {}
+        database.register_local_namespace(METADATA_NAMESPACE)
+        self.mddb = database.wrap_namespace(
+            METADATA_NAMESPACE, parse_keys=False)
         self.pending_requests = {}
         self.events = {}
         self.busy = False
-        self.gc_path = os.path.expanduser("~")
+        self.gc_path = gc_path
         self.prune_cb = PeriodicCallback(
             self.prune_metadata, METADATA_PRUNE_TIME)
 
     def update_gcode_path(self, path):
         if path == self.gc_path:
             return
-        self.metadata = {}
+        self.mddb.clear()
         self.gc_path = path
         if not self.prune_cb.is_running():
             self.prune_cb.start()
@@ -636,27 +648,28 @@ class MetadataStorage:
         self.prune_cb.stop()
 
     def get(self, key, default=None):
-        if key not in self.metadata:
-            return default
-        return dict(self.metadata[key])
+        return self.mddb.get(key, default)
 
     def __getitem__(self, key):
-        return dict(self.metadata[key])
+        return self.mddb[key]
 
     def prune_metadata(self):
-        for fname in list(self.metadata.keys()):
+        for fname in list(self.mddb.keys()):
             fpath = os.path.join(self.gc_path, fname)
             if not os.path.exists(fpath):
-                del self.metadata[fname]
+                del self.mddb[fname]
                 logging.info(f"Pruned file: {fname}")
                 continue
 
     def _has_valid_data(self, fname, fsize, modified):
-        mdata = self.metadata.get(fname, {'size': "", 'modified': 0})
+        mdata = self.mddb.get(fname, {'size': "", 'modified': 0})
         return mdata['size'] == fsize and mdata['modified'] == modified
 
     def remove_file(self, fname):
-        self.metadata.pop(fname)
+        try:
+            del self.mddb[fname]
+        except Exception:
+            pass
 
     def parse_metadata(self, fname, fsize, modified, notify=False):
         evt = Event()
@@ -689,7 +702,7 @@ class MetadataStorage:
                 else:
                     break
             else:
-                self.metadata[fname] = {'size': fsize, 'modified': modified}
+                self.mddb[fname] = {'size': fsize, 'modified': modified}
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
             evt.set()
@@ -716,7 +729,7 @@ class MetadataStorage:
         if not metadata:
             # This indicates an error, do not add metadata for this
             raise self.server.error("Unable to extract metadata")
-        self.metadata[path] = dict(metadata)
+        self.mddb[path] = dict(metadata)
         metadata['filename'] = path
         if notify:
             self.server.send_event(
