@@ -2,3 +2,4 @@
 tornado==6.1.0
 pyserial==3.4
 pillow==8.0.1
+lmdb==1.1.1
