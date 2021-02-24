@@ -252,7 +252,7 @@ class WebsocketManager:
 
     async def close(self):
         async with self.ws_lock:
-            for ws in self.websockets.values():
+            for ws in list(self.websockets.values()):
                 ws.close()
             self.websockets = {}
 
@@ -297,6 +297,7 @@ class WebSocket(WebSocketHandler):
                 f"Error sending data over websocket: {self.uid}")
 
     def on_close(self):
+        self.is_closed = True
         io_loop = IOLoop.current()
         io_loop.spawn_callback(self.wsm.remove_websocket, self)
 
