@@ -142,8 +142,7 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket),
-            (r"/api/version", EmulateOctoprintHandler)]
+            (r"/websocket", WebSocket)]
 
         self.app = tornado.web.Application(
             app_handlers,
@@ -216,6 +215,14 @@ class MoonrakerApp:
             params['arg_parser'] = api_def.parser
             params['callback'] = callback
             self.mutable_router.add_handler(uri, LocalRequestHandler, params)
+            self.registered_base_handlers.append(uri)
+        if "http_octo" in protocol:
+            msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
+            params = {}
+            params['methods'] = request_methods
+            params['arg_parser'] = api_def.parser
+            params['callback'] = callback
+            self.mutable_router.add_handler(uri, LocalOctoRequestHandler, params)
             self.registered_base_handlers.append(uri)
         if "websocket" in protocol:
             msg += f" - Websocket: {', '.join(api_def.ws_methods)}"
@@ -347,6 +354,20 @@ class LocalRequestHandler(AuthorizedRequestHandler):
         self.finish({'result': result})
 
 
+class LocalOctoRequestHandler(LocalRequestHandler):
+    async def _process_http_request(self, method):
+        try:
+            args = json.loads(self.request.body)
+        except json.decoder.JSONDecodeError:
+            args = {}
+        try:
+            result = await self.callback(args)
+        except ServerError as e:
+            raise tornado.web.HTTPError(
+                e.status_code, str(e)) from e
+        self.finish(result)
+
+
 class FileRequestHandler(AuthorizedFileHandler):
     def set_extra_headers(self, path):
         # The call below shold never return an empty string,
@@ -379,11 +400,3 @@ class FileUploadHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
         self.finish(result)
-
-
-class EmulateOctoprintHandler(AuthorizedRequestHandler):
-    def get(self):
-        self.finish({
-            'server': "1.1.1",
-            'api': "0.1",
-            'text': "OctoPrint Upload Emulator"})
