@@ -1418,6 +1418,195 @@ The APIs below are available when the `[power]` plugin has been configured.
   }
   ```
 
+## Octoprint API emulation
+Partial support of Octoprint API is implemented with the purpose of
+allowing uploading of sliced prints to a mainsail instance.
+Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
+
+### Version information
+- HTTP command:\
+  `GET /api/version`
+
+- Returns:\
+  An object containing simulated Octoprint version information
+  ```json
+  {
+    server: "1.5.0",
+    api: "0.1",
+    text: "Octoprint (Moonraker v0.3.1-12)"
+  }
+  ```
+
+### Server status
+- HTTP command:\
+  `GET /api/server`
+
+- Returns:\
+  An object containing simulated Octoprint server status
+  ```json
+  {
+    server: "1.5.0",
+    safemode: <None or "settings">
+  }
+  ```
+
+### Login verification & User information
+- HTTP command:\
+  `GET /api/login`
+
+- HTTP command:\
+  `GET /api/server`
+
+- Returns:\
+  An object containing stubbed Octoprint login/user verification
+  ```json
+  {
+    _is_external_client: false,
+    _login_mechanism: "apikey",
+    name: "_api",
+    active: true,
+    user: true,
+    admin: true,
+    apikey: null,
+    permissions: [],
+    groups: ["admins", "users"],
+  }
+  ```
+
+### Get settings
+- HTTP command:\
+  `GET /api/server`
+
+- Returns:\
+  An object containing stubbed Octoprint settings.
+  The webcam route is hardcoded to Fluidd/Mainsail default path.
+  We say we have the UFP plugin installed so that Cura-Octoprint will
+  upload in the preferred UFP format.
+  ```json
+  {
+    plugins: {
+      UltimakerFormatPackage: {
+        align_inline_thumbnail: false,
+        inline_thumbnail: false,
+        inline_thumbnail_align_value: "left",
+        inline_thumbnail_scale_value: "50",
+        installed: true,
+        installed_version: "0.2.2",
+        scale_inline_thumbnail: false,
+        state_panel_thumbnail: true
+      }
+    },
+    feature: {
+      sdSupport: false,
+      temperatureGraph: false
+    },
+    webcam: {
+      flipH: false,
+      flipV: false,
+      rotate90: false,
+      streamUrl: "/webcam/?action=stream",
+      webcamEnabled': true
+    }
+  }
+  ```
+
+### File Upload
+- HTTP command:\
+  `POST /api/files/local`
+  Otherwise identical to the standard Moonraker `POST /server/files/upload` API.
+
+### Get Job status
+- HTTP command:\
+  `GET /api/job`
+
+- Returns:\
+  An object containing stubbed Octoprint Job status
+  ```json
+  {
+    job: {
+      file: {name: null},
+      estimatedPrintTime: null,
+      filament: {length: null},
+      user: None
+    },
+    progress: {
+      completion: null,
+      filepos: null,
+      printTime: null,
+      printTimeLeft: null,
+      printTimeOrigin: null
+    },
+    state: <One of "Offline","Error", "Operational", "Printing", "Paused">
+  }
+  ```
+
+### Get Printer status
+- HTTP command:\
+  `GET /api/printer`
+
+- Returns:\
+  An object containing Octoprint Printer status
+  ```json
+  {
+    temperature: {
+      <list of heater names: "bed", "tool<n>">: {
+        actual: <actual temp>,
+        offset: 0,
+        target: <target temp>
+      }
+    },
+    state: {
+      text': state,
+      flags': {
+        operational: <bool>,
+        paused: <bool>,
+        printing: <bool>,
+        cancelling: <bool>,
+        pausing: False,
+        error: <bool>,
+        ready: <bool>,
+        closedOrError: <bool>
+      }
+    }
+  }
+  ```
+
+### Send GCode command
+- HTTP command:\
+  `POST /api/printer/command`
+
+  JSON payload with parameter:
+  * commands: List of GCode strings
+
+- Returns:\
+  An blank JSON object
+  ```json
+  {}
+  ```
+
+### List Printer profiles
+- HTTP command:\
+  `GET /api/printerprofiles`
+
+- Returns:\
+  An object containing simulates Octoprint Printer profile
+  ```json
+  {
+    profiles: {
+      _default: {
+        id: "_default",
+        name: "Default",
+        color: "default",
+        model: "Default",
+        default': true,
+        current': true,
+        heatedBed: <true if "heater_bed" heater exists>,
+        heatedChamber: <true if "chamber" heater exists>
+      }
+    }
+  }
+  ```
+
 ## Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
 notifications.  These notifications are sent to all connected clients
