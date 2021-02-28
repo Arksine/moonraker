@@ -579,7 +579,7 @@ class GitUpdater:
             return
 
         remote_url = remote_url.strip()
-        owner_match = re.match(r"https?://.*/(.*)/", remote_url)
+        owner_match = re.match(r"https?://[^/]+/([^/]+)", remote_url)
         if owner_match is not None:
             self.owner = owner_match.group(1)
         self.is_dirty = repo_version.endswith("dirty")
