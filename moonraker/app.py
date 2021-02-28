@@ -92,8 +92,7 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket),
-            (r"/api/version", EmulateOctoprintHandler)]
+            (r"/websocket", WebSocket)]
 
         self.app = tornado.web.Application(
             app_handlers,
@@ -368,11 +367,3 @@ class FileUploadHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
         self.finish(result)
-
-
-class EmulateOctoprintHandler(AuthorizedRequestHandler):
-    def get(self):
-        self.finish({
-            'server': "1.1.1",
-            'api': "0.1",
-            'text': "OctoPrint Upload Emulator"})
