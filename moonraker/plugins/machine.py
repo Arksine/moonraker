@@ -6,6 +6,8 @@
 import logging
 from tornado.ioloop import IOLoop
 
+ALLOWED_SERVICES = ["moonraker", "klipper", "webcamd"]
+
 class Machine:
     def __init__(self, config):
         self.server = config.get_server()
@@ -43,11 +45,11 @@ class Machine:
         await self._execute_cmd(f'sudo systemctl restart {service_name}')
 
     async def _handle_service_restart(self, web_request):
-        name = web_request.get('service')
-        if name == "klipper":
-            await self.restart_service(name)
-        elif name == "moonraker":
+        name = web_request.get('service').lower()
+        if name == "moonraker":
             IOLoop.current().spawn_callback(self.restart_service, name)
+        elif name in ALLOWED_SERVICES:
+            await self.restart_service(name)
         else:
             raise self.server.error(
                 f"Invalid argument recevied for 'name': {name}")
