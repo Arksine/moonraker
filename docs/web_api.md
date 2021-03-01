@@ -14,10 +14,10 @@ Moonraker's API registration along with the desire to keep consistency
 between mulitple API protocols results in an HTTP API that does not
 completely adhere to the standard.
 
-Moonraker is capable of parsing request arguments from the body
-(either json or form-data depending on the `Content-Type` header) and from
+Moonraker is capable of parsing request arguments from the both the body
+(either JSON or form-data depending on the `Content-Type` header) and from
 the query string.  All arguments are grouped together in one data structure,
-with body arguments taking precedence over query query arguments.  Thus
+with body arguments taking precedence over query arguments.  Thus
 if the same argument is supplied both in the body and in the
 query string the body argument would be used. It is left up to the client
 developer to decide exactly how they want to provide arguments, however
