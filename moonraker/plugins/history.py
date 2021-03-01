@@ -26,6 +26,8 @@ class History:
 
         self.server.register_endpoint(
             "/printer/jobs/list", ['GET'], self._handle_jobs_list)
+        self.server.register_endpoint(
+            "/printer/jobs/metadata", ['GET'], self._handle_job_metadata)
 
         self.database.register_local_namespace("history")
 
@@ -58,11 +60,39 @@ class History:
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
-    async def _handle_jobs_list(self, data):
-        jobs = []
+    async def _handle_jobs_list(self, web_request):
+        args = web_request.get_args()
+        if "id" in args:
+            if args['id'] not in self.jobs:
+                raise self.server.error(f"Invalid job id: {args['id']}")
+            return {args['id']: self.get_job(args['id']).get_stats()}
+
+        before = None if 'before' not in args else int(args['before'])
+        since = None if 'since' not in args else int(args['since'])
+
+        jobs = {}
         for id in list(self.jobs):
-            jobs.append(self.get_job(id).get_stats())
+            if before != None and before > self.get_job(id).get('end_time'):
+                continue
+            if since != None and since > self.get_job(id).get('start_time'):
+                continue
+            jobs[id] = self.get_job(id).get_stats()
         return jobs
+
+    async def _handle_job_metadata(self, web_request):
+        args = web_request.get_args()
+        if "id" not in args:
+            raise self.server.error("No ID supplied")
+        if args['id'] not in self.jobs:
+            raise self.server.error(f"Invalid job ID: {args['id']}")
+
+        try:
+            m = self.database.get_item("history","metadata.%s" % args['id'])
+        except:
+            raise self.server.error(
+                f"Metadata not saved for job ID: {args['id']}")
+
+        return m
 
     async def _status_update(self, data):
         if "print_stats" in data:
@@ -157,7 +187,7 @@ class PrinterJob:
         self.file_metadata = file_metadata
         self.update_from_ps(data)
         self._update_file_metadata(file_metadata)
-        
+
     def finish(self, status, print_stats):
         self.end_time = time.time()
         self.status = status
