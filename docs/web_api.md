@@ -2,36 +2,39 @@
 
 Most API methods are supported over both the Websocket and HTTP transports.
 File Transfer and "/access" requests are only available over HTTP. The
-Websocket is required to receive printer generated events such as gcode
+Websocket is required to receive server generated events such as gcode
 responses.  For information on how to set up the Websocket, please see the
 Appendix at the end of this document.
 
-Note that all HTTP responses are returned as a json encoded object in the form
-of:
+### HTTP API Overview
+
+Moonraker's HTTP API could best be described as "RESTish".  Attempts are
+made to conform to REST standards, however the dynamic nature of
+Moonraker's API registration along with the desire to keep consistency
+between mulitple API protocols results in an HTTP API that does not
+completely adhere to the standard.
+
+Moonraker is capable of parsing request arguments from the body
+(either json or form-data depending on the `Content-Type` header) and from
+the query string.  All arguments are grouped together in one data structure,
+with body arguments taking precedence over query query arguments.  Thus
+if the same argument is supplied both in the body and in the
+query string the body argument would be used. It is left up to the client
+developer to decide exactly how they want to provide arguments, however
+future API documention will make recommendations.  As of March 1st 2021
+this document exclusively illustrates arguments via the query string.
+
+All successful HTTP requests will return a json encoded object in the form of:
 
 `{result: <response data>}`
 
-Arguments sent via the HTTP APIs may either be included in the query string
-or as part of the request's body.  All of the examples in this document
-use the query string for arguments.
+Response data is generally an object itself, however for some requests this
+may simply be an "ok" string.
 
-Websocket requests are returned in JSON-RPC format:
-`{jsonrpc: "2.0", "result": <response data>, id: <request id>}`
+Should a request result in an error, a standard error code along with
+an error specific message is returned.
 
-HTML requests will recieve a 500 status code on error, accompanied by
-the specific error message.
-
-Websocket requests that result in an error will receive a properly formatted
-JSON-RPC response:
-`{jsonrpc: "2.0", "error": {code: <code>, message: <msg>}, id: <request_id>}`
-Note that under some circumstances it may not be possible for the server to
-return a request ID, such as an improperly formatted json request.
-
-The `test/client` folder includes a basic test interface with example usage for
-most of the requests below.  It also includes a basic JSON-RPC implementation
-that uses promises to return responses and errors (see json-rcp.js).
-
-### Query string type hints
+#### Query string type hints
 
 By default all arguments passed via the query string are represented as
 strings.  Most endpoint handlers know the data type for each of their
@@ -62,8 +65,54 @@ assing an object, `{foo: 21.5, bar: "hello"}` might look like:
 ?value:json=%7B%22foo%22%3A21.5%2C%22bar%22%3A%22hello%22%7D
 ```
 As you can see, a percent encoded json string is not human readable,
-thus it is recommended to only use json type hints when it is
-absolutely necessary to send an array or object as an argument.
+thus using this functionality should be seen as a "last resort."  If at
+all possible clients should attempt to put these arguments in the body
+of a request.
+
+### Websocket API Overview
+
+The Websocket API is based on JSON-RPC, an encoded request should look
+something like:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "API method",
+    "params": {"arg_one": 1, "arg_two": true},
+    "id": 354
+}
+```
+
+The `params` field may be left out if the API request takes no arguments.
+The `id` should be a unique integer value that has no chance of colliding
+with other JSON-RPC requests.  The `method` is the API method, as defined
+for each API in this document.
+
+A successful request will return a response like the following:
+```json
+{
+    "jsonrpc": "2.0",
+    "result": {"res_data": "success"},
+    "id": 354
+}
+```
+The `result` will generally contain an object, but as with the HTTP API in some
+cases it may simply return a string.  The `id` field will return an id that
+matches the one provided by the request.
+
+Requests that result in an error will receive a properly formatted
+JSON-RPC response:
+```json
+{
+    "jsonrpc": "2.0",
+    "error": {"code": 36000, "message": "Error Message"},
+    "id": 354
+}
+```
+Some errors may not return a request ID, such as an improperly formatted request.
+
+The `test/client` folder includes a basic test interface with example usage for
+most of the requests below.  It also includes a basic JSON-RPC implementation
+that uses promises to return responses and errors (see json-rcp.js).
 
 ## Printer Administration
 
