@@ -36,6 +36,7 @@ cleanup_legacy() {
 install_packages()
 {
     PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
+    PKGLIST="${PKGLIST} liblmdb0"
 
     # Update system package info
     report_status "Running apt-get update..."

@@ -7,6 +7,7 @@
 import os
 import mimetypes
 import logging
+import json
 import tornado
 from inspect import isclass
 from tornado.escape import url_unescape
@@ -25,6 +26,24 @@ RESERVED_ENDPOINTS = [
 
 EXCLUDED_ARGS = ["_", "token", "connection_id"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
+
+# Converts query string values with type hints
+def _convert_type(value, hint):
+    type_funcs = {
+        "int": int, "float": float,
+        "bool": lambda x: x.lower() == "true",
+        "json": json.loads}
+    if hint not in type_funcs:
+        logging.info(f"No conversion method for type hint {hint}")
+        return value
+    func = type_funcs[hint]
+    try:
+        converted = func(value)
+    except Exception:
+        logging.exception("Argument conversion error: Hint: "
+                          f"{hint}, Arg: {value}")
+        return value
+    return converted
 
 # Status objects require special parsing
 def _status_parser(request_handler):
@@ -50,7 +69,12 @@ def _default_parser(request_handler):
     for key in arg_list:
         if key in EXCLUDED_ARGS:
             continue
-        args[key] = request_handler.get_argument(key)
+        key_parts = key.rsplit(":", 1)
+        val = request_handler.get_argument(key)
+        if len(key_parts) == 1:
+            args[key] = val
+        else:
+            args[key_parts[0]] = _convert_type(val, key_parts[1])
     return args
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):

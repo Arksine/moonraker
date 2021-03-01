@@ -27,9 +27,43 @@ JSON-RPC response:
 Note that under some circumstances it may not be possible for the server to
 return a request ID, such as an improperly formatted json request.
 
-The `test\client` folder includes a basic test interface with example usage for
+The `test/client` folder includes a basic test interface with example usage for
 most of the requests below.  It also includes a basic JSON-RPC implementation
 that uses promises to return responses and errors (see json-rcp.js).
+
+### Query string type hints
+
+By default all arguments passed via the query string are represented as
+strings.  Most endpoint handlers know the data type for each of their
+arguments, thus they can perform conversion from a string type if necessary.
+However some endpoints accept arguments of a "generic" type, thus the
+client is responsible for specifying the type if "string" is not desirable.
+This is not a problem for websocket requests as the JSON parser can extract
+the appropriate type.  HTTP requests must provide "type hints" in these
+scenarios.  Moonraker supplies support for the following query string type hints:
+- int
+- bool
+- float
+- json
+The `json` type hint can be specified to pass an array or an object via
+the query string.  Remember to percent encode the json string so that
+the query string is correctly parsed.
+
+Type hints may be specified by post-fixing them to a key, with a ":"
+separating the key and the hint.  For example, lets assume that we
+have a request that takes `seconds` (integer) and `enabled` (boolean)
+arguments.  The query string with type hints might look like:
+```
+?seconds:int=120&enabled:bool=true
+```
+A query string that takes a `value` argument with which we want to
+assing an object, `{foo: 21.5, bar: "hello"}` might look like:
+```
+?value:json=%7B%22foo%22%3A21.5%2C%22bar%22%3A%22hello%22%7D
+```
+As you can see, a percent encoded json string is not human readable,
+thus it is recommended to only use json type hints when it is
+absolutely necessary to send an array or object as an argument.
 
 ## Printer Administration
 
@@ -856,8 +890,135 @@ only be used once, making them relatively for inclusion in the query string.
   to any API endpoint.  The query string should be added in the form of:
   `?token=randomly_generated_token`
 
+## Database APIs
+The following endpoints provide access to Moonraker's ldbm database.  The
+database is divided into "namespaces", each client may define its own
+namespace to store information.  From the client's point of view, a
+namespace is an "object".  Items in the database are accessed by providing
+a namespace and a key.  A key may be specifed as string, where a "." is a
+delimeter to access nested objects. Alternatively the key may be specified
+as an array of strings, where each string references a nested object.
+This is useful for scenarios where your namespace contain keys that include
+a "." character.
+
+Moonraker reserves "moonraker" and "gcode_metadata" namespaces.  Clients may
+read from these namespaces but they may not modify them.
+
+For example, assume the following object is stored in the "superclient"
+namespace:
+
+```json
+{
+    settings: {
+        console: {
+            enable_autocomple: True
+        }
+    }
+    theme: {
+        background_color: "black"
+    }
+}
+```
+One may access the "enable_autocomplete" field by supplying `superclient` as
+the "namespace" parameter and `settings.console.enable_autocomplete` or
+`["settings", "console", "enable_autocomplete"]` as the "key" parameter for
+the request.  The entire settings object could be accessed by providing
+`settings` or `["settings"]` as the key parameter.  The entire namespace
+may be read by omitting the "key" parameter, however as explained below it
+is not possible to modify a namespace without specifying a key.
+
+### List Namespaces
+Lists all available namespaces.
+
+- HTTP command:\
+  `GET /server/database/list`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "server.database.list", id: <request id>}`
+
+- Returns:\
+  An object containing an array of namespaces in the following format:
+  ```json
+  {
+      'namespaces': ["namespace1", "namespace2"...]
+  }
+  ```
+
+### Get Database Item
+Retreives an item from a specified namespace. The `key` parameter may be
+omitted, in which case an object representing the entire namespace will
+be returned in the `value` field.  If the `key` is provided and does not
+exist in the database an error will be returned.
+
+- HTTP command:\
+  `GET /server/database/item?namespace=my_namespace&key=item.location`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "server.database.get_item", params:
+   {namespace: "my_namespace", key: "item.location"}, id: <request id>}`
+
+
+
+- Returns:\
+  An object containing the following fields:
+  ```json
+  {
+      'namespace': "requested_namespace",
+      'key': "requested_key"
+      'value': <value at key>
+  }
+  ```
+
+### Add Database Item
+Inserts an item into the database.  If the namespace does not exist
+it will be created.  If the key specifies parent objects, all parents
+will be created if they do not exist.  If the key exists it will be
+overwritten with the provided `value`.  The key parameter must be provided,
+it is not possible to assign a value directly to a namespace.
+
+- HTTP command:\
+  `POST /server/database/item?namespace=my_namespace&key=item.location&value:int=100`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "server.database.post_item", params:
+   {namespace: "my_namespace", key: "item.location", value: 100},
+   id: <request id>}`
+
+- Returns:\
+  An object containing the following fields:
+  ```json
+  {
+      'namespace': "requested_namespace",
+      'key': "requested_key"
+      'value': <the value inserted>
+  }
+  ```
+
+### Delete Database Item
+Deletes an item from the database at the specified key. If the key does not
+exist in the database an error will be returned.  If the deleted item results
+in an empty namespace, the namespace will be removed from the database.
+
+- HTTP command:\
+  `DELETE /server/database/item?namespace=my_namespace&key=item.location`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "server.database.delete_item", params:
+   {namespace: "my_namespace", key: "item.location"}, id: <request id>}`
+
+
+- Returns:\
+  An object containing the following fields:
+  ```json
+  {
+      'namespace': "requested_namespace",
+      'key': "requested_key"
+      'value': <value at deleted key>
+  }
+  ```
+
 ## Update Manager APIs
-The following endpoints are availabe when the `[update_manager]` plugin has
+The following endpoints are available when the `[update_manager]` plugin has
 been configured:
 
 ### Get update status

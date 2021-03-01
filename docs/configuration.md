@@ -47,6 +47,12 @@ config_path:
 #   files to this directory.  Note that this may not be the system root
 #   (ie: "/") and moonraker must have read and write access permissions
 #   for this directory.
+database_path: ~/.moonraker_database
+#   The path to the folder that stores Moonraker's lmdb database files.
+#   It is NOT recommended to place this file in a location that is served by
+#   Moonraker (such as the "config_path" or the location where gcode
+#   files are stored).  If the folder does not exist an attempt will be made
+#   to create it.  The default is ~/.moonraker_database.
 temperature_store_size: 1200
 #   The maximum number of temperature values to store for each sensor. Note
 #   that this value also applies to the "target", "power", and "fan_speed"

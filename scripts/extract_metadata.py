@@ -15,6 +15,10 @@ import traceback
 import io
 from PIL import Image
 
+def log_to_stderr(msg):
+    sys.stderr.write(f"{msg}\n")
+    sys.stderr.flush()
+
 # regex helpers
 def _regex_find_floats(pattern, data, strict=False):
     # If strict is enabled, pattern requires a floating point
@@ -55,14 +59,13 @@ def _regex_find_first(pattern, data, cast=float):
 class BaseSlicer(object):
     def __init__(self, file_path):
         self.path = file_path
-        self.header_data = self.footer_data = self.log = None
+        self.header_data = self.footer_data = None
         self.layer_height = None
 
-    def set_data(self, header_data, footer_data, fsize, log):
+    def set_data(self, header_data, footer_data, fsize):
         self.header_data = header_data
         self.footer_data = footer_data
         self.size = fsize
-        self.log = log
 
     def _parse_min_float(self, pattern, data, strict=False):
         result = _regex_find_floats(pattern, data, strict)
@@ -209,12 +212,12 @@ class PrusaSlicer(BaseSlicer):
             info = _regex_find_ints(r".*", lines[0])
             data = "".join(lines[1:-1])
             if len(info) != 3:
-                self.log.append(
+                log_to_stderr(
                     f"MetadataError: Error parsing thumbnail"
                     f" header: {lines[0]}")
                 continue
             if len(data) != info[2]:
-                self.log.append(
+                log_to_stderr(
                     f"MetadataError: Thumbnail Size Mismatch: "
                     f"detected {info[2]}, actual {len(data)}")
                 continue
@@ -345,7 +348,7 @@ class Cura(PrusaSlicer):
                         'size': len(thumbSmall), 'data': thumbSmall
                     })
         except Exception as e:
-            self.log.append(str(e))
+            log_to_stderr(str(e))
             return None
         return thumbs
 
@@ -557,7 +560,7 @@ SUPPORTED_DATA = [
     'first_layer_bed_temp', 'first_layer_extr_temp',
     'gcode_start_byte', 'gcode_end_byte']
 
-def extract_metadata(file_path, log):
+def extract_metadata(file_path):
     metadata = {}
     slicers = [s(file_path) for s in SUPPORTED_SLICERS]
     header_data = footer_data = slicer = None
@@ -585,7 +588,7 @@ def extract_metadata(file_path, log):
             footer_data = header_data[remaining - READ_SIZE:] + f.read()
         else:
             footer_data = header_data
-        slicer.set_data(header_data, footer_data, size, log)
+        slicer.set_data(header_data, footer_data, size)
         for key in SUPPORTED_DATA:
             func = getattr(slicer, "parse_" + key)
             result = func()
@@ -595,18 +598,18 @@ def extract_metadata(file_path, log):
 
 def main(path, filename):
     file_path = os.path.join(path, filename)
-    log = []
     metadata = {}
     if not os.path.isfile(file_path):
-        log.append(f"File Not Found: {file_path}")
-    else:
-        try:
-            metadata = extract_metadata(file_path, log)
-        except Exception:
-            log.append(traceback.format_exc())
+        log_to_stderr(f"File Not Found: {file_path}")
+        sys.exit(-1)
+    try:
+        metadata = extract_metadata(file_path)
+    except Exception:
+        log_to_stderr(traceback.format_exc())
+        sys.exit(-1)
     fd = sys.stdout.fileno()
     data = json.dumps(
-        {'file': filename, 'log': log, 'metadata': metadata}).encode()
+        {'file': filename, 'metadata': metadata}).encode()
     while data:
         try:
             ret = os.write(fd, data)

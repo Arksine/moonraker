@@ -417,6 +417,7 @@ class GitUpdater:
         self.execute_cmd_with_response = umgr.execute_cmd_with_response
         self.notify_update_response = umgr.notify_update_response
         self.name = config.get_name().split()[-1]
+        self.owner = "?"
         self.repo_path = path
         if path is None:
             self.repo_path = config.get('path')
@@ -529,7 +530,7 @@ class GitUpdater:
     async def _check_version(self, need_fetch=True):
         self.is_valid = self.detached = False
         self.cur_hash = self.branch = self.remote = "?"
-        self.version = self.remote_version = "?"
+        self.version = self.remote_version = self.owner = "?"
         try:
             blist = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} branch --list")
@@ -577,11 +578,15 @@ class GitUpdater:
             self._log_exc("Error retreiving git info")
             return
 
+        remote_url = remote_url.strip()
+        owner_match = re.match(r"https?://.*/(.*)/", remote_url)
+        if owner_match is not None:
+            self.owner = owner_match.group(1)
         self.is_dirty = repo_version.endswith("dirty")
         versions = []
         for ver in [repo_version, remote_version]:
             tag_version = "?"
-            ver_match = re.match(r"v\d+\.\d+\.\d-\d+", ver)
+            ver_match = re.match(r"v\d+\.\d+\.\d-\d+", ver.strip())
             if ver_match:
                 tag_version = ver_match.group()
             versions.append(tag_version)
@@ -758,6 +763,7 @@ class GitUpdater:
         return {
             'remote_alias': self.remote,
             'branch': self.branch,
+            'owner': self.owner,
             'version': self.version,
             'remote_version': self.remote_version,
             'current_hash': self.cur_hash,
@@ -841,7 +847,7 @@ class WebUpdater:
         self.server = umgr.server
         self.notify_update_response = umgr.notify_update_response
         self.repo = config.get('repo').strip().strip("/")
-        self.name = self.repo.split("/")[-1]
+        self.owner, self.name = self.repo.split("/", 1)
         if hasattr(config, "get_name"):
             self.name = config.get_name().split()[-1]
         self.path = os.path.realpath(os.path.expanduser(
@@ -964,6 +970,7 @@ class WebUpdater:
     def get_update_status(self):
         return {
             'name': self.name,
+            'owner': self.owner,
             'version': self.version,
             'remote_version': self.remote_version
         }
