@@ -157,7 +157,7 @@ class FileManager:
 
     async def _handle_filelist_request(self, web_request):
         root = web_request.get_str('root', "gcodes")
-        return self.get_file_list(root, list_format=True, notify=True)
+        return self.get_file_list(root, list_format=True)
 
     async def _handle_metadata_request(self, web_request):
         requested_file = web_request.get_str('filename')
@@ -170,7 +170,7 @@ class FileManager:
 
     async def _handle_directory_request(self, web_request):
         directory = web_request.get_str('path', "gcodes")
-        root, rel_path, dir_path = self._convert_path(directory)
+        root, dir_path = self._convert_request_path(directory)
         action = web_request.get_action()
         if action == 'GET':
             is_extended = web_request.get_boolean('extended', False)
@@ -183,7 +183,6 @@ class FileManager:
                 os.mkdir(dir_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            self.notify_filelist_changed("create_dir", rel_path, root)
         elif action == 'DELETE' and root in FULL_ACCESS_ROOTS:
             # Remove a directory
             if directory.strip("/") == root:
@@ -203,7 +202,6 @@ class FileManager:
                     os.rmdir(dir_path)
                 except Exception as e:
                     raise self.server.error(str(e))
-            self.notify_filelist_changed("delete_dir", rel_path, root)
         else:
             raise self.server.error("Operation Not Supported", 405)
         return "ok"
@@ -227,20 +225,18 @@ class FileManager:
         ongoing = state in ["printing", "paused"]
         return ongoing
 
-    def _convert_path(self, request_path):
+    def _convert_request_path(self, request_path):
         # Parse the root, relative path, and disk path from a remote request
-        parts = request_path.strip("/").split("/")
+        parts = request_path.strip("/").split("/", 1)
         if not parts:
             raise self.server.error(f"Invalid path: {request_path}")
         root = parts[0]
         if root not in self.file_paths:
             raise self.server.error(f"Invalid root path ({root})")
         disk_path = self.file_paths[root]
-        rel_path = ""
         if len(parts) > 1:
-            rel_path = "/".join(parts[1:])
-            disk_path = os.path.join(disk_path, rel_path)
-        return root, rel_path, disk_path
+            disk_path = os.path.join(disk_path, parts[1])
+        return root, disk_path
 
     async def _handle_file_move_copy(self, web_request):
         source = web_request.get_str("source")
@@ -251,8 +247,8 @@ class FileManager:
         if destination is None:
             raise self.server.error(
                 "File move/copy request missing destination")
-        source_root, src_rel_path, source_path = self._convert_path(source)
-        dest_root, dst_rel_path, dest_path = self._convert_path(destination)
+        source_root, source_path = self._convert_request_path(source)
+        dest_root, dest_path = self._convert_request_path(destination)
         if dest_root not in FULL_ACCESS_ROOTS:
             raise self.server.error(
                 f"Destination path is read-only: {dest_root}")
@@ -261,7 +257,6 @@ class FileManager:
         # make sure the destination is not in use
         if os.path.exists(dest_path):
             await self._handle_operation_check(dest_path)
-        action = op_result = ""
         if ep == "/server/files/move":
             if source_root not in FULL_ACCESS_ROOTS:
                 raise self.server.error(
@@ -269,30 +264,17 @@ class FileManager:
             # if moving the file, make sure the source is not in use
             await self._handle_operation_check(source_path)
             try:
-                op_result = shutil.move(source_path, dest_path)
+                shutil.move(source_path, dest_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            if source_root == "gcodes":
-                if os.path.isdir(op_result):
-                    self.gcode_metadata.prune_metadata()
-                else:
-                    self.gcode_metadata.remove_file(src_rel_path)
-            action = "move_item"
         elif ep == "/server/files/copy":
             try:
                 if os.path.isdir(source_path):
-                    op_result = shutil.copytree(source_path, dest_path)
+                    shutil.copytree(source_path, dest_path)
                 else:
-                    op_result = shutil.copy2(source_path, dest_path)
+                    shutil.copy2(source_path, dest_path)
             except Exception as e:
                 raise self.server.error(str(e))
-            action = "copy_item"
-        if op_result != dest_path:
-            dst_rel_path = os.path.join(
-                dst_rel_path, os.path.basename(op_result))
-        self.notify_filelist_changed(
-            action, dst_rel_path, dest_root,
-            {'path': src_rel_path, 'root': source_root})
         return "ok"
 
     def _list_directory(self, path, is_extended=False):
@@ -441,8 +423,6 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        self.notify_filelist_changed(
-            'upload_file', upload_info['filename'], "gcodes")
         return {
             'result': upload_info['filename'],
             'print_started': start_print
@@ -453,8 +433,6 @@ class FileManager:
         with ThreadPoolExecutor(max_workers=1) as tpe:
             await ioloop.run_in_executor(
                 tpe, self._process_uploaded_file, upload_info)
-        self.notify_filelist_changed(
-            'upload_file', upload_info['filename'], upload_info['root'])
         return {'result': upload_info['filename']}
 
     def _process_uploaded_file(self, upload_info):
@@ -503,7 +481,7 @@ class FileManager:
         self._unzip_ufp(ufp_path, dest_path)
         return dest_path
 
-    def get_file_list(self, root, list_format=False, notify=False):
+    def get_file_list(self, root, list_format=False):
         # Use os.walk find files in sd path and subdirs
         filelist = {}
         path = self.file_paths.get(root, None)
@@ -546,7 +524,7 @@ class FileManager:
                 filelist[fname] = finfo
                 if root == 'gcodes':
                     self.gcode_metadata.parse_metadata(
-                        fname, finfo['size'], finfo['modified'], notify)
+                        fname, finfo['size'], finfo['modified'])
         if list_format:
             flist = []
             for fname in sorted(filelist, key=str.lower):
@@ -622,17 +600,7 @@ class FileManager:
                 if e.status_code == 403:
                     raise
         os.remove(full_path)
-        self.notify_filelist_changed('delete_file', filename, root)
         return filename
-
-    def notify_filelist_changed(self, action, fname, root, source_item={}):
-        flist = self.get_file_list(root, notify=True)
-        file_info = flist.get(fname, {'size': 0, 'modified': 0})
-        file_info.update({'path': fname, 'root': root})
-        result = {'action': action, 'item': file_info}
-        if source_item:
-            result.update({'source_item': source_item})
-        self.server.send_event("file_manager:filelist_changed", result)
 
     def close(self):
         self.inotify_handler.close()
