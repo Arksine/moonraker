@@ -215,6 +215,15 @@ output_id:
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
 #   more than one (default is 0).
+address:
+user:
+password:
+device_name:
+#   The above options are used for "Indigo" Insteon/x10 controllers.  The
+#   address should be a valid ip or hostname for the Indigo server.
+#   Provide the username/password configured in Indigo.
+#   device_name is the Indigo device; for devices with a space in their name,
+#   ie "Office Printer", use %20 "Office%20Printer".
 
 
 ```
@@ -252,6 +261,13 @@ type: shelly
 address: 192.168.1.125
 user: user2
 password: password2
+
+[power insteon_plug]
+type: indigo
+address: 192.168.1.125
+user: username
+password: password
+device_name: Office%20Printer
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
