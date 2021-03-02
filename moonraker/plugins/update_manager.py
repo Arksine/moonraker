@@ -420,7 +420,7 @@ class GitUpdater:
         self.owner = "?"
         self.repo_path = path
         if path is None:
-            self.repo_path = config.get('path')
+            self.repo_path = os.path.expanduser(config.get('path'))
         self.env = config.get("env", env)
         dist_packages = None
         if self.env is not None:
