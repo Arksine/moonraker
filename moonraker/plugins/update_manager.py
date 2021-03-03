@@ -937,6 +937,8 @@ class WebUpdater:
         if self.version == self.remote_version:
             # Already up to date
             return
+        self.notify_update_response(f"Downloading Client: {self.name}")
+        archive = await self.umgr.http_download_request(self.dl_url)
         with tempfile.TemporaryDirectory(
                 suffix=self.name, prefix="client") as tempdir:
             if os.path.isdir(self.path):
@@ -949,8 +951,6 @@ class WebUpdater:
                         shutil.move(src_path, dest_dir)
                 shutil.rmtree(self.path)
             os.mkdir(self.path)
-            self.notify_update_response(f"Downloading Client: {self.name}")
-            archive = await self.umgr.http_download_request(self.dl_url)
             with zipfile.ZipFile(io.BytesIO(archive)) as zf:
                 zf.extractall(self.path)
             # Move temporary files back into
