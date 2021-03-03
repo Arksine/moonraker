@@ -106,7 +106,7 @@ class ShellCommand:
             complete = not self.cancelled
         return self._check_proc_success(complete)
 
-    async def run_with_response(self, timeout=2., retries=1):
+    async def run_with_response(self, timeout=2., retries=1, quiet=False):
         self.return_code = self.proc = None
         self.cancelled = False
         while retries > 0:
@@ -123,7 +123,7 @@ class ShellCommand:
                     complete = not self.cancelled
                     if self.log_stderr:
                         logging.info(f"{self.program}: {stderr.decode()}")
-                if self._check_proc_success(complete):
+                if self._check_proc_success(complete, quiet):
                     return stdout.decode().rstrip("\n")
                 elif stdout:
                     logging.debug(
@@ -154,7 +154,7 @@ class ShellCommand:
             return False
         return True
 
-    def _check_proc_success(self, complete):
+    def _check_proc_success(self, complete, quiet=False):
         self.return_code = self.proc.returncode
         success = self.return_code == 0 and complete
         if success:
@@ -166,7 +166,8 @@ class ShellCommand:
         else:
             msg = f"Command ({self.name}) exited with return code" \
                 f" {self.return_code}"
-        logging.info(msg)
+        if not quiet:
+            logging.info(msg)
         return success
 
 class ShellCommandFactory:
