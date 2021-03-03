@@ -107,6 +107,8 @@ class ShellCommand:
         return self._check_proc_success(complete)
 
     async def run_with_response(self, timeout=2., retries=1):
+        self.return_code = self.proc = None
+        self.cancelled = False
         while retries > 0:
             stdout = stderr = None
             if await self._create_subprocess():
