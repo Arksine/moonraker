@@ -107,8 +107,7 @@ class MoonrakerDatabase:
                 item = reduce(operator.getitem, key_list[1:-1], record)
             except Exception:
                 raise self.server.error(
-                    f"Error updating value at key '{key}' "
-                    f"in namespace '{namespace}'. Key doesn't exist.")
+                    f"Key '{key}' in namespace '{namespace}' not found", 404)
             if isinstance(item[key_list[-1]], dict) \
                     and isinstance(value, dict):
                 item[key_list[-1]].update(value)
@@ -128,7 +127,7 @@ class MoonrakerDatabase:
                 val = item.pop(key_list[-1])
             except Exception:
                 raise self.server.error(
-                    f"Error deleting key '{key}' in namespace '{namespace}'")
+                    f"Key '{key}' in namespace '{namespace}' not found", 404)
             remove_record = False if record else True
         if remove_record:
             db = self.namespaces[namespace]
@@ -156,8 +155,7 @@ class MoonrakerDatabase:
             if default != Sentinel:
                 return default
             raise self.server.error(
-                f"Invalid database key, namespace: '{namespace}', "
-                f"key: {key}")
+                f"Key '{key}' in namespace '{namespace}' not found", 404)
         return val
 
     def ns_length(self, namespace):
@@ -202,7 +200,7 @@ class MoonrakerDatabase:
     def wrap_namespace(self, namespace, parse_keys=True):
         if namespace not in self.namespaces:
             raise self.server.error(
-                f"Invalid database namespace '{namespace}'")
+                f"Namespace '{namespace}' not found", 404)
         self.protected_namespaces.add(namespace)
         return NamespaceWrapper(namespace, self, parse_keys)
 
@@ -212,7 +210,7 @@ class MoonrakerDatabase:
         except Exception:
             key_list = []
         if not key_list or "" in key_list:
-            raise self.server.error(f"Key '{key}' is invalid")
+            raise self.server.error(f"Invalid Key Format: '{key}'")
         return key_list
 
     def _insert_record(self, namespace, key, val):
@@ -224,7 +222,7 @@ class MoonrakerDatabase:
     def _get_record(self, namespace, key, force=False):
         if namespace not in self.namespaces:
             raise self.server.error(
-                f"Invalid database namespace '{namespace}'")
+                f"Namespace '{namespace}' not found", 404)
         db = self.namespaces[namespace]
         with self.lmdb_env.begin(buffers=True, db=db) as txn:
             value = txn.get(key.encode())
@@ -232,7 +230,7 @@ class MoonrakerDatabase:
                 if force:
                     return {}
                 raise self.server.error(
-                    f"Invalid key '{key}' in namespace '{namespace}'")
+                    f"Key '{key}' in namespace '{namespace}' not found", 404)
             return self._decode_value(value)
 
     def _get_namespace(self, namespace):

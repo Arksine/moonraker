@@ -293,7 +293,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
 
     def parse_args(self):
         args = self._parse_query()
-        if self.request.headers.get('Content-Type', "") == "application/json":
+        content_type = self.request.headers.get('Content-Type', "").strip()
+        if content_type.startswith("application/json"):
             try:
                 args.update(json.loads(self.request.body))
             except json.JSONDecodeError:
