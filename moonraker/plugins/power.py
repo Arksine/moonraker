@@ -544,7 +544,10 @@ class Indigo(PowerDevice):
                 url = f"http://{self.addr}/{out_cmd}"
                 info_cmd = f"devices/{self.output_name}.json"
                 info_url = f"http://{self.addr}/{info_cmd}"
-                requests.put(url, auth=HTTPDigestAuth(self.user, self.password))
+                requests.put( \
+                    url, \
+                    timeout=5, \
+                    auth=HTTPDigestAuth(self.user, self.password))
                 response = await http_client.fetch( \
                     info_url, \
                     auth_mode='digest', \
@@ -561,7 +564,10 @@ class Indigo(PowerDevice):
                 url = f"http://{self.addr}/{out_cmd}"
                 info_cmd = f"devices/{self.output_name}.json"
                 info_url = f"http://{self.addr}/{info_cmd}"
-                requests.put(url, auth=HTTPDigestAuth(self.user, self.password))
+                requests.put( \
+                    url, \
+                    timeout=5, \
+                    auth=HTTPDigestAuth(self.user, self.password))
                 response = await http_client.fetch( \
                     info_url, \
                     auth_mode='digest', \
