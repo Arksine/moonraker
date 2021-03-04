@@ -538,7 +538,7 @@ The `type` field will either be "command" or "response".
 
 ### Restart a system service
 Restarts a system service via `sudo systemctl restart <name>`. Currently
-only `moonraker` and `klipper` are allowed.
+only `moonraker`, `klipper`, and `webcamd` are allowed.
 
 - HTTP command:\
   `POST /machine/services/restart?service=<service_name>`
@@ -550,6 +550,91 @@ only `moonraker` and `klipper` are allowed.
 - Returns:\
   `ok` when complete.  Note that if `moonraker` is chosen, the return
   value will be sent prior to the restart.
+
+### Stop a system service
+Stops a system service via `sudo systemctl stop <name>`. Currently
+only `webcamd` and `klipper` are allowed.
+
+- HTTP command:\
+  `POST /machine/services/stop?service=<service_name>`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.services.stop",
+  params: {service: "service name"}, id: <request id>}`
+
+- Returns:\
+  `ok` when complete
+
+### Start a system service
+Starts a system service via `sudo systemctl start <name>`. Currently
+only `webcamd` and `klipper` are allowed.
+
+- HTTP command:\
+  `POST /machine/services/start?service=<service_name>`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.services.start",
+  params: {service: "service name"}, id: <request id>}`
+
+- Returns:\
+  `ok` when complete
+
+### Get Process Info
+Returns system usage information about the moonraker process.
+
+- HTTP command:\
+  `GET /machine/proc_info`
+
+- Websocket command:\
+  `{jsonrpc: "2.0", method: "machine.proc_info", id: <request id>}`
+
+- Returns:\
+  An object in the following format:
+  ```json
+  {
+      proc_info: [
+          {
+              time: <system time of sample>,
+              cpu_usage: <usage percent>,
+              memory: <memory_used>,
+              mem_units: "<kB, mB, etc>"
+          },
+          ...
+      ],
+      throttled_state: {
+          bits: <throttled bits>,
+          flags: ["flag1", "flag2", ...]
+      }
+  }
+  ```
+  Process information is sampled every second.  The `proc_info` field
+  will return up to 30 samples, each sample with the following fields:
+  - `time`: Time of the sample (in seconds since the Epoch)
+  - `cpu_usage`: A floating point value between 0-100, representing the
+    CPU usage of the Moonraker process.
+  - `memory`: Integer value representing the current amount of memory
+    allocated in RAM (resident set size).
+  - `mem_units`: A string indentifying the units of the value in the
+    `memory` field.  This is typically "kB", but not guaranteed.
+  If the system running Moonraker supports `vcgencmd` then Moonraker
+  will check the current throttled flags via `vcgencmd get_throttled`
+  and report them in the `throttled_state` field:
+  - `bits`: An integer value that represents the bits reported by
+    `vcgencmd get_throttled`
+  - `flags`: Descriptive flags parsed out of the bits.  One or more
+    of the following flags may be reported:
+    - "Under-Voltage Detected"
+    - "Frequency Capped"
+    - "Currently Throttled"
+    - "Temperature Limit Active"
+    - "Previously Under-Volted"
+    - "Previously Frequency Capped"
+    - "Previously Throttled"
+    - "Previously Temperature Limited"
+  The first four flags indicate an active throttling condition,
+  whereas the last four indicate a previous condition (may or
+  may not still be active).  If `vcgencmd` is not available the
+  `throttled_state` will report `null`.
 
 ## File Operations
 
@@ -1489,6 +1574,17 @@ notification is broadcast:
 
 Where `update_info` is an object that matches the response from an
 [update status](#get-update-status) request.
+
+### CPU Throttled
+If the system supports throttled CPU monitoring Moonraker will send the
+following notification when it detectes an active throttled condition.
+
+`{jsonrpc: "2.0", method: "notify_cpu_throttled", params: [throttled_state]}`
+
+Where `throtled_state` is an object that matches the `throttled_state` in the
+response from a [process info](#get-process-info) request.  It is possible
+for clients to receive this notification multiple times if the system
+repeatedly transitions between an active and inactive throttled condition.
 
 # Appendix
 
