@@ -11,12 +11,12 @@ import json
 import struct
 import socket
 import gpiod
-import requests
-from requests.auth import HTTPDigestAuth
+
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
 from tornado import gen
 from tornado.httpclient import AsyncHTTPClient
+from tornado.httpclient import HTTPClientError
 from tornado.curl_httpclient import CurlAsyncHTTPClient
 from tornado.escape import json_decode
 
@@ -540,18 +540,22 @@ class Indigo(PowerDevice):
         http_client = CurlAsyncHTTPClient()
         if command == "on":
             try:
-                out_cmd = f"devices/{self.output_name}?isOn=true"
-                url = f"http://{self.addr}/{out_cmd}"
-                info_cmd = f"devices/{self.output_name}.json"
-                info_url = f"http://{self.addr}/{info_cmd}"
-                requests.put( \
-                    url, \
-                    timeout=5, \
-                    auth=HTTPDigestAuth(self.user, self.password))
-                response = await http_client.fetch( \
-                    info_url, \
-                    auth_mode='digest', \
-                    auth_username=self.user, \
+                try:
+                    await http_client.fetch(
+                        f"{self.addr}/devices/{self.output_name}?isOn=true",
+                        method='PUT',
+                        auth_mode='digest',
+                        auth_username=self.user,
+                        auth_password=self.password,
+                        body="",
+                        follow_redirects=0)
+                except HTTPClientError:
+                    # We expect an HTTPError due to 303 redirect
+                    pass
+                response = await http_client.fetch(
+                    f"{self.addr}/devices/{self.output_name}.json",
+                    auth_mode='digest',
+                    auth_username=self.user,
                     auth_password=self.password)
                 data = json_decode(response.body)
             except Exception:
@@ -560,18 +564,22 @@ class Indigo(PowerDevice):
                 raise self.server.error(msg)
         elif command == "off":
             try:
-                out_cmd = f"devices/{self.output_name}?isOn=false"
-                url = f"http://{self.addr}/{out_cmd}"
-                info_cmd = f"devices/{self.output_name}.json"
-                info_url = f"http://{self.addr}/{info_cmd}"
-                requests.put( \
-                    url, \
-                    timeout=5, \
-                    auth=HTTPDigestAuth(self.user, self.password))
+                try:
+                    await http_client.fetch(
+                        f"{self.addr}/devices/{self.output_name}?isOn=false",
+                        method='PUT',
+                        auth_mode='digest',
+                        auth_username=self.user,
+                        auth_password=self.password,
+                        body="",
+                        follow_redirects=0)
+                except HTTPClientError:
+                    # We expect an HTTPError due to 303 redirect
+                    pass
                 response = await http_client.fetch( \
-                    info_url, \
-                    auth_mode='digest', \
-                    auth_username=self.user, \
+                    f"{self.addr}/devices/{self.output_name}.json",
+                    auth_mode='digest',
+                    auth_username=self.user,
                     auth_password=self.password)
                 data = json_decode(response.body)
             except Exception:
@@ -579,13 +587,11 @@ class Indigo(PowerDevice):
                 logging.exception(msg)
                 raise self.server.error(msg)
         elif command == "info":
-            info_cmd = f"devices/{self.output_name}.json"
-            info_url = f"http://{self.addr}/{info_cmd}"
             try:
-                response = await http_client.fetch( \
-                    info_url, \
-                    auth_mode='digest', \
-                    auth_username=self.user, \
+                response = await http_client.fetch(
+                    f"{self.addr}/devices/{self.output_name}.json",
+                    auth_mode='digest',
+                    auth_username=self.user,
                     auth_password=self.password)
                 data = json_decode(response.body)
             except Exception:
