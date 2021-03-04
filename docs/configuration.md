@@ -95,6 +95,17 @@ cors_domains:
 The sections outlined here are optional and enable additional
 functionality in moonraker.
 
+## Octoprint compatibility
+Enables partial support of Octoprint API is implemented with the purpose of
+allowing uploading of sliced prints to a mainsail instance.
+Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
+
+```
+# moonraker.conf
+
+[octoprint_compat]
+```
+
 ## paneldue
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL

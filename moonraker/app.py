@@ -169,14 +169,6 @@ class MoonrakerApp:
             params['is_remote'] = False
             self.mutable_router.add_handler(uri, DynamicRequestHandler, params)
             self.registered_base_handlers.append(uri)
-        if "http_octo" in protocol:
-            msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
-            params = {}
-            params['methods'] = request_methods
-            params['arg_parser'] = api_def.parser
-            params['callback'] = callback
-            self.mutable_router.add_handler(uri, LocalOctoRequestHandler, params)
-            self.registered_base_handlers.append(uri)
         if "websocket" in protocol:
             msg += f" - Websocket: {', '.join(api_def.ws_methods)}"
             self.wsm.register_local_handler(api_def, callback)
@@ -342,20 +334,6 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         if self.wrap_result:
             result = {'result': result}
         self.finish(result)
-
-class LocalOctoRequestHandler(LocalRequestHandler):
-    async def _process_http_request(self, method):
-        try:
-            args = json.loads(self.request.body)
-        except json.decoder.JSONDecodeError:
-            args = {}
-        try:
-            result = await self.callback(args)
-        except ServerError as e:
-            raise tornado.web.HTTPError(
-                e.status_code, str(e)) from e
-        self.finish(result)
-
 
 class FileRequestHandler(AuthorizedFileHandler):
     def set_extra_headers(self, path):

@@ -25,6 +25,7 @@ class OctoprintCompat:
 
     def __init__(self, config):
         self.server = config.get_server()
+        self.software_version = config['system_args'].get('software_version')
 
         # Local variables
         self.klippy_apis = None
@@ -36,20 +37,18 @@ class OctoprintCompat:
 
         # Version & Server information
         self.server.register_endpoint(
-            '/api/version', ['GET'], self._get_version, protocol=['http_octo'])
+            '/api/version', ['GET'], self._get_version, wrap_result=False)
         self.server.register_endpoint(
-            '/api/server', ['GET'], self._get_server, protocol=['http_octo'])
+            '/api/server', ['GET'], self._get_server, wrap_result=False)
 
         # Login, User & Settings
         self.server.register_endpoint(
-            '/api/login', ['POST'], self._post_login_user,
-            protocol=['http_octo'])
+            '/api/login', ['POST'], self._post_login_user, wrap_result=False)
         self.server.register_endpoint(
             '/api/currentuser', ['GET'], self._post_login_user,
-            protocol=['http_octo'])
+            wrap_result=False)
         self.server.register_endpoint(
-            '/api/settings', ['GET'], self._get_settings,
-            protocol=['http_octo'])
+            '/api/settings', ['GET'], self._get_settings, wrap_result=False)
 
         # File operations
         # Note that file upload is handled in file_manager.py
@@ -57,21 +56,21 @@ class OctoprintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', ['GET'], self._get_job, protocol=['http_octo'])
+            '/api/job', ['GET'], self._get_job, wrap_result=False)
         # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
-            '/api/printer', ['GET'], self._get_printer, protocol=['http_octo'])
+            '/api/printer', ['GET'], self._get_printer, wrap_result=False)
         self.server.register_endpoint(
             '/api/printer/command', ['POST'], self._post_command,
-            protocol=['http_octo'])
+            wrap_result=False)
         # TODO: head/tool/bed/chamber specific read/issue
 
         # Printer profiles
         self.server.register_endpoint(
             '/api/printerprofiles', ['GET'], self._get_printerprofiles,
-            protocol=['http_octo'])
+            wrap_result=False)
 
         # System
         # TODO: shutdown/reboot/restart operations
@@ -123,18 +122,17 @@ class OctoprintCompat:
                 }
         return temps
 
-    async def _get_version(self, args):
+    async def _get_version(self, web_request):
         """
         Version information
         """
-        ver = utils.get_software_version()
         return {
             'server': OCTO_VERSION,
             'api': '0.1',
-            'text': f'OctoPrint (Moonraker {ver})',
+            'text': f'OctoPrint (Moonraker {self.software_version})',
         }
 
-    async def _get_server(self, args):
+    async def _get_server(self, web_request):
         """
         Server status
         """
@@ -144,7 +142,7 @@ class OctoprintCompat:
                 None if self.server.klippy_state == 'ready' else 'settings')
         }
 
-    async def _post_login_user(self, args):
+    async def _post_login_user(self, web_request):
         """
         Confirm session login.
 
@@ -163,7 +161,7 @@ class OctoprintCompat:
             'groups': ['admins', 'users'],
         }
 
-    async def _get_settings(self, args):
+    async def _get_settings(self, web_request):
         """
         Used to parse Octoprint capabilities
 
@@ -198,7 +196,7 @@ class OctoprintCompat:
             },
         }
 
-    async def _get_job(self, args):
+    async def _get_job(self, web_request):
         """
         Get current job status
         """
@@ -219,7 +217,7 @@ class OctoprintCompat:
             'state': await self.printer_state()
         }
 
-    async def _get_printer(self, args):
+    async def _get_printer(self, web_request):
         """
         Get Printer status
         """
@@ -241,11 +239,11 @@ class OctoprintCompat:
             },
         }
 
-    async def _post_command(self, args):
+    async def _post_command(self, web_request):
         """
         Request to run some gcode command
         """
-        commands = args.get('commands', [])
+        commands = web_request.get('commands', [])
         for command in commands:
             logging.info(f'Executing GCode: {command}')
             try:
@@ -256,7 +254,7 @@ class OctoprintCompat:
 
         return {}
 
-    async def _get_printerprofiles(self, args):
+    async def _get_printerprofiles(self, web_request):
         """
         Get Printer profiles
         """
