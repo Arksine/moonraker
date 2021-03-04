@@ -348,7 +348,9 @@ updating.
 [update_manager client service_name]
 type: git_repo
 path:
-#   The path to the client's files on disk.  This parameter must be provided.
+#   The absolute path to the client's files on disk. This parameter must be provided.
+#   Example:
+#     path: ~/service_name
 origin:
 #   The full GitHub URL of the "origin" remote for the repository.  This can
 #   be be viewed by navigating to your repository and running:
