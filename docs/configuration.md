@@ -264,7 +264,7 @@ password: password2
 
 [power insteon_plug]
 type: indigo
-address: 192.168.1.125
+address: 192.168.1.126:8176
 user: username
 password: password
 device_name: Office%20Printer
