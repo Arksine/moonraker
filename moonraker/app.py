@@ -16,6 +16,8 @@ from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from authorization import Authorization
+from streaming_form_data import StreamingFormDataParser
+from streaming_form_data.targets import FileTarget, ValueTarget
 
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
@@ -24,6 +26,8 @@ RESERVED_ENDPOINTS = [
     "register_remote_method"
 ]
 
+# 50 MiB Max Standard Body Size
+MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "connection_id"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 
@@ -76,7 +80,7 @@ class MoonrakerApp:
         self.tornado_server = None
         self.api_cache = {}
         self.registered_base_handlers = []
-        self.max_upload_size = config.getint('max_upload_size', 200)
+        self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
 
         # Set Up Websocket and Authorization Managers
@@ -113,7 +117,7 @@ class MoonrakerApp:
 
     def listen(self, host, port):
         self.tornado_server = self.app.listen(
-            port, address=host, max_body_size=self.max_upload_size,
+            port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
 
     def get_server(self):
@@ -191,7 +195,9 @@ class MoonrakerApp:
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
-        self.mutable_router.add_handler(pattern, FileUploadHandler, {})
+        self.mutable_router.add_handler(
+            pattern, FileUploadHandler,
+            {'max_upload_size': self.max_upload_size})
 
     def remove_handler(self, endpoint):
         api_def = self.api_cache.get(endpoint)
@@ -358,11 +364,45 @@ class FileRequestHandler(AuthorizedFileHandler):
                 raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
 
+@tornado.web.stream_request_body
 class FileUploadHandler(AuthorizedRequestHandler):
+    def initialize(self, max_upload_size):
+        super(FileUploadHandler, self).initialize()
+        self.file_manager = self.server.lookup_plugin('file_manager')
+        self.max_upload_size = max_upload_size
+
+    def prepare(self):
+        if self.request.method == "POST":
+            self.request.connection.set_max_body_size(self.max_upload_size)
+            tmpname = self.file_manager.gen_temp_upload_path()
+            self._targets = {
+                'root': ValueTarget(),
+                'print': ValueTarget(),
+                'path': ValueTarget(),
+            }
+            self._file = FileTarget(tmpname)
+            self._parser = StreamingFormDataParser(self.request.headers)
+            self._parser.register('file', self._file)
+            for name, target in self._targets.items():
+                self._parser.register(name, target)
+
+    def data_received(self, chunk):
+        if self.request.method == "POST":
+            self._parser.data_received(chunk)
+
     async def post(self):
-        file_manager = self.server.lookup_plugin('file_manager')
+        form_args = {}
+        for name, target in self._targets.items():
+            if target.value:
+                form_args[name] = target.value.decode()
+        form_args['filename'] = self._file.multipart_filename
+        form_args['tmp_file_path'] = self._file.filename
+        debug_msg = "\nFile Upload Arguments:"
+        for name, value in form_args.items():
+            debug_msg += f"\n{name}: {value}"
+        logging.debug(debug_msg)
         try:
-            result = await file_manager.process_file_upload(self.request)
+            result = await self.file_manager.finalize_upload(form_args)
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
