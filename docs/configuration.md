@@ -35,8 +35,8 @@ port: 7125
 klippy_uds_address: /tmp/klippy_uds
 #   The address of Unix Domain Socket used to communicate with Klippy. Default
 #   is /tmp/klippy_uds
-max_upload_size: 200
-#   The maximum size allowed for a file upload.  Default is 200 MiB.
+max_upload_size: 1024
+#   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
 enable_debug_logging: True
 #   When set to True Moonraker will log in verbose mode.  During this stage
 #   of development the default is True.  In the future this will change.
