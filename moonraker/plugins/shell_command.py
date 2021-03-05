@@ -121,7 +121,7 @@ class ShellCommand:
                     self.proc.terminate()
                 else:
                     complete = not self.cancelled
-                    if self.log_stderr:
+                    if self.log_stderr and stderr:
                         logging.info(f"{self.program}: {stderr.decode()}")
                 if self._check_proc_success(complete, quiet):
                     return stdout.decode().rstrip("\n")
