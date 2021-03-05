@@ -97,7 +97,7 @@ functionality in moonraker.
 
 ## Octoprint compatibility
 Enables partial support of Octoprint API is implemented with the purpose of
-allowing uploading of sliced prints to a mainsail instance.
+allowing uploading of sliced prints to a moonraker instance.
 Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 
 ```
