@@ -1284,6 +1284,58 @@ The APIs below are available when the `[power]` plugin has been configured.
   }
   ```
 
+## History APIs
+The APIs below are avilable when the `[history]` plugin has been configured.
+
+### Get job list
+- HTTP command:\
+  `GET /printer/histor/list?limit=50&start=50&since=1&before=5`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"printer.history.list","id":"1","params":{}}`
+
+All arguments are optional. Arguments are as follows:
+`before` All jobs before this UNIX timestamp
+`limit` Number of prints to return
+`since` All jobs after this UNIX timestamp
+`start` Record number to start from (i.e. 10 would start at the 10th print)
+
+- Returns an array of jobs that have been printed
+  ```json
+  {
+      count: <number of prints>
+      prints: {
+        <id>: {
+            "end_time": <end_time>,
+            "filament_used": <filament_used>
+            "filename": <filename>,
+            "print_duration": <print_duration>,
+            "status": <status>,
+            "start_time": <start_time>,
+            "total_duration": <total_duration>
+        }
+      }
+  }
+  ```
+
+### Delete job
+- HTTP command:\
+`DELETE /printer/history/delete?all`
+
+- Websocket command:\
+`{"jsonrpc":"2.0","method":"printer.jobs.list","id":"1","params":{}}`
+
+Optional argument `all` to delete all history.
+
+- Returns an array of deleted ids
+```json
+[
+    id1,
+    id2,
+    ...
+]
+```
+
 ## Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
 notifications.  These notifications are sent to all connected clients
