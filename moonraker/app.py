@@ -297,7 +297,12 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         return {'objects': args}
 
     def parse_args(self):
-        args = self._parse_query()
+        try:
+            args = self._parse_query()
+        except Exception:
+            raise ServerError(
+                "Error Parsing Request Arguments. "
+                "Is the Content-Type correct?")
         content_type = self.request.headers.get('Content-Type', "").strip()
         if content_type.startswith("application/json"):
             try:
