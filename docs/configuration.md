@@ -95,6 +95,14 @@ cors_domains:
 The sections outlined here are optional and enable additional
 functionality in moonraker.
 
+## History
+Enables moonraker to track and store print history. To enable this plugin, add
+the configuration below.
+
+```
+[history]
+```
+
 ## paneldue
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
