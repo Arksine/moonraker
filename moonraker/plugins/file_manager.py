@@ -19,6 +19,9 @@ FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
 
+UFP_MODEL_PATH = "/3D/model.gcode"
+UFP_THUMB_PATH = "/Metadata/thumbnail.png"
+
 class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
@@ -452,40 +455,34 @@ class FileManager:
                 shutil.move(upload_info['tmp_file_path'],
                             upload_info['dest_path'])
         except Exception:
+            logging.exception("Upload Write Error")
             raise self.server.error("Unable to save file", 500)
 
     # UFP Extraction Implementation inspired by GitHub user @cdkeito
     def _unzip_ufp(self, ufp_path, dest_path):
-        gc_bytes = img_bytes = None
-        with zipfile.ZipFile(ufp_path) as zf:
-            gc_bytes = zf.read("/3D/model.gcode")
-            try:
-                img_bytes = zf.read("/Metadata/thumbnail.png")
-            except Exception:
-                img_bytes = None
-        if gc_bytes is not None:
-            with open(dest_path, "wb") as gc_file:
-                gc_file.write(gc_bytes)
-        else:
-            raise self.server.error(
-                f"UFP file {dest_path} does not "
-                "contain a gcode file")
-        if img_bytes is not None:
-            thumb_name = os.path.splitext(
-                os.path.basename(dest_path))[0] + ".png"
-            thumb_dir = os.path.join(os.path.dirname(dest_path), "thumbs")
-            thumb_path = os.path.join(thumb_dir, thumb_name)
-            try:
-                if not os.path.exists(thumb_dir):
-                    os.mkdir(thumb_dir)
-                with open(thumb_path, "wb") as thumb_file:
-                    thumb_file.write(img_bytes)
-            except Exception:
-                logging.exception("Unable to write Image")
+        thumb_name = os.path.splitext(
+            os.path.basename(dest_path))[0] + ".png"
+        dest_thumb_dir = os.path.join(os.path.dirname(dest_path), "thumbs")
+        dest_thumb_path = os.path.join(dest_thumb_dir, thumb_name)
         try:
-            os.remove(ufp_path)
-        except Exception:
-            logging.exception(f"Error removing ufp file: {ufp_path}")
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                tmp_thumb_path = ""
+                with zipfile.ZipFile(ufp_path) as zf:
+                    tmp_model_path = zf.extract(
+                        UFP_MODEL_PATH, path=tmp_dir_name)
+                    if UFP_THUMB_PATH in zf.namelist():
+                        tmp_thumb_path = zf.extract(
+                            UFP_THUMB_PATH, path=tmp_dir_name)
+                shutil.move(tmp_model_path, dest_path)
+                if tmp_thumb_path:
+                    if not os.path.exists(dest_thumb_dir):
+                        os.mkdir(dest_thumb_dir)
+                    shutil.move(tmp_thumb_path, dest_thumb_path)
+        finally:
+            try:
+                os.remove(ufp_path)
+            except Exception:
+                logging.exception(f"Error removing ufp file: {ufp_path}")
 
     def _process_ufp_from_refresh(self, ufp_path):
         dest_path = os.path.splitext(ufp_path)[0] + ".gcode"
