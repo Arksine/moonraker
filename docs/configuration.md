@@ -37,9 +37,9 @@ klippy_uds_address: /tmp/klippy_uds
 #   is /tmp/klippy_uds
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
-enable_debug_logging: True
+enable_debug_logging: False
 #   When set to True Moonraker will log in verbose mode.  During this stage
-#   of development the default is True.  In the future this will change.
+#   of development the default is False.
 config_path:
 #   The path to a directory where configuration files are located. This
 #   directory may contain Klipper config files (printer.cfg) or Moonraker
