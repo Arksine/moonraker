@@ -16,6 +16,8 @@ from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
 from authorization import Authorization
+from streaming_form_data import StreamingFormDataParser
+from streaming_form_data.targets import FileTarget, ValueTarget
 
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
@@ -24,58 +26,10 @@ RESERVED_ENDPOINTS = [
     "register_remote_method"
 ]
 
+# 50 MiB Max Standard Body Size
+MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "connection_id"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
-
-# Converts query string values with type hints
-def _convert_type(value, hint):
-    type_funcs = {
-        "int": int, "float": float,
-        "bool": lambda x: x.lower() == "true",
-        "json": json.loads}
-    if hint not in type_funcs:
-        logging.info(f"No conversion method for type hint {hint}")
-        return value
-    func = type_funcs[hint]
-    try:
-        converted = func(value)
-    except Exception:
-        logging.exception("Argument conversion error: Hint: "
-                          f"{hint}, Arg: {value}")
-        return value
-    return converted
-
-# Status objects require special parsing
-def _status_parser(request_handler):
-    request = request_handler.request
-    arg_list = request.arguments.keys()
-    args = {}
-    for key in arg_list:
-        if key in EXCLUDED_ARGS:
-            continue
-        val = request_handler.get_argument(key)
-        if not val:
-            args[key] = None
-        else:
-            args[key] = val.split(',')
-    logging.debug(f"Parsed Arguments: {args}")
-    return {'objects': args}
-
-# Built-in Query String Parser
-def _default_parser(request_handler):
-    request = request_handler.request
-    arg_list = request.arguments.keys()
-    args = {}
-    for key in arg_list:
-        if key in EXCLUDED_ARGS:
-            continue
-        key_parts = key.rsplit(":", 1)
-        val = request_handler.get_argument(key)
-        if len(key_parts) == 1:
-            args[key] = val
-        else:
-            args[key_parts[0]] = _convert_type(val, key_parts[1])
-    return args
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application):
@@ -111,14 +65,14 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
 
 class APIDefinition:
     def __init__(self, endpoint, http_uri, ws_methods,
-                 request_methods, parser):
+                 request_methods, need_object_parser):
         self.endpoint = endpoint
         self.uri = http_uri
         self.ws_methods = ws_methods
         if not isinstance(request_methods, list):
             request_methods = [request_methods]
         self.request_methods = request_methods
-        self.parser = parser
+        self.need_object_parser = need_object_parser
 
 class MoonrakerApp:
     def __init__(self, config):
@@ -126,7 +80,7 @@ class MoonrakerApp:
         self.tornado_server = None
         self.api_cache = {}
         self.registered_base_handlers = []
-        self.max_upload_size = config.getint('max_upload_size', 200)
+        self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
 
         # Set Up Websocket and Authorization Managers
@@ -142,8 +96,7 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket),
-            (r"/api/version", EmulateOctoprintHandler)]
+            (r"/websocket", WebSocket)]
 
         self.app = tornado.web.Application(
             app_handlers,
@@ -164,7 +117,7 @@ class MoonrakerApp:
 
     def listen(self, host, port):
         self.tornado_server = self.app.listen(
-            port, address=host, max_body_size=self.max_upload_size,
+            port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
 
     def get_server(self):
@@ -196,14 +149,16 @@ class MoonrakerApp:
             f"Websocket: {', '.join(api_def.ws_methods)}")
         self.wsm.register_remote_handler(api_def)
         params = {}
-        params['arg_parser'] = api_def.parser
-        params['remote_callback'] = api_def.endpoint
+        params['methods'] = api_def.request_methods
+        params['callback'] = api_def.endpoint
+        params['need_object_parser'] = api_def.need_object_parser
         self.mutable_router.add_handler(
-            api_def.uri, RemoteRequestHandler, params)
+            api_def.uri, DynamicRequestHandler, params)
         self.registered_base_handlers.append(api_def.uri)
 
     def register_local_handler(self, uri, request_methods,
-                               callback, protocol=["http", "websocket"]):
+                               callback, protocol=["http", "websocket"],
+                               wrap_result=True):
         if uri in self.registered_base_handlers:
             return
         api_def = self._create_api_definition(
@@ -213,9 +168,10 @@ class MoonrakerApp:
             msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
             params = {}
             params['methods'] = request_methods
-            params['arg_parser'] = api_def.parser
             params['callback'] = callback
-            self.mutable_router.add_handler(uri, LocalRequestHandler, params)
+            params['wrap_result'] = wrap_result
+            params['is_remote'] = False
+            self.mutable_router.add_handler(uri, DynamicRequestHandler, params)
             self.registered_base_handlers.append(uri)
         if "websocket" in protocol:
             msg += f" - Websocket: {', '.join(api_def.ws_methods)}"
@@ -239,7 +195,9 @@ class MoonrakerApp:
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
     def register_upload_handler(self, pattern):
-        self.mutable_router.add_handler(pattern, FileUploadHandler, {})
+        self.mutable_router.add_handler(
+            pattern, FileUploadHandler,
+            {'max_upload_size': self.max_upload_size})
 
     def remove_handler(self, endpoint):
         api_def = self.api_cache.get(endpoint)
@@ -276,76 +234,117 @@ class MoonrakerApp:
             raise self.server.error(
                 "Invalid API definition.  Number of websocket methods must "
                 "match the number of request methods")
-        if endpoint.startswith("objects/"):
-            parser = _status_parser
-        else:
-            parser = _default_parser
-
+        need_object_parser = endpoint.startswith("objects/")
         api_def = APIDefinition(endpoint, uri, ws_methods,
-                                request_methods, parser)
+                                request_methods, need_object_parser)
         self.api_cache[endpoint] = api_def
         return api_def
 
-# ***** Dynamic Handlers*****
-class RemoteRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, remote_callback, arg_parser):
-        super(RemoteRequestHandler, self).initialize()
-        self.remote_callback = remote_callback
-        self.query_parser = arg_parser
-
-    async def get(self):
-        await self._process_http_request()
-
-    async def post(self):
-        await self._process_http_request()
-
-    async def _process_http_request(self):
-        conn = self.get_associated_websocket()
-        args = self.query_parser(self)
-        try:
-            result = await self.server.make_request(
-                WebRequest(self.remote_callback, args, conn=conn))
-        except ServerError as e:
-            raise tornado.web.HTTPError(
-                e.status_code, str(e)) from e
-        self.finish({'result': result})
-
-class LocalRequestHandler(AuthorizedRequestHandler):
-    def initialize(self, callback, methods, arg_parser):
-        super(LocalRequestHandler, self).initialize()
+class DynamicRequestHandler(AuthorizedRequestHandler):
+    def initialize(self, callback, methods, need_object_parser=False,
+                   is_remote=True, wrap_result=True):
+        super(DynamicRequestHandler, self).initialize()
         self.callback = callback
         self.methods = methods
-        self.query_parser = arg_parser
+        self.wrap_result = wrap_result
+        self._do_request = self._do_remote_request if is_remote \
+            else self._do_local_request
+        self._parse_query = self._object_parser if need_object_parser \
+            else self._default_parser
 
-    async def get(self):
-        if 'GET' in self.methods:
-            await self._process_http_request('GET')
-        else:
-            raise tornado.web.HTTPError(405)
-
-    async def post(self):
-        if 'POST' in self.methods:
-            await self._process_http_request('POST')
-        else:
-            raise tornado.web.HTTPError(405)
-
-    async def delete(self):
-        if 'DELETE' in self.methods:
-            await self._process_http_request('DELETE')
-        else:
-            raise tornado.web.HTTPError(405)
-
-    async def _process_http_request(self, method):
-        conn = self.get_associated_websocket()
-        args = self.query_parser(self)
+    # Converts query string values with type hints
+    def _convert_type(value, hint):
+        type_funcs = {
+            "int": int, "float": float,
+            "bool": lambda x: x.lower() == "true",
+            "json": json.loads}
+        if hint not in type_funcs:
+            logging.info(f"No conversion method for type hint {hint}")
+            return value
+        func = type_funcs[hint]
         try:
-            result = await self.callback(
-                WebRequest(self.request.path, args, method, conn=conn))
+            converted = func(value)
+        except Exception:
+            logging.exception("Argument conversion error: Hint: "
+                              f"{hint}, Arg: {value}")
+            return value
+        return converted
+
+    def _default_parser(self):
+        args = {}
+        for key in self.request.arguments.keys():
+            if key in EXCLUDED_ARGS:
+                continue
+            key_parts = key.rsplit(":", 1)
+            val = self.get_argument(key)
+            if len(key_parts) == 1:
+                args[key] = val
+            else:
+                args[key_parts[0]] = self._convert_type(val, key_parts[1])
+        return args
+
+    def _object_parser(self):
+        args = {}
+        for key in self.request.arguments.keys():
+            if key in EXCLUDED_ARGS:
+                continue
+            val = self.get_argument(key)
+            if not val:
+                args[key] = None
+            else:
+                args[key] = val.split(',')
+        logging.debug(f"Parsed Arguments: {args}")
+        return {'objects': args}
+
+    def parse_args(self):
+        try:
+            args = self._parse_query()
+        except Exception:
+            raise ServerError(
+                "Error Parsing Request Arguments. "
+                "Is the Content-Type correct?")
+        content_type = self.request.headers.get('Content-Type', "").strip()
+        if content_type.startswith("application/json"):
+            try:
+                args.update(json.loads(self.request.body))
+            except json.JSONDecodeError:
+                pass
+        for key, value in self.path_kwargs.items():
+            if value is not None:
+                args[key] = value
+        return args
+
+    async def get(self, *args, **kwargs):
+        await self._process_http_request()
+
+    async def post(self, *args, **kwargs):
+        await self._process_http_request()
+
+    async def delete(self, *args, **kwargs):
+        await self._process_http_request()
+
+    async def _do_local_request(self, args, conn):
+        return await self.callback(
+            WebRequest(self.request.path, args, self.request.method,
+                       conn=conn))
+
+    async def _do_remote_request(self, args, conn):
+        return await self.server.make_request(
+            WebRequest(self.callback, args, conn=conn))
+
+    async def _process_http_request(self):
+        if self.request.method not in self.methods:
+            raise tornado.web.HTTPError(405)
+        conn = self.get_associated_websocket()
+        args = self.parse_args()
+        try:
+            result = await self._do_request(args, conn)
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e)) from e
-        self.finish({'result': result})
-
+        if self.wrap_result:
+            result = {'result': result}
+        self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):
     def set_extra_headers(self, path):
@@ -370,20 +369,46 @@ class FileRequestHandler(AuthorizedFileHandler):
                 raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
 
+@tornado.web.stream_request_body
 class FileUploadHandler(AuthorizedRequestHandler):
+    def initialize(self, max_upload_size):
+        super(FileUploadHandler, self).initialize()
+        self.file_manager = self.server.lookup_plugin('file_manager')
+        self.max_upload_size = max_upload_size
+
+    def prepare(self):
+        if self.request.method == "POST":
+            self.request.connection.set_max_body_size(self.max_upload_size)
+            tmpname = self.file_manager.gen_temp_upload_path()
+            self._targets = {
+                'root': ValueTarget(),
+                'print': ValueTarget(),
+                'path': ValueTarget(),
+            }
+            self._file = FileTarget(tmpname)
+            self._parser = StreamingFormDataParser(self.request.headers)
+            self._parser.register('file', self._file)
+            for name, target in self._targets.items():
+                self._parser.register(name, target)
+
+    def data_received(self, chunk):
+        if self.request.method == "POST":
+            self._parser.data_received(chunk)
+
     async def post(self):
-        file_manager = self.server.lookup_plugin('file_manager')
+        form_args = {}
+        for name, target in self._targets.items():
+            if target.value:
+                form_args[name] = target.value.decode()
+        form_args['filename'] = self._file.multipart_filename
+        form_args['tmp_file_path'] = self._file.filename
+        debug_msg = "\nFile Upload Arguments:"
+        for name, value in form_args.items():
+            debug_msg += f"\n{name}: {value}"
+        logging.debug(debug_msg)
         try:
-            result = await file_manager.process_file_upload(self.request)
+            result = await self.file_manager.finalize_upload(form_args)
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
         self.finish(result)
-
-
-class EmulateOctoprintHandler(AuthorizedRequestHandler):
-    def get(self):
-        self.finish({
-            'server': "1.1.1",
-            'api': "0.1",
-            'text': "OctoPrint Upload Emulator"})

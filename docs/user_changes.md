@@ -1,5 +1,8 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
+### March 4th 2021
+- To enable Octoprint compatibility with slicer uploads it is now
+  required to add `[octoprint_compat]` to `moonraker.conf`.
 
 ### December 31st 2020
 - The file manager no longer restricts the `config_path` to a folder

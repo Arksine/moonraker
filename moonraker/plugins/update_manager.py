@@ -420,7 +420,7 @@ class GitUpdater:
         self.owner = "?"
         self.repo_path = path
         if path is None:
-            self.repo_path = config.get('path')
+            self.repo_path = os.path.expanduser(config.get('path'))
         self.env = config.get("env", env)
         dist_packages = None
         if self.env is not None:
@@ -579,7 +579,7 @@ class GitUpdater:
             return
 
         remote_url = remote_url.strip()
-        owner_match = re.match(r"https?://.*/(.*)/", remote_url)
+        owner_match = re.match(r"https?://[^/]+/([^/]+)", remote_url)
         if owner_match is not None:
             self.owner = owner_match.group(1)
         self.is_dirty = repo_version.endswith("dirty")
@@ -937,6 +937,8 @@ class WebUpdater:
         if self.version == self.remote_version:
             # Already up to date
             return
+        self.notify_update_response(f"Downloading Client: {self.name}")
+        archive = await self.umgr.http_download_request(self.dl_url)
         with tempfile.TemporaryDirectory(
                 suffix=self.name, prefix="client") as tempdir:
             if os.path.isdir(self.path):
@@ -949,8 +951,6 @@ class WebUpdater:
                         shutil.move(src_path, dest_dir)
                 shutil.rmtree(self.path)
             os.mkdir(self.path)
-            self.notify_update_response(f"Downloading Client: {self.name}")
-            archive = await self.umgr.http_download_request(self.dl_url)
             with zipfile.ZipFile(io.BytesIO(archive)) as zf:
                 zf.extractall(self.path)
             # Move temporary files back into
