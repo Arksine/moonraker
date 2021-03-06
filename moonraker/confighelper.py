@@ -21,6 +21,8 @@ class ConfigHelper:
         self.section = section
         self.orig_sections = orig_sects
         self.parsed = parsed
+        if self.section not in self.parsed:
+            self.parsed[self.section] = {}
         self.sections = config.sections
         self.has_section = config.has_section
 
@@ -60,7 +62,7 @@ class ConfigHelper:
                 f"No option found ({option}) in section [{self.section}]")
         if self.section in self.orig_sections:
             # Only track sections included in the original config
-            self.parsed.setdefault(self.section, {})[option] = val
+            self.parsed[self.section][option] = val
         return val
 
     def get(self, option, default=Sentinel):
