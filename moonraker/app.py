@@ -90,20 +90,24 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
-        debug = config.getboolean('enable_debug_logging', True)
+        debug = config.getboolean('enable_debug_logging', False)
+        log_level = logging.DEBUG if debug else logging.INFO
+        logging.getLogger().setLevel(log_level)
+        app_args = {
+            'serve_traceback': debug,
+            'websocket_ping_interval': 10,
+            'websocket_ping_timeout': 30,
+            'parent': self
+        }
+        if not debug:
+            app_args['log_function'] = lambda hdlr: None
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
         app_handlers = [
             (AnyMatches(), self.mutable_router),
             (r"/websocket", WebSocket)]
-
-        self.app = tornado.web.Application(
-            app_handlers,
-            serve_traceback=debug,
-            websocket_ping_interval=10,
-            websocket_ping_timeout=30,
-            parent=self)
+        self.app = tornado.web.Application(app_handlers, **app_args)
         self.get_handler_delegate = self.app.get_handler_delegate
 
         # Register handlers

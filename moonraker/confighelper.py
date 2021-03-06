@@ -134,9 +134,6 @@ def get_configuration(server, system_args):
     except Exception:
         pass
 
-    if server_cfg.getboolean('enable_debug_logging', True):
-        logging.getLogger().setLevel(logging.DEBUG)
-
     config['system_args'] = {
         'configfile': system_args.configfile,
         'logfile': system_args.logfile,
