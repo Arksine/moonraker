@@ -106,6 +106,8 @@ class OctoprintCompat:
             result = await self.klippy_apis.query_objects(
                 {heater: None for heater in self.heaters})
             for heater in self.heaters:
+                if heater not in result:
+                    continue
                 data = result[heater]
                 name = 'bed'
                 if heater.startswith('extruder'):
@@ -114,11 +116,12 @@ class OctoprintCompat:
                     except ValueError:
                         tool_no = 0
                     name = f'tool{tool_no}'
-
+                elif heater != "heater_bed":
+                    continue
                 temps[name] = {
-                    'actual': int(data['temperature'] * 100.0) / 100.0,
+                    'actual': round(data.get('temperature', 0.), 2),
                     'offset': 0,
-                    'target': data['target'],
+                    'target': data.get('target', 0.),
                 }
         return temps
 
@@ -202,7 +205,7 @@ class OctoprintCompat:
         """
         return {
             'job': {
-                'file': {'name': None,},
+                'file': {'name': None},
                 'estimatedPrintTime': None,
                 'filament': {'length': None},
                 'user': None,
@@ -247,7 +250,7 @@ class OctoprintCompat:
         for command in commands:
             logging.info(f'Executing GCode: {command}')
             try:
-                    await self.klippy_apis.run_gcode(command)
+                await self.klippy_apis.run_gcode(command)
             except self.server.error:
                 msg = f"Error executing GCode {command}"
                 logging.exception(msg)
