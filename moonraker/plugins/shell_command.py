@@ -11,10 +11,11 @@ import asyncio
 from tornado import gen
 
 class SCProcess(asyncio.subprocess.Process):
-    def initialize(self, cb, log_stderr, program):
-        self.callback = cb
+    def initialize(self, program_name, std_out_cb, std_err_cb, log_stderr):
+        self.program_name = program_name
+        self.std_out_cb = std_out_cb
+        self.std_err_cb = std_err_cb
         self.log_stderr = log_stderr
-        self.program = program
         self.partial_data = b""
         self.cancel_requested = False
 
@@ -22,19 +23,20 @@ class SCProcess(asyncio.subprocess.Process):
         transport = self._transport.get_pipe_transport(fd)
         if fd == 2:
             stream = self.stderr
+            cb = self.std_err_cb
         else:
             assert fd == 1
             stream = self.stdout
+            cb = self.std_out_cb
         while not stream.at_eof():
             output = await stream.readline()
             if not output:
                 break
             if fd == 2 and self.log_stderr:
-                logging.info(f"{self.program}: {output.decode()}")
-            else:
-                output = output.rstrip(b'\n')
-                if output:
-                    self.callback(output)
+                logging.info(f"{self.program_name}: {output.decode()}")
+            output = output.rstrip(b'\n')
+            if output and cb is not None:
+                cb(output)
         transport.close()
         return output
 
@@ -50,12 +52,12 @@ class SCProcess(asyncio.subprocess.Process):
                 await asyncio.wait_for(ret, timeout=2.)
             except asyncio.TimeoutError:
                 continue
-            logging.debug(f"Command '{self.program}' exited with "
+            logging.debug(f"Command '{self.program_name}' exited with "
                           f"signal: {sig.name}")
             exit_success = True
             break
         if not exit_success:
-            logging.info(f"WARNING: {self.program} did not cleanly exit")
+            logging.info(f"WARNING: {self.program_name} did not cleanly exit")
         if self.stdout is not None:
             self.stdout.feed_eof()
         if self.stderr is not None:
@@ -79,13 +81,15 @@ class SCProcess(asyncio.subprocess.Process):
         await self.wait()
 
 class ShellCommand:
-    def __init__(self, cmd, callback, log_stderr=False):
+    def __init__(self, cmd, std_out_callback, std_err_callback,
+                 env=None, log_stderr=False):
         self.name = cmd
-        self.output_cb = callback
+        self.std_out_cb = std_out_callback
+        self.std_err_cb = std_err_callback
         cmd = os.path.expanduser(cmd)
         self.command = shlex.split(cmd)
-        self.program = self.command[0]
         self.log_stderr = log_stderr
+        self.env = env
         self.proc = None
         self.cancelled = False
         self.return_code = None
@@ -142,7 +146,7 @@ class ShellCommand:
                 else:
                     complete = not self.cancelled
                     if self.log_stderr and stderr:
-                        logging.info(f"{self.program}: {stderr.decode()}")
+                        logging.info(f"{self.command[0]}: {stderr.decode()}")
                 if self._check_proc_success(complete, quiet):
                     return stdout.decode().rstrip("\n")
                 elif stdout:
@@ -165,9 +169,10 @@ class ShellCommand:
             transport, protocol = await loop.subprocess_exec(
                 protocol_factory, *self.command,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=errpipe)
+                stderr=errpipe, env=self.env)
             self.proc = SCProcess(transport, protocol, loop)
-            self.proc.initialize(self.output_cb, self.log_stderr, self.program)
+            self.proc.initialize(self.command[0], self.std_out_cb,
+                                 self.std_err_cb, self.log_stderr)
         except Exception:
             logging.exception(
                 f"shell_command: Command ({self.name}) failed")
@@ -191,8 +196,9 @@ class ShellCommand:
         return success
 
 class ShellCommandFactory:
-    def build_shell_command(self, cmd, callback=None, log_stderr=False):
-        return ShellCommand(cmd, callback, log_stderr)
+    def build_shell_command(self, cmd, callback=None, std_err_callback=None,
+                            env=None, log_stderr=False):
+        return ShellCommand(cmd, callback, std_err_callback, env, log_stderr)
 
 def load_plugin(config):
     return ShellCommandFactory()
