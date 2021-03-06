@@ -63,7 +63,7 @@ class History:
 
     async def _handle_job_delete(self, web_request):
         all = web_request.get_boolean("all", False)
-        id = web_request.get_int("id", -1)
+        id = str(web_request.get_int("id", -1))
         if all:
             deljobs = []
             jobs = list(self.jobs)
@@ -161,7 +161,7 @@ class History:
         if id not in self.jobs:
             return False
         del self.jobs[id]
-        self.database.delete_item(HIST_NAMESPACE, "jobs.%s" % id)
+        self.database.delete_item(HIST_NAMESPACE, id)
         return id
 
     def finish_job(self, status, updates):
