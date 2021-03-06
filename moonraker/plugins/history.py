@@ -7,7 +7,6 @@ from tornado.ioloop import IOLoop
 SAVE_INTERVAL = 5
 
 HIST_NAMESPACE = "history"
-METADATA_KEYS = ['estimated_time','modified','slicer','slicer_version']
 
 class History:
     def __init__(self, config):
@@ -26,12 +25,16 @@ class History:
             "server:klippy_ready", self._init_ready)
         self.server.register_event_handler(
             "server:status_update", self._status_update)
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._save_job_on_error)
+        self.server.register_event_handler(
+            "server:klippy_shutdown", self._save_job_on_error)
 
 
         self.server.register_endpoint(
-            "/printer/history/list", ['GET'], self._handle_jobs_list)
+            "/server/history/list", ['GET'], self._handle_jobs_list)
         self.server.register_endpoint(
-            "/printer/history/delete", ['DELETE'], self._handle_job_delete)
+            "/server/history/delete", ['DELETE'], self._handle_job_delete)
 
         self.database.register_local_namespace(HIST_NAMESPACE)
         try:
@@ -41,44 +44,41 @@ class History:
             logging.info("Creating job history namespace in database")
             self.database.insert_item(HIST_NAMESPACE,"job_auto_inc_id", 0)
             self.job_id = 0
-            self.database.insert_item(HIST_NAMESPACE,"prints", self.jobs)
 
-        jobs = self.database.get_item(HIST_NAMESPACE,"prints")
+        jobs = self.database.ns_keys(HIST_NAMESPACE)
+        if "job_auto_inc_id" in jobs:
+            jobs.remove("job_auto_inc_id")
         for job in jobs:
-            self.jobs[job] = PrinterJob(jobs[job])
+            self.jobs[job] = PrinterJob(self.database.get_item(HIST_NAMESPACE,
+                job))
 
     async def _init_ready(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
-        self.print_stats = {}
-
-        try:
-            result = await klippy_apis.query_objects({'print_stats': None})
-        except self.server.error as e:
-            logging.info(f"Error getting print_stats: {e}")
-        self.print_stats = result.get("print_stats", {})
-
         sub = {"print_stats": None}
         try:
-            status = await klippy_apis.subscribe_objects(sub)
+            result = await klippy_apis.subscribe_objects(sub)
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
+        self.print_stats = result.get("print_stats", {})
 
     async def _handle_job_delete(self, web_request):
-        args = web_request.get_args()
-        if "all" in args:
+        all = web_request.get_boolean("all", False)
+        id = web_request.get_int("id", -1)
+        if all:
             deljobs = []
             jobs = list(self.jobs)
             for job in jobs:
                 self.delete_job(job)
                 deljobs.append(job)
             return deljobs
-        if "id" not in args:
-            raise self.server.error("No ID to delete")
-        if args['id'] not in self.jobs:
-            raise self.server.error(f"Invalid job id: {args['id']}")
 
-        logging.debug("Jobs %s: %s" % (args['id'], self.jobs))
-        return self.delete_job(args['id'])
+        if id == -1:
+            raise self.server.error("No ID to delete")
+
+        if id not in self.jobs:
+            raise self.server.error(f"Invalid job id: {id}")
+
+        return self.delete_job(id)
 
     async def _handle_jobs_list(self, web_request):
         args = web_request.get_args()
@@ -120,10 +120,8 @@ class History:
             ps = data['print_stats']
 
             if "filename" in ps:
-                file_store = self.server.lookup_plugin('file_manager')
                 if ps['filename'] != "":
-                    self.file_metadata = file_store.get_file_metadata(
-                        ps['filename'])
+                    self.file_metadata = self.gcdb.get(ps['filename'])
                 else:
                     self.file_metadata = None
 
@@ -133,8 +131,7 @@ class History:
 
                 if new_state is not old_state:
                     if new_state == "printing" and old_state != "paused":
-                        for s in list(ps):
-                            self.print_stats[s] = ps[s]
+                        self.print_stats.update(ps)
                         self.add_job(PrinterJob(self.print_stats))
                     elif new_state == "complete" and self.current_job != None:
                         for s in list(ps):
@@ -143,14 +140,16 @@ class History:
                     elif new_state == "standby"  and self.current_job != None:
                         self.finish_job("cancelled", self.print_stats)
 
-            for s in list(ps):
-                self.print_stats[s] = ps[s]
+            self.print_stats.update(ps)
 
             if time.time() > self.last_update_time + SAVE_INTERVAL:
                 if self.current_job != None:
                     self.last_update_time = time.time()
                     self.jobs[self.current_job].update_from_ps(self.print_stats)
                     self.save_current_job()
+
+    def _save_job_on_error(self):
+        self.save_current_job()
 
     def add_job(self, job):
         job_id = self.job_id
@@ -160,7 +159,8 @@ class History:
         self.current_job = job_id
         self.jobs[job_id] = job
         self.grab_job_metadata()
-        self.save_current_job()
+        self.database.insert_item(HIST_NAMESPACE, str(self.current_job),
+            self.jobs[self.current_job].get_stats())
 
     def delete_job(self, id):
         if id not in self.jobs:
@@ -186,25 +186,18 @@ class History:
         if self.current_job == None or self.current_job not in self.jobs:
             return
 
+        #TODO
         gcdb = self.database.wrap_namespace("gcode_metadata",  parse_keys=False)
-        logging.debug("gcdb: %s" % gcdb)
         filename = self.jobs[self.current_job].get("filename")
         if filename not in gcdb:
             return
 
-        metadata = {}
-        for i in METADATA_KEYS:
-            if i in gcdb[filename]:
-                self.jobs[self.current_job].update_file_metadata(
-                    {i: gcdb[filename][i]})
+        self.jobs[self.current_job].update_file_metadata(
+            self.gcdb.get(filename))
 
     def save_current_job(self):
-        self.database.insert_item(HIST_NAMESPACE, "prints.%s" %
-            self.current_job, self.jobs[self.current_job].get_stats())
-
-    def save_to_database(self):
-        self.database.insert_item(HIST_NAMESPACE, "prints",
-            json.loads(json.dumps(self.jobs,default=lambda o: o.__dict__)))
+        self.database.update_item(HIST_NAMESPACE, str(self.current_job),
+            self.jobs[self.current_job].get_stats())
 
 class PrinterJob:
     def __init__(self, data={}, file_metadata={}):
@@ -230,7 +223,7 @@ class PrinterJob:
         return getattr(self, name)
 
     def get_stats(self):
-        return {k: getattr(self, k) for k in self.__dict__}
+        return self.__dict__
 
     def get_metadata(self):
         return self.file_metadata
