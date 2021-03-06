@@ -6,6 +6,7 @@
 import os
 import shlex
 import logging
+import signal
 import asyncio
 from tornado import gen
 
@@ -15,6 +16,7 @@ class SCProcess(asyncio.subprocess.Process):
         self.log_stderr = log_stderr
         self.program = program
         self.partial_data = b""
+        self.cancel_requested = False
 
     async def _read_stream_with_cb(self, fd):
         transport = self._transport.get_pipe_transport(fd)
@@ -36,10 +38,28 @@ class SCProcess(asyncio.subprocess.Process):
         transport.close()
         return output
 
-    def cancel(self):
-        self.stdout.feed_eof()
-        self.stderr.feed_eof()
-        self.terminate()
+    async def cancel(self):
+        if self.cancel_requested:
+            return
+        self.cancel_requested = True
+        exit_success = False
+        for sig in [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]:
+            self.send_signal(sig)
+            try:
+                ret = self.wait()
+                await asyncio.wait_for(ret, timeout=2.)
+            except asyncio.TimeoutError:
+                continue
+            logging.debug(f"Command '{self.program}' exited with "
+                          f"signal: {sig.name}")
+            exit_success = True
+            break
+        if not exit_success:
+            logging.info(f"WARNING: {self.program} did not cleanly exit")
+        if self.stdout is not None:
+            self.stdout.feed_eof()
+        if self.stderr is not None:
+            self.stderr.feed_eof()
 
     async def communicate_with_cb(self, input=None):
         if input is not None:
@@ -70,10 +90,10 @@ class ShellCommand:
         self.cancelled = False
         self.return_code = None
 
-    def cancel(self):
+    async def cancel(self):
         self.cancelled = True
         if self.proc is not None:
-            self.proc.cancel()
+            await self.proc.cancel()
 
     def get_return_code(self):
         return self.return_code
@@ -101,7 +121,7 @@ class ShellCommand:
             await asyncio.wait_for(ret, timeout=timeout)
         except asyncio.TimeoutError:
             complete = False
-            self.proc.terminate()
+            await self.proc.cancel()
         else:
             complete = not self.cancelled
         return self._check_proc_success(complete)
@@ -118,7 +138,7 @@ class ShellCommand:
                         ret, timeout=timeout)
                 except asyncio.TimeoutError:
                     complete = False
-                    self.proc.terminate()
+                    await self.proc.cancel()
                 else:
                     complete = not self.cancelled
                     if self.log_stderr and stderr:
