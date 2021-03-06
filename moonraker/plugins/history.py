@@ -7,6 +7,7 @@ from tornado.ioloop import IOLoop
 SAVE_INTERVAL = 5
 
 HIST_NAMESPACE = "history"
+METADATA_KEYS = ['estimated_time','modified','slicer','slicer_version']
 
 class History:
     def __init__(self, config):
@@ -80,16 +81,16 @@ class History:
         return self.delete_job(id)
 
     async def _handle_jobs_list(self, web_request):
-        args = web_request.get_args()
-        if "id" in args:
-            if args['id'] not in self.jobs:
-                raise self.server.error(f"Invalid job id: {args['id']}")
-            return {args['id']: self.get_job(args['id']).get_stats()}
+        id = web_request.get_int("id", -1)
+        if id != -1:
+            if id not in self.jobs:
+                raise self.server.error(f"Invalid job id: {id}")
+            return {args['id']: self.get_job(id).get_stats()}
 
-        before = None if 'before' not in args else int(args['before'])
-        since = None if 'since' not in args else int(args['since'])
-        limit = int(args['limit']) if "limit" in args else 50
-        start = int(args['start']) if "start" in args else 0
+        before = web_request.get_float("before", -1)
+        since = web_request.get_float("since", -1)
+        limit = web_request.get_int("limit", 50)
+        start = web_request.get_int("start", 0)
         if start > (len(self.jobs)-1) or len(self.jobs) == 0:
             return {"count": len(self.jobs), "prints": {}}
 
@@ -98,10 +99,10 @@ class History:
         start_num = 0
         end_num = len(self.jobs)
         for id in list(self.jobs):
-            if since != None and since > self.get_job(id).get('start_time'):
+            if since != -1 and since > self.get_job(id).get('start_time'):
                 start_num += 1
                 continue
-            if before != None and before < self.get_job(id).get('end_time'):
+            if before != -1 and before < self.get_job(id).get('end_time'):
                 end_num -= 1
                 continue
             if limit != 0 and i >= limit:
@@ -142,7 +143,8 @@ class History:
                     self.save_current_job()
 
     def _save_job_on_error(self):
-        self.save_current_job()
+        if self.current_job != None:
+            self.save_current_job()
 
     def add_job(self, job):
         job_id = self.job_id
@@ -230,6 +232,8 @@ class PrinterJob:
 
     def update_file_metadata(self, file_metadata={}):
         for i in file_metadata.keys():
+            if i not in METADATA_KEYS:
+                continue
             self.file_metadata[i] = file_metadata[i]
 
 def load_plugin(config):
