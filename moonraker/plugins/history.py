@@ -15,7 +15,6 @@ class History:
         self.gcdb = self.database.wrap_namespace("gcode_metadata",
             parse_keys=False)
         self.current_job = None
-        self.file_metadata = None
         self.jobs = {}
         self.job_id = -1
         self.last_update_time = 0
@@ -119,12 +118,6 @@ class History:
         if "print_stats" in data:
             ps = data['print_stats']
 
-            if "filename" in ps:
-                if ps['filename'] != "":
-                    self.file_metadata = self.gcdb.get(ps['filename'])
-                else:
-                    self.file_metadata = None
-
             if "state" in ps:
                 old_state = self.print_stats['state']
                 new_state = ps['state']
@@ -174,6 +167,8 @@ class History:
             return
 
         self.jobs[self.current_job].finish("completed", self.print_stats)
+        # Regrab metadata incase metadata wasn't parsed yet due to file upload
+        self.grab_job_metadata()
         self.save_current_job()
         self.current_job = None
 
@@ -186,10 +181,8 @@ class History:
         if self.current_job == None or self.current_job not in self.jobs:
             return
 
-        #TODO
-        gcdb = self.database.wrap_namespace("gcode_metadata",  parse_keys=False)
         filename = self.jobs[self.current_job].get("filename")
-        if filename not in gcdb:
+        if filename not in self.gcdb:
             return
 
         self.jobs[self.current_job].update_file_metadata(
@@ -224,9 +217,6 @@ class PrinterJob:
 
     def get_stats(self):
         return self.__dict__
-
-    def get_metadata(self):
-        return self.file_metadata
 
     def set(self, name, val):
         if not hasattr(self, name):
