@@ -102,7 +102,7 @@ class ShellCommand:
     def get_return_code(self):
         return self.return_code
 
-    async def run(self, timeout=2., verbose=True):
+    async def run(self, timeout=2., verbose=True, log_complete=True):
         self.return_code = self.proc = None
         self.cancelled = False
         if not timeout:
@@ -124,9 +124,10 @@ class ShellCommand:
             await self.proc.cancel()
         else:
             complete = not self.cancelled
-        return self._check_proc_success(complete)
+        return self._check_proc_success(complete, log_complete)
 
-    async def run_with_response(self, timeout=2., retries=1, quiet=False):
+    async def run_with_response(self, timeout=2., retries=1,
+                                log_complete=True):
         self.return_code = self.proc = None
         self.cancelled = False
         while retries > 0:
@@ -143,7 +144,7 @@ class ShellCommand:
                     complete = not self.cancelled
                     if self.log_stderr and stderr:
                         logging.info(f"{self.command[0]}: {stderr.decode()}")
-                if self._check_proc_success(complete, quiet):
+                if self._check_proc_success(complete, log_complete):
                     return stdout.decode().rstrip("\n")
                 elif stdout:
                     logging.debug(
@@ -175,7 +176,7 @@ class ShellCommand:
             return False
         return True
 
-    def _check_proc_success(self, complete, quiet=False):
+    def _check_proc_success(self, complete, log_complete):
         self.return_code = self.proc.returncode
         success = self.return_code == 0 and complete
         if success:
@@ -187,7 +188,7 @@ class ShellCommand:
         else:
             msg = f"Command ({self.name}) exited with return code" \
                 f" {self.return_code}"
-        if not quiet:
+        if log_complete:
             logging.info(msg)
         return success
 

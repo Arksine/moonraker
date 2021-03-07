@@ -103,7 +103,7 @@ class ProcStats:
     async def _check_throttled_state(self):
         try:
             resp = await self.vcgencmd.run_with_response(
-                timeout=.5, quiet=True)
+                timeout=.5, log_complete=False)
             ts = int(resp.strip().split("=")[-1], 16)
         except Exception:
             return {'bits': 0, 'flags': ["?"]}
