@@ -81,11 +81,11 @@ class History:
         return self.delete_job(id)
 
     async def _handle_jobs_list(self, web_request):
-        id = web_request.get_int("id", -1)
-        if id != -1:
+        id = str(web_request.get_int("id", -1))
+        if id != "-1":
             if id not in self.jobs:
                 raise self.server.error(f"Invalid job id: {id}")
-            return {args['id']: self.get_job(id).get_stats()}
+            return {id: self.get_job(id).get_stats()}
 
         before = web_request.get_float("before", -1)
         since = web_request.get_float("since", -1)
