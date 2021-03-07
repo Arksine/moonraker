@@ -68,11 +68,12 @@ class SCProcess(asyncio.subprocess.Process):
             stdin = self._feed_stdin(input)
         else:
             stdin = self._noop()
-        if self.stdout is not None:
+        if self.stdout is not None and self.std_out_cb is not None:
             stdout = self._read_stream_with_cb(1)
         else:
             stdout = self._noop()
-        if self.stderr is not None:
+        has_err_output = self.std_err_cb is not None or self.log_stderr
+        if self.stderr is not None and has_err_output:
             stderr = self._read_stream_with_cb(2)
         else:
             stderr = self._noop()
@@ -108,7 +109,8 @@ class ShellCommand:
         if not timeout:
             # Never timeout
             timeout = 9999999999999999.
-        if self.std_out_cb is None and self.std_err_cb is None:
+        if self.std_out_cb is None and self.std_err_cb is None and \
+                not self.log_stderr:
             # No callbacks set so output cannot be verbose
             verbose = False
         if not await self._create_subprocess():
