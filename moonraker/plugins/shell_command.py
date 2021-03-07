@@ -105,18 +105,14 @@ class ShellCommand:
     async def run(self, timeout=2., verbose=True):
         self.return_code = self.proc = None
         self.cancelled = False
-        if timeout is None:
+        if not timeout:
             # Never timeout
             timeout = 9999999999999999.
-        if not timeout or self.output_cb is None:
-            # Fire and forget commands cannot be verbose as we can't
-            # clean up after the process terminates
+        if self.std_out_cb is None and self.std_err_cb is None:
+            # No callbacks set so output cannot be verbose
             verbose = False
         if not await self._create_subprocess():
             return False
-        if not timeout:
-            # fire and forget, return from execution
-            return True
         try:
             if verbose:
                 ret = self.proc.communicate_with_cb()
