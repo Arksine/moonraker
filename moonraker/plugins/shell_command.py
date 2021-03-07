@@ -161,8 +161,10 @@ class ShellCommand:
             return asyncio.subprocess.SubprocessStreamProtocol(
                 limit=2**20, loop=loop)
         try:
-            errpipe = asyncio.subprocess.PIPE if self.log_stderr \
-                else asyncio.subprocess.STDOUT
+            if self.std_err_cb is not None or self.log_stderr:
+                errpipe = asyncio.subprocess.PIPE
+            else:
+                errpipe = asyncio.subprocess.STDOUT
             transport, protocol = await loop.subprocess_exec(
                 protocol_factory, *self.command,
                 stdout=asyncio.subprocess.PIPE,
