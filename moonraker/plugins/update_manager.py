@@ -259,10 +259,15 @@ class UpdateManager:
             'github_limit_reset_time': self.gh_limit_reset_time,
             'busy': self.current_update is not None}
 
-    async def execute_cmd(self, cmd, timeout=10., notify=False, retries=1):
+    async def execute_cmd(self, cmd, timeout=10., notify=False,
+                          retries=1, env=None):
         shell_command = self.server.lookup_plugin('shell_command')
+        if env is not None:
+            os_env = dict(os.environ)
+            os_env.update(env)
+            env = os_env
         cb = self.notify_update_response if notify else None
-        scmd = shell_command.build_shell_command(cmd, callback=cb)
+        scmd = shell_command.build_shell_command(cmd, callback=cb, env=env)
         while retries:
             if await scmd.run(timeout=timeout, verbose=notify):
                 break
@@ -270,9 +275,13 @@ class UpdateManager:
         if not retries:
             raise self.server.error("Shell Command Error")
 
-    async def execute_cmd_with_response(self, cmd, timeout=10.):
+    async def execute_cmd_with_response(self, cmd, timeout=10., env=None):
         shell_command = self.server.lookup_plugin('shell_command')
-        scmd = shell_command.build_shell_command(cmd, None)
+        if env is not None:
+            os_env = dict(os.environ)
+            os_env.update(env)
+            env = os_env
+        scmd = shell_command.build_shell_command(cmd, None, env=env)
         result = await scmd.run_with_response(timeout, retries=5)
         if result is None:
             raise self.server.error(f"Error Running Command: {cmd}")
@@ -558,9 +567,13 @@ class GitUpdater:
                     f"git -C {self.repo_path} config --get"
                     f" branch.{self.branch}.remote")
             if need_fetch:
+                env = {
+                    'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
+                    'GIT_HTTP_LOW_SPEED_TIME ': "15"
+                }
                 await self.execute_cmd(
                     f"git -C {self.repo_path} fetch {self.remote} --prune -q",
-                    retries=3)
+                    timeout=20., retries=3, env=env)
             remote_url = await self.execute_cmd_with_response(
                 f"git -C {self.repo_path} remote get-url {self.remote}")
             cur_hash = await self.execute_cmd_with_response(
@@ -634,16 +647,21 @@ class GitUpdater:
             return
         self._notify_status("Updating Repo...")
         try:
+            env = {
+                'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
+                'GIT_HTTP_LOW_SPEED_TIME ': "15"
+            }
             if self.detached:
                 await self.execute_cmd(
                     f"git -C {self.repo_path} fetch {self.remote} -q",
-                    retries=3)
+                    timeout=20., retries=3, env=env)
                 await self.execute_cmd(
                     f"git -C {self.repo_path} checkout"
                     f" {self.remote}/{self.branch} -q")
             else:
                 await self.execute_cmd(
-                    f"git -C {self.repo_path} pull -q", retries=3)
+                    f"git -C {self.repo_path} pull -q", timeout=20.,
+                    retries=3, env=env)
         except Exception:
             raise self._log_exc("Error running 'git pull'")
         # Check Semantic Versions
