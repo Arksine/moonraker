@@ -97,7 +97,9 @@ class MoonrakerApp:
             'serve_traceback': debug,
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
-            'parent': self
+            'parent': self,
+            'default_handler_class': AuthorizedErrorHandler,
+            'default_handler_args': {}
         }
         if not debug:
             app_args['log_function'] = lambda hdlr: None
@@ -416,3 +418,12 @@ class FileUploadHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
         self.finish(result)
+
+# Default Handler for unregistered endpoints
+class AuthorizedErrorHandler(AuthorizedRequestHandler):
+    def prepare(self):
+        super(AuthorizedRequestHandler, self).prepare()
+        raise tornado.web.HTTPError(404)
+
+    def check_xsrf_cookie(self):
+        pass
