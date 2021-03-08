@@ -480,14 +480,18 @@ class Server:
 
     async def _stop_server(self, exit_reason="restart"):
         self.server_running = False
-        for name, plugin in self.plugins.items():
-            if hasattr(plugin, "close"):
+        for method in ["on_exit", "close"]:
+            for name, plugin in self.plugins.items():
+                if not hasattr(plugin, method):
+                    continue
+                func = getattr(plugin, method)
                 try:
-                    ret = plugin.close()
+                    ret = func()
                     if asyncio.iscoroutine(ret):
                         await ret
                 except Exception:
-                    logging.exception(f"Error closing plugin: {name}")
+                    logging.exception(
+                        f"Error executing '{method}()' for plugin: {name}")
         try:
             if self.klippy_connection.is_connected():
                 self.klippy_disconnect_evt = Event()
