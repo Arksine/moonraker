@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.locks import Event
 
-VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp']
+VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp', '.nc']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
