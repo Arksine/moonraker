@@ -12,6 +12,7 @@ import tornado
 from inspect import isclass
 from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
+from tornado.log import access_log
 from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from authorization import AuthorizedRequestHandler, AuthorizedFileHandler
@@ -102,7 +103,7 @@ class MoonrakerApp:
             'default_handler_args': {}
         }
         if not debug:
-            app_args['log_function'] = lambda hdlr: None
+            app_args['log_function'] = self.log_release_mode
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
@@ -125,6 +126,21 @@ class MoonrakerApp:
         self.tornado_server = self.app.listen(
             port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
+
+    def log_release_mode(self, handler):
+        status_code = handler.get_status()
+        if status_code in [200, 204]:
+            # don't log OK and No Content
+            return
+        if status_code < 400:
+            log_method = access_log.info
+        elif status_code < 500:
+            log_method = access_log.warning
+        else:
+            log_method = access_log.error
+        request_time = 1000.0 * handler.request.request_time()
+        log_method("%d %s %.2fms", status_code,
+                   handler._request_summary(), request_time)
 
     def get_server(self):
         return self.server
@@ -423,6 +439,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
 class AuthorizedErrorHandler(AuthorizedRequestHandler):
     def prepare(self):
         super(AuthorizedRequestHandler, self).prepare()
+        self.set_status(404)
         raise tornado.web.HTTPError(404)
 
     def check_xsrf_cookie(self):
