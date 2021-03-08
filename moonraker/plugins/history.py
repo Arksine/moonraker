@@ -8,7 +8,6 @@ SAVE_INTERVAL = 5
 
 HIST_NAMESPACE = "history"
 JOBS_AUTO_INC_KEY = "job_auto_inc_id"
-METADATA_KEYS = ['estimated_time','filament_total','modified','slicer']
 
 class History:
     def __init__(self, config):
