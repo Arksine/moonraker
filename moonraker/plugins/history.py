@@ -74,7 +74,7 @@ class History:
             deljobs = []
             jobs = self.jobs.copy()
             for job in jobs:
-                self.delete_job(job)
+                self.delete_job(job, False)
                 deljobs.append(job)
             for key in self.history_ns.keys():
                 self.history_ns.delete(key);
