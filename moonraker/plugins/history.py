@@ -1,7 +1,7 @@
 # History cache for printer jobs
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import json, logging, time
+import json, logging
 from tornado.ioloop import IOLoop
 
 SAVE_INTERVAL = 5
@@ -18,7 +18,6 @@ class History:
         self.current_job = None
         self.jobs = []
         self.job_id = -1
-        self.last_update_time = 0
         self.print_stats = {}
 
         self.server.register_event_handler(
@@ -154,12 +153,6 @@ class History:
                         self.finish_job("cancelled", self.print_stats)
 
             self.print_stats.update(ps)
-
-            if time.time() > self.last_update_time + SAVE_INTERVAL:
-                if self.current_job != None:
-                    self.last_update_time = time.time()
-                    self.current_job.update_from_ps(self.print_stats)
-                    self.save_current_job()
 
     def _save_job_on_error(self):
         if self.current_job != None:
