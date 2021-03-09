@@ -269,7 +269,7 @@ class MoonrakerDatabase:
 
     async def _handle_item_request(self, web_request):
         action = web_request.get_action()
-        namespace = web_request.get_str("namespace").lower()
+        namespace = web_request.get_str("namespace")
         if action != "GET":
             if namespace in self.protected_namespaces:
                 raise self.server.error(
@@ -283,8 +283,6 @@ class MoonrakerDatabase:
             raise self.server.error(
                 "Value for argument 'key' is an invalid type: "
                 f"{type(key).__name__}")
-        if isinstance(key, str):
-            key = key.lower()
         if action == "GET":
             val = self.get_item(namespace, key)
         elif action == "POST":
