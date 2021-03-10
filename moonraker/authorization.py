@@ -28,9 +28,17 @@ class Authorization:
         self.access_tokens = {}
 
         # Get allowed cors domains
+        self.cors_domains = []
         cors_cfg = config.get('cors_domains', "").strip()
-        self.cors_domains = [d.strip().replace(".", "\\.").replace("*", ".*")
-                             for d in cors_cfg.split('\n')if d.strip()]
+        cds = [d.strip() for d in cors_cfg.split('\n')if d.strip()]
+        for domain in cds:
+            bad_match = re.search(r"^.+\.[^:]*\*", domain)
+            if bad_match is not None:
+                raise config.error(
+                    f"Unsafe CORS Domain '{domain}'.  Wildcards are not"
+                    " permitted in the top level domain.")
+            self.cors_domains.append(
+                domain.replace(".", "\\.").replace("*", ".*"))
 
         # Get Trusted Clients
         self.trusted_ips = []
