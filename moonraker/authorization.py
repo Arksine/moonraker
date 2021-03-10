@@ -193,7 +193,7 @@ class Authorization:
         return False
 
     def check_cors(self, origin, request=None):
-        if origin is None:
+        if origin is None or not self.cors_domains:
             return False
         for regex in self.cors_domains:
             match = re.match(regex, origin)
@@ -206,6 +206,21 @@ class Authorization:
                 else:
                     logging.debug(f"Partial Cors Match: {match.group()}")
         else:
+            # Check to see if the origin contains an IP that matches a
+            # current trusted connection
+            match = re.search(r"^https?://([^/]+)$", origin)
+            if match is not None:
+                ip = match.group(1)
+                try:
+                    ipaddr = ipaddress.ip_address(ip)
+                except ValueError:
+                    pass
+                else:
+                    if self._check_authorized_ip(ipaddr):
+                        logging.debug(
+                            f"Cors request matched trusted IP: {ip}")
+                        self._set_cors_headers(origin, request)
+                        return True
             logging.debug(f"No CORS match for origin: {origin}\n"
                           f"Patterns: {self.cors_domains}")
         return False
