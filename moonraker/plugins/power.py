@@ -558,6 +558,7 @@ class NeoPixel(PowerDevice):
         pass
 
     def set_all(self, color):
+        print("Set color", color)
         for i in range(self.neopixel.numPixels()):
             self.neopixel.setPixelColor(i, color)
         self.neopixel.show()
