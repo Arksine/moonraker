@@ -455,6 +455,7 @@ class GitUpdater:
         self.debug = self.cmd_helper.is_debug_enabled()
         self.env = config.get("env", env)
         dist_packages = None
+        self.python_reqs = None
         if self.env is not None:
             self.env = os.path.expanduser(self.env)
             dist_packages = config.get('python_dist_packages', None)
