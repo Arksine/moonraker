@@ -208,7 +208,7 @@ class Authorization:
         else:
             # Check to see if the origin contains an IP that matches a
             # current trusted connection
-            match = re.search(r"^https?://([^/]+)$", origin)
+            match = re.search(r"^https?://([^/:]+)", origin)
             if match is not None:
                 ip = match.group(1)
                 try:
