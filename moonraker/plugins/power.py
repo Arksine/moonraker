@@ -36,6 +36,8 @@ class PrinterPower:
                     dev = Tasmota(cfg)
                 elif dev_type == "shelly":
                     dev = Shelly(cfg)
+                elif dev_type == "homeseer":
+                    dev =  HomeSeer(cfg)
                 else:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 self.devices[dev.get_name()] = dev
@@ -521,6 +523,65 @@ class Shelly(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = "on" if state else "off"
+
+class HomeSeer(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.server = config.get_server()
+        self.addr = config.get("address")
+        self.device = config.getint("device")
+        self.user = config.get("user", "admin")
+        self.password = config.get("password", "")
+
+    async def _send_homeseer(self, request, additional = ""):
+        url = (f"http://{self.user}:{self.password}@{self.addr}"
+               f"/JSON?user={self.user}&pass={self.password}"
+               f"&request={request}&ref={self.device}&{additional}")
+        data = ""
+        http_client = AsyncHTTPClient()
+        try:
+            response = await http_client.fetch(url)
+            data = json_decode(response.body)
+        except Exception:
+            msg = f"Error sending HomeSeer command: {request}"
+            logging.exception(msg)
+            raise self.server.error(msg)
+        return data
+
+    async def initialize(self):
+        await self.refresh_status()
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "homeseer"
+        }
+
+    async def refresh_status(self):
+        try:
+            res = await self._send_homeseer("getstatus")
+            state = res[f"Devices"][0]["status"].lower()
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+
+    async def set_power(self, state):
+        try:
+            if state == "on":
+                state_hs = "On"
+            elif state == "off":
+                state_hs = "Off"
+            res = await self._send_homeseer("controldevicebylabel",
+                                            f"label={state_hs}")
+        except Exception:
+            self.state = "error"
+            msg = f"Error Setting Device Status: {self.name} to {state}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
 
 # The power plugin has multiple configuration sections
 def load_plugin_multi(config):

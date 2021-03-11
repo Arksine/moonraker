@@ -191,7 +191,8 @@ and Tasmota (via http) devices are supported.
 
 [power device_name]
 type: gpio
-#   The type of device.  Can be either gpio, tplink_smartplug or tasmota.
+#   The type of device.  Can be either gpio, tplink_smartplug, tasmota
+#   or homeseer.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -248,7 +249,19 @@ output_id:
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
 #   more than one (default is 0).
-
+address:
+device:
+user:
+password:
+#   The above options are used for "homeseer" devices.  The
+#   address should be a valid ip or hostname for the homeseer controller.
+#   "device" should be the ID of the device to control.
+#   To find out the ID, in the HomeSeer UI, click on the device you want to
+#   control (Make sure to click the sub-device that actually has On/Off
+#   buttons).  And then go to the "status/graphics" tab and it should list
+#   "ID" in the "advanced information" section.
+#   Provide a user and password with access to "device control"
+#   and at least the specific device you want to control
 
 ```
 Below are some potential examples:
