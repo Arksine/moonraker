@@ -804,6 +804,11 @@ class GitRepo:
 
     async def update_repo_status(self):
         async with self.git_operation_lock:
+            if not os.path.isdir(os.path.join(self.git_path, ".git")):
+                logging.info(
+                    f"Git Repo {self.alias}: path '{self.git_path}'"
+                    " is not a valid git repo")
+                return False
             try:
                 resp = await self.cmd_helper.run_cmd_with_response(
                     f"{self.git_cmd} status -u no")
@@ -869,8 +874,7 @@ class GitRepo:
     def _verify_repo(self, check_remote=False):
         if not self.valid_git_repo:
             raise self.server.error(
-                f"Git Repo {self.alias}: '{self.git_path}' "
-                "not a git repository")
+                f"Git Repo {self.alias}: repo not initialized")
         if check_remote:
             if self.git_remote == "?":
                 raise self.server.error(
