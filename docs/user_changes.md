@@ -1,5 +1,13 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
+
+### March 10th 2021
+- The `cors_domain` option in the `[authoriztion]` section is now
+  checked for dangerous entries.  If a domain entry contains a
+  wildcard in the top level domain (ie: `http://www.*`) then it
+  will be rejected, as malicious website can easily reproduce
+  this match.
+
 ### March 6th 2021
 - The `enable_debug_logging` in the `[server]` section now defaults
   to `False`.  This dramatically reduces the amount of logging produced

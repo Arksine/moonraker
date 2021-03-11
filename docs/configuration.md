@@ -88,7 +88,19 @@ cors_domains:
   http://klipper-printer.local
   http://second-printer.local:7125
 #   Enables CORS for the specified domains.  One may specify * if they wish
-#   to allow all domains.
+#   to allow all domains, however this should be an option reserved for
+#   client developers and not used in production.  A * can also be used
+#   to specify a wildcard that matches several domains.  For example:
+#     *.local
+#     http://*.my-domain.com
+#     *.my-domain.com:*
+#   Are all valid entries.  However, a wildcard may not be specified in
+#   the top level domain:
+#      http://my-printer.*
+#   The above example will be rejected.
+#   When CORS is enabled by adding an entry to this option, all origins
+#   matching the "trusted_clients" option will have CORS headers set as
+#   well.  If this option is not specified then CORS is disabled.
 ```
 
 # Plugin Configuration
