@@ -4,3 +4,4 @@ pyserial==3.4
 pillow==8.0.1
 lmdb==1.1.1
 streaming-form-data==1.8.1
+rpi-ws281x==1.1.3

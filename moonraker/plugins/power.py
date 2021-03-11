@@ -11,6 +11,7 @@ import json
 import struct
 import socket
 import gpiod
+from rpi_ws281x import Adafruit_NeoPixel, Color
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
 from tornado import gen
@@ -36,6 +37,8 @@ class PrinterPower:
                     dev = Tasmota(cfg)
                 elif dev_type == "shelly":
                     dev = Shelly(cfg)
+                elif dev_type == "neopixel":
+                    dev = NeoPixel(cfg)
                 else:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 self.devices[dev.get_name()] = dev
@@ -521,6 +524,50 @@ class Shelly(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = "on" if state else "off"
+
+class NeoPixel(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.pin = config.getint("pin")
+        self.count = config.getint("count", 1)
+        self.freq = config.getint("freq", 800000)
+        self.dma = config.getint("dma", 10)
+        self.brightness = config.getint("brightness", 255)
+        self.invert = config.getboolean("invert", False)
+        self.channel = config.getint("channel", 0)
+
+        self.color_off = Color(0,0,0)
+        self.color_on = Color(config.getint("r", 255), config.getint("g", 255), config.getint("b", 255))
+
+        self.initial_state = config.getboolean("initial_state", False)
+
+        self.neopixel = Adafruit_NeoPixel(self.count, self.pin, self.freq, self.dma, self.invert, self.brightness, self.channel)
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "neopixel"
+        }
+
+    async def initialize(self):
+        self.neopixel.begin()
+        self.set_power("on" if self.initial_state else "off")
+
+    def refresh_status(self):
+        # We have no way of reading the current state
+        pass
+
+    def set_all(self, color):
+        for i in range(self.neopixel.numPixels()):
+            self.neopixel.setPixelColor(i, color)
+        self.neopixel.show()
+
+    def set_power(self, state):
+        if state == "on":
+            self.set_all(self.color_on)
+        else:
+            self.set_all(self.color_off)
+        self.state = state
 
 # The power plugin has multiple configuration sections
 def load_plugin_multi(config):
