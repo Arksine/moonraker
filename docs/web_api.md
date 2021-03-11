@@ -1632,6 +1632,7 @@ All arguments are optional. Arguments are as follows:
             "end_time": <end_time>,
             "filament_used": <filament_used>
             "filename": <filename>,
+            "metadata": {}, # Array of file metadata
             "print_duration": <print_duration>,
             "status": <status>,
             "start_time": <start_time>,
