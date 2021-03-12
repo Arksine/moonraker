@@ -1612,13 +1612,14 @@ The APIs below are avilable when the `[history]` plugin has been configured.
 
 ### Get job list
 - HTTP command:\
-  `GET /printer/histor/list?limit=50&start=50&since=1&before=5`
+  `GET /server/history/list?limit=50&start=50&since=1&before=5&id=1`
 
 - Websocket command:\
-  `{"jsonrpc":"2.0","method":"printer.history.list","id":"1","params":{}}`
+  `{"jsonrpc":"2.0","method":"server.history.list","id":"1","params":{}}`
 
 All arguments are optional. Arguments are as follows:
 `before` All jobs before this UNIX timestamp
+`id` ID of job to display. This overrides other arguments.
 `limit` Number of prints to return
 `since` All jobs after this UNIX timestamp
 `start` Record number to start from (i.e. 10 would start at the 10th print)
@@ -1644,12 +1645,14 @@ All arguments are optional. Arguments are as follows:
 
 ### Delete job
 - HTTP command:\
-`DELETE /printer/history/delete?all`
+`DELETE /server/history/delete?all`
 
 - Websocket command:\
-`{"jsonrpc":"2.0","method":"printer.jobs.list","id":"1","params":{}}`
+`{"jsonrpc":"2.0","method":"server.history.delete","id":"1","params":{}}`
 
-Optional argument `all` to delete all history.
+One argument from below is required:
+`all` Set to true to delete all history
+`id` Delete specific job
 
 - Returns an array of deleted ids
 ```json

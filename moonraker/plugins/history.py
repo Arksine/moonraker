@@ -55,7 +55,6 @@ class History:
         id = str(web_request.get_int("id", -1))
         if all:
             deljobs = []
-            jobs = self.history_ns.keys()
             for job in self.history_ns.keys():
                 self.delete_job(job, False)
                 deljobs.append(job)
