@@ -49,7 +49,7 @@ class History:
 
     async def _handle_job_delete(self, web_request):
         all = web_request.get_boolean("all", False)
-        id = str(web_request.get_int("id", -1))
+        id = web_request.get_str("id", None)
         if all:
             deljobs = []
             for job in self.history_ns.keys():
@@ -59,7 +59,7 @@ class History:
             self.metadata = []
             return deljobs
 
-        if id == -1:
+        if id is None:
             raise self.server.error("No ID to delete")
 
         if id not in self.history_ns.keys():
@@ -69,26 +69,26 @@ class History:
         return [id]
 
     async def _handle_jobs_list(self, web_request):
-        id = str(web_request.get_int("id", -1))
-        if id != "-1":
+        id = web_request.get_str("id", None)
+        if id is not None:
             if id not in self.history_ns:
                 raise self.server.error(f"Invalid job id: {id}")
-            return {id: self.history_ns.get(id, {})}
-
-        before = web_request.get_float("before", -1)
-        since = web_request.get_float("since", -1)
-        limit = web_request.get_int("limit", 50)
-        start = web_request.get_int("start", 0)
-        if start > (len(self.history_ns)-1) or len(self.history_ns) == 0:
-            return {"count": len(self.history_ns), "prints": {}}
+            return {id: self.history_ns[id]}
 
         i = 0
         end_num = len(self.history_ns)
         jobs = {}
         start_num = 0
 
+        before = web_request.get_float("before", -1)
+        since = web_request.get_float("since", -1)
+        limit = web_request.get_int("limit", 50)
+        start = web_request.get_int("start", 0)
+        if start >= end_num or end_num == 0:
+            return {"count": 0, "jobs": {}}
+
         for id in self.history_ns.keys():
-            job = self.history_ns.get(id)
+            job = self.history_ns[id]
             if since != -1 and since > job.get('start_time'):
                 start_num += 1
                 continue
@@ -134,17 +134,17 @@ class History:
     def add_job(self, job):
         self.current_job_id = str(
             self.database.get_item("moonraker", JOBS_AUTO_INC_KEY))
-        self.database.update_item("moonraker", JOBS_AUTO_INC_KEY,
+        self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY,
                                   int(self.current_job_id)+1)
         self.current_job = job
         self.grab_job_metadata()
-        self.history_ns.insert(self.current_job_id, job.get_stats())
+        self.history_ns[self.current_job_id] = job.get_stats()
 
     def delete_job(self, id):
         id = str(id)
 
         if id in self.history_ns.keys():
-            self.history_ns.delete(id)
+            del self.history_ns[id]
 
         return
 
@@ -161,25 +161,19 @@ class History:
 
     def get_job(self, id):
         id = str(id)
-        if id not in self.history_ns.keys():
-            return None
-        return self.history_ns.get(id)
+        return self.history_ns.get(id, None)
 
     def grab_job_metadata(self):
         if self.current_job is None:
             return
 
         filename = self.current_job.get("filename")
-        if filename not in self.gcdb:
-            return
-
         metadata = self.gcdb.get(filename, {})
         metadata.pop("thumbnails", None)
         self.current_job.set("metadata", metadata)
 
     def save_current_job(self):
-        self.history_ns.update_child(self.current_job_id,
-                                     self.current_job.get_stats())
+        self.history_ns[self.current_job_id] = self.current_job.get_stats()
 
 class PrinterJob:
     def __init__(self, data={}):
