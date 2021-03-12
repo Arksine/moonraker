@@ -27,7 +27,7 @@ class History:
             "server:klippy_shutdown", self._save_job_on_error)
 
         self.server.register_endpoint(
-            "/server/history/delete", ['DELETE'], self._handle_job_delete)
+            "/server/history/job", ['GET', 'DELETE'], self._handle_job_request)
         self.server.register_endpoint(
             "/server/history/list", ['GET'], self._handle_jobs_list)
 
@@ -47,37 +47,37 @@ class History:
             logging.info(f"Error subscribing to print_stats")
         self.print_stats = result.get("print_stats", {})
 
-    async def _handle_job_delete(self, web_request):
-        all = web_request.get_boolean("all", False)
-        id = web_request.get_str("id", None)
-        if all:
-            deljobs = []
-            for job in self.history_ns.keys():
-                self.delete_job(job)
-                deljobs.append(job)
-            self.database.update_item("moonraker", JOBS_AUTO_INC_KEY, 0)
-            self.metadata = []
-            return deljobs
+    async def _handle_job_request(self, web_request):
+        action = web_request.get_action()
+        if action == "GET":
+            id = web_request.get_str("id")
+            if id not in self.history_ns:
+                raise self.server.error(f"Invalid job id: {id}", 404)
+            job = self.history_ns[id]
+            job['job_id'] = id
+            return {"job": job}
+        if action == "DELETE":
+            all = web_request.get_boolean("all", False)
+            if all:
+                deljobs = []
+                for job in self.history_ns.keys():
+                    self.delete_job(job)
+                    deljobs.append(job)
+                self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY, 0)
+                self.metadata = []
+                return {'deleted_jobs': deljobs}
 
-        if id is None:
-            raise self.server.error("No ID to delete")
+            id = web_request.get_str("id")
+            if id not in self.history_ns.keys():
+                raise self.server.error(f"Invalid job id: {id}", 404)
 
-        if id not in self.history_ns.keys():
-            raise self.server.error(f"Invalid job id: {id}")
-
-        self.delete_job(id)
-        return [id]
+            self.delete_job(id)
+            return {'deleted_jobs': [id]}
 
     async def _handle_jobs_list(self, web_request):
-        id = web_request.get_str("id", None)
-        if id is not None:
-            if id not in self.history_ns:
-                raise self.server.error(f"Invalid job id: {id}")
-            return {id: self.history_ns[id]}
-
         i = 0
         end_num = len(self.history_ns)
-        jobs = {}
+        jobs = []
         start_num = 0
 
         before = web_request.get_float("before", -1)
@@ -100,10 +100,11 @@ class History:
             if start != 0:
                 start -= 1
                 continue
-            jobs[id] = job
+            job['job_id'] = id
+            jobs.append(job)
             i += 1
 
-        return {"count": end_num - start_num, "prints": jobs}
+        return {"count": end_num - start_num, "jobs": jobs}
 
     async def _status_update(self, data):
         if "print_stats" in data:
