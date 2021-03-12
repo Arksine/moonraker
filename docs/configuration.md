@@ -118,6 +118,16 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 [octoprint_compat]
 ```
 
+## History
+Enables moonraker to track and store print history. To enable this plugin, add
+the configuration below.
+
+```
+# moonraker.conf
+
+[history]
+```
+
 ## paneldue
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL

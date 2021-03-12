@@ -1607,6 +1607,62 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
   }
   ```
 
+## History APIs
+The APIs below are avilable when the `[history]` plugin has been configured.
+
+### Get job list
+- HTTP command:\
+  `GET /server/history/list?limit=50&start=50&since=1&before=5&id=1`
+
+- Websocket command:\
+  `{"jsonrpc":"2.0","method":"server.history.list","id":"1","params":{}}`
+
+All arguments are optional. Arguments are as follows:
+`before` All jobs before this UNIX timestamp
+`id` ID of job to display. This overrides other arguments.
+`limit` Number of prints to return
+`since` All jobs after this UNIX timestamp
+`start` Record number to start from (i.e. 10 would start at the 10th print)
+
+- Returns an array of jobs that have been printed
+  ```json
+  {
+      count: <number of prints>
+      prints: {
+        <id>: {
+            "end_time": <end_time>,
+            "filament_used": <filament_used>
+            "filename": <filename>,
+            "metadata": {}, # Array of file metadata
+            "print_duration": <print_duration>,
+            "status": <status>,
+            "start_time": <start_time>,
+            "total_duration": <total_duration>
+        }
+      }
+  }
+  ```
+
+### Delete job
+- HTTP command:\
+`DELETE /server/history/delete?all`
+
+- Websocket command:\
+`{"jsonrpc":"2.0","method":"server.history.delete","id":"1","params":{}}`
+
+One argument from below is required:
+`all` Set to true to delete all history
+`id` Delete specific job
+
+- Returns an array of deleted ids
+```json
+[
+    id1,
+    id2,
+    ...
+]
+```
+
 ## Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
 notifications.  These notifications are sent to all connected clients
