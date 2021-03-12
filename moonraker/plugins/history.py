@@ -22,9 +22,10 @@ class History:
         self.server.register_event_handler(
             "server:status_update", self._status_update)
         self.server.register_event_handler(
-            "server:klippy_disconnect", self._save_job_on_error)
+            "server:klippy_disconnect", self._handle_disconnect)
         self.server.register_event_handler(
-            "server:klippy_shutdown", self._save_job_on_error)
+            "server:klippy_shutdown", self._handle_shutdown)
+        self.server.register_notification("history:history_changed")
 
         self.server.register_endpoint(
             "/server/history/job", ['GET', 'DELETE'], self._handle_job_request)
@@ -118,19 +119,22 @@ class History:
                     if new_state == "printing" and old_state != "paused":
                         self.print_stats.update(ps)
                         self.add_job(PrinterJob(self.print_stats))
-                    elif new_state == "complete" and \
-                            self.current_job is not None:
-                        self.print_stats.update(ps)
-                        self.finish_job("completed")
-                    elif new_state == "standby" and \
-                            self.current_job is not None:
-                        self.finish_job("cancelled")
+                    elif self.current_job is not None:
+                        if new_state == "complete":
+                            self.print_stats.update(ps)
+                            self.finish_job("completed")
+                        if new_state == "standby":
+                            self.finish_job("cancelled")
+                        elif new_state == "error":
+                            self.finish_job("error")
 
             self.print_stats.update(ps)
 
-    def _save_job_on_error(self):
-        if self.current_job is not None:
-            self.save_current_job()
+    def _handle_shutdown(self):
+        self.finish_job("klippy_shutdown")
+
+    def _handle_disconnect(self):
+        self.finish_job("klippy_disconnect")
 
     def add_job(self, job):
         self.current_job_id = str(
@@ -140,6 +144,7 @@ class History:
         self.current_job = job
         self.grab_job_metadata()
         self.history_ns[self.current_job_id] = job.get_stats()
+        self.send_history_event("added")
 
     def delete_job(self, id):
         id = str(id)
@@ -157,6 +162,7 @@ class History:
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
         self.save_current_job()
+        self.send_history_event("finished")
         self.current_job = None
         self.current_job_id = None
 
@@ -175,6 +181,15 @@ class History:
 
     def save_current_job(self):
         self.history_ns[self.current_job_id] = self.current_job.get_stats()
+
+    def send_history_event(self, evt_action):
+        job = dict(self.current_job.get_stats())
+        job['job_id'] = self.current_job_id
+        self.server.send_event("history:history_changed",
+                               {'action': evt_action, 'job': job})
+
+    def on_exit(self):
+        self.finish_job("server_exit")
 
 class PrinterJob:
     def __init__(self, data={}):
