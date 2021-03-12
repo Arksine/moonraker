@@ -1,10 +1,8 @@
 # History cache for printer jobs
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import json, logging, time
-from tornado.ioloop import IOLoop
-
-SAVE_INTERVAL = 5
+import logging
+import time
 
 HIST_NAMESPACE = "history"
 JOBS_AUTO_INC_KEY = "history_auto_inc_id"
@@ -14,7 +12,7 @@ class History:
         self.server = config.get_server()
         self.database = self.server.lookup_plugin("database")
         self.gcdb = self.database.wrap_namespace("gcode_metadata",
-            parse_keys=False)
+                                                 parse_keys=False)
         self.current_job = None
         self.current_job_id = None
         self.print_stats = {}
@@ -28,7 +26,6 @@ class History:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._save_job_on_error)
 
-
         self.server.register_endpoint(
             "/server/history/delete", ['DELETE'], self._handle_job_delete)
         self.server.register_endpoint(
@@ -36,7 +33,7 @@ class History:
 
         self.database.register_local_namespace(HIST_NAMESPACE)
         self.history_ns = self.database.wrap_namespace(HIST_NAMESPACE,
-            parse_keys=False)
+                                                       parse_keys=False)
 
         if JOBS_AUTO_INC_KEY not in self.database.ns_keys("moonraker"):
             self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY, 0)
@@ -56,9 +53,9 @@ class History:
         if all:
             deljobs = []
             for job in self.history_ns.keys():
-                self.delete_job(job, False)
+                self.delete_job(job)
                 deljobs.append(job)
-            self.database.update_item("moonraker", JOBS_AUTO_INC_KEY, 0);
+            self.database.update_item("moonraker", JOBS_AUTO_INC_KEY, 0)
             self.metadata = []
             return deljobs
 
@@ -120,28 +117,30 @@ class History:
                     if new_state == "printing" and old_state != "paused":
                         self.print_stats.update(ps)
                         self.add_job(PrinterJob(self.print_stats))
-                    elif new_state == "complete" and self.current_job != None:
+                    elif new_state == "complete" and \
+                            self.current_job is not None:
                         self.print_stats.update(ps)
-                        self.finish_job("completed", self.print_stats)
-                    elif new_state == "standby"  and self.current_job != None:
-                        self.finish_job("cancelled", self.print_stats)
+                        self.finish_job("completed")
+                    elif new_state == "standby" and \
+                            self.current_job is not None:
+                        self.finish_job("cancelled")
 
             self.print_stats.update(ps)
 
     def _save_job_on_error(self):
-        if self.current_job != None:
+        if self.current_job is not None:
             self.save_current_job()
 
     def add_job(self, job):
-        self.current_job_id = str(self.database.get_item("moonraker",
-            JOBS_AUTO_INC_KEY))
+        self.current_job_id = str(
+            self.database.get_item("moonraker", JOBS_AUTO_INC_KEY))
         self.database.update_item("moonraker", JOBS_AUTO_INC_KEY,
-            int(self.current_job_id)+1)
+                                  int(self.current_job_id)+1)
         self.current_job = job
         self.grab_job_metadata()
         self.history_ns.insert(self.current_job_id, job.get_stats())
 
-    def delete_job(self, id, check_metadata=True):
+    def delete_job(self, id):
         id = str(id)
 
         if id in self.history_ns.keys():
@@ -149,11 +148,11 @@ class History:
 
         return
 
-    def finish_job(self, status, updates):
-        if self.current_job == None:
+    def finish_job(self, status):
+        if self.current_job is None:
             return
 
-        self.current_job.finish("completed", self.print_stats)
+        self.current_job.finish(status, self.print_stats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
         self.save_current_job()
@@ -167,23 +166,23 @@ class History:
         return self.history_ns.get(id)
 
     def grab_job_metadata(self):
-        if self.current_job == None:
+        if self.current_job is None:
             return
 
         filename = self.current_job.get("filename")
         if filename not in self.gcdb:
             return
 
-        metadata = {k:v for k,v in self.gcdb.get(filename).items()
-            if k != "thumbnails"}
+        metadata = self.gcdb.get(filename, {})
+        metadata.pop("thumbnails", None)
         self.current_job.set("metadata", metadata)
 
     def save_current_job(self):
         self.history_ns.update_child(self.current_job_id,
-            self.current_job.get_stats())
+                                     self.current_job.get_stats())
 
 class PrinterJob:
-    def __init__(self, data={}, file_metadata={}):
+    def __init__(self, data={}):
         self.end_time = None
         self.filament_used = 0
         self.filename = None
