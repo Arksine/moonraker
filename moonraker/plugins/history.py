@@ -108,33 +108,45 @@ class History:
         return {"count": end_num - start_num, "jobs": jobs}
 
     async def _status_update(self, data):
-        if "print_stats" in data:
-            ps = data['print_stats']
+        ps = data.get("print_stats", {})
+        if "state" in ps:
+            old_state = self.print_stats['state']
+            new_state = ps['state']
+            new_ps = dict(self.print_stats)
+            new_ps.update(ps)
 
-            if "state" in ps:
-                old_state = self.print_stats['state']
-                new_state = ps['state']
+            if new_state is not old_state:
+                if new_state == "printing" and self.current_job is None:
+                    # always add new job if no existing job is present
+                    self.add_job(PrinterJob(new_ps))
+                elif self.current_job is not None:
+                    if new_state == "complete":
+                        self.finish_job("completed", new_ps)
+                    if new_state == "standby":
+                        self.finish_job("cancelled", self.print_stats)
+                    elif new_state == "error":
+                        self.finish_job("error", new_ps)
+                    elif new_state == "printing" and \
+                            self._check_need_cancel(new_ps):
+                        # Finish with the previous state
+                        self.finish_job("cancelled", self.print_stats)
+                        self.add_job(PrinterJob(new_ps))
 
-                if new_state is not old_state:
-                    if new_state == "printing" and old_state != "paused":
-                        self.print_stats.update(ps)
-                        self.add_job(PrinterJob(self.print_stats))
-                    elif self.current_job is not None:
-                        if new_state == "complete":
-                            self.print_stats.update(ps)
-                            self.finish_job("completed")
-                        if new_state == "standby":
-                            self.finish_job("cancelled")
-                        elif new_state == "error":
-                            self.finish_job("error")
-
-            self.print_stats.update(ps)
+        self.print_stats.update(ps)
 
     def _handle_shutdown(self):
-        self.finish_job("klippy_shutdown")
+        self.finish_job("klippy_shutdown", self.print_stats)
 
     def _handle_disconnect(self):
-        self.finish_job("klippy_disconnect")
+        self.finish_job("klippy_disconnect", self.print_stats)
+
+    def _check_need_cancel(self, new_stats):
+        # Cancel if the file name has changed, total duration has
+        # decreased, or if job is not resuming from a pause
+        ps = self.print_stats
+        return ps['filename'] != new_stats['filename'] or \
+            ps['total_duration'] > new_stats['total_duration'] or \
+            ps['state'] != "paused"
 
     def add_job(self, job):
         self.current_job_id = str(
@@ -154,11 +166,11 @@ class History:
 
         return
 
-    def finish_job(self, status):
+    def finish_job(self, status, pstats):
         if self.current_job is None:
             return
 
-        self.current_job.finish(status, self.print_stats)
+        self.current_job.finish(status, pstats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
         self.save_current_job()
@@ -189,7 +201,7 @@ class History:
                                {'action': evt_action, 'job': job})
 
     def on_exit(self):
-        self.finish_job("server_exit")
+        self.finish_job("server_exit", self.print_stats)
 
 class PrinterJob:
     def __init__(self, data={}):
