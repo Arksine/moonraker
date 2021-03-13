@@ -573,6 +573,8 @@ class GitUpdater:
         if self.repo.is_current():
             # No need to update
             return
+        package_mtime = self._get_file_mtime(self.install_script)
+        pyreqs_mtime = self._get_file_mtime(self.python_reqs)
         self._notify_status("Updating Repo...")
         try:
             if self.repo.is_detached():
@@ -588,13 +590,13 @@ class GitUpdater:
         # Check Semantic Versions
         vinfo = self._get_version_info()
         cur_version = vinfo.get('version', ())
-        update_deps |= cur_version < vinfo.get('deps_version', ())
         need_env_rebuild = cur_version < vinfo.get('env_version', ())
-        if update_deps:
+        if update_deps or self._check_need_update(
+                package_mtime, self.install_script):
             await self._install_packages()
+        if update_deps or self._check_need_update(
+                pyreqs_mtime, self.python_reqs):
             await self._update_virtualenv(need_env_rebuild)
-        elif need_env_rebuild:
-            await self._update_virtualenv(True)
         # Refresh local repo state
         await self._update_repo_state(need_fetch=False)
         if self.name == "moonraker":
@@ -606,6 +608,17 @@ class GitUpdater:
         else:
             await self.restart_service()
             self._notify_status("Update Finished...", is_complete=True)
+
+    def _get_file_mtime(self, filename):
+        if filename is None or not os.path.isfile(filename):
+            return None
+        return os.path.getmtime(filename)
+
+    def _check_need_update(self, prev_mtime, filename):
+        cur_mtime = self._get_file_mtime(filename)
+        if prev_mtime is None or cur_mtime is None:
+            return False
+        return cur_mtime != prev_mtime
 
     async def _install_packages(self):
         if self.install_script is None:
