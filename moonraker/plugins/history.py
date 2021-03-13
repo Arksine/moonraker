@@ -5,17 +5,12 @@ import logging
 import time
 
 HIST_NAMESPACE = "history"
-JOBS_AUTO_INC_KEY = "history_auto_inc_id"
 
 class History:
     def __init__(self, config):
         self.server = config.get_server()
-        self.database = self.server.lookup_plugin("database")
-        self.gcdb = self.database.wrap_namespace("gcode_metadata",
-                                                 parse_keys=False)
-        self.current_job = None
-        self.current_job_id = None
-        self.print_stats = {}
+        database = self.server.lookup_plugin("database")
+        self.gcdb = database.wrap_namespace("gcode_metadata", parse_keys=False)
 
         self.server.register_event_handler(
             "server:klippy_ready", self._init_ready)
@@ -32,12 +27,17 @@ class History:
         self.server.register_endpoint(
             "/server/history/list", ['GET'], self._handle_jobs_list)
 
-        self.database.register_local_namespace(HIST_NAMESPACE)
-        self.history_ns = self.database.wrap_namespace(HIST_NAMESPACE,
-                                                       parse_keys=False)
+        database.register_local_namespace(HIST_NAMESPACE)
+        self.history_ns = database.wrap_namespace(HIST_NAMESPACE,
+                                                  parse_keys=False)
 
-        if JOBS_AUTO_INC_KEY not in self.database.ns_keys("moonraker"):
-            self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY, 0)
+        self.current_job = None
+        self.current_job_id = None
+        self.print_stats = {}
+        self.next_job_id = 0
+        self.cached_job_ids = self.history_ns.keys()
+        if self.cached_job_ids:
+            self.next_job_id = int(self.cached_job_ids[-1], 16) + 1
 
     async def _init_ready(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
@@ -51,29 +51,27 @@ class History:
     async def _handle_job_request(self, web_request):
         action = web_request.get_action()
         if action == "GET":
-            id = web_request.get_str("id")
-            if id not in self.history_ns:
-                raise self.server.error(f"Invalid job id: {id}", 404)
-            job = self.history_ns[id]
-            job['job_id'] = id
+            job_id = web_request.get_str("uid")
+            if job_id not in self.cached_job_ids:
+                raise self.server.error(f"Invalid job uid: {job_id}", 404)
+            job = self.history_ns[job_id]
+            job['job_id'] = job_id
             return {"job": job}
         if action == "DELETE":
             all = web_request.get_boolean("all", False)
             if all:
-                deljobs = []
-                for job in self.history_ns.keys():
-                    self.delete_job(job)
-                    deljobs.append(job)
-                self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY, 0)
-                self.metadata = []
+                deljobs = self.cached_job_ids
+                self.history_ns.clear()
+                self.cached_job_ids = []
+                self.next_job_id = 0
                 return {'deleted_jobs': deljobs}
 
-            id = web_request.get_str("id")
-            if id not in self.history_ns.keys():
-                raise self.server.error(f"Invalid job id: {id}", 404)
+            job_id = web_request.get_str("uid")
+            if job_id not in self.cached_job_ids:
+                raise self.server.error(f"Invalid job uid: {job_id}", 404)
 
-            self.delete_job(id)
-            return {'deleted_jobs': [id]}
+            self.delete_job(job_id)
+            return {'deleted_jobs': [job_id]}
 
     async def _handle_jobs_list(self, web_request):
         i = 0
@@ -88,8 +86,8 @@ class History:
         if start >= end_num or end_num == 0:
             return {"count": 0, "jobs": {}}
 
-        for id in self.history_ns.keys():
-            job = self.history_ns[id]
+        for job_id in self.cached_job_ids:
+            job = self.history_ns[job_id]
             if since != -1 and since > job.get('start_time'):
                 start_num += 1
                 continue
@@ -101,7 +99,7 @@ class History:
             if start != 0:
                 start -= 1
                 continue
-            job['job_id'] = id
+            job['job_id'] = job_id
             jobs.append(job)
             i += 1
 
@@ -149,22 +147,22 @@ class History:
             ps['state'] != "paused"
 
     def add_job(self, job):
-        self.current_job_id = str(
-            self.database.get_item("moonraker", JOBS_AUTO_INC_KEY))
-        self.database.insert_item("moonraker", JOBS_AUTO_INC_KEY,
-                                  int(self.current_job_id)+1)
+        job_id = f"{self.next_job_id:06X}"
         self.current_job = job
         self.grab_job_metadata()
-        self.history_ns[self.current_job_id] = job.get_stats()
+        self.history_ns[job_id] = job.get_stats()
+        self.current_job_id = job_id
+        self.cached_job_ids.append(job_id)
+        self.next_job_id += 1
         self.send_history_event("added")
 
-    def delete_job(self, id):
-        id = str(id)
+    def delete_job(self, job_id):
+        if isinstance(job_id, int):
+            job_id = f"{job_id:06X}"
 
-        if id in self.history_ns.keys():
-            del self.history_ns[id]
-
-        return
+        if job_id in self.cached_job_ids:
+            del self.history_ns[job_id]
+            self.cached_job_ids.remove(job_id)
 
     def finish_job(self, status, pstats):
         if self.current_job is None:
@@ -178,9 +176,10 @@ class History:
         self.current_job = None
         self.current_job_id = None
 
-    def get_job(self, id):
-        id = str(id)
-        return self.history_ns.get(id, None)
+    def get_job(self, job_id):
+        if isinstance(job_id, int):
+            job_id = f"{job_id:06X}"
+        return self.history_ns.get(job_id, None)
 
     def grab_job_metadata(self):
         if self.current_job is None:
