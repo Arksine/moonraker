@@ -1454,9 +1454,6 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 - HTTP command:\
   `GET /api/login`
 
-- HTTP command:\
-  `GET /api/server`
-
 - Returns:\
   An object containing stubbed Octoprint login/user verification
   ```json
@@ -1475,7 +1472,7 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 
 ### Get settings
 - HTTP command:\
-  `GET /api/server`
+  `GET /api/settings`
 
 - Returns:\
   An object containing stubbed Octoprint settings.
