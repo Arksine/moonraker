@@ -9,6 +9,7 @@ HIST_NAMESPACE = "history"
 class History:
     def __init__(self, config):
         self.server = config.get_server()
+        self.file_manager = self.server.lookup_plugin('file_manager')
         database = self.server.lookup_plugin("database")
         self.gcdb = database.wrap_namespace("gcode_metadata", parse_keys=False)
 
@@ -55,8 +56,7 @@ class History:
             if job_id not in self.cached_job_ids:
                 raise self.server.error(f"Invalid job uid: {job_id}", 404)
             job = self.history_ns[job_id]
-            job['job_id'] = job_id
-            return {"job": job}
+            return {"job": self._prep_requested_job(job, job_id)}
         if action == "DELETE":
             all = web_request.get_boolean("all", False)
             if all:
@@ -99,8 +99,7 @@ class History:
             if start != 0:
                 start -= 1
                 continue
-            job['job_id'] = job_id
-            jobs.append(job)
+            jobs.append(self._prep_requested_job(job, job_id))
             i += 1
 
         return {"count": end_num - start_num, "jobs": jobs}
@@ -184,20 +183,27 @@ class History:
     def grab_job_metadata(self):
         if self.current_job is None:
             return
-
         filename = self.current_job.get("filename")
         metadata = self.gcdb.get(filename, {})
-        metadata.pop("thumbnails", None)
+        if "thumbnails" in metadata:
+            for thumb in metadata['thumbnails']:
+                thumb.pop('data', None)
         self.current_job.set("metadata", metadata)
 
     def save_current_job(self):
         self.history_ns[self.current_job_id] = self.current_job.get_stats()
 
     def send_history_event(self, evt_action):
-        job = dict(self.current_job.get_stats())
-        job['job_id'] = self.current_job_id
+        job = self._prep_requested_job(
+            self.current_job.get_stats(), self.current_job_id)
         self.server.send_event("history:history_changed",
                                {'action': evt_action, 'job': job})
+
+    def _prep_requested_job(self, job, job_id):
+        job['job_id'] = job_id
+        job['exists'] = self.file_manager.check_file_exists(
+            "gcodes", job['filename'])
+        return job
 
     def on_exit(self):
         self.finish_job("server_exit", self.print_stats)
@@ -225,7 +231,7 @@ class PrinterJob:
         return getattr(self, name)
 
     def get_stats(self):
-        return self.__dict__
+        return self.__dict__.copy()
 
     def set(self, name, val):
         if not hasattr(self, name):
