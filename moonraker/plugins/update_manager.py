@@ -710,6 +710,10 @@ class GitUpdater:
             await self.cmd_helper.run_cmd(
                 f"sudo systemctl restart {self.name}")
         except Exception:
+            if self.name == "moonraker":
+                # We will always get an error when restarting moonraker
+                # from within the child process, so ignore it
+                return
             raise self._log_exc("Error restarting service")
 
     def get_update_status(self):
