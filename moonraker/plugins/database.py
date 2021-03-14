@@ -338,7 +338,7 @@ class NamespaceWrapper:
     def delete(self, key):
         if isinstance(key, str) and not self.parse_keys:
             key = [key]
-        self.db.delete_item(self.namespace, key)
+        return self.db.delete_item(self.namespace, key)
 
     def __len__(self):
         return self.db.ns_length(self.namespace)
