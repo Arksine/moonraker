@@ -206,6 +206,14 @@ class PrusaSlicer(BaseSlicer):
             r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", self.header_data)
         if not thumb_matches:
             return None
+        thumb_dir = os.path.join(os.path.dirname(self.path), "thumbs")
+        if not os.path.exists(thumb_dir):
+            try:
+                os.mkdir(thumb_dir)
+            except Exception:
+                log_to_stderr(f"Unable to create thumb dir: {thumb_dir}")
+                return
+        thumb_base = os.path.splitext(os.path.basename(self.path))[0]
         parsed_matches = []
         for match in thumb_matches:
             lines = re.split(r"\r?\n", match.replace('; ', ''))
@@ -221,9 +229,15 @@ class PrusaSlicer(BaseSlicer):
                     f"MetadataError: Thumbnail Size Mismatch: "
                     f"detected {info[2]}, actual {len(data)}")
                 continue
+            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
+            thumb_path = os.path.join(thumb_dir, thumb_name)
+            rel_thumb_path = os.path.join("thumbs", thumb_name)
+            with open(thumb_path, "wb") as f:
+                f.write(base64.b64decode(data.encode()))
             parsed_matches.append({
                 'width': info[0], 'height': info[1],
-                'size': info[2], 'data': data})
+                'size': info[2], 'data': data,
+                'relative_path': rel_thumb_path})
         return parsed_matches
 
     def parse_first_layer_extr_temp(self):
@@ -319,33 +333,38 @@ class Cura(PrusaSlicer):
         if thumbs is not None:
             return thumbs
         # Check for thumbnails extracted from the ufp
-        thumbName = os.path.splitext(
-            os.path.basename(self.path))[0] + ".png"
-        thumbPath = os.path.join(
-            os.path.dirname(self.path), "thumbs", thumbName)
-        if not os.path.isfile(thumbPath):
+        thumb_dir = os.path.join(os.path.dirname(self.path), "thumbs")
+        thumb_base = os.path.splitext(os.path.basename(self.path))[0]
+        thumb_path = os.path.join(thumb_dir, f"{thumb_base}.png")
+        rel_path_full = os.path.join("thumbs", f"{thumb_base}.png")
+        rel_path_small = os.path.join("thumbs", f"{thumb_base}-32x32.png")
+        thumb_path_small = os.path.join(thumb_dir, f"{thumb_base}-32x32.png")
+        if not os.path.isfile(thumb_path):
             return None
         # read file
         thumbs = []
         try:
-            with open(thumbPath, 'rb') as thumbFile:
-                fbytes = thumbFile.read()
+            with open(thumb_path, 'rb') as thumb_file:
+                fbytes = thumb_file.read()
                 with Image.open(io.BytesIO(fbytes)) as im:
-                    thumbFull = base64.b64encode(fbytes).decode()
+                    thumb_full_b64 = base64.b64encode(fbytes).decode()
                     thumbs.append({
                         'width': im.width, 'height': im.height,
-                        'size': len(thumbFull), 'data': thumbFull
+                        'size': len(thumb_full_b64), 'data': thumb_full_b64,
+                        'relative_path': rel_path_full
                     })
                     # Create 32x32 thumbnail
                     im.thumbnail((32, 32), Image.ANTIALIAS)
-                    tmpThumb = io.BytesIO()
-                    im.save(tmpThumb, format="PNG")
-                    thumbSmall = base64.b64encode(
-                        tmpThumb.getbuffer()).decode()
-                    tmpThumb.close()
+                    tmp_thumb = io.BytesIO()
+                    im.save(tmp_thumb, format="PNG")
+                    im.save(thumb_path_small, format="PNG")
+                    thumb_small_b64 = base64.b64encode(
+                        tmp_thumb.getbuffer()).decode()
+                    tmp_thumb.close()
                     thumbs.insert(0, {
                         'width': im.width, 'height': im.height,
-                        'size': len(thumbSmall), 'data': thumbSmall
+                        'size': len(thumb_small_b64), 'data': thumb_small_b64,
+                        'relative_path': rel_path_small
                     })
         except Exception as e:
             log_to_stderr(str(e))
