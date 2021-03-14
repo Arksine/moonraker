@@ -792,6 +792,15 @@ class GitRepo:
                 f"{self.git_remote}/{self.git_branch} "
                 "--always --tags --long")
 
+            # Store current remote in the database if in a detached state
+            if self.head_detached:
+                database = self.server.lookup_plugin("database")
+                db_key = f"update_manager.git_repo_{self.alias}" \
+                    ".detached_remote"
+                database.insert_item(
+                    "moonraker", db_key,
+                    [self.current_commit, self.git_remote, self.git_branch])
+
             # Parse GitHub Owner from URL
             owner_match = re.match(r"https?://[^/]+/([^/]+)", self.upstream_url)
             self.git_owner = "?"
@@ -861,7 +870,17 @@ class GitRepo:
                 if len(bparts) == 2:
                     self.git_remote, self.git_branch = bparts
                 else:
-                    if self.git_remote == "?":
+                    database = self.server.lookup_plugin("database")
+                    db_key = f"update_manager.git_repo_{self.alias}" \
+                        ".detached_remote"
+                    detached_remote = database.get_item(
+                        "moonraker", db_key, ("", "?"))
+                    if detached_remote[0].startswith(branch_info):
+                        self.git_remote = detached_remote[1]
+                        self.git_branch = detached_remote[2]
+                        msg = "Using remote stored in database:"\
+                            f" {self.git_remote}/{self.git_branch}"
+                    elif self.git_remote == "?":
                         msg = "Resolve by manually checking out" \
                             " a branch via SSH."
                     else:
