@@ -139,6 +139,11 @@ class FileManager:
     def get_fixed_path_args(self):
         return dict(self.fixed_path_args)
 
+    def check_file_exists(self, root, filename):
+        root_dir = self.file_paths.get(root, "")
+        file_path = os.path.join(root_dir, filename)
+        return os.path.exists(file_path)
+
     async def _handle_filelist_request(self, web_request):
         root = web_request.get_str('root', "gcodes")
         return self.get_file_list(root, list_format=True, notify=True)
