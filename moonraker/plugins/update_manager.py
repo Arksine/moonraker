@@ -724,6 +724,9 @@ GIT_FETCH_ENV_VARS = {
     'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
     'GIT_HTTP_LOW_SPEED_TIME ': "15"
 }
+GIT_MAX_LOG_CNT = 100
+GIT_LOG_FMT = \
+    "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
 
 class GitRepo:
     def __init__(self, cmd_helper, git_path, alias):
@@ -744,6 +747,7 @@ class GitRepo:
         self.branches = []
         self.dirty = False
         self.head_detached = False
+        self.commits_behind = []
 
         self.init_condition = None
         self.git_operation_lock = Lock()
@@ -804,6 +808,22 @@ class GitRepo:
                     tag_version = ver_match.group()
                 versions.append(tag_version)
             self.current_version, self.upstream_version = versions
+
+            # Get Commits Behind
+            self.commits_behind = []
+            cbh = await self.get_commits_behind()
+            if cbh:
+                tagged_commits = await self.get_tagged_commits()
+                debug_msg = '\n'.join([f"{k}: {v}" for k, v in
+                                       tagged_commits.items()])
+                logging.debug(f"Git Repo {self.alias}: Tagged Commits\n"
+                              f"{debug_msg}")
+                for i, commit in enumerate(cbh):
+                    tag = tagged_commits.get(commit['sha'], None)
+                    if i < 30 or tag is not None:
+                        commit['tag'] = tag
+                        self.commits_behind.append(commit)
+
             self.log_repo_info()
         except Exception:
             logging.exception(f"Git Repo {self.alias}: Initialization failure")
@@ -868,7 +888,8 @@ class GitRepo:
             f"Current Version: {self.current_version}\n"
             f"Upstream Version: {self.upstream_version}\n"
             f"Is Dirty: {self.dirty}\n"
-            f"Is Detached: {self.head_detached}")
+            f"Is Detached: {self.head_detached}\n"
+            f"Commits Behind: {len(self.commits_behind)}")
 
     def report_invalids(self, valid_origin):
         invalids = []
@@ -959,6 +980,48 @@ class GitRepo:
             await self.cmd_helper.run_cmd_with_response(
                 f"{self.git_cmd} checkout {branch} -q")
 
+    async def get_commits_behind(self):
+        self._verify_repo()
+        if self.is_current():
+            return []
+        async with self.git_operation_lock:
+            branch = f"{self.git_remote}/{self.git_branch}"
+            resp = await self.cmd_helper.run_cmd_with_response(
+                f"{self.git_cmd} log {self.current_commit}..{branch} "
+                f"--format={GIT_LOG_FMT} --max-count={GIT_MAX_LOG_CNT}")
+            commits_behind = []
+            for log_entry in resp.split('\x1E'):
+                log_entry = log_entry.strip()
+                if not log_entry:
+                    continue
+                log_items = [li.strip() for li in log_entry.split('\x1D')
+                             if li.strip()]
+                commits_behind.append(
+                    dict([li.split(':', 1) for li in log_items]))
+            return commits_behind
+
+    async def get_tagged_commits(self):
+        self._verify_repo()
+        async with self.git_operation_lock:
+            resp = await self.cmd_helper.run_cmd_with_response(
+                f"{self.git_cmd} show-ref --tags -d")
+            tagged_commits = {}
+            tags = [tag.strip() for tag in resp.split('\n') if tag.strip()]
+            for tag in tags:
+                sha, ref = tag.split(' ', 1)
+                ref = ref.split('/')[-1]
+                if ref[-3:] == "^{}":
+                    # Dereference this commit and overwrite any existing tag
+                    ref = ref[:-3]
+                    tagged_commits[ref] = sha
+                elif ref not in tagged_commits:
+                    # This could be a lightweight tag pointing to a commit.  If
+                    # it is an annotated tag it will be overwritten by the
+                    # dereferenced tag
+                    tagged_commits[ref] = sha
+            # Return tagged commits as SHA keys mapped to tag values
+            return {v: k for k, v in tagged_commits.items()}
+
     def get_repo_status(self):
         return {
             'remote_alias': self.git_remote,
@@ -969,7 +1032,8 @@ class GitRepo:
             'current_hash': self.current_commit,
             'remote_hash': self.upstream_commit,
             'is_dirty': self.dirty,
-            'detached': self.head_detached
+            'detached': self.head_detached,
+            'commits_behind': self.commits_behind
         }
 
     def get_version(self, upstream=False):
