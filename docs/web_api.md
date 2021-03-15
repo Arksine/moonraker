@@ -722,7 +722,7 @@ path relative to the specified "root".  Note that if the query st
         width: <in_pixels>,
         height: <in_pixels>,
         size: <length_of_string>,
-        data: <base64_string>
+        relative_path: <relative_path_to_png>
       }, ...
     ]
   }
@@ -1183,6 +1183,7 @@ In these cases the current status will be returned immediately.
   {
       'version_info': {
           'moonraker': {
+              owner: <string>,
               branch: <string>,
               remote_alias: <string>,
               version: <string>,
@@ -1192,9 +1193,20 @@ In these cases the current status will be returned immediately.
               is_valid: <bool>,
               is_dirty: <bool>,
               detached: <bool>,
-              debug_enabled: <bool>
+              debug_enabled: <bool>,
+              commits_behind: [
+                  {
+                      author: <string>,
+                      date: <unix_time>,
+                      subject: <string>,
+                      message: <string>,
+                      sha: <string>,
+                      tag: <string or null>
+                  },...
+              ]
           },
           'klipper': {
+              owner: <string>,
               branch: <string>,
               remote_alias: <string>,
               version: <string>,
@@ -1204,7 +1216,8 @@ In these cases the current status will be returned immediately.
               is_valid: <bool>,
               is_dirty: <bool>,
               detached: <bool>,
-              debug_enabled: <bool>
+              debug_enabled: <bool>,
+              commits_behind: []
           },
           'client_name_1': {
               name: <string>,
@@ -1627,6 +1640,7 @@ The APIs below are avilable when the `[history]` plugin has been configured.
       jobs: [
         {
             "job_id": <unique job id>,
+            "exists": <boolean>,
             "end_time": <end_time>,
             "filament_used": <filament_used>,
             "filename": <filename>,
@@ -1655,6 +1669,7 @@ The APIs below are avilable when the `[history]` plugin has been configured.
   {
       "job": {
         "job_id": <unique job id>,
+        "exists": <boolean>,
         "end_time": <end_time>,
         "filament_used": <filament_used>,
         "filename": <filename>,

@@ -21,4 +21,4 @@ Users:\
 [user_changes.md](/docs/user_changes.md) - March 10th 2021
 
 Developers:\
-[api_changes.md](/docs/api_changes.md) - January 31st 2021
+[api_changes.md](/docs/api_changes.md) - March 15th 2021

@@ -1,5 +1,12 @@
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### March 15th 2021
+- The `data` field for gcode thumbnails is now deprecated and will
+  be removed in the near future.  Thumbnails are now saved to png
+  files in a `thumbs` directory relative to a gcode file's location.
+  This path is available in the `relative_path` field for each
+  thumbnail entry in the metadata.
+
 ### January 31st 2021
 - The `GET /server/temperature_store` endpoint now only returns fields
   that each sensor reports.  For example, if a particuarly temperature
