@@ -388,6 +388,10 @@ origin:
 #   be be viewed by navigating to your repository and running:
 #     git remote -v
 #   This parameter must be provided.
+primary_branch:
+#   The name of the primary branch used for release code on this repo.  This
+#   option allows clients to specify 'main', or their own unique name, as
+#   the branch used for repo validity checks.  The default is master.
 env:
 #   The path to the client's virtual environment executable on disk.  For
 #   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
