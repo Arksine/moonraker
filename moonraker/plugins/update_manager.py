@@ -449,6 +449,7 @@ class GitUpdater:
         self.name = config.get_name().split()[-1]
         if path is None:
             path = os.path.expanduser(config.get('path'))
+        self.primary_branch = config.get("primary_branch", "master")
         self.repo_path = path
         self.repo = GitRepo(cmd_helper, path, self.name)
         self.init_evt = Event()
@@ -547,7 +548,7 @@ class GitUpdater:
     async def _update_repo_state(self, need_fetch=True):
         self.is_valid = False
         await self.repo.initialize(need_fetch=need_fetch)
-        invalids = self.repo.report_invalids(self.origin)
+        invalids = self.repo.report_invalids(self.origin, self.primary_branch)
         if invalids:
             msgs = '\n'.join(invalids)
             self._log_info(
@@ -914,16 +915,17 @@ class GitRepo:
             f"Is Detached: {self.head_detached}\n"
             f"Commits Behind: {len(self.commits_behind)}")
 
-    def report_invalids(self, valid_origin):
+    def report_invalids(self, valid_origin, primary_branch):
         invalids = []
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
         if upstream_url != valid_origin:
             invalids.append(f"Unofficial remote url: {self.upstream_url}")
-        if self.git_branch != "master" or self.git_remote != "origin":
+        if self.git_branch != primary_branch or self.git_remote != "origin":
             invalids.append(
-                "Repo not on default remote branch: "
+                "Repo not on valid remote branch, expected: "
+                f"origin/{primary_branch}, detected: "
                 f"{self.git_remote}/{self.git_branch}")
         if self.head_detached:
             invalids.append("Detached HEAD detected")
