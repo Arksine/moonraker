@@ -275,7 +275,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             else self._default_parser
 
     # Converts query string values with type hints
-    def _convert_type(value, hint):
+    def _convert_type(self, value, hint):
         type_funcs = {
             "int": int, "float": float,
             "bool": lambda x: x.lower() == "true",
