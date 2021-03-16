@@ -148,9 +148,9 @@ class History:
     def add_job(self, job):
         job_id = f"{self.next_job_id:06X}"
         self.current_job = job
+        self.current_job_id = job_id
         self.grab_job_metadata()
         self.history_ns[job_id] = job.get_stats()
-        self.current_job_id = job_id
         self.cached_job_ids.append(job_id)
         self.next_job_id += 1
         self.send_history_event("added")
@@ -185,6 +185,18 @@ class History:
             return
         filename = self.current_job.get("filename")
         metadata = self.gcdb.get(filename, {})
+        if metadata:
+            # Add the start time and job id to the
+            # persistent metadata storage
+            metadata.update({
+                'print_start_time': self.current_job.get('start_time'),
+                'job_id': self.current_job_id
+            })
+            self.gcdb[filename] = metadata
+        # We don't need to store these fields in the
+        # job metadata, as they are redundant
+        metadata.pop('print_start_time', None)
+        metadata.pop('job_id', None)
         if "thumbnails" in metadata:
             for thumb in metadata['thumbnails']:
                 thumb.pop('data', None)
