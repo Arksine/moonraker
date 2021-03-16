@@ -627,7 +627,7 @@ class FileManager:
 
 METADATA_PRUNE_TIME = 600000
 METADATA_NAMESPACE = "gcode_metadata"
-METADATA_VERSION = 2
+METADATA_VERSION = 3
 
 class MetadataStorage:
     def __init__(self, server, gc_path, database):
@@ -727,7 +727,12 @@ class MetadataStorage:
                 else:
                     break
             else:
-                self.mddb[fname] = {'size': fsize, 'modified': modified}
+                self.mddb[fname] = {
+                    'size': fsize,
+                    'modified': modified,
+                    'print_start_time': None,
+                    'job_id': None
+                }
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
             evt.set()
@@ -754,6 +759,7 @@ class MetadataStorage:
         if not metadata:
             # This indicates an error, do not add metadata for this
             raise self.server.error("Unable to extract metadata")
+        metadata.update({'print_start_time': None, 'job_id': None})
         self.mddb[path] = dict(metadata)
         metadata['filename'] = path
         if notify:
