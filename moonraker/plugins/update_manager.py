@@ -857,6 +857,7 @@ class GitRepo:
                     f"Git Repo {self.alias}: path '{self.git_path}'"
                     " is not a valid git repo")
                 return False
+            await self._wait_for_lock_release()
             try:
                 resp = await self.cmd_helper.run_cmd_with_response(
                     f"{self.git_cmd} status -u no")
@@ -1074,10 +1075,37 @@ class GitRepo:
     def is_current(self):
         return self.current_commit == self.upstream_commit
 
+    def _check_lock_file_exists(self, remove=False):
+        lock_path = os.path.join(self.git_path, ".git/index.lock")
+        if os.path.isfile(lock_path):
+            if remove:
+                logging.info(f"Git Repo {self.alias}: Git lock file found "
+                             "after git process exited, removing")
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+            return True
+        return False
+
+    async def _wait_for_lock_release(self, timeout=60):
+        while timeout:
+            if self._check_lock_file_exists():
+                if not timeout % 10:
+                    logging.info(f"Git Repo {self.alias}: Git lock file "
+                                 f"exists, {timeout} seconds remaining "
+                                 "before removal.")
+                await tornado.gen.sleep(1.)
+                timeout -= 1
+            else:
+                return
+        self._check_lock_file_exists(remove=True)
+
     async def _do_fetch_pull(self, cmd, retries=5):
         # Fetch and pull require special handling.  If the request
         # gets delayed we do not want to terminate it while the command
         # is processing.
+        await self._wait_for_lock_release()
         env = os.environ.copy()
         env.update(GIT_FETCH_ENV_VARS)
         scmd = self.cmd_helper.build_shell_command(
@@ -1097,6 +1125,8 @@ class GitRepo:
             if ret == 0:
                 return
             retries -= 1
+            await tornado.gen.sleep(.5)
+            self._check_lock_file_exists(remove=True)
         raise self.server.error(f"Git Command '{cmd}' failed")
 
     def _handle_process_output(self, output):
