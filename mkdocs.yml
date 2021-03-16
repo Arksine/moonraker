@@ -1,0 +1,19 @@
+site_name: Moonraker
+repo_url: https://github.com/Arksine/moonraker
+nav:
+    - 'User Documentation':
+        - Installation: installation.md
+        - Configuration : configuration.md
+        - User Changes: user_changes.md
+    - 'Client Developers':
+        - Client API: web_api.md
+        - Printer Objects: printer_objects.md
+        - API Changes: api_changes.md
+    - 'Backend Developers':
+        - Contributing: contributing.md
+theme:
+    name: readthedocs
+plugins:
+    - search
+markdown_extensions:
+    - codehilite

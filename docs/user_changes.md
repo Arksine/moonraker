@@ -1,3 +1,4 @@
+##
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
@@ -33,10 +34,10 @@ such as a configuration change or a reinstallation.
   This changes requires the user to rerun the install script.  If
   `moonraker.conf` is not located in the home directory, the command
   will looks something like the following:
-  ```
-  cd ~/moonraker
-  ./scripts/install-moonraker.sh -f -c /home/pi/klipper_config/moonraker.conf
-  ```
+
+        cd ~/moonraker
+        ./scripts/install-moonraker.sh -f -c /home/pi/klipper_config/moonraker.conf
+
   Otherwise you can run the install script with no arguments.
 
 ### November 19th 2020
@@ -49,24 +50,24 @@ such as a configuration change or a reinstallation.
   will update the defaults file wih the new path.
 - New dependencies have been added to Moonraker which require reinstallation.
   Run the following command to reinstall and rebuild the virtualenv:
-  ```
-  ~/moonraker/scripts/install-moonraker.sh -r
-  ```
+
+        ~/moonraker/scripts/install-moonraker.sh -r
+
 - The power plugin configuration has changed.  See the
   [install guide](installation.md#power-control-plugin) for
   details on the new configuration.
 - Users transitioning from the previous version of the power plugin will need
   to unexport any curently used pins.  For example, the following command
   may be used to unexport pin 19:
-  ```
-  echo 19 > /sys/class/gpio/unexport
-  ```
+
+        echo 19 > /sys/class/gpio/unexport
+
   Alternatively one may reboot the machine after upgrading:
-  ```
-  cd ~/moonraker/
-  git pull
-  ~/moonraker/scripts/install-moonraker.sh -r
-  sudo reboot
-  ```
+
+    cd ~/moonraker/
+    git pull
+    ~/moonraker/scripts/install-moonraker.sh -r
+    sudo reboot
+
   Make sure that the power plugin configuration has been updated prior
   to rebooting the machine.

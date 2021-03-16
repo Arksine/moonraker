@@ -1,29 +1,17 @@
+#
 This document describes Moonraker's full configuration.  As this file
-references configuration for both Klipper (printer.cfg) and Moonraker
-(moonraker.conf), each example contains a commment indicating which
-configuration file is being refrenenced.
+references configuration for both Klipper (`printer.cfg`) and Moonraker
+(`moonraker.conf`), each example contains a commment indicating which
+configuration file is being refrenenced. A basic
+[sample configuration](./moonraker.conf) in the `docs` directory.
 
-# Primary Configuration
-The sections outlined here are required for Moonraker to function. A
-minimal functional configuration might look like the following:
-```
-# moonraker.conf
+## `[server]`
 
-[server]
-host: 0.0.0.0
-port: 7125
-enable_debug_logging: True
-config_path: ~/.klippy_config
+The `[server]` section provides essential configuration for Moonraker
+and its core components.  This section is requrired.
 
-[authorization]
-enabled: True
-trusted_clients:
- 192.168.1.0/24
-```
+```ini
 
-## server
-
-```
 # moonraker.conf
 
 [server]
@@ -61,9 +49,12 @@ temperature_store_size: 1200
 gcode_store_size:  1000
 #   The maximum number "gcode lines" to store.  The default is 1000.
 ```
-## authorization
+## `[authorization]`
 
-```
+The `[authorization]` section provides configuration for Moonraker's
+authorization module. This section is required.
+
+```ini
 # moonraker.conf
 
 [authorization]
@@ -103,38 +94,33 @@ cors_domains:
 #   well.  If this option is not specified then CORS is disabled.
 ```
 
-# Plugin Configuration
-The sections outlined here are optional and enable additional
-functionality in moonraker.
-
-## Octoprint compatibility
+## `[octoprint_compat]`
 Enables partial support of Octoprint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
 Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 
-```
+```ini
 # moonraker.conf
 
 [octoprint_compat]
 ```
 
-## History
-Enables moonraker to track and store print history. To enable this plugin, add
-the configuration below.
+## `[history]`
+Enables print history tracking.
 
-```
+```ini
 # moonraker.conf
 
 [history]
 ```
 
-## paneldue
+## `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
 converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
 releases may not behave correctly.
 
-```
+```ini
 # moonraker.conf
 
 [paneldue]
@@ -168,7 +154,7 @@ to specify commands (either built in or gcode_macros) that will show up
 in the PanelDue's "macro" menu.
 
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
-```
+```ini
 # printer.cfg
 
 [gcode_macro PANELDUE_BEEP]
@@ -182,11 +168,11 @@ gcode:
                              duration=DURATION|float)}
 ```
 
-## power
+## `[power]`
 Enables device power control.  Currently GPIO (relays), TPLink Smartplug,
 and Tasmota (via http) devices are supported.
 
-```
+```ini
 # moonraker.conf
 
 [power device_name]
@@ -265,7 +251,7 @@ password:
 
 ```
 Below are some potential examples:
-```
+```ini
 # moonraker.conf
 
 [power printer]
@@ -302,7 +288,7 @@ password: password2
 
 It is possible to toggle device power from the Klippy host, this can be done
 with a gcode_macro, such as:
-```
+```ini
 # printer.cfg
 
 [gcode_macro POWER_OFF_PRINTER]
@@ -314,7 +300,7 @@ gcode:
 The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
 printer off when idle with a configuration similar to that of below:
-```
+```ini
 # printer.cfg
 
 [delayed_gcode delayed_printer_off]
@@ -331,12 +317,12 @@ gcode:
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
 
-## update_manager
+## `[update_manager]`
 This enables moonraker's update manager.  Note that updates can only be
 performed on pristine git repos.  Repos that have been modified on
 disk or cloned from unofficial sources are not supported.
 
-```
+```ini
 # moonraker.conf
 
 [update_manager]
@@ -367,7 +353,7 @@ There are two types of update manager clients and each will be detailed
 separately. The first one is targeted towards releases that do not need a
 service restart such as Fluidd/Mainsail.
 
-```
+```ini
 # moonraker.conf
 
 [update_manager client client_name]
@@ -387,7 +373,7 @@ persistent_files:
 This second example is for git repositories that have a service that need
 updating.
 
-```
+```ini
 # moonraker.conf
 
 # service_name must be the name of the systemd service
