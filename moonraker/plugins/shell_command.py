@@ -9,6 +9,14 @@ import logging
 import signal
 import asyncio
 from tornado import gen
+from utils import ServerError
+
+class ShellCommandError(ServerError):
+    def __init__(self, message, return_code, err_output=(b"", b""),
+                 status_code=400):
+        super().__init__(message, status_code=status_code)
+        self.stdout, self.stderr = err_output
+        self.return_code = return_code
 
 class SCProcess(asyncio.subprocess.Process):
     def initialize(self, program_name, std_out_cb, std_err_cb, log_stderr):
@@ -16,7 +24,6 @@ class SCProcess(asyncio.subprocess.Process):
         self.std_out_cb = std_out_cb
         self.std_err_cb = std_err_cb
         self.log_stderr = log_stderr
-        self.partial_data = b""
         self.cancel_requested = False
 
     async def _read_stream_with_cb(self, fd):
@@ -103,9 +110,12 @@ class ShellCommand:
     def get_return_code(self):
         return self.return_code
 
-    async def run(self, timeout=2., verbose=True, log_complete=True):
+    def _reset_command_data(self):
         self.return_code = self.proc = None
         self.cancelled = False
+
+    async def run(self, timeout=2., verbose=True, log_complete=True):
+        self._reset_command_data()
         if not timeout:
             # Never timeout
             timeout = 9999999999999999.
@@ -130,10 +140,10 @@ class ShellCommand:
 
     async def run_with_response(self, timeout=2., retries=1,
                                 log_complete=True):
-        self.return_code = self.proc = None
-        self.cancelled = False
+        self._reset_command_data()
+        retries = max(1, retries)
         while retries > 0:
-            stdout = stderr = None
+            stdout = stderr = b""
             if await self._create_subprocess():
                 try:
                     ret = self.proc.communicate()
@@ -154,7 +164,9 @@ class ShellCommand:
                         f"\n{stdout.decode()}")
             retries -= 1
             await gen.sleep(.5)
-        return None
+        raise ShellCommandError(
+            f"Error running shell command: '{self.command}'",
+            self.return_code, err_output=(stdout, stderr))
 
     async def _create_subprocess(self):
         loop = asyncio.get_event_loop()
@@ -197,6 +209,7 @@ class ShellCommand:
         return success
 
 class ShellCommandFactory:
+    error = ShellCommandError
     def build_shell_command(self, cmd, callback=None, std_err_callback=None,
                             env=None, log_stderr=False):
         return ShellCommand(cmd, callback, std_err_callback, env, log_stderr)
