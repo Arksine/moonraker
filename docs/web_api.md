@@ -1059,6 +1059,8 @@ modified time, and size.
 
 ```json
 {
+    "print_start_time": null,
+    "job_id": null,
     "size": 4926481,
     "modified": 1615077020.2025201,
     "slicer": "SuperSlicer",
@@ -1091,6 +1093,10 @@ modified time, and size.
     "filename": "3DBenchy_0.15mm_PLA_MK3S_2h6m.gcode"
 }
 ```
+**Note: The `print_start_time` and `job_id` fields are initialized to
+`null`.  They will be updated for each print job if the user has the
+`[history]` plugin configured**
+
 **Note: The `data` field for each thumbnail is deprecated and will be removed
 in a future release.  Clients should retrieve the png directly using the
 `relative_path` field.**
