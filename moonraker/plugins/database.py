@@ -298,9 +298,10 @@ class MoonrakerDatabase:
         with self.lmdb_env.begin() as txn:
             for db_name, db in self.namespaces.items():
                 stats = txn.stat(db)
-                msg += f"\n{db_name}:"
+                msg += f"\n{db_name}:\n"
                 msg += "\n".join([f"{k}: {v}" for k, v in stats.items()])
         logging.info(f"Database statistics:\n{msg}")
+        self.lmdb_env.sync()
         self.lmdb_env.close()
 
 class NamespaceWrapper:
