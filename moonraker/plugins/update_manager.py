@@ -335,8 +335,6 @@ class CommandHelper:
     async def run_cmd_with_response(self, cmd, timeout=10., env=None):
         scmd = self.build_shell_command(cmd, None, env=env)
         result = await scmd.run_with_response(timeout, retries=5)
-        if result is None:
-            raise self.server.error(f"Error Running Command: {cmd}")
         return result
 
     async def github_api_request(self, url, etag=None, is_init=False):
@@ -451,7 +449,8 @@ class GitUpdater:
             path = os.path.expanduser(config.get('path'))
         self.primary_branch = config.get("primary_branch", "master")
         self.repo_path = path
-        self.repo = GitRepo(cmd_helper, path, self.name)
+        origin = config.get("origin").lower()
+        self.repo = GitRepo(cmd_helper, path, self.name, origin)
         self.init_evt = Event()
         self.debug = self.cmd_helper.is_debug_enabled()
         self.env = config.get("env", env)
@@ -462,7 +461,6 @@ class GitUpdater:
             dist_packages = config.get('python_dist_packages', None)
             self.python_reqs = os.path.join(
                 self.repo_path, config.get("requirements"))
-        self.origin = config.get("origin").lower()
         self.install_script = config.get('install_script', None)
         if self.install_script is not None:
             self.install_script = os.path.abspath(os.path.join(
@@ -548,7 +546,7 @@ class GitUpdater:
     async def _update_repo_state(self, need_fetch=True):
         self.is_valid = False
         await self.repo.initialize(need_fetch=need_fetch)
-        invalids = self.repo.report_invalids(self.origin, self.primary_branch)
+        invalids = self.repo.report_invalids(self.primary_branch)
         if invalids:
             msgs = '\n'.join(invalids)
             self._log_info(
@@ -734,11 +732,14 @@ GIT_LOG_FMT = \
     "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
 
 class GitRepo:
-    def __init__(self, cmd_helper, git_path, alias):
+    def __init__(self, cmd_helper, git_path, alias, origin_url):
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
         self.alias = alias
         self.git_path = git_path
+        self.valid_origin_url = origin_url
+        git_dir, git_base = os.path.split(self.git_path)
+        self.backup_path = os.path.join(git_dir, f".{git_base}_repo_backup")
         self.git_cmd = f"git -C {git_path}"
         self.valid_git_repo = False
         self.git_owner = "?"
@@ -753,6 +754,15 @@ class GitRepo:
         self.dirty = False
         self.head_detached = False
         self.commits_behind = []
+        self.recovery_message = \
+            f"""
+            Manually restore via SSH with the following commands:
+            sudo service {self.alias} stop
+            cd {git_dir}
+            rm -rf {git_base}
+            f"git clone {self.valid_origin_url}
+            f"sudo service {self.alias} start"
+            """
 
         self.init_condition = None
         self.git_operation_lock = Lock()
@@ -858,17 +868,34 @@ class GitRepo:
                     " is not a valid git repo")
                 return False
             await self._wait_for_lock_release()
-            try:
-                resp = await self.cmd_helper.run_cmd_with_response(
-                    f"{self.git_cmd} status -u no")
-            except Exception:
-                self.valid_git_repo = False
-                return False
+            restored = False
+            self.valid_git_repo = False
+            while True:
+                try:
+                    resp = await self.cmd_helper.run_cmd_with_response(
+                        f"{self.git_cmd} status -u no")
+                except self.server.error as e:
+                    if restored:
+                        logging.info(f"Git Repo {self.alias}: restore attempt"
+                                     f" failed\n{self.recovery_message}")
+                        self.valid_git_repo = False
+                        return False
+                    err = e.stdout.decode().strip()
+                    if err.startswith("fatal:"):
+                        # Invalid repo, attempt to restore it
+                        ret = await self._restore_repo()
+                        if not ret:
+                            return False
+                        restored = True
+                        continue
+                    else:
+                        # Unknown exit reason
+                        logging.info(
+                            f"Git Repo {self.alias}: Repo init failed with"
+                            f" output:\n{err}")
+                        return False
+                break
             resp = resp.strip().split('\n', 1)[0]
-            if resp.startswith("fatal:"):
-                # Invalid repo
-                self.valid_git_repo = False
-                return False
             self.head_detached = resp.startswith("HEAD detached")
             branch_info = resp.split()[-1]
             if self.head_detached:
@@ -898,6 +925,7 @@ class GitRepo:
             else:
                 self.git_branch = branch_info
             self.valid_git_repo = True
+            await self._backup_repo()
             return True
 
     def log_repo_info(self):
@@ -916,12 +944,12 @@ class GitRepo:
             f"Is Detached: {self.head_detached}\n"
             f"Commits Behind: {len(self.commits_behind)}")
 
-    def report_invalids(self, valid_origin, primary_branch):
+    def report_invalids(self, primary_branch):
         invalids = []
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
-        if upstream_url != valid_origin:
+        if upstream_url != self.valid_origin_url:
             invalids.append(f"Unofficial remote url: {self.upstream_url}")
         if self.git_branch != primary_branch or self.git_remote != "origin":
             invalids.append(
@@ -1047,6 +1075,55 @@ class GitRepo:
                     tagged_commits[ref] = sha
             # Return tagged commits as SHA keys mapped to tag values
             return {v: k for k, v in tagged_commits.items()}
+
+    async def _restore_repo(self):
+        # Make sure that a backup exists
+        backup_git_dir = os.path.join(self.backup_path, ".git")
+        if not os.path.exists(backup_git_dir):
+            logging.info(f"Git Repo {self.alias}: Unable to restore repo, "
+                         f"no backup exists.\n{self.recovery_message}")
+            return False
+        logging.info(f"Git Repo {self.alias}: Attempting to restore corrupt"
+                     " repo from backup...")
+        await self._rsync_repo(self.backup_path, self.git_path)
+        logging.info(f"Git Repo {self.alias}: Verifying restored repo with"
+                     " git fsck...")
+        try:
+            await self.cmd_helper.run_cmd(
+                f"{self.git_cmd} fsck --full", retries=2,
+                timeout=300.)
+        except Exception:
+            logging.info(f"Git Repo {self.alias}: git fsck failed on"
+                         f" restored repo.\n{self.recovery_message}")
+            return False
+        return True
+
+    async def _backup_repo(self):
+        if not os.path.isdir(self.backup_path):
+            try:
+                os.mkdir(self.backup_path)
+            except Exception:
+                logging.exception(
+                    f"Git Repo {self.alias}: Unable to create backup  "
+                    f"directory {self.backup_path}")
+                return
+            else:
+                # Creating a first time backup.  Could take a while
+                # on low resource systems
+                logging.info(
+                    f"Git Repo {self.alias}: Backing up git repo to "
+                    f"'{self.backup_path}'. This may take a while to "
+                    "complete.")
+        await self._rsync_repo(self.git_path, self.backup_path)
+
+    async def _rsync_repo(self, source, dest):
+        try:
+            await self.cmd_helper.run_cmd(
+                f"rsync -a --delete {source}/ {dest}",
+                timeout=1200.)
+        except Exception:
+            logging.exception(
+                f"Git Repo {self.git_path}: Backup Error")
 
     def get_repo_status(self):
         return {
