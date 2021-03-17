@@ -114,16 +114,17 @@ class UpdateManager:
             self._initalize_updaters, list(self.updaters.values()))
 
     async def _initalize_updaters(self, initial_updaters):
-        self.is_refreshing = True
-        await self.cmd_helper.init_api_rate_limit()
-        for updater in initial_updaters:
-            if isinstance(updater, PackageUpdater):
-                ret = updater.refresh(False)
-            else:
-                ret = updater.refresh()
-            if asyncio.iscoroutine(ret):
-                await ret
-        self.is_refreshing = False
+        async with self.cmd_request_lock:
+            self.is_refreshing = True
+            await self.cmd_helper.init_api_rate_limit()
+            for updater in initial_updaters:
+                if isinstance(updater, PackageUpdater):
+                    ret = updater.refresh(False)
+                else:
+                    ret = updater.refresh()
+                if asyncio.iscoroutine(ret):
+                    await ret
+            self.is_refreshing = False
 
     async def _set_klipper_repo(self):
         kinfo = self.server.get_klippy_info()
@@ -139,7 +140,8 @@ class UpdateManager:
             return
         kcfg = self.config[f"update_manager static {self.distro} klipper"]
         self.updaters['klipper'] = GitUpdater(kcfg, self.cmd_helper, kpath, env)
-        await self.updaters['klipper'].refresh()
+        async with self.cmd_request_lock:
+            await self.updaters['klipper'].refresh()
 
     async def _check_klippy_printing(self):
         klippy_apis = self.server.lookup_plugin('klippy_apis')
