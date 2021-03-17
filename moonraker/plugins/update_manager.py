@@ -323,7 +323,7 @@ class CommandHelper:
                 break
         self.gh_init_evt.set()
 
-    async def run_cmd(self, cmd, timeout=10., notify=False,
+    async def run_cmd(self, cmd, timeout=20., notify=False,
                       retries=1, env=None):
         cb = self.notify_update_response if notify else None
         scmd = self.build_shell_command(cmd, callback=cb, env=env)
@@ -334,7 +334,7 @@ class CommandHelper:
         if not retries:
             raise self.server.error("Shell Command Error")
 
-    async def run_cmd_with_response(self, cmd, timeout=10., env=None):
+    async def run_cmd_with_response(self, cmd, timeout=20., env=None):
         scmd = self.build_shell_command(cmd, None, env=env)
         result = await scmd.run_with_response(timeout, retries=5)
         return result
@@ -724,10 +724,10 @@ class GitUpdater:
         return status
 
 
-GIT_FETCH_TIMEOUT = 20.
+GIT_FETCH_TIMEOUT = 30.
 GIT_FETCH_ENV_VARS = {
     'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
-    'GIT_HTTP_LOW_SPEED_TIME ': "15"
+    'GIT_HTTP_LOW_SPEED_TIME ': "20"
 }
 GIT_MAX_LOG_CNT = 100
 GIT_LOG_FMT = \
