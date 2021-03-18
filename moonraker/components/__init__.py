@@ -1,5 +1,5 @@
 
-# Package definition for the plugins directory
+# Package definition for the components directory
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #
