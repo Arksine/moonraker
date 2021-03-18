@@ -37,7 +37,7 @@ class PrinterPower:
                 elif dev_type == "shelly":
                     dev = Shelly(cfg)
                 elif dev_type == "homeseer":
-                    dev =  HomeSeer(cfg)
+                    dev = HomeSeer(cfg)
                 else:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 self.devices[dev.get_name()] = dev
@@ -533,7 +533,7 @@ class HomeSeer(PowerDevice):
         self.user = config.get("user", "admin")
         self.password = config.get("password", "")
 
-    async def _send_homeseer(self, request, additional = ""):
+    async def _send_homeseer(self, request, additional=""):
         url = (f"http://{self.user}:{self.password}@{self.addr}"
                f"/JSON?user={self.user}&pass={self.password}"
                f"&request={request}&ref={self.device}&{additional}")
