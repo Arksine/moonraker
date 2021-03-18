@@ -146,7 +146,7 @@ class UpdateManager:
             await self.updaters['klipper'].refresh()
 
     async def _check_klippy_printing(self):
-        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        klippy_apis = self.server.lookup_component('klippy_apis')
         result = await klippy_apis.query_objects(
             {'print_stats': None}, default={})
         pstate = result.get('print_stats', {}).get('state', "")
@@ -262,7 +262,7 @@ class CommandHelper:
         self.debug_enabled = config.getboolean('enable_repo_debug', False)
         if self.debug_enabled:
             logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
-        shell_command = self.server.lookup_plugin('shell_command')
+        shell_command = self.server.lookup_component('shell_command')
         self.build_shell_command = shell_command.build_shell_command
 
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
@@ -794,7 +794,7 @@ class GitRepo:
 
             # Store current remote in the database if in a detached state
             if self.head_detached:
-                database = self.server.lookup_plugin("database")
+                database = self.server.lookup_component("database")
                 db_key = f"update_manager.git_repo_{self.alias}" \
                     ".detached_remote"
                 database.insert_item(
@@ -888,7 +888,7 @@ class GitRepo:
                 if len(bparts) == 2:
                     self.git_remote, self.git_branch = bparts
                 else:
-                    database = self.server.lookup_plugin("database")
+                    database = self.server.lookup_component("database")
                     db_key = f"update_manager.git_repo_{self.alias}" \
                         ".detached_remote"
                     detached_remote = database.get_item(
@@ -1396,5 +1396,5 @@ class WebUpdater:
             'remote_version': self.remote_version
         }
 
-def load_plugin(config):
+def load_component(config):
     return UpdateManager(config)
