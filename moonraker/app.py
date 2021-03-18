@@ -380,7 +380,7 @@ class FileRequestHandler(AuthorizedFileHandler):
     async def delete(self, path):
         path = self.request.path.lstrip("/").split("/", 2)[-1]
         path = url_unescape(path, plus=False)
-        file_manager = self.server.lookup_plugin('file_manager')
+        file_manager = self.server.lookup_component('file_manager')
         try:
             filename = await file_manager.delete_file(path)
         except self.server.error as e:
@@ -395,7 +395,7 @@ class FileRequestHandler(AuthorizedFileHandler):
 class FileUploadHandler(AuthorizedRequestHandler):
     def initialize(self, max_upload_size):
         super(FileUploadHandler, self).initialize()
-        self.file_manager = self.server.lookup_plugin('file_manager')
+        self.file_manager = self.server.lookup_component('file_manager')
         self.max_upload_size = max_upload_size
 
     def prepare(self):
