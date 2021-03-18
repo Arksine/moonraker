@@ -28,7 +28,7 @@ INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
-CORE_PLUGINS = [
+CORE_COMPONENTS = [
     'database', 'file_manager', 'klippy_apis', 'machine',
     'data_store', 'shell_command', 'proc_stats']
 
@@ -67,7 +67,7 @@ class Server:
         self.klippy_state = "disconnected"
         self.klippy_disconnect_evt = None
         self.subscriptions = {}
-        self.failed_plugins = []
+        self.failed_components = []
 
         # Server/IOLoop
         self.server_running = False
@@ -103,10 +103,10 @@ class Server:
             'process_status_update', self._process_status_update,
             need_klippy_reg=False)
 
-        # Plugin initialization
-        self.plugins = {}
-        self._load_plugins(config)
-        self.klippy_apis = self.lookup_plugin('klippy_apis')
+        # Component initialization
+        self.components = {}
+        self._load_components(config)
+        self.klippy_apis = self.lookup_component('klippy_apis')
         config.validate_config()
 
     def start(self):
@@ -130,56 +130,57 @@ class Server:
         if log and item is not None:
             logging.info(item)
 
-    # ***** Plugin Management *****
-    def _load_plugins(self, config):
-        # load core plugins
-        for plugin in CORE_PLUGINS:
-            self.load_plugin(config, plugin)
+    # ***** Component Management *****
+    def _load_components(self, config):
+        # load core components
+        for component in CORE_COMPONENTS:
+            self.load_component(config, component)
 
-        # check for optional plugins
+        # check for optional components
         opt_sections = set([s.split()[0] for s in config.sections()]) - \
             set(['server', 'authorization', 'system_args'])
         for section in opt_sections:
-            self.load_plugin(config, section, None)
+            self.load_component(config, section, None)
 
-    def load_plugin(self, config, plugin_name, default=Sentinel):
-        if plugin_name in self.plugins:
-            return self.plugins[plugin_name]
-        # Make sure plugin exists
+    def load_component(self, config, component_name, default=Sentinel):
+        if component_name in self.components:
+            return self.components[component_name]
+        # Make sure component exists
         mod_path = os.path.join(
-            os.path.dirname(__file__), 'plugins', plugin_name + '.py')
+            os.path.dirname(__file__), 'components', component_name + '.py')
         if not os.path.exists(mod_path):
-            msg = f"Plugin ({plugin_name}) does not exist"
+            msg = f"Component ({component_name}) does not exist"
             logging.info(msg)
-            self.failed_plugins.append(plugin_name)
+            self.failed_components.append(component_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
         try:
-            module = importlib.import_module("plugins." + plugin_name)
-            func_name = "load_plugin"
-            if hasattr(module, "load_plugin_multi"):
-                func_name = "load_plugin_multi"
-            if plugin_name not in CORE_PLUGINS and func_name == "load_plugin":
-                config = config[plugin_name]
+            module = importlib.import_module("components." + component_name)
+            func_name = "load_component"
+            if hasattr(module, "load_component_multi"):
+                func_name = "load_component_multi"
+            if component_name not in CORE_COMPONENTS and \
+                    func_name == "load_component":
+                config = config[component_name]
             load_func = getattr(module, func_name)
-            plugin = load_func(config)
+            component = load_func(config)
         except Exception:
-            msg = f"Unable to load plugin ({plugin_name})"
+            msg = f"Unable to load component: ({component_name})"
             logging.exception(msg)
-            self.failed_plugins.append(plugin_name)
+            self.failed_components.append(component_name)
             if default == Sentinel:
                 raise ServerError(msg)
             return default
-        self.plugins[plugin_name] = plugin
-        logging.info(f"Plugin ({plugin_name}) loaded")
-        return plugin
+        self.components[component_name] = component
+        logging.info(f"Component ({component_name}) loaded")
+        return component
 
-    def lookup_plugin(self, plugin_name, default=Sentinel):
-        plugin = self.plugins.get(plugin_name, default)
-        if plugin == Sentinel:
-            raise ServerError(f"Plugin ({plugin_name}) not found")
-        return plugin
+    def lookup_component(self, component_name, default=Sentinel):
+        component = self.components.get(component_name, default)
+        if component == Sentinel:
+            raise ServerError(f"Component ({component_name}) not found")
+        return component
 
     def register_notification(self, event_name, notify_name=None):
         wsm = self.moonraker_app.get_websocket_manager()
@@ -375,7 +376,7 @@ class Server:
                 vsd_config = config.get('virtual_sdcard', {})
                 vsd_path = vsd_config.get('path', None)
                 if vsd_path is not None:
-                    file_manager = self.lookup_plugin('file_manager')
+                    file_manager = self.lookup_component('file_manager')
                     file_manager.register_directory('gcodes', vsd_path)
                 else:
                     logging.info(
@@ -413,7 +414,7 @@ class Server:
         else:
             if rpc_method == "gcode/script":
                 script = web_request.get_str('script', "")
-                data_store = self.lookup_plugin('data_store')
+                data_store = self.lookup_component('data_store')
                 data_store.store_gcode_command(script)
             return await self._request_standard(web_request)
 
@@ -481,17 +482,17 @@ class Server:
     async def _stop_server(self, exit_reason="restart"):
         self.server_running = False
         for method in ["on_exit", "close"]:
-            for name, plugin in self.plugins.items():
-                if not hasattr(plugin, method):
+            for name, component in self.components.items():
+                if not hasattr(component, method):
                     continue
-                func = getattr(plugin, method)
+                func = getattr(component, method)
                 try:
                     ret = func()
                     if asyncio.iscoroutine(ret):
                         await ret
                 except Exception:
                     logging.exception(
-                        f"Error executing '{method}()' for plugin: {name}")
+                        f"Error executing '{method}()' for component: {name}")
         try:
             if self.klippy_connection.is_connected():
                 self.klippy_disconnect_evt = Event()
@@ -518,15 +519,17 @@ class Server:
         return "ok"
 
     async def _handle_info_request(self, web_request):
-        file_manager = self.lookup_plugin('file_manager', None)
+        file_manager = self.lookup_component('file_manager', None)
         reg_dirs = []
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
-            'plugins': list(self.plugins.keys()),
-            'failed_plugins': self.failed_plugins,
+            'components': list(self.components.keys()),
+            'failed_components': self.failed_components,
+            'plugins': list(self.components.keys()),
+            'failed_plugins': self.failed_components,
             'registered_directories': reg_dirs}
 
     async def _handle_config_request(self, web_request):
