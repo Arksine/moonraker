@@ -76,7 +76,7 @@ class OctoprintCompat:
         # TODO: shutdown/reboot/restart operations
 
     async def _init(self):
-        self.klippy_apis = self.server.lookup_plugin('klippy_apis')
+        self.klippy_apis = self.server.lookup_component('klippy_apis')
         # Fetch heaters
         try:
             result = await self.klippy_apis.query_objects({'heaters': None})
@@ -277,5 +277,5 @@ class OctoprintCompat:
         }
 
 
-def load_plugin(config):
+def load_component(config):
     return OctoprintCompat(config)
