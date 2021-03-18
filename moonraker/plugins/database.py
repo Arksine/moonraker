@@ -384,5 +384,5 @@ class NamespaceWrapper:
             except Exception:
                 pass
 
-def load_plugin(config):
+def load_component(config):
     return MoonrakerDatabase(config)
