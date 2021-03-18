@@ -23,7 +23,7 @@ class PrinterPower:
         self.chip_factory = GpioChipFactory()
         self.devices = {}
         prefix_sections = config.get_prefix_sections("power")
-        logging.info(f"Power plugin loading devices: {prefix_sections}")
+        logging.info(f"Power component loading devices: {prefix_sections}")
         try:
             for section in prefix_sections:
                 cfg = config[section]
@@ -66,7 +66,7 @@ class PrinterPower:
             self._initalize_devices, list(self.devices.values()))
 
     async def _check_klippy_printing(self):
-        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        klippy_apis = self.server.lookup_component('klippy_apis')
         result = await klippy_apis.query_objects(
             {'print_stats': None}, default={})
         pstate = result.get('print_stats', {}).get('state', "").lower()
@@ -204,7 +204,7 @@ class PowerDevice:
     def run_power_changed_action(self):
         if self.state == "on" and self.klipper_restart:
             ioloop = IOLoop.current()
-            klippy_apis = self.server.lookup_plugin("klippy_apis")
+            klippy_apis = self.server.lookup_component("klippy_apis")
             ioloop.call_later(self.restart_delay, klippy_apis.do_restart,
                               "FIRMWARE_RESTART")
 
@@ -583,6 +583,6 @@ class HomeSeer(PowerDevice):
             raise self.server.error(msg) from None
         self.state = state
 
-# The power plugin has multiple configuration sections
-def load_plugin_multi(config):
+# The power component has multiple configuration sections
+def load_component_multi(config):
     return PrinterPower(config)
