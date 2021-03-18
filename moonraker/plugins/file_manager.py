@@ -26,7 +26,7 @@ class FileManager:
     def __init__(self, config):
         self.server = config.get_server()
         self.file_paths = {}
-        database = self.server.load_plugin(config, "database")
+        database = self.server.load_component(config, "database")
         gc_path = database.get_item("moonraker", "file_manager.gcode_path", "")
         self.gcode_metadata = MetadataStorage(self.server, gc_path, database)
         self.fixed_path_args = {}
@@ -118,7 +118,7 @@ class FileManager:
             self.file_paths[root] = path
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
-                database = self.server.lookup_plugin(
+                database = self.server.lookup_component(
                     "database").wrap_namespace("moonraker")
                 database["file_manager.gcode_path"] = path
                 # scan for metadata changes
@@ -201,7 +201,7 @@ class FileManager:
 
     async def _handle_operation_check(self, requested_path):
         # Get virtual_sdcard status
-        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        klippy_apis = self.server.lookup_component('klippy_apis')
         result = await klippy_apis.query_objects({'print_stats': None})
         pstats = result.get('print_stats', {})
         loaded_file = pstats.get('filename', "")
@@ -426,7 +426,7 @@ class FileManager:
         await evt.wait()
         if start_print:
             # Make a Klippy Request to "Start Print"
-            klippy_apis = self.server.lookup_plugin('klippy_apis')
+            klippy_apis = self.server.lookup_component('klippy_apis')
             try:
                 await klippy_apis.start_print(upload_info['filename'])
             except self.server.error:
@@ -744,7 +744,7 @@ class MetadataStorage:
         filename = filename.replace("\"", "\\\"")
         cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
                         self.gc_path, "-f", f"\"{filename}\""])
-        shell_command = self.server.lookup_plugin('shell_command')
+        shell_command = self.server.lookup_component('shell_command')
         scmd = shell_command.build_shell_command(cmd, log_stderr=True)
         result = await scmd.run_with_response(timeout=10.)
         try:
@@ -764,5 +764,5 @@ class MetadataStorage:
             self.server.send_event(
                 "file_manager:metadata_update", metadata)
 
-def load_plugin(config):
+def load_component(config):
     return FileManager(config)
