@@ -68,7 +68,7 @@ class Machine:
         return "ok"
 
     async def _execute_cmd(self, cmd):
-        shell_command = self.server.lookup_plugin('shell_command')
+        shell_command = self.server.lookup_component('shell_command')
         scmd = shell_command.build_shell_command(cmd, None)
         try:
             await scmd.run(timeout=2., verbose=False)
@@ -76,5 +76,5 @@ class Machine:
             logging.exception(f"Error running cmd '{cmd}'")
             raise
 
-def load_plugin(config):
+def load_component(config):
     return Machine(config)
