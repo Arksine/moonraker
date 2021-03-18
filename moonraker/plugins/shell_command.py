@@ -214,5 +214,5 @@ class ShellCommandFactory:
                             env=None, log_stderr=False):
         return ShellCommand(cmd, callback, std_err_callback, env, log_stderr)
 
-def load_plugin(config):
+def load_component(config):
     return ShellCommandFactory()
