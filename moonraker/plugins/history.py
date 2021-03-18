@@ -9,8 +9,8 @@ HIST_NAMESPACE = "history"
 class History:
     def __init__(self, config):
         self.server = config.get_server()
-        self.file_manager = self.server.lookup_plugin('file_manager')
-        database = self.server.lookup_plugin("database")
+        self.file_manager = self.server.lookup_component('file_manager')
+        database = self.server.lookup_component("database")
         self.gcdb = database.wrap_namespace("gcode_metadata", parse_keys=False)
 
         self.server.register_event_handler(
@@ -41,7 +41,7 @@ class History:
             self.next_job_id = int(self.cached_job_ids[-1], 16) + 1
 
     async def _init_ready(self):
-        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        klippy_apis = self.server.lookup_component('klippy_apis')
         sub = {"print_stats": None}
         try:
             result = await klippy_apis.subscribe_objects(sub)
@@ -255,5 +255,5 @@ class PrinterJob:
             if hasattr(self, i):
                 setattr(self, i, data[i])
 
-def load_plugin(config):
+def load_component(config):
     return History(config)
