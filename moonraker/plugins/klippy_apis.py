@@ -157,5 +157,5 @@ class KlippyAPI:
     def send_status(self, status):
         self.server.send_event("server:status_update", status)
 
-def load_plugin(config):
+def load_component(config):
     return KlippyAPI(config)
