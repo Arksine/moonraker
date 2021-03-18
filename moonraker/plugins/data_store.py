@@ -40,7 +40,7 @@ class DataStore:
             self._handle_gcode_store_request)
 
     async def _init_sensors(self):
-        klippy_apis = self.server.lookup_plugin('klippy_apis')
+        klippy_apis = self.server.lookup_component('klippy_apis')
         # Fetch sensors
         try:
             result = await klippy_apis.query_objects({'heaters': None})
@@ -136,5 +136,5 @@ class DataStore:
             gc_responses = list(self.gcode_queue)
         return {'gcode_store': gc_responses}
 
-def load_plugin(config):
+def load_component(config):
     return DataStore(config)
