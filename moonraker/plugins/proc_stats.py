@@ -37,7 +37,7 @@ class ProcStats:
         self.vcgencmd = None
         if os.path.exists(VC_GEN_CMD_FILE):
             logging.info("Detected 'vcgencmd', throttle checking enabled")
-            shell_command = self.server.load_plugin(config, "shell_command")
+            shell_command = self.server.load_component(config, "shell_command")
             self.vcgencmd = shell_command.build_shell_command(
                 "vcgencmd get_throttled")
             self.server.register_notification("proc_stats:cpu_throttled")
@@ -133,5 +133,5 @@ class ProcStats:
     def close(self):
         self.stat_update_cb.stop()
 
-def load_plugin(config):
+def load_component(config):
     return ProcStats(config)
