@@ -61,8 +61,9 @@ The `gcode_move` object reports the current gcode state:
   the most recent "G1" or "G0" processed assuming the machine is
   using absolute coordinates.
 
-Note: The printer's actual movement will lag behind the reported positional
-coordinates due to lookahead.
+!!! Note
+    The printer's actual movement will lag behind the reported positional
+    coordinates due to lookahead.
 
 ## toolhead
 ```json
@@ -98,9 +99,10 @@ The `toolhead` object reports state of the current tool:
 - `square_corner_velocity`: The currently set square corner velocity.  This
   is the maximum velocity at which the tool may travel a 90 degree corner.
 
-Note:  `max_velocity`, `max_accel`, `max_accel_to_decel`, and
-`square_corner_velocity` can be changed by the `SET_VELOCITY_LIMIT` gcode.
-`M204` can also change `max_accel`.
+!!! tip
+    `max_velocity`, `max_accel`, `max_accel_to_decel`, and
+    `square_corner_velocity` can be changed by the `SET_VELOCITY_LIMIT` gcode.
+    `M204` can also change `max_accel`.
 
 ## configfile
 ```json
@@ -128,8 +130,9 @@ The `configfile` object reports printer configuration state:
 
 ## extruder
 *Enabled when `[extruder]` is included in printer.cfg*
-Note: If multiple extruders are configured, extruder 0 is available as
-`extruder`, extruder 1 as `extruder1` and so on.
+!!! note
+    If multiple extruders are configured, extruder 0 is available as
+    `extruder`, extruder 1 as `extruder1` and so on.
 ```json
 {
     "temperature": 0.0,
@@ -219,9 +222,10 @@ The `virtual_sdcard` object reports the state of the virtual sdcard:
 - `file_position`:  The current file position in bytes.  This will always
   be an integer value
 
-**Note:  `progress` and `file_position` will persist after a print has
-paused, completed, or errored.  They are cleared when the user issues
-a SDCARD_RESET_FILE gcode or when a new print has started.**
+!!! Note
+    `progress` and `file_position` will persist after a print has
+    paused, completed, or errored.  They are cleared when the user issues
+    a SDCARD_RESET_FILE gcode or when a new print has started.
 
 ## print_stats
 *Enabled when `[virtual_sdcard]` is included in printer.cfg*
@@ -252,8 +256,9 @@ The `print_stats` object reports `virtual_sdcard` print state:
 - `message`:  If an error is detected, this field contains the error
   message generated.  Otherwise it will be a null string.
 
-**Note: After a print has started all of the values above will persist until
-the user issues a SDCARD_RESET_FILE gcode or when a new print has started.**
+!!! Note
+    After a print has started all of the values above will persist until
+    the user issues a SDCARD_RESET_FILE gcode or when a new print has started.
 
 ## display_status
 *Enabled when `[display]` or `[display_status]` is included in printer.cfg*
@@ -360,8 +365,9 @@ The `bed_mesh` printer object reports the following state:
 - `mesh_matrix`: A 2 dimension array representing the interpolated mesh.  If
   no matrix has been generated the result is `[[]]`.
 
-**Note: See [web_api.md](web_api.md##bed-mesh-coordinates) for an example
-of how to use this information to generate (X,Y,Z) coordinates.**
+!!! tip
+    See [web_api.md](web_api.md##bed-mesh-coordinates) for an example
+    of how to use this information to generate (X,Y,Z) coordinates.
 
 ## gcode_macro macro_name
 *Enabled when `[gcode_macro macro_name]` is included in printer.cfg.

@@ -11,9 +11,11 @@ nav:
         - API Changes: api_changes.md
     - 'Backend Developers':
         - Contributing: contributing.md
+        - Components: components.md
 theme:
     name: readthedocs
 plugins:
     - search
 markdown_extensions:
     - codehilite
+    - admonition

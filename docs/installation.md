@@ -64,9 +64,10 @@ KLIPPY_EXEC=/home/pi/klippy-env/bin/python
 KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer.cfg -l /tmp/klippy.log -a /tmp/klippy_uds"
 ```
 
-**Note: Your installation of Klipper may use systemd instead of
-the default LSB script.  In this case, you need to modify the
-klipper.service file.**
+!!! note
+    Your installation of Klipper may use systemd instead of
+    the default LSB script.  In this case, you need to modify the
+    klipper.service file.
 
 You may also want to take this opportunity to change the location of
 printer.cfg to match Moonraker's `config_path` option (see the

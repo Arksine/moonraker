@@ -253,7 +253,8 @@ JSON-RPC request:
     "id": 4654
 }
 ```
-**Note: A `null` value will fetch all available attributes for its key.
+!!! note
+    A `null` value will fetch all available attributes for its key.
 
 Returns:
 
@@ -289,11 +290,12 @@ HTTP request:
 ```http
 POST /printer/objects/subscribe?connection_id=123456789&gcode_move&extruder`
 ```
-**Note:  The HTTP API requires that a `connection_id` is passed via the query
-string or as part of the form.   This should be the
-[ID reported](#get-websocket-id) from a currently connected websocket. A
-request that includes only the `connection_id` argument will cancel the
-subscription on the specified websocket.**
+!!! note
+    The HTTP API requires that a `connection_id` is passed via the query
+    string or as part of the form.   This should be the
+    [ID reported](#get-websocket-id) from a currently connected websocket. A
+    request that includes only the `connection_id` argument will cancel the
+    subscription on the specified websocket.
 
 JSON-RPC request:
 ```json
@@ -309,8 +311,9 @@ JSON-RPC request:
     "id": 5434
 }
 ```
-**Note: If `objects` is set to an empty object then the subscription will
-be cancelled.**
+!!! note
+    If `objects` is set to an empty object then the subscription will
+    be cancelled.
 
 Returns:
 
@@ -392,7 +395,7 @@ An object containing various fields that report server state.
   {
     "klippy_connected": true,
     "klippy_state": "ready",
-    "plugins": [
+    "components": [
         "database",
         "file_manager",
         "klippy_apis",
@@ -405,17 +408,22 @@ An object containing various fields that report server state.
         "update_manager",
         "power"
     ],
-    "failed_plugins": [],
+    "failed_components": [],
     "registered_directories": ["config", "gcodes", "config_examples", "docs"]
   }
 ```
+!!! warning
+    This object also includes `plugins` and `failed_plugins` fields that
+    are now deprecated.  They duplicate the information in
+    `components` and `failed_components`, and will be removed in the future.
+
 Note that `klippy_state` will match the `state` value received from
 `/printer/info`. The `klippy_connected` item tracks the state of the
-unix domain socket connect to Klippy. The `plugins` key will return a list of
-enabled plugins.  This can be used by clients to check if an optional
-plugin is available.  Optional plugins that do not load correctly will not
-prevent the server from starting, thus any plugins that failed to load will be
-reported in the `failed_plugins` field.
+unix domain socket connect to Klippy. The `components` key will return a list
+of enabled components.  This can be used by clients to check if an optional
+component is available.  Optional components that do not load correctly will
+not prevent the server from starting, thus any components that failed to load
+will be reported in the `failed_components` field.
 
 #### Get Server Configuration
 HTTP request:
@@ -987,12 +995,13 @@ JSON-RPC request:
     "id": 4644
 }
 ```
+!!! tip
+    If the `root` argument is omitted the request will default to
+    the `gcodes` root.
 
-**Note: If the `root` argument is omitted the request will default to
-the `gcodes` root.**
-
-**Note: The `gcodes` root will only return files with valid gcode
-extensions.**
+!!! note
+    The `gcodes` root will only return files with valid gcode
+    extensions.
 
 Returns:
 A list of objects, where each object contains file data.
@@ -1093,13 +1102,15 @@ modified time, and size.
     "filename": "3DBenchy_0.15mm_PLA_MK3S_2h6m.gcode"
 }
 ```
-**Note: The `print_start_time` and `job_id` fields are initialized to
-`null`.  They will be updated for each print job if the user has the
-`[history]` plugin configured**
+!!! note
+    The `print_start_time` and `job_id` fields are initialized to
+    `null`.  They will be updated for each print job if the user has the
+    `[history]` component configured
 
-**Note: The `data` field for each thumbnail is deprecated and will be removed
-in a future release.  Clients should retrieve the png directly using the
-`relative_path` field.**
+!!! warning
+    The `data` field for each thumbnail is deprecated and will be removed
+    in a future release.  Clients should retrieve the png directly using the
+    `relative_path` field.
 
 #### Get directory information
 Returns a list of files and subdirectories given a supplied path.
@@ -1124,9 +1135,9 @@ JSON-RPC request:
     "id": 5644
 }
 ```
-
-**Note: If the `path` argument is omitted then the command will return
-directory information from the `gcodes` root.**
+!!! tip
+    If the `path` argument is omitted then the command will return
+    directory information from the `gcodes` root.
 
 The `extended` argument is optional and defaults to false. If
 supplied and set to true then data returned for gcode files
@@ -1223,8 +1234,9 @@ JSON-RPC request:
     "id": 6545
 }
 ```
-**Note: If the specified directory contains files then the delete request
-will fail unless the `force` argument is set to `true`.**
+!!! warning
+    If the specified directory contains files then the delete request
+    will fail unless the `force` argument is set to `true`.
 
 Returns:
 
@@ -1467,9 +1479,10 @@ as an array of strings, where each string references a nested field.
 This is useful for scenarios where your namespace contains keys that include
 a "." character.
 
-**Note: Moonraker reserves the `moonraker`, `gcode_metadata`, and `history`
-namespaces. Clients may read from these namespaces but they may not modify
-them.**
+!!! note
+    Moonraker reserves the `moonraker`, `gcode_metadata`, and `history`
+    namespaces. Clients may read from these namespaces but they may not
+    modify them.
 
 For example, assume the following object is stored in the "superclient"
 namespace:
@@ -1568,10 +1581,11 @@ HTTP request:
 ```http
 POST /server/database/item?namespace={namespace}&key={key}value={value}`
 ```
-**Note: If the `value` is not a string type, the `value` argument must
-provide a [type hint](#query-string-type-hints).  Alternatively,
-arguments may be passed via the request body in JSON format. For
-example:**
+!!! note
+    If the `value` is not a string type, the `value` argument must
+    provide a [type hint](#query-string-type-hints).  Alternatively,
+    arguments may be passed via the request body in JSON format. For
+    example:
 ```http
 POST /server/database/item
 Content-Type: application/json
@@ -1639,7 +1653,7 @@ deleted item.
 ```
 
 ### Update Manager APIs
-The following endpoints are available when the `[update_manager]` plugin has
+The following endpoints are available when the `[update_manager]` component has
 been configured:
 
 #### Get update status
@@ -1887,7 +1901,7 @@ Returns:
 `ok` when complete
 
 ### Power APIs
-The APIs below are available when the `[power]` plugin has been configured.
+The APIs below are available when the `[power]` component has been configured.
 
 #### Get Device List
 HTTP request:
@@ -2240,7 +2254,7 @@ An object containing simulates Octoprint Printer profile
 ```
 
 ### History APIs
-The APIs below are avilable when the `[history]` plugin has been configured.
+The APIs below are avilable when the `[history]` component has been configured.
 
 #### Get job list
 HTTP request:
@@ -2346,9 +2360,9 @@ JSON-RPC request:
     "id": 5534
 }
 ```
-
-**Note: it is possible to replace the `uid` argument with `all=true`
-to delete all jobs in the history database.**
+!!! tip
+    It is possible to replace the `uid` argument with `all=true`
+    to delete all jobs in the history database.
 
 Returns:
 
@@ -2571,9 +2585,10 @@ The websocket is located at `ws://host:port/websocket`, for example:
 var s = new WebSocket("ws://" + location.host + "/websocket");
 ```
 
-**Note: A client using API Key authorization may request a
-[oneshot token](#generate-a-oneshot-token), applying the result to the
-websocket request's query string:**
+!!! tip
+    A client using API Key authorization may request a
+    [oneshot token](#generate-a-oneshot-token), applying the result to the
+    websocket request's query string:
 
 ```http
 ws://host:port/websocket?token={32 character base32 string}
