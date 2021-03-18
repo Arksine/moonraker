@@ -145,8 +145,8 @@ class PanelDue:
     def __init__(self, config):
         self.server = config.get_server()
         self.ioloop = IOLoop.current()
-        self.file_manager = self.server.lookup_plugin('file_manager')
-        self.klippy_apis = self.server.lookup_plugin('klippy_apis')
+        self.file_manager = self.server.lookup_component('file_manager')
+        self.klippy_apis = self.server.lookup_component('klippy_apis')
         self.kinematics = "none"
         self.machine_name = config.get('machine_name', "Klipper")
         self.firmware_name = "Repetier | Klipper"
@@ -788,5 +788,5 @@ class PanelDue:
             msg += f"\nSequence {i}: {gc}"
         logging.debug(msg)
 
-def load_plugin(config):
+def load_component(config):
     return PanelDue(config)
