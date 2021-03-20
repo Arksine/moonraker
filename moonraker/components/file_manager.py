@@ -11,7 +11,7 @@ import logging
 import json
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.ioloop import IOLoop
 from tornado.locks import Event
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
@@ -604,7 +604,6 @@ class FileManager:
 
     def close(self):
         self.inotify_handler.close()
-        self.gcode_metadata.close()
 
 
 INOTIFY_DELETE_TIME = .25
@@ -946,7 +945,6 @@ class INotifyHandler:
                 pass
 
 
-METADATA_PRUNE_TIME = 600000
 METADATA_NAMESPACE = "gcode_metadata"
 METADATA_VERSION = 3
 
@@ -968,35 +966,26 @@ class MetadataStorage:
         self.events = {}
         self.busy = False
         self.gc_path = gc_path
-        self.prune_cb = PeriodicCallback(
-            self.prune_metadata, METADATA_PRUNE_TIME)
         if self.gc_path:
-            self.prune_cb.start()
+            # Check for removed gcode files while moonraker was shutdown
+            for fname in list(self.mddb.keys()):
+                fpath = os.path.join(self.gc_path, fname)
+                if not os.path.isfile(fpath):
+                    self.remove_file_metadata(fname)
+                    logging.info(f"Pruned file: {fname}")
+                    continue
 
     def update_gcode_path(self, path):
         if path == self.gc_path:
             return
         self.mddb.clear()
         self.gc_path = path
-        if not self.prune_cb.is_running():
-            self.prune_cb.start()
-
-    def close(self):
-        self.prune_cb.stop()
 
     def get(self, key, default=None):
         return self.mddb.get(key, default)
 
     def __getitem__(self, key):
         return self.mddb[key]
-
-    def prune_metadata(self):
-        for fname in list(self.mddb.keys()):
-            fpath = os.path.join(self.gc_path, fname)
-            if not os.path.isfile(fpath):
-                self.remove_file_metadata(fname)
-                logging.info(f"Pruned file: {fname}")
-                continue
 
     def _has_valid_data(self, fname, fsize, modified):
         mdata = self.mddb.get(fname, {'size': "", 'modified': 0})
