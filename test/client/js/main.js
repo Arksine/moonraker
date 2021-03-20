@@ -798,7 +798,7 @@ function handle_file_list_changed(file_info) {
     // Update the jstree based on the action and info
     let parent_node = parse_node_path(file_info.item.root, file_info.item.path);
     $("#filelist").jstree('refresh_node', parent_node);
-    if (file_info.action == "move_item") {
+    if (file_info.action.startsWith("move_")) {
         let src_parent_node = parse_node_path(
             file_info.source_item.root, file_info.source_item.path)
         if (src_parent_node != parent_node)
