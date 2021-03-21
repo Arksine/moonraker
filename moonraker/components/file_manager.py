@@ -703,8 +703,8 @@ class INotifyHandler:
                 st = os.stat(full_path)
                 key = (st.st_dev, st.st_ino)
                 if key not in visited_dirs:
-                    # Don't watch "thumbs" directories in the gcodes root
-                    if not (root == "gcodes" and dname == "thumbs"):
+                    # Don't watch hidden directories
+                    if dname[0] != ".":
                         if moved_path is not None:
                             rel_path = os.path.relpath(
                                 full_path, start=dir_path)
@@ -777,8 +777,8 @@ class INotifyHandler:
                 self._process_file_event(evt, root, child_path)
 
     def _process_dir_event(self, evt, root, child_path):
-        if root == "gcodes" and evt.name == "thumbs":
-            # ignore changes to the thumbs directory
+        if evt.name and evt.name[0] == ".":
+            # ignore changes to the hidden directories
             return
         if evt.mask & iFlags.CREATE:
             logging.debug(f"Inotify directory create: {root}, {evt.name}")
