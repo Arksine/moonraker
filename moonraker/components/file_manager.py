@@ -614,15 +614,16 @@ class INotifyHandler:
             self.watches[new_path] = wd
             self.watched_dirs[wd] = (new_root, new_path)
 
-    def _process_deleted_files(self, dir_path):
+    def _process_deleted_items(self, dir_path):
         if dir_path not in self.pending_delete_events:
             return
-        root, files, hdl = self.pending_delete_events.pop(dir_path)
-        for fname in files:
-            file_path = os.path.join(dir_path, fname)
-            self._clear_metadata(root, file_path)
+        root, items, hdl = self.pending_delete_events.pop(dir_path)
+        for (item_name, isdir) in items:
+            item_path = os.path.join(dir_path, item_name)
+            item_type = "dir" if isdir else "file"
+            self._clear_metadata(root, item_path, isdir)
             self._notify_filelist_changed(
-                "delete_file", root, file_path)
+                f"delete_{item_type}", root, item_path)
 
     def _remove_stale_cookie(self, cookie):
         pending_evt = self.pending_move_events.pop(cookie, None)
@@ -729,6 +730,24 @@ class INotifyHandler:
             else:
                 self._process_file_event(evt, root, child_path)
 
+    def _schedule_delete_event(self, root, item_path, is_dir):
+        if is_dir:
+            self.remove_watch(item_path, need_low_level_rm=False)
+            # Remove pending delete events for children if they exist
+            pending_evt = self.pending_delete_events.pop(item_path, None)
+            if pending_evt is not None:
+                delete_hdl = pending_evt[2]
+                self.ioloop.remove_timeout(delete_hdl)
+        parent_path, item_name = os.path.split(item_path)
+        items = set()
+        if parent_path in self.pending_delete_events:
+            root, items, delete_hdl = self.pending_delete_events[parent_path]
+            self.ioloop.remove_timeout(delete_hdl)
+        items.add((item_name, is_dir))
+        delete_hdl = self.ioloop.call_later(
+            INOTIFY_DELETE_TIME, self._process_deleted_items, parent_path)
+        self.pending_delete_events[parent_path] = (root, items, delete_hdl)
+
     def _process_dir_event(self, evt, root, child_path):
         if evt.name and evt.name[0] == ".":
             # ignore changes to the hidden directories
@@ -740,14 +759,7 @@ class INotifyHandler:
                 "create_dir", root, child_path)
         elif evt.mask & iFlags.DELETE:
             logging.debug(f"Inotify directory delete: {root}, {evt.name}")
-            self.remove_watch(child_path, need_low_level_rm=False)
-            pending_evt = self.pending_delete_events.pop(child_path, None)
-            if pending_evt is not None:
-                delete_hdl = pending_evt[2]
-                self.ioloop.remove_timeout(delete_hdl)
-            self._clear_metadata(root, child_path, True)
-            self._notify_filelist_changed(
-                "delete_dir", root, child_path)
+            self._schedule_delete_event(root, child_path, True)
         elif evt.mask & iFlags.MOVED_FROM:
             logging.debug(f"Inotify directory move from: {root}, {evt.name}")
             hdl = self.ioloop.call_later(
@@ -791,19 +803,11 @@ class INotifyHandler:
             if root == "gcodes" and ext == ".ufp":
                 # Don't notify deleted ufp files
                 return
-            dir_path, fname = os.path.split(child_path)
-            files = set()
-            if dir_path in self.pending_delete_events:
-                root, files, delete_hdl = self.pending_delete_events[dir_path]
-                self.ioloop.remove_timeout(delete_hdl)
-            files.add(fname)
-            delete_hdl = self.ioloop.call_later(
-                INOTIFY_MOVE_TIME, self._process_deleted_files, dir_path)
-            self.pending_delete_events[dir_path] = (root, files, delete_hdl)
+            self._schedule_delete_event(root, child_path, False)
         elif evt.mask & iFlags.MOVED_FROM:
             logging.debug(f"Inotify file move from: {root}, {evt.name}")
             hdl = self.ioloop.call_later(
-                INOTIFY_DELETE_TIME, self._remove_stale_cookie, evt.cookie)
+                INOTIFY_MOVE_TIME, self._remove_stale_cookie, evt.cookie)
             self.pending_move_events[evt.cookie] = (
                 root, child_path, hdl, False)
             self._clear_metadata(root, child_path)
