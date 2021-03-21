@@ -213,7 +213,7 @@ class PrusaSlicer(BaseSlicer):
             r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", self.header_data)
         if not thumb_matches:
             return None
-        thumb_dir = os.path.join(os.path.dirname(self.path), "thumbs")
+        thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
         if not os.path.exists(thumb_dir):
             try:
                 os.mkdir(thumb_dir)
@@ -238,7 +238,7 @@ class PrusaSlicer(BaseSlicer):
                 continue
             thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
             thumb_path = os.path.join(thumb_dir, thumb_name)
-            rel_thumb_path = os.path.join("thumbs", thumb_name)
+            rel_thumb_path = os.path.join(".thumbs", thumb_name)
             with open(thumb_path, "wb") as f:
                 f.write(base64.b64decode(data.encode()))
             parsed_matches.append({
@@ -355,11 +355,11 @@ class Cura(PrusaSlicer):
         if thumbs is not None:
             return thumbs
         # Check for thumbnails extracted from the ufp
-        thumb_dir = os.path.join(os.path.dirname(self.path), "thumbs")
+        thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
         thumb_base = os.path.splitext(os.path.basename(self.path))[0]
         thumb_path = os.path.join(thumb_dir, f"{thumb_base}.png")
-        rel_path_full = os.path.join("thumbs", f"{thumb_base}.png")
-        rel_path_small = os.path.join("thumbs", f"{thumb_base}-32x32.png")
+        rel_path_full = os.path.join(".thumbs", f"{thumb_base}.png")
+        rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
         thumb_path_small = os.path.join(thumb_dir, f"{thumb_base}-32x32.png")
         if not os.path.isfile(thumb_path):
             return None
