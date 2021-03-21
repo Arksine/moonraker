@@ -296,23 +296,10 @@ class FileManager:
                 ext = os.path.splitext(fname)[-1].lower()
                 gc_path = self.file_paths.get('gcodes', None)
                 if gc_path is not None and full_path.startswith(gc_path) and \
-                        ext in VALID_GCODE_EXTS:
-                    if ext == ".ufp":
-                        try:
-                            full_path = self.process_ufp_from_refresh(
-                                full_path)
-                        except Exception:
-                            logging.exception("Error processing ufp file")
-                            continue
-                        path_info = self.get_path_info(full_path)
-                        path_info['filename'] = os.path.split(full_path)[-1]
+                        ext in VALID_GCODE_EXTS and is_extended:
                     rel_path = os.path.relpath(full_path, start=gc_path)
-                    self.gcode_metadata.parse_metadata(
-                        rel_path, path_info['size'], path_info['modified'],
-                        notify=True)
-                    metadata = self.gcode_metadata.get(rel_path, None)
-                    if metadata is not None and is_extended:
-                        path_info.update(metadata)
+                    metadata = self.gcode_metadata.get(rel_path, {})
+                    path_info.update(metadata)
                 flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
@@ -511,20 +498,11 @@ class FileManager:
                 if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
                     continue
                 full_path = os.path.join(dir_path, name)
-                if root == 'gcodes' and ext == ".ufp":
-                    try:
-                        full_path = self.process_ufp_from_refresh(full_path)
-                    except Exception:
-                        logging.exception("Error processing ufp file")
-                        continue
                 if not os.path.exists(full_path):
                     continue
                 fname = full_path[len(path) + 1:]
                 finfo = self.get_path_info(full_path)
                 filelist[fname] = finfo
-                if root == 'gcodes':
-                    self.gcode_metadata.parse_metadata(
-                        fname, finfo['size'], finfo['modified'])
         if list_format:
             flist = []
             for fname in sorted(filelist, key=str.lower):
