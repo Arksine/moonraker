@@ -84,7 +84,7 @@ class History:
         limit = web_request.get_int("limit", 50)
         start = web_request.get_int("start", 0)
         if start >= end_num or end_num == 0:
-            return {"count": 0, "jobs": {}}
+            return {"count": 0, "jobs": []}
 
         for job_id in self.cached_job_ids:
             job = self.history_ns[job_id]
