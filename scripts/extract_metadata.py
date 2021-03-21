@@ -249,7 +249,7 @@ class PrusaSlicer(BaseSlicer):
                 f.write(base64.b64decode(data.encode()))
             parsed_matches.append({
                 'width': info[0], 'height': info[1],
-                'size': info[2], 'data': data,
+                'size': os.path.getsize(thumb_path),
                 'relative_path': rel_thumb_path})
         return parsed_matches
 
@@ -372,28 +372,20 @@ class Cura(PrusaSlicer):
         # read file
         thumbs = []
         try:
-            with open(thumb_path, 'rb') as thumb_file:
-                fbytes = thumb_file.read()
-                with Image.open(io.BytesIO(fbytes)) as im:
-                    thumb_full_b64 = base64.b64encode(fbytes).decode()
-                    thumbs.append({
-                        'width': im.width, 'height': im.height,
-                        'size': len(thumb_full_b64), 'data': thumb_full_b64,
-                        'relative_path': rel_path_full
-                    })
-                    # Create 32x32 thumbnail
-                    im.thumbnail((32, 32), Image.ANTIALIAS)
-                    tmp_thumb = io.BytesIO()
-                    im.save(tmp_thumb, format="PNG")
-                    im.save(thumb_path_small, format="PNG")
-                    thumb_small_b64 = base64.b64encode(
-                        tmp_thumb.getbuffer()).decode()
-                    tmp_thumb.close()
-                    thumbs.insert(0, {
-                        'width': im.width, 'height': im.height,
-                        'size': len(thumb_small_b64), 'data': thumb_small_b64,
-                        'relative_path': rel_path_small
-                    })
+            with Image.open(thumb_path) as im:
+                thumbs.append({
+                    'width': im.width, 'height': im.height,
+                    'size': os.path.getsize(thumb_path),
+                    'relative_path': rel_path_full
+                })
+                # Create 32x32 thumbnail
+                im.thumbnail((32, 32), Image.ANTIALIAS)
+                im.save(thumb_path_small, format="PNG")
+                thumbs.insert(0, {
+                    'width': im.width, 'height': im.height,
+                    'size': os.path.getsize(thumb_path_small),
+                    'relative_path': rel_path_small
+                })
         except Exception as e:
             log_to_stderr(str(e))
             return None
