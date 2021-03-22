@@ -482,7 +482,34 @@ Enables print history tracking.
 [history]
 ```
 
-### `[paneldue]`
+## `[spool_manager]`
+Enables spool manager. Spool manager templates are optional predefined sets of
+values that can be referenced with the template property when creating a new spool.
+The spool manager publishes four endpoints: "/spool_manager/spool and
+"/spool_manager/spool/list supporting GET, POST and DELETE, "/spool_manager/spool/active"
+supporting GET and POST, and "/spool_manager/templates" supporting GET. The active
+spool is the one to which usage will be tracked. Unused/spent spools can be marked hidden,
+and can optionally be omitted from the list response.
+
+```ini
+# moonraker.conf
+
+[spool_manager]
+sync_rate_seconds: 900
+#   The time in seconds between saving filament usage. Updates will happen on the next
+#   status update from klipper. Default is 900.
+
+[spool_manager template pla]
+vendor: vendor
+material: PLA
+density:  1.24
+diameter: 1.75
+filament_weight: 1000
+spool_weight: 200
+cost: 24.99
+```
+
+## `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
 converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
@@ -1594,7 +1621,7 @@ instance_name:
 status_objects:
 #   A newline separated list of Klipper objects whose state will be
 #   published.  There are two different ways to publish the states - you
-#   can use either or both depending on your need.  See the 
+#   can use either or both depending on your need.  See the
 #   "publish_split_status" options for details.
 #
 #   For example, this option could be set as follows:
@@ -1618,7 +1645,7 @@ status_objects:
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
 publish_split_status: False
-#   Configures how to publish status updates to MQTT.  
+#   Configures how to publish status updates to MQTT.
 #
 #   When set to False (default), all Klipper object state updates will be
 #   published to a single mqtt state with the following topic:
