@@ -550,7 +550,7 @@ class FileManager:
         self.inotify_handler.close()
 
 
-INOTIFY_DELETE_TIME = .25
+INOTIFY_BUNDLE_TIME = .25
 INOTIFY_MOVE_TIME = 1.
 
 class INotifyHandler:
@@ -569,8 +569,9 @@ class INotifyHandler:
         self.watches = {}
         self.watched_dirs = {}
         self.pending_move_events = {}
-        self.pending_create_events = {}
-        self.pending_modify_events = {}
+        self.pending_create_file_events = {}
+        self.pending_create_dir_events = {}
+        self.pending_modify_file_events = {}
         self.pending_delete_events = {}
 
     def add_root_watch(self, root, root_path):
@@ -584,13 +585,17 @@ class INotifyHandler:
                 self.ioloop.remove_timeout(pending[2])
                 del self.pending_move_events[cookie]
         # remove pending create notifications on root
-        for fpath, croot in list(self.pending_create_events.items()):
-            if root == croot:
-                del self.pending_create_events[fpath]
+        for fpath, pending in list(self.pending_create_file_events.items()):
+            if root == pending[0]:
+                del self.pending_create_file_events[fpath]
         # remove pending modify notifications on root
-        for fpath, croot in list(self.pending_modify_events.items()):
-            if root == croot:
-                del self.pending_modify_events[fpath]
+        for fpath, mroot in list(self.pending_modify_file_events.items()):
+            if root == mroot:
+                del self.pending_modify_file_events[fpath]
+        # remove pending create notifications on root
+        for dpath, pending in list(self.pending_create_dir_events.items()):
+            if root == pending[0]:
+                del self.pending_create_dir_events[dpath]
         # remove pending delete notifications on root
         for dir_path, pending in list(self.pending_delete_events.items()):
             if root == pending[0]:
@@ -631,6 +636,14 @@ class INotifyHandler:
             self._clear_metadata(root, item_path, isdir)
             self._notify_filelist_changed(
                 f"delete_{item_type}", root, item_path)
+
+    def _process_created_directory(self, dir_path):
+        if dir_path not in self.pending_create_dir_events:
+            return
+        root, hdl = self.pending_create_dir_events.pop(dir_path)
+        self._scan_directory(root, dir_path)
+        self._notify_filelist_changed(
+            "create_dir", root, dir_path)
 
     def _remove_stale_cookie(self, cookie):
         # This is a file or directory moved out of a watched parent.
@@ -689,7 +702,7 @@ class INotifyHandler:
                     scan_dirs.append(dname)
             dnames[:] = scan_dirs
             if root != "gcodes":
-                # No need check for metadata in other roots
+                # No need check for metadata in non-gcode roots.
                 continue
             for name in files:
                 fpath = os.path.join(dpath, name)
@@ -758,7 +771,7 @@ class INotifyHandler:
             self.ioloop.remove_timeout(delete_hdl)
         items.add((item_name, is_dir))
         delete_hdl = self.ioloop.call_later(
-            INOTIFY_DELETE_TIME, self._process_deleted_items, parent_path)
+            INOTIFY_BUNDLE_TIME, self._process_deleted_items, parent_path)
         self.pending_delete_events[parent_path] = (root, items, delete_hdl)
 
     def _process_dir_event(self, evt, root, child_path):
@@ -767,9 +780,22 @@ class INotifyHandler:
             return
         if evt.mask & iFlags.CREATE:
             logging.debug(f"Inotify directory create: {root}, {evt.name}")
-            self._scan_directory(root, child_path)
-            self._notify_filelist_changed(
-                "create_dir", root, child_path)
+            # Add a watch for this directory immediately so we can catch
+            # events for its children
+            self.add_watch(root, child_path)
+            cb_path = child_path
+            for parent_path, pending in self.pending_create_dir_events.items():
+                if child_path.startswith(parent_path):
+                    # This directory has a parent with a pending notification.
+                    # Reset the parent's timeout and suppress the notification
+                    # for this child
+                    self.ioloop.remove_timeout(pending[1])
+                    cb_path = parent_path
+                    break
+            hdl = self.ioloop.call_later(
+                INOTIFY_BUNDLE_TIME, self._process_created_directory,
+                cb_path)
+            self.pending_create_dir_events[cb_path] = (root, hdl)
         elif evt.mask & iFlags.DELETE:
             logging.debug(f"Inotify directory delete: {root}, {evt.name}")
             self._schedule_delete_event(root, child_path, True)
@@ -810,7 +836,13 @@ class INotifyHandler:
             return
         if evt.mask & iFlags.CREATE:
             logging.debug(f"Inotify file create: {root}, {evt.name}")
-            self.pending_create_events[child_path] = root
+            parent = None
+            for dpath, pending in self.pending_create_dir_events.items():
+                if child_path.startswith(dpath):
+                    parent = dpath
+                    self.ioloop.remove_timeout(pending[1])
+                    break
+            self.pending_create_file_events[child_path] = (root, parent)
         elif evt.mask & iFlags.DELETE:
             logging.debug(f"Inotify file delete: {root}, {evt.name}")
             if root == "gcodes" and ext == ".ufp":
@@ -843,16 +875,25 @@ class INotifyHandler:
                 self._notify_filelist_changed(
                     "create_file", root, child_path)
         elif evt.mask & iFlags.MODIFY:
-            if child_path not in self.pending_create_events:
-                self.pending_modify_events[child_path] = root
+            if child_path not in self.pending_create_file_events:
+                self.pending_modify_file_events[child_path] = root
         elif evt.mask & iFlags.CLOSE_WRITE:
             logging.debug(f"Inotify writable file closed: {child_path}")
             # Only process files that have been created or modified
-            if child_path in self.pending_create_events:
-                del self.pending_create_events[child_path]
+            if child_path in self.pending_create_file_events:
+                parent = self.pending_create_file_events.pop(child_path)[1]
+                if parent is not None:
+                    # This is part of a created parent.  Reschedule the
+                    # directory notification callback.  The parent will
+                    # handle metadata/gcode processing, so we can skip it here
+                    hdl = self.ioloop.call_later(
+                        INOTIFY_BUNDLE_TIME, self._process_created_directory,
+                        parent)
+                    self.pending_create_dir_events[parent] = (root, hdl)
+                    return
                 action = "create_file"
-            elif child_path in self.pending_modify_events:
-                del self.pending_modify_events[child_path]
+            elif child_path in self.pending_modify_file_events:
+                del self.pending_modify_file_events[child_path]
                 action = "modify_file"
             else:
                 # Some other event, ignore it
