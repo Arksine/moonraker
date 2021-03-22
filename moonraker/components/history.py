@@ -220,6 +220,12 @@ class History:
     def on_exit(self):
         self.finish_job("server_exit", self.print_stats)
 
+    def add_job_metadata(self, job_id, data):
+        job = self.get_job(job_id)
+        job['metadata'].update(data)
+        self.history_ns[job_id] = job
+
+
 class PrinterJob:
     def __init__(self, data={}):
         self.end_time = None
