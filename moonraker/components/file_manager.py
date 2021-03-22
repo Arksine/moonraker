@@ -9,6 +9,7 @@ import shutil
 import logging
 import json
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from tornado.ioloop import IOLoop
 from tornado.locks import Event
 from inotify_simple import INotify
@@ -263,14 +264,20 @@ class FileManager:
             except Exception as e:
                 raise self.server.error(str(e))
         elif ep == "/server/files/copy":
-            try:
-                if os.path.isdir(source_path):
-                    shutil.copytree(source_path, dest_path)
-                else:
-                    shutil.copy2(source_path, dest_path)
-            except Exception as e:
-                raise self.server.error(str(e))
+            ioloop = IOLoop.current()
+            with ThreadPoolExecutor(max_workers=1) as tpe:
+                await ioloop.run_in_executor(
+                    tpe, self._do_copy, source_path, dest_path)
         return "ok"
+
+    def _do_copy(self, source_path, dest_path):
+        try:
+            if os.path.isdir(source_path):
+                shutil.copytree(source_path, dest_path)
+            else:
+                shutil.copy2(source_path, dest_path)
+        except Exception as e:
+            raise self.server.error(str(e))
 
     def _list_directory(self, path, is_extended=False):
         if not os.path.isdir(path):
