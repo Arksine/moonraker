@@ -12,6 +12,16 @@ class History:
         self.file_manager = self.server.lookup_component('file_manager')
         database = self.server.lookup_component("database")
         self.gcdb = database.wrap_namespace("gcode_metadata", parse_keys=False)
+        self.job_totals = database.get_item(
+            "moonraker", "history.job_totals",
+            {
+                'total_jobs': 0,
+                'total_time': 0.,
+                'total_print_time': 0.,
+                'total_filament_used': 0.,
+                'longest_job': 0.,
+                'longest_print': 0.
+            })
 
         self.server.register_event_handler(
             "server:klippy_ready", self._init_ready)
@@ -27,6 +37,8 @@ class History:
             "/server/history/job", ['GET', 'DELETE'], self._handle_job_request)
         self.server.register_endpoint(
             "/server/history/list", ['GET'], self._handle_jobs_list)
+        self.server.register_endpoint(
+            "/server/history/totals", ['GET'], self._handle_job_totals)
 
         database.register_local_namespace(HIST_NAMESPACE)
         self.history_ns = database.wrap_namespace(HIST_NAMESPACE,
@@ -104,6 +116,9 @@ class History:
 
         return {"count": end_num - start_num, "jobs": jobs}
 
+    async def _handle_job_totals(self, web_request):
+        return {'job_totals': self.job_totals}
+
     async def _status_update(self, data):
         ps = data.get("print_stats", {})
         if "state" in ps:
@@ -171,6 +186,7 @@ class History:
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
         self.save_current_job()
+        self._update_job_totals()
         self.send_history_event("finished")
         self.current_job = None
         self.current_job_id = None
@@ -204,6 +220,22 @@ class History:
 
     def save_current_job(self):
         self.history_ns[self.current_job_id] = self.current_job.get_stats()
+
+    def _update_job_totals(self):
+        if self.current_job is None:
+            return
+        job = self.current_job
+        self.job_totals['total_jobs'] += 1
+        self.job_totals['total_time'] += job.get('total_duration')
+        self.job_totals['total_print_time'] += job.get('print_duration')
+        self.job_totals['total_filament_used'] += job.get('filament_used')
+        self.job_totals['longest_job'] = max(
+            self.job_totals['longest_job'], job.get('total_duration'))
+        self.job_totals['longest_print'] = max(
+            self.job_totals['longest_print'], job.get('print_duration'))
+        database = self.server.lookup_component("database")
+        database.insert_item(
+            "moonraker", "history.job_totals", self.job_totals)
 
     def send_history_event(self, evt_action):
         job = self._prep_requested_job(
