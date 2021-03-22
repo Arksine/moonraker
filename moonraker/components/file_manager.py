@@ -626,6 +626,8 @@ class INotifyHandler:
                 f"delete_{item_type}", root, item_path)
 
     def _remove_stale_cookie(self, cookie):
+        # This is a file or directory moved out of a watched parent.
+        # We treat this as a deleted file/directory.
         pending_evt = self.pending_move_events.pop(cookie, None)
         if pending_evt is None:
             # Event already processed
@@ -636,7 +638,11 @@ class INotifyHandler:
         item_type = "file"
         if is_dir:
             item_type = "dir"
-            self.remove_watch(prev_path)
+            for wpath in list(self.watches.keys()):
+                if wpath.startswith(prev_path):
+                    self.remove_watch(wpath)
+        # Metadata should have been cleared in the MOVE_TO event,
+        # so no need to clear it here
         self._notify_filelist_changed(
             f"delete_{item_type}", prev_root, prev_path)
 
