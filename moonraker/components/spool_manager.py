@@ -59,10 +59,9 @@ class Spool(Validation):
         self.material: str = None
         self.density: float = None
         self.diameter: float = None
-        self.total_weight: int = None
-        self.used_weight: int = 0
-        self.total_length: int = None
-        self.used_length: int = 0
+        self.total_weight: float = None
+        self.used_length: float = 0
+        self.spool_weight: float = None
         self.first_used: float = None
         self.last_used: float = None
         self.cost: float = None
@@ -75,8 +74,19 @@ class Spool(Validation):
             if hasattr(self, a):
                 setattr(self, a, data[a])
 
-    def serialize(self):
-        return self.__dict__.copy()
+    def used_weight(self) -> float:
+        used_weight = 0.0
+        if self.diameter and self.density:
+            r = self.diameter / 2
+            density_mm = self.density / 1000
+            used_weight = math.pi * r * r * self.used_length * density_mm
+        return used_weight
+
+    def serialize(self, include_calculated: bool = False):
+        data = self.__dict__.copy()
+        if include_calculated:
+            data.update({'used_weight': self.used_weight()})
+        return data
 
 
 class SpoolManager:
@@ -92,18 +102,23 @@ class SpoolManager:
 
         self.handler = SpoolManagerHandler(self.server, self)
 
-    def find_spool(self, spool_id: str) -> Optional[dict]:
-        return self.db.get(spool_id, None)
+    def find_spool(self, spool_id: str) -> Optional[Spool]:
+        spool = self.db.get(spool_id, None)
 
-    def set_active_spool(self, spool_id: str) -> Optional[dict]:
+        if spool:
+            return Spool(spool)
+        else:
+            return None
+
+    def set_active_spool(self, spool_id: str) -> bool:
         spool = self.find_spool(spool_id)
 
         if spool:
             self.moonraker_db[ACTIVE_SPOOL_KEY] = spool_id
             logging.info(f'Setting spool active, id: {spool_id}')
-            return spool
+            return True
         else:
-            return None
+            return False
 
     def get_active_spool_id(self) -> str:
         return self.moonraker_db.get(ACTIVE_SPOOL_KEY, None)
@@ -127,9 +142,7 @@ class SpoolManager:
         return spool_id
 
     def update_spool(self, spool_id: str, data: {}) -> None:
-        spool_from_db = self.find_spool(spool_id)
-
-        spool = Spool(spool_from_db)
+        spool = self.find_spool(spool_id)
         spool.update(data)
         missing_attrs = spool.validate()
         if missing_attrs:
@@ -146,10 +159,11 @@ class SpoolManager:
         logging.info(f'Spool id: {spool_id} deleted.')
         return
 
-    def find_all_spools(self, show_inactive: bool) -> List[dict]:
+    def find_all_spools(self, show_inactive: bool) -> dict:
         spools = self.db.items()
-        if not show_inactive:
-            spools = {k: v for k, v in spools if v['active'] is True}
+        spools = {k: Spool(v).serialize(include_calculated=True)
+                  for k, v in spools
+                  if show_inactive is True or v['active'] is True}
 
         return dict(spools)
 
@@ -158,38 +172,29 @@ class SpoolManager:
         spool = self.find_spool(spool_id)
 
         if spool:
-            old_used_length = spool['used_length']
+            old_used_length = spool.used_length
+            old_used_weight = spool.used_weight()
+
             new_used_length = old_used_length + used_length
-            spool['used_length'] = new_used_length
+            spool.used_length = new_used_length
 
-            diameter = spool['diameter']
-            density = spool['density']
-            old_used_weight = spool['used_weight']
-            cost = spool['cost']
-            total_weight = spool['total_weight']
-            used_weight = 0
-            new_used_weight = 0
+            new_used_weight = spool.used_weight()
+
+            used_weight = new_used_weight - old_used_weight
+
+            if 0 < spool.total_weight < new_used_weight:
+                spool.active = False
+
             used_cost = 0
+            if spool.cost and used_weight and spool.total_weight:
+                used_cost = used_weight/spool.total_weight*spool.cost
 
-            if diameter and density:
-                r = diameter/2
-                density_mm = density/1000
-                used_weight = math.pi * r * r * used_length * density_mm
-                new_used_weight = old_used_weight + used_weight
-                spool['used_weight'] = new_used_weight
+            if not spool.first_used:
+                spool.first_used = time.time()
 
-            if 0 < total_weight < used_weight:
-                spool['active'] = False
+            spool.last_used = time.time()
 
-            if cost and used_weight and total_weight:
-                used_cost = used_weight/total_weight*cost
-
-            if not spool['first_used']:
-                spool['first_used'] = time.time()
-
-            spool['last_used'] = time.time()
-
-            self.update_spool(spool_id, spool)
+            self.update_spool(spool_id, spool.serialize())
 
             history = self.server.lookup_component('history', None)
             metadata = {'spool_id': spool_id,
@@ -248,7 +253,7 @@ class SpoolManagerHandler:
         if action == 'GET':
             spool_id = web_request.get_str('id')
             spool = self.spool_manager.find_spool(spool_id)
-            return {'spool': spool}
+            return {'spool': spool.serialize(include_calculated=True)}
         elif action == 'POST':
             spool_id = web_request.get('id', None)
 
@@ -277,8 +282,7 @@ class SpoolManagerHandler:
             return {"spool_id": spool_id}
         elif action == 'POST':
             spool_id = web_request.get_str('id')
-            spool = self.spool_manager.set_active_spool(spool_id)
-            if spool:
+            if self.spool_manager.set_active_spool(spool_id):
                 return 'OK'
             else:
                 raise self.server.error(
