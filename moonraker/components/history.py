@@ -5,6 +5,7 @@ import logging
 import time
 
 HIST_NAMESPACE = "history"
+MAX_JOBS = 10000
 
 class History:
     def __init__(self, config):
@@ -161,6 +162,8 @@ class History:
             ps['state'] != "paused"
 
     def add_job(self, job):
+        if len(self.cached_job_ids) >= MAX_JOBS:
+            self.delete_job(self.cached_job_ids[0])
         job_id = f"{self.next_job_id:06X}"
         self.current_job = job
         self.current_job_id = job_id
