@@ -114,6 +114,33 @@ Enables print history tracking.
 [history]
 ```
 
+## `[spool_manager]`
+Enables spool manager.
+
+```ini
+# moonraker.conf
+
+[spool_manager]
+materials:
+    # name, density
+    PLA, 1.24
+    PLA+, 1.24
+    ABS, 1.04
+    PETG, 1.27
+    NYLON, 1.52
+    TPU, 1.21
+    PC, 1.3
+    Carbon, 1.3
+    PC_ABS, 1.19
+    HIPS, 1.03
+    PVA, 1.23
+    ASA, 1.05
+    PP, 0.9
+    POM, 1.4
+    PMMA, 1.18
+    FPE, 2.16
+```
+
 ## `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL

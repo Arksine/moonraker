@@ -9,9 +9,7 @@ import time
 import math
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from typing import Set
-    from typing import Optional
-    from typing import List
+    from typing import Set, Optional, List
     from components.database import NamespaceWrapper
     from websockets import WebRequest
 
@@ -20,25 +18,6 @@ SPOOL_NAMESPACE = "spool_manager"
 MOONRAKER_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spool_manager.active_spool_id"
 MAX_SPOOLS = 1000
-
-MATERIALS = {
-    'PLA': {'density': 1.24},
-    'PLA_plus': {'density': 1.24},
-    'ABS': {'density': 1.04},
-    'PETG': {'density': 1.27},
-    'NYLON': {'density': 1.52},
-    'TPU': {'density': 1.21},
-    'PC': {'density': 1.3},
-    'Carbon': {'density': 1.3},
-    'PC_ABS': {'density': 1.19},
-    'HIPS': {'density': 1.03},
-    'PVA': {'density': 1.23},
-    'ASA': {'density': 1.05},
-    'PP': {'density': 0.9},
-    'POM': {'density': 1.4},
-    'PMMA': {'density': 1.18},
-    'FPE': {'density': 2.16}
-}
 
 
 class Validation:
@@ -94,6 +73,8 @@ class SpoolManager:
     def __init__(self, config):
         self.server = config.get_server()
 
+        self.materials = self._parse_materials_cfg(config)
+
         database = self.server.lookup_component("database")
         database.register_local_namespace(SPOOL_NAMESPACE)
         self.db: NamespaceWrapper = database.wrap_namespace(SPOOL_NAMESPACE,
@@ -102,6 +83,12 @@ class SpoolManager:
             MOONRAKER_NAMESPACE, parse_keys=False)
 
         self.handler = SpoolManagerHandler(self.server, self)
+
+    def _parse_materials_cfg(self, config):
+        materials_cfg = config.get('materials', '').strip()
+        lines = [l.strip().split(',') for l in materials_cfg.split('\n') if
+                 l.strip()]
+        return {f.strip(): {'density': d.strip()} for f, d in lines}
 
     def find_spool(self, spool_id: str) -> Optional[Spool]:
         spool = self.db.get(spool_id, None)
@@ -294,7 +281,7 @@ class SpoolManagerHandler:
                     f"Spool id {spool_id} not found", 404)
 
     async def _handle_materials_list(self, web_request: WebRequest):
-        return {'materials': MATERIALS}
+        return {'materials': self.spool_manager.materials}
 
 
 def load_component(config):
