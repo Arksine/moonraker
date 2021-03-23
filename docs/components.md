@@ -63,71 +63,71 @@ to Moonraker.   Be aware that there is no "Reactor" object in Moonraker,
 it uses `asyncio` for coroutines.  Like Klippy, you should not write
 code that blocks the main thread.
 
-### The ConfigWrapper Object
+### The ConfigHelper Object
 
 As shown above, each component is passed a config object.  This object
-will be a `ConfigWrapper` type, which is an object that wraps a
+will be a `ConfigHelper` type, which is an object that wraps a
 configuration section to simply access to the native `ConfigParser`.
-A `ConfigWrapper` should never be directly instantiated.
+A `ConfigHelper` should never be directly instantiated.
 
-#### *ConfigWrapper.get_server()*
+#### *ConfigHelper.get_server()*
 
 Returns the primary [server](#the-server-object) instance.
 
-#### *ConfigWrapper.get_name()*
+#### *ConfigHelper.get_name()*
 
-Returns the configuration section name associated with this `ConfigWrapper`.
+Returns the configuration section name associated with this `ConfigHelper`.
 
-#### *ConfigWrapper.get(option_name, default=Sentinel)*
+#### *ConfigHelper.get(option_name, default=Sentinel)*
 
 Returns the value of the option`option_name` as a string.  If
 the option does not exist, returns `default`.  If `default` is
 not provided raises a `ConfigError`.
 
-#### *ConfigWrapper.getint(option_name, default=Sentinel)*
+#### *ConfigHelper.getint(option_name, default=Sentinel)*
 
 Returns the value of the option`option_name` as an integer.  If
 the option does not exist, returns `default`.  If `default` is
 not provided raises a `ConfigError`.
 
-#### *ConfigWrapper.getfloat(option_name, default=Sentinel)*
+#### *ConfigHelper.getfloat(option_name, default=Sentinel)*
 
 Returns the value of the option`option_name` as a float.  If
 the option does not exist, returns `default`.  If `default` is
 not provided raises a `ConfigError`.
 
-#### *ConfigWrapper.getboolean(option_name, default=Sentinel)*
+#### *ConfigHelper.getboolean(option_name, default=Sentinel)*
 
 Returns the value of the option`option_name` as a boolean.  If
 the option does not exist, returns `default`.  If `default` is
 not provided raises a `ConfigError`.
 
-#### *ConfigWrapper.has_section(section_name)*
+#### *ConfigHelper.has_section(section_name)*
 
 Returns True if a section matching `section_name` is in the configuration,
 otherwise False.
 
-Note that a ConfigWrapper object also implements `__contains__`,
+Note that a ConfigHelper object also implements `__contains__`,
 which is an alias for `has_section`, ie: `section_name in config_instance`
 
-#### *ConfigWrapper.getsection(section_name)*
+#### *ConfigHelper.getsection(section_name)*
 
 Returns a Config object for the section matching `section_name`.  If the
 section does not exist in the configuration raises a `ConfigError`.
 
-Note that a ConfigWrapper object also implements `__getitem__`,
+Note that a ConfigHelper object also implements `__getitem__`,
 which is an alias for `get_section`, ie: `config_instance[section_name]`
 
-#### *ConfigWrapper.get_options()*
+#### *ConfigHelper.get_options()*
 
 Returns a dict mapping options to values for all options in the Config
 object.
 
-#### *ConfigWrapper.get_prefix_sections(prefix)*
+#### *ConfigHelper.get_prefix_sections(prefix)*
 
 Returns a list section names in the configuration that start with `prefix`.
-These strings can be used to retreve ConfigWrappers via
-[get_section()](#configwrappergetsectionsection_name).
+These strings can be used to retreve ConfigHelpers via
+[get_section()](#confighelpergetsectionsection_name).
 
 ### The Server Object
 
