@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 SPOOL_NAMESPACE = "spool_manager"
 MOONRAKER_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spool_manager.active_spool_id"
+MAX_SPOOLS = 1000
 
 MATERIALS = {
     'PLA': {'density': 1.24},
@@ -124,11 +125,15 @@ class SpoolManager:
         return self.moonraker_db.get(ACTIVE_SPOOL_KEY, None)
 
     def add_spool(self, data: {}) -> str:
+        if len(self.db) >= MAX_SPOOLS:
+            raise self.server.error(
+                f"Reached maximum number of spools: {MAX_SPOOLS}", 400)
+
         spool = Spool(data)
         missing_attrs = spool.validate()
         if missing_attrs:
             raise self.server.error(
-                f"Missing spool attributes: {missing_attrs}", 404)
+                f"Missing spool attributes: {missing_attrs}", 400)
 
         next_spool_id = 0
         spools = self.db.keys()
@@ -147,7 +152,7 @@ class SpoolManager:
         missing_attrs = spool.validate()
         if missing_attrs:
             raise self.server.error(
-                f"Missing spool attributes: {missing_attrs}", 404)
+                f"Missing spool attributes: {missing_attrs}", 400)
 
         self.db[spool_id] = spool.serialize()
         logging.info(f'Spool id: {spool_id} updated.')
