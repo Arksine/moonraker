@@ -103,6 +103,8 @@ class SpoolManager:
 
         if spool:
             self.moonraker_db[ACTIVE_SPOOL_KEY] = spool_id
+            self.server.send_event('spool_manager:active_spool_set',
+                                   {'spool_id': spool_id})
             logging.info(f'Setting spool active, id: {spool_id}')
             return True
         else:
@@ -129,6 +131,8 @@ class SpoolManager:
         spool_id = f"{next_spool_id:06X}"
 
         self.db[spool_id] = spool.serialize()
+        self.server.send_event('spool_manager:new_spool_added',
+                               {'spool_id': spool_id})
         logging.info(f'New spool added, id: {spool_id}')
 
         return spool_id
@@ -142,6 +146,8 @@ class SpoolManager:
                 f"Missing spool attributes: {missing_attrs}", 400)
 
         self.db[spool_id] = spool.serialize()
+        self.server.send_event('spool_manager:spool_updated',
+                               {'spool_id': spool_id})
         logging.info(f'Spool id: {spool_id} updated.')
 
         return
@@ -149,6 +155,8 @@ class SpoolManager:
     def delete_spool(self, spool_id: str) -> None:
         self.db.delete(spool_id)
         logging.info(f'Spool id: {spool_id} deleted.')
+        self.server.send_event('spool_manager:spool_deleted',
+                               {'spool_id': spool_id})
         return
 
     def find_all_spools(self, show_inactive: bool) -> dict:
@@ -192,6 +200,9 @@ class SpoolManager:
             metadata = {'spool_id': spool_id,
                         'used_weight': used_weight,
                         'cost': used_cost}
+
+            self.server.send_event('spool_manager:filament_used', metadata)
+
             history.add_job_metadata(job_id, {'spool': metadata})
 
             logging.info(f'Tracking filament usage, spool_id: {spool_id}, ' +
