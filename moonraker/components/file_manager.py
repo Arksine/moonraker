@@ -553,6 +553,220 @@ class FileManager:
 INOTIFY_BUNDLE_TIME = .25
 INOTIFY_MOVE_TIME = 1.
 
+class InotifyNode:
+    def __init__(self, ihdlr, parent, name):
+        self.ihdlr = ihdlr
+        self.name = name
+        self.parent_node = parent
+        self.child_nodes = {}
+        self.watch_desc = self.ihdlr.add_watch(self)
+        self.pending_node_events = {}
+        self.pending_deleted_children = set()
+        self.pending_file_events = {}
+
+    def _finish_create_node(self):
+        # Finish a node's creation.  All children that were created
+        # with this node (ie: a directory is copied) are bundled into
+        # this notification.  We also scan the node to extract metadata
+        # here, as we know all files have been copied.
+        if "create_node" not in self.pending_node_events:
+            return
+        del self.pending_node_events['create_node']
+        node_path = self.get_path()
+        root = self.get_root()
+        # Scan child nodes for unwatched directories and metadata
+        self.scan_node(notify_created=False)
+        self.ihdlr.log_nodes()
+        self.ihdlr.notify_filelist_changed(
+            "create_dir", root, node_path)
+
+    def _finish_delete_child(self):
+        # Items deleted in a child (node or file) are batched.
+        # Individual files get notifications if their parent
+        # node stil exists.  Otherwise notififications are
+        # bundled into the topmost deleted parent.
+        if "delete_child" not in self.pending_node_events:
+            self.pending_deleted_children.clear()
+            return
+        del self.pending_node_events['delete_child']
+        node_path = self.get_path()
+        root = self.get_root()
+        for (name, is_node) in self.pending_deleted_children:
+            item_path = os.path.join(node_path, name)
+            item_type = "dir" if is_node else "file"
+            self.ihdlr.clear_metadata(root, item_path, is_node)
+            self.ihdlr.notify_filelist_changed(
+                f"delete_{item_type}", root, item_path)
+        self.pending_deleted_children.clear()
+
+    def scan_node(self, notify_created=True, visited_dirs=set()):
+        dir_path = self.get_path()
+        st = os.stat(dir_path)
+        if st in visited_dirs:
+            return
+        visited_dirs.add((st.st_dev, st.st_ino))
+        for fname in os.listdir(dir_path):
+            if fname[0] == ".":
+                continue
+            item_path = os.path.join(dir_path, fname)
+            ext = os.path.splitext(fname)[-1].lower()
+            if os.path.isdir(item_path):
+                new_child = self.create_child_node(fname, notify_created)
+                new_child.scan_node(notify_created, visited_dirs)
+            elif os.path.isfile(item_path) and \
+                    self.get_root() == "gcodes" and \
+                    ext in VALID_GCODE_EXTS:
+                self.ihdlr.parse_gcode_metadata(item_path)
+
+    def move_child_node(self, child_name, new_name, new_parent):
+        child_node = self.pop_child_node(child_name)
+        if child_node is None:
+            logging.info(f"No child for node at path: {self.get_path()}")
+            return
+        prev_path = child_node.get_path()
+        prev_root = child_node.get_root()
+        child_node.name = new_name
+        new_parent.add_child_node(child_node)
+        new_path = child_node.get_path()
+        new_root = child_node.get_root()
+        logging.debug(f"Moving node from '{prev_path}' to '{new_path}'")
+        # TODO: It is possible to "move" metadata rather
+        # than rescan.
+        child_node.scan_node(notify_created=False)
+        self.ihdlr.notify_filelist_changed(
+            "move_dir", new_root, new_path,
+            prev_root, prev_path)
+
+    def schedule_file_event(self, file_name, evt_name):
+        if file_name in self.pending_file_events:
+            return
+        pending_node = self.search_pending_event("create_node")
+        if pending_node is not None:
+            pending_node.stop_event("create_node")
+        self.pending_file_events[file_name] = evt_name
+
+    def complete_file_write(self, file_name):
+        evt_name = self.pending_file_events.pop(file_name, None)
+        if evt_name is None:
+            logging.info(f"Invalid file write event: {file_name}")
+            return
+        pending_node = self.search_pending_event("create_node")
+        if pending_node is not None:
+            # if this event was generated as a result of a created parent
+            # node it should be ignored in favor of the parent event.
+            pending_node.reset_event("create_node", INOTIFY_BUNDLE_TIME)
+            return
+        file_path = os.path.join(self.get_path(), file_name)
+        root = self.get_root()
+        if root == "gcodes":
+            self.ihdlr.parse_gcode_metadata(file_path)
+            if os.path.splitext(file_path)[1].lower() == ".ufp":
+                # don't notify .ufp files
+                return
+        self.ihdlr.notify_filelist_changed(evt_name, root, file_path)
+
+    def add_child_node(self, node):
+        self.child_nodes[node.name] = node
+        node.parent_node = self
+
+    def get_child_node(self, name):
+        return self.child_nodes.get(name, None)
+
+    def pop_child_node(self, name):
+        return self.child_nodes.pop(name, None)
+
+    def create_child_node(self, name, notify=True):
+        if name in self.child_nodes:
+            return self.child_nodes[name]
+        new_child = InotifyNode(self.ihdlr, self, name)
+        self.child_nodes[name] = new_child
+        if notify:
+            pending_node = self.search_pending_event("create_node")
+            if pending_node is None:
+                # schedule a pending create event for the child
+                new_child.add_event("create_node", INOTIFY_BUNDLE_TIME)
+            else:
+                pending_node.reset_event("create_node", INOTIFY_BUNDLE_TIME)
+        return new_child
+
+    def schedule_child_delete(self, child_name, is_node):
+        if is_node:
+            child_node = self.child_nodes.pop(child_name, None)
+            if child_node is None:
+                return
+            self.ihdlr.remove_watch(
+                child_node.watch_desc, need_low_level_rm=False)
+            child_node.remove_event("delete_child")
+        self.pending_deleted_children.add((child_name, is_node))
+        self.add_event("delete_child", INOTIFY_BUNDLE_TIME)
+
+    def clear_watches(self):
+        for cnode in self.child_nodes.values():
+            # Delete all of the children's children
+            cnode.clear_watches()
+        self.ihdlr.remove_watch(self.watch_desc)
+
+    def get_path(self):
+        return os.path.join(self.parent_node.get_path(), self.name)
+
+    def get_root(self):
+        return self.parent_node.get_root()
+
+    def add_event(self, evt_name, timeout):
+        if evt_name in self.pending_node_events:
+            self.reset_event(evt_name, timeout)
+            return
+        callback = getattr(self, f"_finish_{evt_name}")
+        hdl = IOLoop.current().call_later(timeout, callback)
+        self.pending_node_events[evt_name] = hdl
+
+    def reset_event(self, evt_name, timeout):
+        if evt_name in self.pending_node_events:
+            ioloop = IOLoop.current()
+            hdl = self.pending_node_events[evt_name]
+            ioloop.remove_timeout(hdl)
+            callback = getattr(self, f"_finish_{evt_name}")
+            hdl = ioloop.call_later(timeout, callback)
+            self.pending_node_events[evt_name] = hdl
+
+    def stop_event(self, evt_name):
+        if evt_name in self.pending_node_events:
+            hdl = self.pending_node_events[evt_name]
+            IOLoop.current().remove_timeout(hdl)
+
+    def remove_event(self, evt_name):
+        hdl = self.pending_node_events.pop(evt_name, None)
+        if hdl is not None:
+            IOLoop.current().remove_timeout(hdl)
+
+    def clear_events(self, include_children=True):
+        if include_children:
+            for child in self.child_nodes.values():
+                child.clear_events(include_children)
+        for hdl in self.pending_node_events.values():
+            IOLoop.current().remove_timeout(hdl)
+        self.pending_node_events.clear()
+        self.pending_deleted_children.clear()
+        self.pending_file_events.clear()
+
+    def search_pending_event(self, name):
+        if name in self.pending_node_events:
+            return self
+        if self.parent_node is None:
+            return None
+        return self.parent_node.search_pending_event(name)
+
+class InotifyRootNode(InotifyNode):
+    def __init__(self, ihdlr, root_name, root_path):
+        self.root_name = root_name
+        super().__init__(ihdlr, None, root_path)
+
+    def get_path(self):
+        return self.name
+
+    def get_root(self):
+        return self.root_name
+
 class INotifyHandler:
     def __init__(self, config, file_manager, gcode_metadata):
         self.server = config.get_server()
@@ -560,113 +774,47 @@ class INotifyHandler:
             'enable_debug_logging', False)
         self.file_manager = file_manager
         self.gcode_metadata = gcode_metadata
-        self.ioloop = IOLoop.current()
         self.inotify = INotify(nonblocking=True)
-        self.ioloop.add_handler(
+        IOLoop.current().add_handler(
             self.inotify.fileno(), self._handle_inotify_read,
             IOLoop.READ | IOLoop.ERROR)
 
-        self.watches = {}
-        self.watched_dirs = {}
-        self.pending_move_events = {}
-        self.pending_create_file_events = {}
-        self.pending_create_dir_events = {}
-        self.pending_modify_file_events = {}
-        self.pending_delete_events = {}
+        self.watched_roots = {}
+        self.watched_nodes = {}
+        self.pending_moves = {}
 
     def add_root_watch(self, root, root_path):
-        # remove all exisiting watches on root
-        for (wroot, wdir) in list(self.watched_dirs.values()):
-            if root == wroot:
-                self.remove_watch(wdir)
-        # remove pending move notifications on root
-        for cookie, pending in list(self.pending_move_events.items()):
-            if root == pending[0]:
-                self.ioloop.remove_timeout(pending[2])
-                del self.pending_move_events[cookie]
-        # remove pending create notifications on root
-        for fpath, pending in list(self.pending_create_file_events.items()):
-            if root == pending[0]:
-                del self.pending_create_file_events[fpath]
-        # remove pending modify notifications on root
-        for fpath, mroot in list(self.pending_modify_file_events.items()):
-            if root == mroot:
-                del self.pending_modify_file_events[fpath]
-        # remove pending create notifications on root
-        for dpath, pending in list(self.pending_create_dir_events.items()):
-            if root == pending[0]:
-                del self.pending_create_dir_events[dpath]
-        # remove pending delete notifications on root
-        for dir_path, pending in list(self.pending_delete_events.items()):
-            if root == pending[0]:
-                self.ioloop.remove_timeout(pending[2])
-                del self.pending_delete_events[dir_path]
-        self._scan_directory(root, root_path)
-
-    def add_watch(self, root, dir_path):
-        if dir_path in self.watches or \
-                root not in FULL_ACCESS_ROOTS:
+        if root not in FULL_ACCESS_ROOTS:
             return
-        watch = self.inotify.add_watch(dir_path, WATCH_FLAGS)
-        self.watches[dir_path] = watch
-        self.watched_dirs[watch] = (root, dir_path)
+        # remove all exisiting watches on root
+        if root in self.watched_roots:
+            old_root = self.watched_roots.pop(root)
+            old_root.clear_watches()
+            old_root.clear_events()
+        root_node = InotifyRootNode(self, root, root_path)
+        self.watched_roots[root] = root_node
+        root_node.scan_node(notify_created=False)
+        self.log_nodes()
 
-    def remove_watch(self, dir_path, need_low_level_rm=True):
-        wd = self.watches.pop(dir_path)
-        self.watched_dirs.pop(wd)
+    def add_watch(self, node):
+        dir_path = node.get_path()
+        try:
+            watch = self.inotify.add_watch(dir_path, WATCH_FLAGS)
+        except OSError:
+            logging.exception(
+                f"Error adding watch, already exists: {dir_path}")
+        self.watched_nodes[watch] = node
+        return watch
+
+    def remove_watch(self, wdesc, need_low_level_rm=True):
+        node = self.watched_nodes.pop(wdesc, None)
         if need_low_level_rm:
             try:
-                self.inotify.rm_watch(wd)
-            except OSError:
-                logging.exception(f"Error removing watch: '{dir_path}'")
+                self.inotify.rm_watch(wdesc)
+            except Exception:
+                logging.exception(f"Error removing watch: '{node.get_path()}'")
 
-    def _reset_watch(self, prev_path, new_root, new_path):
-        wd = self.watches.pop(prev_path, None)
-        if wd is not None:
-            self.watches[new_path] = wd
-            self.watched_dirs[wd] = (new_root, new_path)
-
-    def _process_deleted_items(self, dir_path):
-        if dir_path not in self.pending_delete_events:
-            return
-        root, items, hdl = self.pending_delete_events.pop(dir_path)
-        for (item_name, isdir) in items:
-            item_path = os.path.join(dir_path, item_name)
-            item_type = "dir" if isdir else "file"
-            self._clear_metadata(root, item_path, isdir)
-            self._notify_filelist_changed(
-                f"delete_{item_type}", root, item_path)
-
-    def _process_created_directory(self, dir_path):
-        if dir_path not in self.pending_create_dir_events:
-            return
-        root, hdl = self.pending_create_dir_events.pop(dir_path)
-        self._scan_directory(root, dir_path)
-        self._notify_filelist_changed(
-            "create_dir", root, dir_path)
-
-    def _remove_stale_cookie(self, cookie):
-        # This is a file or directory moved out of a watched parent.
-        # We treat this as a deleted file/directory.
-        pending_evt = self.pending_move_events.pop(cookie, None)
-        if pending_evt is None:
-            # Event already processed
-            return
-        prev_root, prev_path, hdl, is_dir = pending_evt
-        logging.debug("Inotify stale cookie removed: "
-                      f"{prev_root}, {prev_path}")
-        item_type = "file"
-        if is_dir:
-            item_type = "dir"
-            for wpath in list(self.watches.keys()):
-                if wpath.startswith(prev_path):
-                    self.remove_watch(wpath)
-        # Metadata should have been cleared in the MOVE_TO event,
-        # so no need to clear it here
-        self._notify_filelist_changed(
-            f"delete_{item_type}", prev_root, prev_path)
-
-    def _clear_metadata(self, root, path, is_dir=False):
+    def clear_metadata(self, root, path, is_dir=False):
         if root == "gcodes":
             rel_path = self.file_manager.get_relative_path(root, path)
             if is_dir:
@@ -674,52 +822,17 @@ class INotifyHandler:
             else:
                 self.gcode_metadata.remove_file_metadata(rel_path)
 
-    def _scan_directory(self, root, dir_path, moved_path=None):
-        # Walk through a directory.  Create or reset watches as necessary
-        if moved_path is None:
-            self.add_watch(root, dir_path)
-        else:
-            self._reset_watch(moved_path, root, dir_path)
-        st = os.stat(dir_path)
-        visited_dirs = {(st.st_dev, st.st_ino)}
-        for dpath, dnames, files in os.walk(dir_path, followlinks=True):
-            scan_dirs = []
-            for dname in dnames:
-                full_path = os.path.join(dpath, dname)
-                st = os.stat(full_path)
-                key = (st.st_dev, st.st_ino)
-                if key not in visited_dirs:
-                    # Don't watch hidden directories
-                    if dname[0] != ".":
-                        if moved_path is not None:
-                            rel_path = os.path.relpath(
-                                full_path, start=dir_path)
-                            prev_path = os.path.join(moved_path, rel_path)
-                            self._reset_watch(prev_path, root, full_path)
-                        else:
-                            self.add_watch(root, full_path)
-                    visited_dirs.add(key)
-                    scan_dirs.append(dname)
-            dnames[:] = scan_dirs
-            if root != "gcodes":
-                # No need check for metadata in non-gcode roots.
-                continue
-            for name in files:
-                fpath = os.path.join(dpath, name)
-                ext = os.path.splitext(name)[-1].lower()
-                if name[0] == "." or ext not in VALID_GCODE_EXTS:
-                    continue
-                self._parse_gcode_metadata(fpath)
+    def log_nodes(self):
         if self.debug_enabled:
-            debug_msg = f"Inotify Watches After Scan: {dir_path}"
-            for wdir, watch in self.watches.items():
-                wroot, wpath = self.watched_dirs[watch]
-                match = wdir == wpath
+            debug_msg = f"Inotify Watches After Scan:"
+            for wdesc, node in self.watched_nodes.items():
+                wdir = node.get_path()
+                wroot = node.get_root()
                 debug_msg += f"\nRoot: {wroot}, Directory: {wdir},  " \
-                    f"Watch: {watch}, Dir Match: {match}"
+                    f"Watch: {wdesc}"
             logging.debug(debug_msg)
 
-    def _parse_gcode_metadata(self, file_path):
+    def parse_gcode_metadata(self, file_path):
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
         if not rel_path:
             logging.info(
@@ -733,6 +846,33 @@ class INotifyHandler:
             path_info['ufp_path'] = file_path
         self.gcode_metadata.parse_metadata(rel_path, path_info, notify=True)
 
+    def _handle_move_timeout(self, cookie, is_dir):
+        if cookie not in self.pending_moves:
+            return
+        parent_node, name, hdl = self.pending_moves.pop(cookie)
+        item_path = os.path.join(parent_node.get_path(), name)
+        root = parent_node.get_root()
+        action = "delete_file"
+        if is_dir:
+            # The supplied node is a child node
+            child_node = parent_node.pop_child_node(name)
+            if child_node is None:
+                return
+            child_node.clear_watches()
+            child_node.clear_events(include_children=True)
+            self.log_nodes()
+            action = "delete_dir"
+        self.notify_filelist_changed(action, root, item_path)
+
+    def _schedule_pending_move(self, evt, parent_node, is_dir):
+        item_path = os.path.join(parent_node.get_path(), evt.name)
+        root = parent_node.get_root()
+        self.clear_metadata(root, item_path, is_dir)
+        hdl = IOLoop.current().call_later(
+            INOTIFY_MOVE_TIME, self._handle_move_timeout,
+            evt.cookie, is_dir)
+        self.pending_moves[evt.cookie] = (parent_node, evt.name, hdl)
+
     def _handle_inotify_read(self, fd, events):
         if events & IOLoop.ERROR:
             logging.info("INotify Read Error")
@@ -740,174 +880,103 @@ class INotifyHandler:
         for evt in self.inotify.read(timeout=0):
             if evt.mask & iFlags.IGNORED:
                 continue
-            if evt.wd not in self.watched_dirs:
+            if evt.wd not in self.watched_nodes:
                 flags = " ".join([str(f) for f in iFlags.from_mask(evt.mask)])
                 logging.info(
                     f"Error, inotify watch descriptor {evt.wd} "
                     f"not currently tracked: name: {evt.name}, "
                     f"flags: {flags}")
                 continue
-            root, watch_path = self.watched_dirs[evt.wd]
-            child_path = watch_path
-            if evt.name:
-                child_path = os.path.join(watch_path, evt.name)
+            node = self.watched_nodes[evt.wd]
             if evt.mask & iFlags.ISDIR:
-                self._process_dir_event(evt, root, child_path)
+                self._process_dir_event(evt, node)
             else:
-                self._process_file_event(evt, root, child_path)
+                self._process_file_event(evt, node)
 
-    def _schedule_delete_event(self, root, item_path, is_dir):
-        if is_dir:
-            self.remove_watch(item_path, need_low_level_rm=False)
-            # Remove pending delete events for children if they exist
-            pending_evt = self.pending_delete_events.pop(item_path, None)
-            if pending_evt is not None:
-                delete_hdl = pending_evt[2]
-                self.ioloop.remove_timeout(delete_hdl)
-        parent_path, item_name = os.path.split(item_path)
-        items = set()
-        if parent_path in self.pending_delete_events:
-            root, items, delete_hdl = self.pending_delete_events[parent_path]
-            self.ioloop.remove_timeout(delete_hdl)
-        items.add((item_name, is_dir))
-        delete_hdl = self.ioloop.call_later(
-            INOTIFY_BUNDLE_TIME, self._process_deleted_items, parent_path)
-        self.pending_delete_events[parent_path] = (root, items, delete_hdl)
-
-    def _process_dir_event(self, evt, root, child_path):
+    def _process_dir_event(self, evt, node):
         if evt.name and evt.name[0] == ".":
             # ignore changes to the hidden directories
             return
+        root = node.get_root()
+        node_path = node.get_path()
         if evt.mask & iFlags.CREATE:
-            logging.debug(f"Inotify directory create: {root}, {evt.name}")
-            # Add a watch for this directory immediately so we can catch
-            # events for its children
-            self.add_watch(root, child_path)
-            cb_path = child_path
-            for parent_path, pending in self.pending_create_dir_events.items():
-                if child_path.startswith(parent_path):
-                    # This directory has a parent with a pending notification.
-                    # Reset the parent's timeout and suppress the notification
-                    # for this child
-                    self.ioloop.remove_timeout(pending[1])
-                    cb_path = parent_path
-                    break
-            hdl = self.ioloop.call_later(
-                INOTIFY_BUNDLE_TIME, self._process_created_directory,
-                cb_path)
-            self.pending_create_dir_events[cb_path] = (root, hdl)
+            logging.debug(f"Inotify directory create: {root}, "
+                          f"{node_path}, {evt.name}")
+            node.create_child_node(evt.name)
         elif evt.mask & iFlags.DELETE:
-            logging.debug(f"Inotify directory delete: {root}, {evt.name}")
-            self._schedule_delete_event(root, child_path, True)
+            logging.debug(f"Inotify directory delete: {root}, "
+                          f"{node_path}, {evt.name}")
+            node.schedule_child_delete(evt.name, True)
         elif evt.mask & iFlags.MOVED_FROM:
-            logging.debug(f"Inotify directory move from: {root}, {evt.name}")
-            hdl = self.ioloop.call_later(
-                INOTIFY_MOVE_TIME, self._remove_stale_cookie, evt.cookie)
-            self.pending_move_events[evt.cookie] = (
-                root, child_path, hdl, True)
-            self._clear_metadata(root, child_path, True)
+            logging.debug(f"Inotify directory move from: {root}, "
+                          f"{node_path}, {evt.name}")
+            self._schedule_pending_move(evt, node, True)
         elif evt.mask & iFlags.MOVED_TO:
-            logging.debug(f"Inotify directory move to: {root}, {evt.name}")
-            pending_evt = self.pending_move_events.pop(evt.cookie, None)
-            if pending_evt is not None:
+            logging.debug(f"Inotify directory move to: {root}, "
+                          f"{node_path}, {evt.name}")
+            moved_evt = self.pending_moves.pop(evt.cookie, None)
+            if moved_evt is not None:
                 # Moved from a currently watched directory
-                prev_root, prev_path, hdl, is_dir = pending_evt
-                if not is_dir:
-                    logging.debug(
-                        f"Cookie matched to a file: {pending_evt}")
-                    return
-                self.ioloop.remove_timeout(hdl)
-                self._scan_directory(root, child_path, prev_path)
-                self._notify_filelist_changed(
-                    "move_dir", root, child_path,
-                    prev_root, prev_path)
+                prev_parent, child_name, hdl = moved_evt
+                IOLoop.current().remove_timeout(hdl)
+                prev_parent.move_child_node(child_name, evt.name, node)
             else:
                 # Moved from an unwatched directory, for our
                 # purposes this is the same as creating a
                 # directory
-                self._scan_directory(root, child_path)
-                self._notify_filelist_changed(
-                    "create_dir", root, child_path)
+                node.create_child_node(evt.name)
 
-    def _process_file_event(self, evt, root, child_path):
+    def _process_file_event(self, evt, node):
         ext = os.path.splitext(evt.name)[-1].lower()
+        root = node.get_root()
+        node_path = node.get_path()
         if root == "gcodes" and ext not in VALID_GCODE_EXTS:
             # Don't notify files with invalid gcode extensions
             return
         if evt.mask & iFlags.CREATE:
-            logging.debug(f"Inotify file create: {root}, {evt.name}")
-            parent = None
-            for dpath, pending in self.pending_create_dir_events.items():
-                if child_path.startswith(dpath):
-                    parent = dpath
-                    self.ioloop.remove_timeout(pending[1])
-                    break
-            self.pending_create_file_events[child_path] = (root, parent)
+            logging.debug(f"Inotify file create: {root}, "
+                          f"{node_path}, {evt.name}")
+            node.schedule_file_event(evt.name, "create_file")
         elif evt.mask & iFlags.DELETE:
-            logging.debug(f"Inotify file delete: {root}, {evt.name}")
+            logging.debug(f"Inotify file delete: {root}, "
+                          f"{node_path}, {evt.name}")
             if root == "gcodes" and ext == ".ufp":
                 # Don't notify deleted ufp files
                 return
-            self._schedule_delete_event(root, child_path, False)
+            node.schedule_child_delete(evt.name, False)
         elif evt.mask & iFlags.MOVED_FROM:
-            logging.debug(f"Inotify file move from: {root}, {evt.name}")
-            hdl = self.ioloop.call_later(
-                INOTIFY_MOVE_TIME, self._remove_stale_cookie, evt.cookie)
-            self.pending_move_events[evt.cookie] = (
-                root, child_path, hdl, False)
-            self._clear_metadata(root, child_path)
+            logging.debug(f"Inotify file move from: {root}, "
+                          f"{node_path}, {evt.name}")
+            self._schedule_pending_move(evt, node, False)
         elif evt.mask & iFlags.MOVED_TO:
-            logging.debug(f"Inotify file move to: {root}, {evt.name}")
+            logging.debug(f"Inotify file move to: {root}, "
+                          f"{node_path}, {evt.name}")
+            file_path = os.path.join(node_path, evt.name)
             if root == "gcodes":
-                self._parse_gcode_metadata(child_path)
-            pending_evt = self.pending_move_events.pop(evt.cookie, None)
-            if pending_evt is not None:
+                self.parse_gcode_metadata(file_path)
+            moved_evt = self.pending_moves.pop(evt.cookie, None)
+            if moved_evt is not None:
                 # Moved from a currently watched directory
-                prev_root, prev_path, hdl, is_dir = pending_evt
-                if is_dir:
-                    logging.debug(
-                        f"Cookie matched to directory: {pending_evt}")
-                    return
-                self._notify_filelist_changed(
-                    "move_file", root, child_path,
+                prev_parent, prev_name, hdl = moved_evt
+                IOLoop.current().remove_timeout(hdl)
+                prev_root = prev_parent.get_root()
+                prev_path = os.path.join(prev_parent.get_path(), prev_name)
+                self.notify_filelist_changed(
+                    "move_file", root, file_path,
                     prev_root, prev_path)
             else:
-                self._notify_filelist_changed(
-                    "create_file", root, child_path)
+                self.notify_filelist_changed(
+                    "create_file", root, file_path)
         elif evt.mask & iFlags.MODIFY:
-            if child_path not in self.pending_create_file_events:
-                self.pending_modify_file_events[child_path] = root
+            node.schedule_file_event(evt.name, "modify_file")
         elif evt.mask & iFlags.CLOSE_WRITE:
-            logging.debug(f"Inotify writable file closed: {child_path}")
+            file_path = os.path.join(node_path, evt.name)
+            logging.debug(f"Inotify writable file closed: {file_path}")
             # Only process files that have been created or modified
-            if child_path in self.pending_create_file_events:
-                parent = self.pending_create_file_events.pop(child_path)[1]
-                if parent is not None:
-                    # This is part of a created parent.  Reschedule the
-                    # directory notification callback.  The parent will
-                    # handle metadata/gcode processing, so we can skip it here
-                    hdl = self.ioloop.call_later(
-                        INOTIFY_BUNDLE_TIME, self._process_created_directory,
-                        parent)
-                    self.pending_create_dir_events[parent] = (root, hdl)
-                    return
-                action = "create_file"
-            elif child_path in self.pending_modify_file_events:
-                del self.pending_modify_file_events[child_path]
-                action = "modify_file"
-            else:
-                # Some other event, ignore it
-                return
-            if root == "gcodes":
-                self._parse_gcode_metadata(child_path)
-                if ext == ".ufp":
-                    # Don't notify ufp creation in the gcodes directory,
-                    # it will be removed after it has been unzipped
-                    return
-            self._notify_filelist_changed(action, root, child_path)
+            node.complete_file_write(evt.name)
 
-    def _notify_filelist_changed(self, action, root, full_path,
-                                 source_root=None, source_path=None):
+    def notify_filelist_changed(self, action, root, full_path,
+                                source_root=None, source_path=None):
         rel_path = self.file_manager.get_relative_path(root, full_path)
         file_info = {'size': 0, 'modified': 0}
         if os.path.exists(full_path):
@@ -922,11 +991,11 @@ class INotifyHandler:
         self.server.send_event("file_manager:filelist_changed", result)
 
     def close(self):
-        self.ioloop.remove_handler(self.inotify.fileno())
-        for watch in self.watches.values():
+        IOLoop.current().remove_handler(self.inotify.fileno())
+        for watch in self.watched_nodes.keys():
             try:
                 self.inotify.rm_watch(watch)
-            except OSError:
+            except Exception:
                 pass
 
 
@@ -984,6 +1053,8 @@ class MetadataStorage:
         return True
 
     def remove_directory_metadata(self, dir_name):
+        if dir_name[-1] != "/":
+            dir_name += "/"
         for fname in list(self.mddb.keys()):
             if fname.startswith(dir_name):
                 self.remove_file_metadata(fname)
