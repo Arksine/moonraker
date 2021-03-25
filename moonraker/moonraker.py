@@ -30,7 +30,7 @@ MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
 CORE_COMPONENTS = [
     'database', 'file_manager', 'klippy_apis', 'machine',
-    'data_store', 'shell_command', 'proc_stats']
+    'data_store', 'shell_command', 'proc_stats', 'axes_tracking']
 
 class Sentinel:
     pass
