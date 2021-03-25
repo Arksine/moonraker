@@ -500,6 +500,34 @@ included.
     }
 }
 ```
+
+#### Retrieve axes total distance traveled
+HTTP request:
+```http
+GET /server/axes_distance
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.axes_distance",
+    "id": 7643}
+```
+
+Returns:
+
+An object with the total distance traveled for each axes and the epoc timestamp
+since the axes have been tracked.
+```json
+{
+    "x": 0.,
+    "y": 0.,
+    "z": 0.,
+    "e": 0.,
+    "tracked_since": 0.
+}
+```
+
 #### Request Cached Temperature Data
 HTTP request:
 ```http
