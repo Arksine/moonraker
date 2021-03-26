@@ -807,6 +807,9 @@ class GitRepo:
             if owner_match is not None:
                 self.git_owner = owner_match.group(1)
             self.dirty = current_version.endswith("dirty")
+            if not self.dirty:
+                # backup the current repo if it is clean
+                await self._backup_repo()
 
             # Parse Version Info
             versions = []
@@ -910,7 +913,6 @@ class GitRepo:
             else:
                 self.git_branch = branch_info
             self.valid_git_repo = True
-            await self._backup_repo()
             return True
 
     def log_repo_info(self):
