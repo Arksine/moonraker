@@ -311,14 +311,24 @@ class TPLinkSmartPlug(PowerDevice):
     def __init__(self, config):
         super().__init__(config)
         self.server = config.get_server()
-        self.addr = config.get("address")
+        self.addr = config.get("address").split('/')
         self.port = config.getint("port", 9999)
 
     async def _send_tplink_command(self, command):
         out_cmd = {}
         if command in ["on", "off"]:
-            out_cmd = {'system': {'set_relay_state':
-                       {'state': int(command == "on")}}}
+            out_cmd = {
+                'system': {'set_relay_state': {'state': int(command == "on")}}
+            }
+            if len(self.addr) == 2: # TPLink device controls multiple devices
+               sysinfo = await self._send_tplink_command("info")
+               out_cmd["context"] = {
+                   'child_ids' :
+                       [
+                           sysinfo["system"]["get_sysinfo"]["deviceId"]
+                           + '%02d'%int(self.addr[1])
+                       ]
+               }
         elif command == "info":
             out_cmd = {'system': {'get_sysinfo': {}}}
         else:
@@ -326,7 +336,7 @@ class TPLinkSmartPlug(PowerDevice):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         stream = IOStream(s)
         try:
-            await stream.connect((self.addr, self.port))
+            await stream.connect((self.addr[0], self.port))
             await stream.write(self._encrypt(out_cmd))
             data = await stream.read_bytes(2048, partial=True)
             length = struct.unpack(">I", data[:4])[0]
@@ -378,7 +388,11 @@ class TPLinkSmartPlug(PowerDevice):
     async def refresh_status(self):
         try:
             res = await self._send_tplink_command("info")
-            state = res['system']['get_sysinfo']['relay_state']
+            if len(self.addr) == 2: # TPLink device controls multiple devices
+               state = res['system']['get_sysinfo']['children'][
+                   int(self.addr[1])]['state']
+            else:
+               state = res['system']['get_sysinfo']['relay_state']
         except Exception:
             self.state = "error"
             msg = f"Error Refeshing Device Status: {self.name}"
