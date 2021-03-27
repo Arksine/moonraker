@@ -104,6 +104,9 @@ class UpdateManager:
         self.server.register_endpoint(
             "/machine/update/status", ["GET"],
             self._handle_status_request)
+        self.server.register_endpoint(
+            "/machine/update/recover", ["POST"],
+            self._handle_repo_recovery)
         self.server.register_notification("update_manager:update_response")
         self.server.register_notification("update_manager:update_refreshed")
 
@@ -200,7 +203,7 @@ class UpdateManager:
             return f"Object {app} is currently being updated"
         updater = self.updaters.get(app, None)
         if updater is None:
-            raise self.server.error(f"Updater {app} not available")
+            raise self.server.error(f"Updater {app} not available", 404)
         async with self.cmd_request_lock:
             self.cmd_helper.set_update_info(app, id(web_request))
             try:
@@ -250,6 +253,33 @@ class UpdateManager:
         ret['version_info'] = vinfo
         ret['busy'] = self.cmd_helper.is_update_busy()
         return ret
+
+    async def _handle_repo_recovery(self, web_request):
+        await self.initialized_lock.wait()
+        if await self._check_klippy_printing():
+            raise self.server.error(
+                "Recovery Attempt Refused: Klippy is printing")
+        app = web_request.get_str('name')
+        hard = web_request.get_boolean("hard", False)
+        update_deps = web_request.get_boolean("update_deps", False)
+        updater = self.updaters.get(app, None)
+        if updater is None:
+            raise self.server.error(f"Updater {app} not available", 404)
+        elif not isinstance(updater, GitUpdater):
+            raise self.server.error(f"Upater {app} is not a Git Repo Type")
+        async with self.cmd_request_lock:
+            self.cmd_helper.set_update_info(f"recover_{app}", id(web_request))
+            try:
+                await updater.recover(hard, update_deps)
+            except Exception as e:
+                self.cmd_helper.notify_update_response(
+                    f"Error Recovering {app}")
+                self.cmd_helper.notify_update_response(
+                    str(e), is_complete=True)
+                raise
+            finally:
+                self.cmd_helper.clear_update_info()
+        return "ok"
 
     def close(self):
         self.cmd_helper.close()
@@ -521,7 +551,7 @@ class GitUpdater:
         logging.info(log_msg)
 
     def _notify_status(self, msg, is_complete=False):
-        log_msg = f"Repo {self.name}: {msg}"
+        log_msg = f"Git Repo {self.name}: {msg}"
         logging.debug(log_msg)
         self.cmd_helper.notify_update_response(log_msg, is_complete)
 
@@ -541,12 +571,16 @@ class GitUpdater:
                 f"Repo validation checks failed:\n{msgs}")
             if self.debug:
                 self.is_valid = True
+                if not self.repo.is_dirty():
+                    await self.repo.backup_repo()
                 self._log_info(
                     "Repo debug enabled, overriding validity checks")
             else:
                 self._log_info("Updates on repo disabled")
         else:
             self.is_valid = True
+            if not self.repo.is_dirty():
+                await self.repo.backup_repo()
             self._log_info("Validity check for git repo passed")
 
     async def update(self, update_deps=False):
@@ -559,27 +593,11 @@ class GitUpdater:
         if self.repo.is_current():
             # No need to update
             return
-        package_mtime = self._get_file_mtime(self.install_script)
+        inst_mtime = self._get_file_mtime(self.install_script)
         pyreqs_mtime = self._get_file_mtime(self.python_reqs)
-        self._notify_status("Updating Repo...")
-        try:
-            if self.repo.is_detached():
-                await self.repo.fetch()
-                await self.repo.checkout()
-            else:
-                await self.repo.pull()
-        except Exception:
-            raise self._log_exc("Error running 'git pull'")
+        await self._pull_repo()
         # Check Semantic Versions
-        vinfo = self._get_version_info()
-        cur_version = vinfo.get('version', ())
-        need_env_rebuild = cur_version < vinfo.get('env_version', ())
-        if update_deps or self._check_need_update(
-                package_mtime, self.install_script):
-            await self._install_packages()
-        if update_deps or self._check_need_update(
-                pyreqs_mtime, self.python_reqs):
-            await self._update_virtualenv(need_env_rebuild)
+        await self._update_dependencies(inst_mtime, pyreqs_mtime)
         # Refresh local repo state
         await self._update_repo_state(need_fetch=False)
         if self.name == "moonraker":
@@ -591,6 +609,27 @@ class GitUpdater:
         else:
             await self.restart_service()
             self._notify_status("Update Finished...", is_complete=True)
+
+    async def _pull_repo(self):
+        self._notify_status("Updating Repo...")
+        try:
+            if self.repo.is_detached():
+                await self.repo.fetch()
+                await self.repo.checkout()
+            else:
+                await self.repo.pull()
+        except Exception:
+            raise self._log_exc("Error running 'git pull'")
+
+    async def _update_dependencies(self, inst_mtime, pyreqs_mtime,
+                                   force=False):
+        vinfo = self._get_version_info()
+        cur_version = vinfo.get('version', ())
+        need_env_rebuild = cur_version < vinfo.get('env_version', ())
+        if force or self._check_need_update(inst_mtime, self.install_script):
+            await self._install_packages()
+        if force or self._check_need_update(pyreqs_mtime, self.python_reqs):
+            await self._update_virtualenv(need_env_rebuild)
 
     def _get_file_mtime(self, filename):
         if filename is None or not os.path.isfile(filename):
@@ -699,6 +738,35 @@ class GitUpdater:
                 return
             raise self._log_exc("Error restarting service")
 
+    async def recover(self, hard=False, force_dep_update=False):
+        self._notify_status("Attempting Repo Recovery...")
+        inst_mtime = self._get_file_mtime(self.install_script)
+        pyreqs_mtime = self._get_file_mtime(self.python_reqs)
+
+        if hard:
+            self._notify_status("Restoring repo from backup...")
+            if os.path.exists(self.repo_path):
+                shutil.rmtree(self.repo_path)
+            os.mkdir(self.repo_path)
+            await self.repo.restore_repo()
+            await self._update_repo_state()
+            await self._pull_repo()
+        else:
+            self._notify_status("Resetting Git Repo...")
+            await self.repo.reset()
+            await self._update_repo_state()
+
+        if self.repo.is_dirty() or not self.is_valid:
+            raise self.server.error(
+                "Recovery attempt failed, repo state not pristine", 500)
+        await self._update_dependencies(inst_mtime, pyreqs_mtime,
+                                        force=force_dep_update)
+        if self.name == "moonraker":
+            IOLoop.current().call_later(.1, self.restart_service)
+        else:
+            await self.restart_service()
+        self._notify_status("Recovery Complete", is_complete=True)
+
     def get_update_status(self):
         status = self.repo.get_repo_status()
         status['is_valid'] = self.is_valid
@@ -721,9 +789,9 @@ class GitRepo:
         self.cmd_helper = cmd_helper
         self.alias = alias
         self.git_path = git_path
-        self.valid_origin_url = origin_url
         git_dir, git_base = os.path.split(self.git_path)
         self.backup_path = os.path.join(git_dir, f".{git_base}_repo_backup")
+        self.origin_url = origin_url
         self.valid_git_repo = False
         self.git_owner = "?"
         self.git_remote = "?"
@@ -744,8 +812,8 @@ class GitRepo:
             sudo service {self.alias} stop
             cd {git_dir}
             rm -rf {git_base}
-            f"git clone {self.valid_origin_url}
-            f"sudo service {self.alias} start"
+            git clone {self.origin_url}
+            sudo service {self.alias} start
             """
 
         self.init_condition = None
@@ -845,21 +913,6 @@ class GitRepo:
         if self.init_condition is not None:
             await self.init_condition.wait()
 
-    async def run_git_cmd(self, git_args, timeout=20., retries=5,
-                          env=None):
-        try:
-            return await self.cmd_helper.run_cmd_with_response(
-                f"git -C {self.git_path} {git_args}",
-                timeout=timeout, retries=retries, env=env)
-        except self.cmd_helper.scmd_error as e:
-            stdout = e.stdout.decode().strip()
-            stderr = e.stderr.decode().strip()
-            if stdout:
-                self.git_messages.append(stdout)
-            if stderr:
-                self.git_messages.append(stderr)
-            raise
-
     async def update_repo_status(self):
         async with self.git_operation_lock:
             if not os.path.isdir(os.path.join(self.git_path, ".git")):
@@ -870,7 +923,7 @@ class GitRepo:
             await self._wait_for_lock_release()
             self.valid_git_repo = False
             try:
-                resp = await self.run_git_cmd("status -u no")
+                resp = await self._run_git_cmd("status -u no")
             except Exception:
                 return False
             resp = resp.strip().split('\n', 1)[0]
@@ -926,7 +979,7 @@ class GitRepo:
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
-        if upstream_url != self.valid_origin_url:
+        if upstream_url != self.origin_url:
             invalids.append(f"Unofficial remote url: {self.upstream_url}")
         if self.git_branch != primary_branch or self.git_remote != "origin":
             invalids.append(
@@ -946,10 +999,19 @@ class GitRepo:
                 raise self.server.error(
                     f"Git Repo {self.alias}: No valid git remote detected")
 
+    async def reset(self):
+        if self.git_remote == "?" or self.git_branch == "?":
+            raise self.server.error("Cannot reset, unknown remote/branch")
+        async with self.git_operation_lock:
+            await self._run_git_cmd("clean -d -f", retries=2)
+            await self._run_git_cmd(
+                f"reset --hard {self.git_remote}/{self.git_branch}",
+                retries=2)
+
     async def fetch(self):
         self._verify_repo(check_remote=True)
         async with self.git_operation_lock:
-            await self._do_fetch_pull(
+            await self._run_git_cmd_async(
                 f"fetch {self.git_remote} --prune --progress")
 
 
@@ -960,44 +1022,44 @@ class GitRepo:
                 f"Git Repo {self.alias}: Cannot perform pull on a "
                 "detached HEAD")
         async with self.git_operation_lock:
-            await self._do_fetch_pull("pull --progress")
+            await self._run_git_cmd_async("pull --progress")
 
     async def list_branches(self):
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd("branch --list")
+            resp = await self._run_git_cmd("branch --list")
             return resp.strip().split("\n")
 
     async def remote(self, command):
         self._verify_repo(check_remote=True)
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd(
+            resp = await self._run_git_cmd(
                 f"remote {command} {self.git_remote}")
             return resp.strip()
 
     async def describe(self, args=""):
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd(f"describe {args}".strip())
+            resp = await self._run_git_cmd(f"describe {args}".strip())
             return resp.strip()
 
     async def rev_parse(self, args=""):
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd(f"rev-parse {args}".strip())
+            resp = await self._run_git_cmd(f"rev-parse {args}".strip())
             return resp.strip()
 
     async def get_config_item(self, item):
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd(f"config --get {item}")
+            resp = await self._run_git_cmd(f"config --get {item}")
             return resp.strip()
 
     async def checkout(self, branch=None):
         self._verify_repo()
         async with self.git_operation_lock:
             branch = branch or f"{self.git_remote}/{self.git_branch}"
-            await self.run_git_cmd(f"checkout {branch} -q")
+            await self._run_git_cmd(f"checkout {branch} -q")
 
     async def get_commits_behind(self):
         self._verify_repo()
@@ -1005,7 +1067,7 @@ class GitRepo:
             return []
         async with self.git_operation_lock:
             branch = f"{self.git_remote}/{self.git_branch}"
-            resp = await self.run_git_cmd(
+            resp = await self._run_git_cmd(
                 f"log {self.current_commit}..{branch} "
                 f"--format={GIT_LOG_FMT} --max-count={GIT_MAX_LOG_CNT}")
             commits_behind = []
@@ -1022,7 +1084,7 @@ class GitRepo:
     async def get_tagged_commits(self):
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self.run_git_cmd(f"show-ref --tags -d")
+            resp = await self._run_git_cmd(f"show-ref --tags -d")
             tagged_commits = {}
             tags = [tag.strip() for tag in resp.split('\n') if tag.strip()]
             for tag in tags:
@@ -1040,45 +1102,38 @@ class GitRepo:
             # Return tagged commits as SHA keys mapped to tag values
             return {v: k for k, v in tagged_commits.items()}
 
-    async def _restore_repo(self):
-        # Make sure that a backup exists
-        backup_git_dir = os.path.join(self.backup_path, ".git")
-        if not os.path.exists(backup_git_dir):
-            logging.info(f"Git Repo {self.alias}: Unable to restore repo, "
-                         f"no backup exists.\n{self.recovery_message}")
-            return False
-        logging.info(f"Git Repo {self.alias}: Attempting to restore corrupt"
-                     " repo from backup...")
-        await self._rsync_repo(self.backup_path, self.git_path)
-        logging.info(f"Git Repo {self.alias}: Verifying restored repo with"
-                     " git fsck...")
-        try:
-            await self.cmd_helper.run_cmd(
-                f"{self.git_cmd} fsck --full", retries=2,
-                timeout=300.)
-        except Exception:
-            logging.info(f"Git Repo {self.alias}: git fsck failed on"
-                         f" restored repo.\n{self.recovery_message}")
-            return False
-        return True
+    async def restore_repo(self):
+        async with self.git_operation_lock:
+            # Make sure that a backup exists
+            backup_git_dir = os.path.join(self.backup_path, ".git")
+            if not os.path.exists(backup_git_dir):
+                err_msg = f"Git Repo {self.alias}: Unable to restore repo, " \
+                          f"no backup exists.\n{self.recovery_message}"
+                self.git_messages.append(err_msg)
+                logging.info(err_msg)
+                raise self.server.error(err_msg)
+            logging.info(f"Git Repo {self.alias}: Attempting to restore "
+                         "corrupt repo from backup...")
+            await self._rsync_repo(self.backup_path, self.git_path)
 
-    async def _backup_repo(self):
-        if not os.path.isdir(self.backup_path):
-            try:
-                os.mkdir(self.backup_path)
-            except Exception:
-                logging.exception(
-                    f"Git Repo {self.alias}: Unable to create backup  "
-                    f"directory {self.backup_path}")
-                return
-            else:
-                # Creating a first time backup.  Could take a while
-                # on low resource systems
-                logging.info(
-                    f"Git Repo {self.alias}: Backing up git repo to "
-                    f"'{self.backup_path}'. This may take a while to "
-                    "complete.")
-        await self._rsync_repo(self.git_path, self.backup_path)
+    async def backup_repo(self):
+        async with self.git_operation_lock:
+            if not os.path.isdir(self.backup_path):
+                try:
+                    os.mkdir(self.backup_path)
+                except Exception:
+                    logging.exception(
+                        f"Git Repo {self.alias}: Unable to create backup  "
+                        f"directory {self.backup_path}")
+                    return
+                else:
+                    # Creating a first time backup.  Could take a while
+                    # on low resource systems
+                    logging.info(
+                        f"Git Repo {self.alias}: Backing up git repo to "
+                        f"'{self.backup_path}'. This may take a while to "
+                        "complete.")
+            await self._rsync_repo(self.git_path, self.backup_path)
 
     async def _rsync_repo(self, source, dest):
         try:
@@ -1143,7 +1198,7 @@ class GitRepo:
                 return
         self._check_lock_file_exists(remove=True)
 
-    async def _do_fetch_pull(self, cmd, retries=5):
+    async def _run_git_cmd_async(self, cmd, retries=5):
         # Fetch and pull require special handling.  If the request
         # gets delayed we do not want to terminate it while the command
         # is processing.
@@ -1200,6 +1255,21 @@ class GitRepo:
             # Request has timed out with no input, terminate it
             logging.debug(f"Git Repo {self.alias}: Fetch/Pull timed out")
             await scmd.cancel()
+
+    async def _run_git_cmd(self, git_args, timeout=20., retries=5,
+                           env=None):
+        try:
+            return await self.cmd_helper.run_cmd_with_response(
+                f"git -C {self.git_path} {git_args}",
+                timeout=timeout, retries=retries, env=env)
+        except self.cmd_helper.scmd_error as e:
+            stdout = e.stdout.decode().strip()
+            stderr = e.stderr.decode().strip()
+            if stdout:
+                self.git_messages.append(stdout)
+            if stderr:
+                self.git_messages.append(stderr)
+            raise
 
 class PackageUpdater:
     def __init__(self, cmd_helper):
