@@ -12,10 +12,11 @@ from tornado import gen
 from utils import ServerError
 
 class ShellCommandError(ServerError):
-    def __init__(self, message, return_code, err_output=(b"", b""),
-                 status_code=400):
+    def __init__(self, message, return_code, stdout=b"",
+                 stderr=b"", status_code=400):
         super().__init__(message, status_code=status_code)
-        self.stdout, self.stderr = err_output
+        self.stdout = stdout or b""
+        self.stderr = stderr or b""
         self.return_code = return_code
 
 class SCProcess(asyncio.subprocess.Process):
@@ -166,7 +167,7 @@ class ShellCommand:
             await gen.sleep(.5)
         raise ShellCommandError(
             f"Error running shell command: '{self.command}'",
-            self.return_code, err_output=(stdout, stderr))
+            self.return_code, stdout, stderr)
 
     async def _create_subprocess(self):
         loop = asyncio.get_event_loop()
