@@ -326,9 +326,9 @@ class CommandHelper:
                 break
 
     async def run_cmd(self, cmd, timeout=20., notify=False,
-                      retries=1, env=None):
+                      retries=1, env=None, cwd=None):
         cb = self.notify_update_response if notify else None
-        scmd = self.build_shell_command(cmd, callback=cb, env=env)
+        scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
         while retries:
             if await scmd.run(timeout=timeout):
                 break
@@ -337,8 +337,8 @@ class CommandHelper:
             raise self.server.error("Shell Command Error")
 
     async def run_cmd_with_response(self, cmd, timeout=20., retries=5,
-                                    env=None):
-        scmd = self.build_shell_command(cmd, None, env=env)
+                                    env=None, cwd=None):
+        scmd = self.build_shell_command(cmd, None, env=env, cwd=cwd)
         result = await scmd.run_with_response(timeout, retries)
         return result
 
