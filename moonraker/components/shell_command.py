@@ -13,7 +13,7 @@ from utils import ServerError
 
 class ShellCommandError(ServerError):
     def __init__(self, message, return_code, stdout=b"",
-                 stderr=b"", status_code=400):
+                 stderr=b"", status_code=500):
         super().__init__(message, status_code=status_code)
         self.stdout = stdout or b""
         self.stderr = stderr or b""
@@ -91,7 +91,7 @@ class SCProcess(asyncio.subprocess.Process):
 
 class ShellCommand:
     def __init__(self, cmd, std_out_callback, std_err_callback,
-                 env=None, log_stderr=False):
+                 env=None, log_stderr=False, cwd=None):
         self.name = cmd
         self.std_out_cb = std_out_callback
         self.std_err_cb = std_err_callback
@@ -99,6 +99,7 @@ class ShellCommand:
         self.command = shlex.split(cmd)
         self.log_stderr = log_stderr
         self.env = env
+        self.cwd = cwd
         self.proc = None
         self.cancelled = False
         self.return_code = None
@@ -183,7 +184,7 @@ class ShellCommand:
             transport, protocol = await loop.subprocess_exec(
                 protocol_factory, *self.command,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=errpipe, env=self.env)
+                stderr=errpipe, env=self.env, cwd=self.cwd)
             self.proc = SCProcess(transport, protocol, loop)
             self.proc.initialize(self.command[0], self.std_out_cb,
                                  self.std_err_cb, self.log_stderr)
@@ -212,8 +213,9 @@ class ShellCommand:
 class ShellCommandFactory:
     error = ShellCommandError
     def build_shell_command(self, cmd, callback=None, std_err_callback=None,
-                            env=None, log_stderr=False):
-        return ShellCommand(cmd, callback, std_err_callback, env, log_stderr)
+                            env=None, log_stderr=False, cwd=None):
+        return ShellCommand(cmd, callback, std_err_callback, env,
+                            log_stderr, cwd)
 
 def load_component(config):
     return ShellCommandFactory()
