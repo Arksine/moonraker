@@ -11,7 +11,7 @@ CONFIG_PATH="${HOME}/moonraker.conf"
 # Step 1:  Verify Klipper has been installed
 check_klipper()
 {
-    if [ "$(systemctl list-units --full -all -t service --no-legend | grep -F "klipper.service")" ]; then
+    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "klipper.service")" ]; then
         echo "Klipper service found!"
     else
         echo "Klipper service not found, please install Klipper first"
@@ -36,7 +36,7 @@ cleanup_legacy() {
 install_packages()
 {
     PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
-    PKGLIST="${PKGLIST} liblmdb0"
+    PKGLIST="${PKGLIST} liblmdb0 rsync zlib1g-dev"
 
     # Update system package info
     report_status "Running apt-get update..."
