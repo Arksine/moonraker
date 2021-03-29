@@ -198,7 +198,6 @@ class UpdateManager:
         app = web_request.get_endpoint().split("/")[-1]
         if app == "client":
             app = web_request.get('name')
-        inc_deps = web_request.get_boolean('include_deps', False)
         if self.cmd_helper.is_app_updating(app):
             return f"Object {app} is currently being updated"
         updater = self.updaters.get(app, None)
@@ -207,7 +206,7 @@ class UpdateManager:
         async with self.cmd_request_lock:
             self.cmd_helper.set_update_info(app, id(web_request))
             try:
-                await updater.update(inc_deps)
+                await updater.update()
             except Exception as e:
                 self.cmd_helper.notify_update_response(
                     f"Error updating {app}")
@@ -584,7 +583,7 @@ class GitUpdater:
                 await self.repo.backup_repo()
             self._log_info("Validity check for git repo passed")
 
-    async def update(self, update_deps=False):
+    async def update(self):
         await self.repo.wait_for_init()
         if not self.is_valid:
             raise self._log_exc("Update aborted, repo not valid", False)
@@ -1307,7 +1306,7 @@ class PackageUpdater:
         self.refresh_condition.notify_all()
         self.refresh_condition = None
 
-    async def update(self, *args):
+    async def update(self):
         if self.refresh_condition is not None:
             self.refresh_condition.wait()
         self.cmd_helper.notify_update_response("Updating packages...")
@@ -1399,7 +1398,7 @@ class WebUpdater:
             f"Remote Version: {self.remote_version}\n"
             f"url: {self.dl_url}")
 
-    async def update(self, *args):
+    async def update(self):
         if self.refresh_condition is not None:
             # wait for refresh if in progess
             self.refresh_condition.wait()
