@@ -144,9 +144,19 @@ class UpdateManager:
             # Current Klipper Updater is valid
             return
         kcfg = self.config[f"update_manager static {self.distro} klipper"]
+        need_notification = "klipper" not in self.updaters
         self.updaters['klipper'] = GitUpdater(kcfg, self.cmd_helper, kpath, env)
         async with self.cmd_request_lock:
             await self.updaters['klipper'].refresh()
+        if need_notification:
+            vinfo = {}
+            for name, updater in self.updaters.items():
+                if hasattr(updater, "get_update_status"):
+                    vinfo[name] = updater.get_update_status()
+            uinfo = self.cmd_helper.get_rate_limit_stats()
+            uinfo['version_info'] = vinfo
+            uinfo['busy'] = self.cmd_helper.is_update_busy()
+            self.server.send_event("update_manager:update_refreshed", uinfo)
 
     async def _check_klippy_printing(self):
         klippy_apis = self.server.lookup_component('klippy_apis')
