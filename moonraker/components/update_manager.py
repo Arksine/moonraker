@@ -356,20 +356,21 @@ class CommandHelper:
                 break
 
     async def run_cmd(self, cmd, timeout=20., notify=False,
-                      retries=1, env=None, cwd=None):
+                      retries=1, env=None, cwd=None, sig_idx=1):
         cb = self.notify_update_response if notify else None
         scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
         while retries:
-            if await scmd.run(timeout=timeout):
+            if await scmd.run(timeout=timeout, sig_idx=sig_idx):
                 break
             retries -= 1
         if not retries:
             raise self.server.error("Shell Command Error")
 
     async def run_cmd_with_response(self, cmd, timeout=20., retries=5,
-                                    env=None, cwd=None):
+                                    env=None, cwd=None, sig_idx=1):
         scmd = self.build_shell_command(cmd, None, env=env, cwd=cwd)
-        result = await scmd.run_with_response(timeout, retries)
+        result = await scmd.run_with_response(
+            timeout, retries, sig_idx=sig_idx)
         return result
 
     async def github_api_request(self, url, etag=None, is_init=False):
@@ -1254,14 +1255,15 @@ class GitRepo:
         else:
             # Request has timed out with no input, terminate it
             logging.debug(f"Git Repo {self.alias}: Fetch/Pull timed out")
-            await scmd.cancel()
+            # Cancel with SIGKILL
+            await scmd.cancel(2)
 
     async def _run_git_cmd(self, git_args, timeout=20., retries=5,
                            env=None):
         try:
             return await self.cmd_helper.run_cmd_with_response(
                 f"git -C {self.git_path} {git_args}",
-                timeout=timeout, retries=retries, env=env)
+                timeout=timeout, retries=retries, env=env, sig_idx=2)
         except self.cmd_helper.scmd_error as e:
             stdout = e.stdout.decode().strip()
             stderr = e.stderr.decode().strip()
