@@ -490,6 +490,14 @@ class GitUpdater:
         self.repo = GitRepo(cmd_helper, path, self.name, origin)
         self.debug = self.cmd_helper.is_debug_enabled()
         self.env = config.get("env", env)
+        self.npm_pkg_json = None
+        if config.get("enable_node_updates", False):
+            self.npm_pkg_json = os.path.join(
+                self.repo_path, "package-lock.json")
+            if not os.path.isfile(self.npm_pkg_json):
+                raise config.error(
+                    f"Cannot enable node updates, no file "
+                    f"{self.npm_pkg_json}")
         dist_packages = None
         self.python_reqs = None
         if self.env is not None:
@@ -605,9 +613,10 @@ class GitUpdater:
             return
         inst_mtime = self._get_file_mtime(self.install_script)
         pyreqs_mtime = self._get_file_mtime(self.python_reqs)
+        npm_mtime = self._get_file_mtime(self.npm_pkg_json)
         await self._pull_repo()
         # Check Semantic Versions
-        await self._update_dependencies(inst_mtime, pyreqs_mtime)
+        await self._update_dependencies(inst_mtime, pyreqs_mtime, npm_mtime)
         # Refresh local repo state
         await self._update_repo_state(need_fetch=False)
         if self.name == "moonraker":
@@ -632,7 +641,7 @@ class GitUpdater:
             raise self._log_exc("Error running 'git pull'")
 
     async def _update_dependencies(self, inst_mtime, pyreqs_mtime,
-                                   force=False):
+                                   npm_mtime, force=False):
         vinfo = self._get_version_info()
         cur_version = vinfo.get('version', ())
         need_env_rebuild = cur_version < vinfo.get('env_version', ())
@@ -640,6 +649,15 @@ class GitUpdater:
             await self._install_packages()
         if force or self._check_need_update(pyreqs_mtime, self.python_reqs):
             await self._update_virtualenv(need_env_rebuild)
+        if force or self._check_need_update(npm_mtime, self.npm_pkg_json):
+            if self.npm_pkg_json is not None:
+                self._notify_status("Updating Node Packages...")
+                try:
+                    await self.cmd_helper.run_cmd(
+                        "npm ci --only=prod", notify=True, timeout=600.,
+                        cwd=self.repo_path)
+                except Exception:
+                    self._notify_status("Node Package Update failed")
 
     def _get_file_mtime(self, filename):
         if filename is None or not os.path.isfile(filename):
@@ -752,6 +770,7 @@ class GitUpdater:
         self._notify_status("Attempting Repo Recovery...")
         inst_mtime = self._get_file_mtime(self.install_script)
         pyreqs_mtime = self._get_file_mtime(self.python_reqs)
+        npm_mtime = self._get_file_mtime(self.npm_pkg_json)
 
         if hard:
             self._notify_status("Restoring repo from backup...")
@@ -769,7 +788,7 @@ class GitUpdater:
         if self.repo.is_dirty() or not self.is_valid:
             raise self.server.error(
                 "Recovery attempt failed, repo state not pristine", 500)
-        await self._update_dependencies(inst_mtime, pyreqs_mtime,
+        await self._update_dependencies(inst_mtime, pyreqs_mtime, npm_mtime,
                                         force=force_dep_update)
         if self.name == "moonraker":
             IOLoop.current().call_later(.1, self.restart_service)
