@@ -14,6 +14,7 @@ install one.  The following clients are currently available:
 - [Mainsail](https://github.com/meteyou/mainsail) by Meteyou
 - [Fluidd](https://github.com/cadriel/fluidd) by Cadriel
 - [KlipperScreen](https://github.com/jordanruthe/KlipperScreen) by jordanruthe
+- [mooncord](https://github.com/eliteSchwein/mooncord) by eliteSchwein
 
 
 ### Changes
