@@ -88,7 +88,8 @@ class History:
 
     async def _handle_jobs_list(self, web_request):
         i = 0
-        end_num = len(self.history_ns)
+        count = 0
+        end_num = len(self.cached_job_ids)
         jobs = []
         start_num = 0
 
@@ -96,26 +97,49 @@ class History:
         since = web_request.get_float("since", -1)
         limit = web_request.get_int("limit", 50)
         start = web_request.get_int("start", 0)
-        if start >= end_num or end_num == 0:
+        order = web_request.get_str("order", "desc")
+
+        if not order in ["asc", "desc"]:
+            raise self.server.error(f"Invalid `order` value: {order}", 400)
+
+        reverse_order = (order == "desc")
+
+        # cached jobs is asc order, find lower and upper boundary
+        if since != -1:
+            while start_num < end_num:
+                job_id = self.cached_job_ids[start_num]
+                job = self.history_ns[job_id]
+                if job.get('start_time') > since:
+                    break
+                start_num += 1
+
+        if before != -1:
+            while end_num > 0:
+                job_id = self.cached_job_ids[end_num-1]
+                job = self.history_ns[job_id]
+                if job.get('end_time') < before:
+                    break
+                end_num -= 1
+
+        if start_num >= end_num or end_num == 0:
             return {"count": 0, "jobs": []}
 
-        for job_id in self.cached_job_ids:
+        i = start
+        count = end_num - start_num
+
+        if limit == 0:
+            limit = MAX_JOBS
+
+        while i < count and len(jobs) < limit:
+            if reverse_order:
+                job_id = self.cached_job_ids[end_num - i - 1]
+            else:
+                job_id = self.cached_job_ids[start_num + i]
             job = self.history_ns[job_id]
-            if since != -1 and since > job.get('start_time'):
-                start_num += 1
-                continue
-            if before != -1 and before < job.get('end_time'):
-                end_num -= 1
-                continue
-            if limit != 0 and i >= limit:
-                continue
-            if start != 0:
-                start -= 1
-                continue
             jobs.append(self._prep_requested_job(job, job_id))
             i += 1
 
-        return {"count": end_num - start_num, "jobs": jobs}
+        return {"count": count, "jobs": jobs}
 
     async def _handle_job_totals(self, web_request):
         return {'job_totals': self.job_totals}

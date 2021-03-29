@@ -2305,7 +2305,7 @@ The APIs below are avilable when the `[history]` component has been configured.
 #### Get job list
 HTTP request:
 ```http
-GET /server/history/list?limit=50&start=50&since=1&before=5
+GET /server/history/list?limit=50&start=50&since=1&before=5&order=asc
 ```
 JSON-RPC request:
 ```json
@@ -2316,7 +2316,8 @@ JSON-RPC request:
         "limit": 50,
         "start": 10,
         "since": 464.54,
-        "before": 1322.54
+        "before": 1322.54,
+        "order": "asc"
     },
     "id": 5656
 }
@@ -2325,9 +2326,10 @@ JSON-RPC request:
 All arguments are optional. Arguments are as follows:
 
 - `start` Record number to start from (i.e. 10 would start at the 10th print)
-- `limit` Maximum Number of prints to return
+- `limit` Maximum Number of prints to return (default: 50)
 - `before` All jobs before this UNIX timestamp
 - `since` All jobs after this UNIX timestamp
+- `order` Define return order `asc` or `desc` (default)
 
 Returns:
 
