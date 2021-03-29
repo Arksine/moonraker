@@ -405,4 +405,10 @@ install_script:
 #  The file location, relative to the repository, for the installation script.
 #  The update manager parses this file for "system" packages that need updating.
 #  The default is no install script, which disables system package updates
+enable_node_updates:
+#   When set to True, Moonraker will asssume that this repo relies upon node
+#   and will attempt to execute "npm ci --only=prod" when it detects a change
+#   to package-lock.json.  Note that if your project does not have a
+#   package-lock.json in its root directory then the plugin will fail to load.
+#   Default is False.
 ```

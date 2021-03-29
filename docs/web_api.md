@@ -1755,6 +1755,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
                     "tag": null
                 }
             ],
+            "git_messages": [],
             "is_valid": true,
             "debug_enabled": true
         }
@@ -1796,6 +1797,12 @@ as git repos have the following fields:
 - `commits_behind`: A list of commits behind.  Up to 30 "untagged" commits
   will be reported.  Moonraker checks the last 100 commits for tags, any
   commits beyond the last 30 with a tag will also be reported.
+- `git_messages`:  If a repo is in the "invalid" state this field will hold
+  a list of string messages containing the output of the last failed git
+  command.  Note that it is possible for a git command to fail without
+  providing output (for example, it may become non-responsive and time out),
+  so it is possible for this field to be an empty list when the repo is
+  invalid.
 
 Web clients have the following fields:
 
@@ -1893,6 +1900,45 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "machine.update.system",
+    "id": 4564
+}
+```
+Returns:
+
+`ok` when complete
+
+#### Recover a corrupt repo
+On ocassion a git command may fail resulting in a repo in a
+dirty or invalid state.  When this happens it is possible
+to recover.  The `name` argument must specify the name of
+the repo to recover, it must be of a git repo type. There are two
+methods of recovery, the `hard` argument determines which method
+is used:
+
+- `hard == true`: Moonraker will remove the old directory
+  entirely.  It will then attempt to recover with `rsync`
+  by restoring a backup of a recent valid repo.
+- `hard == false`:  Will run `git clean -f -d` followed
+  by `git reset --hard {remote}/{branch}`.  This is useful
+  for recovering dirty repos that are valid.  It is possible
+  that this will work on an invalid repo, however it will
+  not work on a corrupt repo.
+
+The `hard` argument defaults to `false`.
+
+HTTP request:
+```http
+POST /machine/update/recover?name=moonraker&hard=false
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.update.recover",
+    "params": {
+        "name": "moonraker",
+        "hard": false
+    },
     "id": 4564
 }
 ```
