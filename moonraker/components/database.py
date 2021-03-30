@@ -46,6 +46,7 @@ class MoonrakerDatabase:
     def __init__(self, config):
         self.server = config.get_server()
         self.namespaces = {}
+        self.enable_debug = config.get("enable_database_debug", False)
         self.database_path = os.path.expanduser(config.get(
             'database_path', "~/.moonraker_database"))
         if not os.path.isdir(self.database_path):
@@ -69,6 +70,13 @@ class MoonrakerDatabase:
                         db=mrdb)
         self.protected_namespaces = set(self.get_item(
             "moonraker", "database.protected_namespaces", ["moonraker"]))
+        debug_counter = self.get_item("moonraker", "database.debug_counter", 0)
+        if self.enable_debug:
+            debug_counter += 1
+            self.insert_item("moonraker", "database.debug_counter",
+                             debug_counter)
+        if debug_counter:
+            logging.info(f"Database Debug Count: {debug_counter}")
         self.server.register_endpoint(
             "/server/database/list", ['GET'], self._handle_list_request)
         self.server.register_endpoint(
@@ -273,7 +281,8 @@ class MoonrakerDatabase:
         action = web_request.get_action()
         namespace = web_request.get_str("namespace")
         if action != "GET":
-            if namespace in self.protected_namespaces:
+            if namespace in self.protected_namespaces and \
+                    not self.enable_debug:
                 raise self.server.error(
                     f"Namespace '{namespace}' is write protected")
             key = web_request.get("key")
