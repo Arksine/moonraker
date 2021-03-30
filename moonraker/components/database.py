@@ -46,7 +46,6 @@ class MoonrakerDatabase:
     def __init__(self, config):
         self.server = config.get_server()
         self.namespaces = {}
-        self.protected_namespaces = {"moonraker"}
         self.database_path = os.path.expanduser(config.get(
             'database_path', "~/.moonraker_database"))
         if not os.path.isdir(self.database_path):
@@ -68,7 +67,8 @@ class MoonrakerDatabase:
                 txn.put(b'database_version',
                         self._encode_value(DATABASE_VERSION),
                         db=mrdb)
-
+        self.protected_namespaces = set(self.get_item(
+            "moonraker", "database.protected_namespaces", ["moonraker"]))
         self.server.register_endpoint(
             "/server/database/list", ['GET'], self._handle_list_request)
         self.server.register_endpoint(
@@ -195,13 +195,15 @@ class MoonrakerDatabase:
         if namespace not in self.namespaces:
             self.namespaces[namespace] = self.lmdb_env.open_db(
                 namespace.encode())
-        self.protected_namespaces.add(namespace)
+        if namespace not in self.protected_namespaces:
+            self.protected_namespaces.add(namespace)
+            self.insert_item("moonraker", "database.protected_namespaces",
+                             list(self.protected_namespaces))
 
     def wrap_namespace(self, namespace, parse_keys=True):
         if namespace not in self.namespaces:
             raise self.server.error(
                 f"Namespace '{namespace}' not found", 404)
-        self.protected_namespaces.add(namespace)
         return NamespaceWrapper(namespace, self, parse_keys)
 
     def _process_key(self, key):
