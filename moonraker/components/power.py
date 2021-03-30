@@ -317,10 +317,18 @@ class TPLinkSmartPlug(PowerDevice):
     async def _send_tplink_command(self, command):
         out_cmd = {}
         if command in ["on", "off"]:
-            out_cmd = {'system': {'set_relay_state': {'state': int(command == "on")}}}
+            out_cmd = {
+                'system': {'set_relay_state': {'state': int(command == "on")}}
+            }
             if len(self.addr) == 2: # TPLink device controls multiple devices
                sysinfo = await self._send_tplink_command("info")
-               out_cmd["context"] = {'child_ids' : [sysinfo["system"]["get_sysinfo"]["deviceId"]+'%02d'%int(self.addr[1])]}
+               out_cmd["context"] = {
+                   'child_ids' :
+                       [
+                           sysinfo["system"]["get_sysinfo"]["deviceId"]
+                           + '%02d'%int(self.addr[1])
+                       ]
+               }
         elif command == "info":
             out_cmd = {'system': {'get_sysinfo': {}}}
         else:
@@ -381,7 +389,8 @@ class TPLinkSmartPlug(PowerDevice):
         try:
             res = await self._send_tplink_command("info")
             if len(self.addr) == 2: # TPLink device controls multiple devices
-               state = res['system']['get_sysinfo']['children'][int(self.addr[1])]['state']
+               state = res['system']['get_sysinfo']['children'][
+                   int(self.addr[1])]['state']
             else:
                state = res['system']['get_sysinfo']['relay_state']
         except Exception:
