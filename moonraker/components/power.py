@@ -16,6 +16,8 @@ from tornado.iostream import IOStream
 from tornado import gen
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
+from PyP100 import PyP100
+
 
 class PrinterPower:
     def __init__(self, config):
@@ -32,6 +34,8 @@ class PrinterPower:
                     dev = GpioDevice(cfg, self.chip_factory)
                 elif dev_type == "tplink_smartplug":
                     dev = TPLinkSmartPlug(cfg)
+                elif dev_type == "tplink_tapo":
+                    dev = TPLinkTapo(cfg)
                 elif dev_type == "tasmota":
                     dev = Tasmota(cfg)
                 elif dev_type == "shelly":
@@ -412,6 +416,52 @@ class TPLinkSmartPlug(PowerDevice):
             raise self.server.error(
                 f"Error Toggling Device Power: {self.name}")
         self.state = state
+
+
+# Support for TP-Link Tapo smart plug
+# thanks to PyP100 lib 
+# https://github.com/fishbigger/TapoP100/
+class TPLinkTapo(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.server = config.get_server()
+        self.addr = config.get("address")
+        self.email = config.get("email")
+        self.password = config.get("password")
+
+    def initialize(self):
+        self.p100 = PyP100.P100 (self.addr, self.email, self.password)
+        self.p100.handshake()
+        self.p100.login()
+        self.refresh_status()
+
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "tplink_tapo"
+        }
+
+    def refresh_status(self):        
+        try:
+            res = self.p100.getDeviceInfo()
+            data = json.loads(res)
+            state = data["result"]["device_on"]
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = "on" if state else "off"
+
+
+    def set_power(self, state):
+        if (state == "on"):
+            self.p100.turnOn()
+        else:
+            self.p100.turnOff()
+        self.state = state
+
 
 
 class Tasmota(PowerDevice):
