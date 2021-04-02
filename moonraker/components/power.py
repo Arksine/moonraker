@@ -455,7 +455,13 @@ class Tasmota(PowerDevice):
     async def refresh_status(self):
         try:
             res = await self._send_tasmota_command("info")
-            state = res[f"POWER{self.output_id}"].lower()
+            try: 
+                state = res[f"POWER{self.output_id}"].lower()
+            except KeyError as e:
+                if self.output_id == 1 :
+                    state = res[f"POWER"].lower()
+                else:
+                    raise KeyError(e)
         except Exception:
             self.state = "error"
             msg = f"Error Refeshing Device Status: {self.name}"
@@ -466,7 +472,13 @@ class Tasmota(PowerDevice):
     async def set_power(self, state):
         try:
             res = await self._send_tasmota_command(state)
-            state = res[f"POWER{self.output_id}"].lower()
+            try: 
+                state = res[f"POWER{self.output_id}"].lower()
+            except KeyError as e:
+                if self.output_id == 1 :
+                    state = res[f"POWER"].lower()
+                else:
+                    raise KeyError(e)
         except Exception:
             self.state = "error"
             msg = f"Error Setting Device Status: {self.name} to {state}"
