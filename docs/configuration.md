@@ -41,6 +41,8 @@ database_path: ~/.moonraker_database
 #   Moonraker (such as the "config_path" or the location where gcode
 #   files are stored).  If the folder does not exist an attempt will be made
 #   to create it.  The default is ~/.moonraker_database.
+enable_database_debug: False
+#   For developer use only.  End users should leave this option set to False.
 temperature_store_size: 1200
 #   The maximum number of temperature values to store for each sensor. Note
 #   that this value also applies to the "target", "power", and "fan_speed"
