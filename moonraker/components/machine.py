@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
+import os
 from tornado.ioloop import IOLoop
 
 ALLOWED_SERVICES = ["moonraker", "klipper", "webcamd"]
@@ -42,9 +43,17 @@ class Machine:
         return "ok"
 
     async def shutdown_machine(self):
+        myfile = os.path.join(
+            os.path.dirname(__file__),'../../scripts/pre_shutdown_sequence.sh' )
+        if os.path.isfile(myfile) and os.access(myfile, os.X_OK):
+            await self._execute_cmd("bash -c " + myfile)
         await self._execute_cmd("sudo shutdown now")
 
     async def reboot_machine(self):
+        myfile = os.path.join(
+            os.path.dirname(__file__),'../../scripts/pre_reboot_sequence.sh' )
+        if os.path.isfile(myfile) and os.access(myfile, os.X_OK):
+            await self._execute_cmd("bash -c " + myfile)        
         await self._execute_cmd("sudo shutdown -r now")
 
     async def do_service_action(self, action, service_name):
