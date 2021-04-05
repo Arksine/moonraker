@@ -219,6 +219,7 @@ port:
 address:
 password:
 output_id:
+timer:
 #   The above options are used for "tasmota" devices.  The
 #   address should be a valid ip or hostname for the tasmota device.
 #   Provide a password if configured in Tasmota (default is empty).
@@ -231,12 +232,16 @@ address:
 user:
 password:
 output_id:
+timer:
 #   The above options are used for "shelly" devices.  The
 #   address should be a valid ip or hostname for the Shelly device.
 #   Provide a user and password if configured in Shelly (default is empty).
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
 #   more than one (default is 0).
+#   When timer option is used to delay the turn off make sure to set
+#   the state to "on" in action call_remote_method.
+#   So we send a command to turn it on for x sec when its already on then it turns off.
 address:
 device:
 user:
