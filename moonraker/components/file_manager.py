@@ -52,7 +52,6 @@ class FileManager:
             protocol=["websocket"])
         # register client notificaitons
         self.server.register_notification("file_manager:filelist_changed")
-        self.server.register_notification("file_manager:metadata_update")
         # Register APIs to handle file uploads
         self.server.register_upload_handler("/server/files/upload")
         self.server.register_upload_handler("/api/files/local")
@@ -575,7 +574,7 @@ class InotifyNode:
         node_path = self.get_path()
         root = self.get_root()
         # Scan child nodes for unwatched directories and metadata
-        mevts = self.scan_node(notify_created=False)
+        mevts = self.scan_node()
         if mevts:
             mfuts = [e.wait() for e in mevts]
             await asyncio.gather(*mfuts)
@@ -602,7 +601,7 @@ class InotifyNode:
                 f"delete_{item_type}", root, item_path)
         self.pending_deleted_children.clear()
 
-    def scan_node(self, notify_created=True, visited_dirs=set()):
+    def scan_node(self, visited_dirs=set()):
         dir_path = self.get_path()
         st = os.stat(dir_path)
         if st in visited_dirs:
@@ -615,9 +614,8 @@ class InotifyNode:
             item_path = os.path.join(dir_path, fname)
             ext = os.path.splitext(fname)[-1].lower()
             if os.path.isdir(item_path):
-                new_child = self.create_child_node(fname, notify_created)
-                metadata_events.extend(new_child.scan_node(
-                    notify_created, visited_dirs))
+                new_child = self.create_child_node(fname, False)
+                metadata_events.extend(new_child.scan_node(visited_dirs))
             elif os.path.isfile(item_path) and \
                     self.get_root() == "gcodes" and \
                     ext in VALID_GCODE_EXTS:
@@ -639,7 +637,7 @@ class InotifyNode:
         logging.debug(f"Moving node from '{prev_path}' to '{new_path}'")
         # TODO: It is possible to "move" metadata rather
         # than rescan.
-        mevts = child_node.scan_node(notify_created=False)
+        mevts = child_node.scan_node()
         if mevts:
             mfuts = [e.wait() for e in mevts]
             await asyncio.gather(*mfuts)
@@ -807,8 +805,16 @@ class INotifyHandler:
             old_root.clear_events()
         root_node = InotifyRootNode(self, root, root_path)
         self.watched_roots[root] = root_node
-        root_node.scan_node(notify_created=False)
+        mevts = root_node.scan_node()
         self.log_nodes()
+        IOLoop.current().spawn_callback(
+            self._notify_root_updated, mevts, root, root_path)
+
+    async def _notify_root_updated(self, mevts, root, root_path):
+        if mevts:
+            mfuts = [e.wait() for e in mevts]
+            await asyncio.gather(*mfuts)
+        self.notify_filelist_changed("root_update", root, root_path)
 
     def add_watch(self, node):
         dir_path = node.get_path()
@@ -860,8 +866,7 @@ class INotifyHandler:
         if ext == ".ufp":
             rel_path = os.path.splitext(rel_path)[0] + ".gcode"
             path_info['ufp_path'] = file_path
-        return self.gcode_metadata.parse_metadata(
-            rel_path, path_info, notify=True)
+        return self.gcode_metadata.parse_metadata(rel_path, path_info)
 
     def _handle_move_timeout(self, cookie, is_dir):
         if cookie not in self.pending_moves:
@@ -1105,14 +1110,14 @@ class MetadataStorage:
                 except Exception:
                     logging.debug(f"Error removing thumb at {thumb_path}")
 
-    def parse_metadata(self, fname, path_info, notify=False):
+    def parse_metadata(self, fname, path_info):
         mevt = Event()
         if fname in self.pending_requests or \
                 self._has_valid_data(fname, path_info):
             # request already pending or not necessary
             mevt.set()
             return mevt
-        self.pending_requests[fname] = (path_info, notify, mevt)
+        self.pending_requests[fname] = (path_info, mevt)
         if self.busy:
             return mevt
         self.busy = True
@@ -1121,7 +1126,7 @@ class MetadataStorage:
 
     async def _process_metadata_update(self):
         while self.pending_requests:
-            fname, (path_info, notify, mevt) = \
+            fname, (path_info, mevt) = \
                 self.pending_requests.popitem()
             if self._has_valid_data(fname, path_info):
                 mevt.set()
@@ -1130,7 +1135,7 @@ class MetadataStorage:
             retries = 3
             while retries:
                 try:
-                    await self._run_extract_metadata(fname, ufp_path, notify)
+                    await self._run_extract_metadata(fname, ufp_path)
                 except Exception:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
@@ -1149,7 +1154,7 @@ class MetadataStorage:
             mevt.set()
         self.busy = False
 
-    async def _run_extract_metadata(self, filename, ufp_path, notify):
+    async def _run_extract_metadata(self, filename, ufp_path):
         # Escape single quotes in the file name so that it may be
         # properly loaded
         filename = filename.replace("\"", "\\\"")
@@ -1176,9 +1181,6 @@ class MetadataStorage:
         metadata.update({'print_start_time': None, 'job_id': None})
         self.mddb[path] = dict(metadata)
         metadata['filename'] = path
-        if notify:
-            self.server.send_event(
-                "file_manager:metadata_update", metadata)
 
 def load_component(config):
     return FileManager(config)
