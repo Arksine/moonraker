@@ -424,10 +424,10 @@ class Tasmota(PowerDevice):
 
     async def _send_tasmota_command(self, command, password=None):
         if command in ["on", "off"]:
+            out_cmd = f"Power{self.output_id}%20{command}"
             if self.timer != "" and command == "off":
-                out_cmd = f"Backlog%20Delay%20{self.timer}0%3B%20Power{self.output_id}%20{command}"
+                out_cmd = f"Backlog%20Delay%20{self.timer}0%3B%20{out_cmd}"
             else:
-                out_cmd = f"Power{self.output_id}%20{command}"
         elif command == "info":
             out_cmd = f"Power{self.output_id}"
         else:
