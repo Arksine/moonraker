@@ -420,10 +420,13 @@ class Tasmota(PowerDevice):
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
         self.password = config.get("password", "")
+        self.timer = config.get("timer","")
 
     async def _send_tasmota_command(self, command, password=None):
         if command in ["on", "off"]:
             out_cmd = f"Power{self.output_id}%20{command}"
+            if self.timer != "" and command == "off":
+                out_cmd = f"Backlog%20Delay%20{self.timer}0%3B%20{out_cmd}"
         elif command == "info":
             out_cmd = f"Power{self.output_id}"
         else:
@@ -471,13 +474,14 @@ class Tasmota(PowerDevice):
     async def set_power(self, state):
         try:
             res = await self._send_tasmota_command(state)
-            try: 
-                state = res[f"POWER{self.output_id}"].lower()
-            except KeyError as e:
-                if self.output_id == 1 :
-                    state = res[f"POWER"].lower()
-                else:
-                    raise KeyError(e)
+            if self.timer == "" or state != "off":
+                try: 
+                    state = res[f"POWER{self.output_id}"].lower()
+                except KeyError as e:
+                    if self.output_id == 1 :
+                        state = res[f"POWER"].lower()
+                    else:
+                        raise KeyError(e)
         except Exception:
             self.state = "error"
             msg = f"Error Setting Device Status: {self.name} to {state}"
@@ -494,10 +498,14 @@ class Shelly(PowerDevice):
         self.output_id = config.getint("output_id", 0)
         self.user = config.get("user", "admin")
         self.password = config.get("password", "")
+        self.timer = config.get("timer","")
 
     async def _send_shelly_command(self, command):
         if command in ["on", "off"]:
-            out_cmd = f"relay/{self.output_id}?turn={command}"
+            if self.timer != "":
+                out_cmd = f"relay/{self.output_id}?turn={command}&timer={self.timer}"
+            else:
+                out_cmd = f"relay/{self.output_id}?turn={command}"
         elif command == "info":
             out_cmd = f"relay/{self.output_id}"
         else:
