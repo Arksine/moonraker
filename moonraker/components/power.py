@@ -427,7 +427,6 @@ class Tasmota(PowerDevice):
             out_cmd = f"Power{self.output_id}%20{command}"
             if self.timer != "" and command == "off":
                 out_cmd = f"Backlog%20Delay%20{self.timer}0%3B%20{out_cmd}"
-            else:
         elif command == "info":
             out_cmd = f"Power{self.output_id}"
         else:
