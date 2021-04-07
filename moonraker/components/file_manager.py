@@ -635,12 +635,15 @@ class InotifyNode:
         new_path = child_node.get_path()
         new_root = child_node.get_root()
         logging.debug(f"Moving node from '{prev_path}' to '{new_path}'")
-        # TODO: It is possible to "move" metadata rather
-        # than rescan.
-        mevts = child_node.scan_node()
-        if mevts:
-            mfuts = [e.wait() for e in mevts]
-            await asyncio.gather(*mfuts)
+        # Attempt to move metadata
+        move_success = await self.ihdlr.try_move_metadata(
+            prev_root, new_root, prev_path, new_path, is_dir=True)
+        if not move_success:
+            # Need rescan
+            mevts = child_node.scan_node()
+            if mevts:
+                mfuts = [e.wait() for e in mevts]
+                await asyncio.gather(*mfuts)
         self.ihdlr.notify_filelist_changed(
             "move_dir", new_root, new_path,
             prev_root, prev_path)
@@ -842,6 +845,30 @@ class INotifyHandler:
             else:
                 self.gcode_metadata.remove_file_metadata(rel_path)
 
+    async def try_move_metadata(self, prev_root, new_root, prev_path,
+                                new_path, is_dir=False):
+        if new_root == "gcodes":
+            if prev_root == "gcodes":
+                # moved within the gcodes root, move metadata
+                prev_rel_path = self.file_manager.get_relative_path(
+                    "gcodes", prev_path)
+                new_rel_path = self.file_manager.get_relative_path(
+                    "gcodes", new_path)
+                if is_dir:
+                    self.gcode_metadata.move_directory_metadata(
+                        prev_rel_path, new_rel_path)
+                else:
+                    self.gcode_metadata.move_file_metadata(
+                        prev_rel_path, new_rel_path)
+            else:
+                # move from a non-gcodes root to gcodes return true
+                self.clear_metadata(prev_root, prev_path, is_dir)
+                return False
+        elif prev_root == "gcodes":
+            # moved out of the gcodes root, remove metadata
+            self.clear_metadata(prev_root, prev_path, is_dir)
+        return True
+
     def log_nodes(self):
         if self.debug_enabled:
             debug_msg = f"Inotify Watches After Scan:"
@@ -874,6 +901,7 @@ class INotifyHandler:
         parent_node, name, hdl = self.pending_moves.pop(cookie)
         item_path = os.path.join(parent_node.get_path(), name)
         root = parent_node.get_root()
+        self.clear_metadata(root, item_path, is_dir)
         action = "delete_file"
         if is_dir:
             # The supplied node is a child node
@@ -887,9 +915,6 @@ class INotifyHandler:
         self.notify_filelist_changed(action, root, item_path)
 
     def _schedule_pending_move(self, evt, parent_node, is_dir):
-        item_path = os.path.join(parent_node.get_path(), evt.name)
-        root = parent_node.get_root()
-        self.clear_metadata(root, item_path, is_dir)
         hdl = IOLoop.current().call_later(
             INOTIFY_MOVE_TIME, self._handle_move_timeout,
             evt.cookie, is_dir)
@@ -983,9 +1008,6 @@ class INotifyHandler:
             logging.debug(f"Inotify file move to: {root}, "
                           f"{node_path}, {evt.name}")
             file_path = os.path.join(node_path, evt.name)
-            if root == "gcodes":
-                mevt = self.parse_gcode_metadata(file_path)
-                await mevt.wait()
             moved_evt = self.pending_moves.pop(evt.cookie, None)
             if moved_evt is not None:
                 # Moved from a currently watched directory
@@ -993,10 +1015,19 @@ class INotifyHandler:
                 IOLoop.current().remove_timeout(hdl)
                 prev_root = prev_parent.get_root()
                 prev_path = os.path.join(prev_parent.get_path(), prev_name)
+                move_success = await self.try_move_metadata(
+                    prev_root, root, prev_path, file_path)
+                if not move_success:
+                    # Unable to move, metadata needs parsing
+                    mevt = self.parse_gcode_metadata(file_path)
+                    await mevt.wait()
                 self.notify_filelist_changed(
                     "move_file", root, file_path,
                     prev_root, prev_path)
             else:
+                if root == "gcodes":
+                    mevt = self.parse_gcode_metadata(file_path)
+                    await mevt.wait()
                 self.notify_filelist_changed(
                     "create_file", root, file_path)
         elif evt.mask & iFlags.MODIFY:
@@ -1109,6 +1140,37 @@ class MetadataStorage:
                     os.remove(thumb_path)
                 except Exception:
                     logging.debug(f"Error removing thumb at {thumb_path}")
+
+    def move_directory_metadata(self, prev_dir, new_dir):
+        if prev_dir[-1] != "/":
+            prev_dir += "/"
+        for prev_fname in list(self.mddb.keys()):
+            if prev_fname.startswith(prev_dir):
+                new_fname = os.path.join(new_dir, prev_fname[len(prev_dir):])
+                self.move_file_metadata(prev_fname, new_fname, False)
+
+    def move_file_metadata(self, prev_fname, new_fname, move_thumbs=True):
+        metadata = self.mddb.pop(prev_fname, None)
+        if metadata is None:
+            return
+        self.mddb[new_fname] = metadata
+        prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
+        new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
+        if "thumbnails" in metadata and move_thumbs:
+            for thumb in metadata["thumbnails"]:
+                path = thumb.get("relative_path", None)
+                if path is None:
+                    continue
+                thumb_path = os.path.join(prev_dir, path)
+                if not os.path.isfile(thumb_path):
+                    continue
+                new_path = os.path.join(new_dir, path)
+                try:
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    shutil.move(thumb_path, new_path)
+                except Exception:
+                    logging.debug(f"Error moving thumb from {thumb_path}"
+                                  f" to {new_path}")
 
     def parse_metadata(self, fname, path_info):
         mevt = Event()
