@@ -109,6 +109,9 @@ class BaseSlicer(object):
     def parse_filament_total(self):
         return None
 
+    def parse_filament_weight_total(self):
+        return None
+
     def parse_estimated_time(self):
         return None
 
@@ -182,6 +185,10 @@ class PrusaSlicer(BaseSlicer):
     def parse_filament_total(self):
         return _regex_find_first(
             r"filament\sused\s\[mm\]\s=\s(\d+\.\d*)", self.footer_data)
+
+    def parse_filament_weight_total(self):
+        return _regex_find_first(
+            r"total\sfilament\sused\s\[g\]\s=\s(\d+\.\d*)", self.footer_data)
 
     def parse_estimated_time(self):
         time_match = re.search(
@@ -396,6 +403,10 @@ class Simplify3D(BaseSlicer):
         return _regex_find_first(
             r";\s+Filament\slength:\s(\d+\.?\d*)\smm", self.footer_data)
 
+    def parse_filament_weight_total(self):
+        return _regex_find_first(
+            r";\s+Plastic\sweight:\s(\d+\.?\d*)\sg", self.footer_data)
+
     def parse_estimated_time(self):
         time_match = re.search(
             r';\s+Build time:.*', self.footer_data)
@@ -526,6 +537,21 @@ class IdeaMaker(BaseSlicer):
             return sum(filament)
         return None
 
+    def parse_filament_weight_total(self):
+        pi = 3.141592653589793
+        length = _regex_find_floats(
+            r";Material.\d\sUsed:.*", self.footer_data, strict=True)
+        diameter = _regex_find_floats(
+            r";Filament\sDiameter\s.\d:.*", self.header_data, strict=True)
+        density = _regex_find_floats(
+            r";Filament\sDensity\s.\d:.*", self.header_data, strict=True)
+        if len(length) == len(density) == len(diameter):
+            # calc individual weight for each filament with m=pi/4*d²*l*rho
+            weights = [(pi/4 * diameter[i]**2 * length[i] * density[i]/10**6)
+                      for i in range(len(length))]
+            return sum(weights)
+        return None
+
     def parse_estimated_time(self):
         return _regex_find_first(
             r";Print\sTime:\s(\d+\.?\d*)", self.footer_data)
@@ -575,8 +601,8 @@ SUPPORTED_SLICERS = [
     Cura, Simplify3D, KISSlicer, IdeaMaker, IceSL]
 SUPPORTED_DATA = [
     'layer_height', 'first_layer_height', 'object_height',
-    'filament_total', 'estimated_time', 'thumbnails',
-    'first_layer_bed_temp', 'first_layer_extr_temp',
+    'filament_total', 'filament_weight_total', 'estimated_time',
+    'thumbnails', 'first_layer_bed_temp', 'first_layer_extr_temp',
     'gcode_start_byte', 'gcode_end_byte']
 
 def extract_metadata(file_path):
