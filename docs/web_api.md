@@ -163,6 +163,12 @@ JSON-RPC request:
     "id": 4564
 }
 ```
+
+!!! note
+    This endpoint will immediately halt the printer and put it in a "shutdown"
+    state.  It should be used to implement an "emergency stop" button and
+    also used if a user enters `M112`(emergency stop) via a console.
+
 Returns:
 
 `ok`
@@ -658,6 +664,14 @@ JSON-RPC request:
     },
     "id": 7466}
 ```
+
+!!! warning
+    When `M112`(emergency stop) is requested via this endpoint it will not
+    immediately stop the printer. `M112` will be placed on the gcode queue and
+    executed after all previous gcodes are complete.  If a client detects
+    `M112` via user input (such as a console) it should request the
+    `/printer/emergency_stop` endpoint to immediately halt the printer.  This
+    may be done in addition to sending the `M112` gcode if desired.
 
 Returns:
 
@@ -1707,6 +1721,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "owner": "Arksine",
             "version": "v0.4.1-45",
             "remote_version": "v0.4.1-45",
+            "full_version_string": "v0.4.1-45-g7e230c1c",
             "current_hash": "7e230c1c77fa406741ab99fb9156951c4e5c9cb4",
             "remote_hash": "7e230c1c77fa406741ab99fb9156951c4e5c9cb4",
             "is_dirty": false,
@@ -1733,6 +1748,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "owner": "KevinOConnor",
             "version": "v0.9.1-317",
             "remote_version": "v0.9.1-324",
+            "full_version_string": "v0.9.1-324-gd77928b1",
             "current_hash": "d77928b17ba6b32189033b3d6decdb5bcc7c342c",
             "remote_hash": "22753f3b389e3f21a6047bac70abc42b6cf4a7dc",
             "is_dirty": false,
@@ -1783,8 +1799,9 @@ as git repos have the following fields:
     be "master".
 - `remote_alias`: the alias for the remote.  This should typically be
     "origin".
-- `version`:  version of the current repo on disk
-- `remote_version`: version of the latest available update
+- `version`:  abbreviated version of the current repo on disk
+- `remote_version`: abbreviated version of the latest available update
+- `full_version_string`:  The complete version string of the current repo.
 - `current_hash`: hash of the most recent commit on disk
 - `remote_hash`: hash of the most recent commit pushed to the remote
 - `is_valid`: true if installation is a valid git repo on the master branch
