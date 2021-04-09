@@ -830,6 +830,7 @@ class GitRepo:
         self.current_commit = "?"
         self.upstream_commit = "?"
         self.upstream_url = "?"
+        self.full_version_string = "?"
         self.branches = []
         self.dirty = False
         self.head_detached = False
@@ -885,6 +886,7 @@ class GitRepo:
                 f"{self.git_remote}/{self.git_branch}")
             current_version = await self.describe(
                 "--always --tags --long --dirty")
+            self.full_version_string = current_version.strip()
             upstream_version = await self.describe(
                 f"{self.git_remote}/{self.git_branch} "
                 "--always --tags --long")
@@ -1185,7 +1187,8 @@ class GitRepo:
             'is_dirty': self.dirty,
             'detached': self.head_detached,
             'commits_behind': self.commits_behind,
-            'git_messages': self.git_messages
+            'git_messages': self.git_messages,
+            'full_version_string': self.full_version_string
         }
 
     def get_version(self, upstream=False):
