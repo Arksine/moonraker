@@ -138,7 +138,7 @@ class Server:
 
         # check for optional components
         opt_sections = set([s.split()[0] for s in config.sections()]) - \
-            set(['server', 'authorization', 'system_args'])
+            set(['server', 'system_args'])
         for section in opt_sections:
             self.load_component(config, section, None)
 

@@ -259,7 +259,7 @@ class WebsocketManager:
 class WebSocket(WebSocketHandler):
     def initialize(self):
         app = self.settings['parent']
-        self.auth = app.get_auth()
+        self.server = app.get_server()
         self.wsm = app.get_websocket_manager()
         self.rpc = self.wsm.rpc
         self.uid = id(self)
@@ -303,9 +303,14 @@ class WebSocket(WebSocketHandler):
 
     def check_origin(self, origin):
         if not super(WebSocket, self).check_origin(origin):
-            return self.auth.check_cors(origin)
+            auth = self.server.lookup_component('authorization', None)
+            if auth is not None:
+                return auth.check_cors(origin)
+            return False
         return True
+
     # Check Authorized User
     def prepare(self):
-        if not self.auth.check_authorized(self.request):
+        auth = self.server.lookup_component('authorization', None)
+        if auth is not None and not auth.check_authorized(self.request):
             raise tornado.web.HTTPError(401, "Unauthorized")
