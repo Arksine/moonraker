@@ -521,7 +521,7 @@ class IdeaMaker(BaseSlicer):
 
     def parse_filament_total(self):
         filament = _regex_find_floats(
-            r";Material.\d\sUsed:.*", self.header_data, strict=True)
+            r";Material.\d\sUsed:.*", self.footer_data, strict=True)
         if filament:
             return sum(filament)
         return None
