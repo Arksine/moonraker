@@ -430,11 +430,12 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
     async def _do_local_request(self, args, conn):
         return await self.callback(
             WebRequest(self.request.path, args, self.request.method,
-                       conn=conn))
+                       conn=conn, ip_addr=self.request.remote_ip))
 
     async def _do_remote_request(self, args, conn):
         return await self.server.make_request(
-            WebRequest(self.callback, args, conn=conn))
+            WebRequest(self.callback, args, conn=conn,
+                       ip_addr=self.request.remote_ip))
 
     async def _process_http_request(self):
         if self.request.method not in self.methods:

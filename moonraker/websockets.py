@@ -15,11 +15,13 @@ class Sentinel:
     pass
 
 class WebRequest:
-    def __init__(self, endpoint, args, action="", conn=None):
+    def __init__(self, endpoint, args, action="",
+                 conn=None, ip_addr=""):
         self.endpoint = endpoint
         self.action = action
         self.args = args
         self.conn = conn
+        self.ip_addr = ip_addr
 
     def get_endpoint(self):
         return self.endpoint
@@ -32,6 +34,9 @@ class WebRequest:
 
     def get_connection(self):
         return self.conn
+
+    def get_ip_address(self):
+        return self.ip_addr
 
     def _get_converted_arg(self, key, default=Sentinel, dtype=str):
         if key not in self.args:
@@ -202,14 +207,15 @@ class WebsocketManager:
     def _generate_callback(self, endpoint):
         async def func(ws, **kwargs):
             result = await self.server.make_request(
-                WebRequest(endpoint, kwargs, conn=ws))
+                WebRequest(endpoint, kwargs, conn=ws, ip_addr=ws.ip_addr))
             return result
         return func
 
     def _generate_local_callback(self, endpoint, request_method, callback):
         async def func(ws, **kwargs):
             result = await callback(
-                WebRequest(endpoint, kwargs, request_method, ws))
+                WebRequest(endpoint, kwargs, request_method,
+                           ws, ip_addr=ws.ip_addr))
             return result
         return func
 
@@ -264,6 +270,7 @@ class WebSocket(WebSocketHandler):
         self.rpc = self.wsm.rpc
         self.uid = id(self)
         self.is_closed = False
+        self.ip_addr = self.request.remote_ip
 
     async def open(self):
         await self.wsm.add_websocket(self)
