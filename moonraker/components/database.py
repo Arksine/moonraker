@@ -68,8 +68,13 @@ class MoonrakerDatabase:
                 txn.put(b'database_version',
                         self._encode_value(DATABASE_VERSION),
                         db=mrdb)
+        # Protected Namespaces have read-only API access.  Write access can
+        # be granted by enabling the debug option.  Forbidden namespaces
+        # have no API access.  This cannot be overridden.
         self.protected_namespaces = set(self.get_item(
             "moonraker", "database.protected_namespaces", ["moonraker"]))
+        self.forbidden_namespaces = set(self.get_item(
+            "moonraker", "database.forbidden_namespaces", []))
         debug_counter = self.get_item("moonraker", "database.debug_counter", 0)
         if self.enable_debug:
             debug_counter += 1
@@ -199,11 +204,17 @@ class MoonrakerDatabase:
             return False
         return True
 
-    def register_local_namespace(self, namespace):
+    def register_local_namespace(self, namespace, forbidden=False):
         if namespace not in self.namespaces:
             self.namespaces[namespace] = self.lmdb_env.open_db(
                 namespace.encode())
-        if namespace not in self.protected_namespaces:
+        if forbidden:
+            if namespace not in self.forbidden_namespaces:
+                self.forbidden_namespaces.add(namespace)
+                self.insert_item(
+                    "moonraker", "database.forbidden_namespaces",
+                    list(self.forbidden_namespaces))
+        elif namespace not in self.protected_namespaces:
             self.protected_namespaces.add(namespace)
             self.insert_item("moonraker", "database.protected_namespaces",
                              list(self.protected_namespaces))
@@ -280,11 +291,16 @@ class MoonrakerDatabase:
     async def _handle_item_request(self, web_request):
         action = web_request.get_action()
         namespace = web_request.get_str("namespace")
+        if namespace in self.forbidden_namespaces:
+            raise self.server.error(
+                f"Read/Write access to namespace '{namespace}'"
+                " is forbidden", 403)
         if action != "GET":
             if namespace in self.protected_namespaces and \
                     not self.enable_debug:
                 raise self.server.error(
-                    f"Namespace '{namespace}' is write protected")
+                    f"Write access to namespaces '{namespace}'"
+                    " is forbidden", 403)
             key = web_request.get("key")
             valid_types = (list, str)
         else:
