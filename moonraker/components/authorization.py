@@ -20,9 +20,13 @@ PRUNE_CHECK_TIME = 300 * 1000
 class Authorization:
     def __init__(self, config):
         self.server = config.get_server()
-        api_key_file = config.get('api_key_file', "~/.moonraker_api_key")
-        self.api_key_file = os.path.expanduser(api_key_file)
-        self.api_key = self._read_api_key()
+        database = self.server.lookup_component('database')
+        database.register_local_namespace('authorization', forbidden=True)
+        self.auth_db = database.wrap_namespace('authorization')
+        self.api_key = self.auth_db.get('api_key', None)
+        if self.api_key is None:
+            self.api_key = uuid.uuid4().hex
+            self.auth_db['api_key'] = self.api_key
         self.trusted_connections = {}
         self.access_tokens = {}
 
@@ -87,29 +91,12 @@ class Authorization:
     async def _handle_apikey_request(self, web_request):
         action = web_request.get_action()
         if action.upper() == 'POST':
-            self.api_key = self._create_api_key()
+            self.api_key = uuid.uuid4().hex
+            self.auth_db['api_key'] = self.api_key
         return self.api_key
 
     async def _handle_token_request(self, web_request):
         return self.get_access_token()
-
-    def _read_api_key(self):
-        if os.path.exists(self.api_key_file):
-            with open(self.api_key_file, 'r') as f:
-                api_key = f.read()
-            return api_key
-        # API Key file doesn't exist.  Generate
-        # a new api key and create the file.
-        logging.info(
-            f"No API Key file found, creating new one at:"
-            f"\n{self.api_key_file}")
-        return self._create_api_key()
-
-    def _create_api_key(self):
-        api_key = uuid.uuid4().hex
-        with open(self.api_key_file, 'w') as f:
-            f.write(api_key)
-        return api_key
 
     def _check_authorized_ip(self, ip):
         if ip in self.trusted_ips:
