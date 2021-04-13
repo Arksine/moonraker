@@ -282,6 +282,17 @@ class Slic3r(Slic3rPE):
             }
         return None
 
+    def parse_filament_total(self):
+        filament = _regex_find_first(
+            r";\sfilament\_length\_m\s=\s(\d+\.\d*)", self.footer_data)
+        if filament is not None:
+            filament *= 1000
+        return filament
+
+    def parse_filament_weight_total(self):
+        return _regex_find_first(
+            r";\sfilament\smass\_g\s=\s(\d+\.\d*)", self.footer_data)
+
     def parse_estimated_time(self):
         return None
 
