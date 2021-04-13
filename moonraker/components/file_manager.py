@@ -510,7 +510,10 @@ class FileManager:
             # Filter out directories that have already been visted. This
             # prevents infinite recrusion "followlinks" is set to True
             for dname in dir_names:
-                st = os.stat(os.path.join(dir_path, dname))
+                full_path = os.path.join(dir_path, dname)
+                if not os.path.exists(full_path):
+                    continue
+                st = os.stat(full_path)
                 key = (st.st_dev, st.st_ino)
                 if key not in visited_dirs:
                     visited_dirs.add(key)
@@ -527,6 +530,8 @@ class FileManager:
                     except Exception:
                         logging.exception("Error processing ufp file")
                         continue
+                if not os.path.exists(full_path):
+                    continue
                 fname = full_path[len(path) + 1:]
                 finfo = self._get_path_info(full_path)
                 filelist[fname] = finfo
