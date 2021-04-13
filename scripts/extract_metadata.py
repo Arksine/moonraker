@@ -323,6 +323,10 @@ class Cura(PrusaSlicer):
             filament *= 1000
         return filament
 
+    def parse_filament_weight_total(self):
+        return _regex_find_first(
+            r";Filament\sweight\s=\s.(\d+\.\d+).", self.header_data)
+
     def parse_estimated_time(self):
         return self._parse_max_float(r";TIME:.*", self.header_data)
 
