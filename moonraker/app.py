@@ -9,6 +9,7 @@ import mimetypes
 import logging
 import json
 import datetime
+import traceback
 import tornado
 import tornado.iostream
 import tornado.httputil
@@ -299,6 +300,13 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
                 conn = wsm.get_websocket(conn_id)
         return conn
 
+    def write_error(self, status_code, **kwargs):
+        err = {'code': status_code, 'message': self._reason}
+        if 'exc_info' in kwargs:
+            err['traceback'] = "\n".join(
+                traceback.format_exception(*kwargs['exc_info']))
+        self.finish({'error': err})
+
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files
 class AuthorizedFileHandler(tornado.web.StaticFileHandler):
@@ -328,6 +336,13 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
             self.finish()
         else:
             super(AuthorizedFileHandler, self).options()
+
+    def write_error(self, status_code, **kwargs):
+        err = {'code': status_code, 'message': self._reason}
+        if 'exc_info' in kwargs:
+            err['traceback'] = "\n".join(
+                traceback.format_exception(*kwargs['exc_info']))
+        self.finish({'error': err})
 
 class DynamicRequestHandler(AuthorizedRequestHandler):
     def initialize(self, callback, methods, need_object_parser=False,
@@ -624,3 +639,10 @@ class AuthorizedErrorHandler(AuthorizedRequestHandler):
 
     def check_xsrf_cookie(self):
         pass
+
+    def write_error(self, status_code, **kwargs):
+        err = {'code': status_code, 'message': self._reason}
+        if 'exc_info' in kwargs:
+            err['traceback'] = "\n".join(
+                traceback.format_exception(*kwargs['exc_info']))
+        self.finish({'error': err})
