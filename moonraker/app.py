@@ -274,8 +274,8 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
 
     def prepare(self):
         auth = self.server.lookup_component('authorization', None)
-        if auth is not None and not auth.check_authorized(self.request):
-            raise tornado.web.HTTPError(401, "Unauthorized")
+        if auth is not None:
+            self.current_user = auth.check_authorized(self.request)
 
     def options(self, *args, **kwargs):
         # Enable CORS if configured
@@ -326,8 +326,8 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
 
     def prepare(self):
         auth = self.server.lookup_component('authorization', None)
-        if auth is not None and not auth.check_authorized(self.request):
-            raise tornado.web.HTTPError(401, "Unauthorized")
+        if auth is not None:
+            self.current_user = auth.check_authorized(self.request)
 
     def options(self, *args, **kwargs):
         # Enable CORS if configured
@@ -430,12 +430,14 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
     async def _do_local_request(self, args, conn):
         return await self.callback(
             WebRequest(self.request.path, args, self.request.method,
-                       conn=conn, ip_addr=self.request.remote_ip))
+                       conn=conn, ip_addr=self.request.remote_ip,
+                       user=self.current_user))
 
     async def _do_remote_request(self, args, conn):
         return await self.server.make_request(
             WebRequest(self.callback, args, conn=conn,
-                       ip_addr=self.request.remote_ip))
+                       ip_addr=self.request.remote_ip,
+                       user=self.current_user))
 
     async def _process_http_request(self):
         if self.request.method not in self.methods:

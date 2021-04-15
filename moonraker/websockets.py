@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 import logging
+import ipaddress
 import tornado
 import json
 from tornado.ioloop import IOLoop
@@ -16,12 +17,16 @@ class Sentinel:
 
 class WebRequest:
     def __init__(self, endpoint, args, action="",
-                 conn=None, ip_addr=""):
+                 conn=None, ip_addr="", user=None):
         self.endpoint = endpoint
         self.action = action
         self.args = args
         self.conn = conn
-        self.ip_addr = ip_addr
+        try:
+            self.ip_addr = ipaddress.ip_address(ip_addr)
+        except Exception:
+            self.ip_addr = None
+        self.current_user = user
 
     def get_endpoint(self):
         return self.endpoint
@@ -37,6 +42,9 @@ class WebRequest:
 
     def get_ip_address(self):
         return self.ip_addr
+
+    def get_current_user(self):
+        return self.current_user
 
     def _get_converted_arg(self, key, default=Sentinel, dtype=str):
         if key not in self.args:
@@ -207,15 +215,16 @@ class WebsocketManager:
     def _generate_callback(self, endpoint):
         async def func(ws, **kwargs):
             result = await self.server.make_request(
-                WebRequest(endpoint, kwargs, conn=ws, ip_addr=ws.ip_addr))
+                WebRequest(endpoint, kwargs, conn=ws, ip_addr=ws.ip_addr,
+                           user=ws.current_user))
             return result
         return func
 
     def _generate_local_callback(self, endpoint, request_method, callback):
         async def func(ws, **kwargs):
             result = await callback(
-                WebRequest(endpoint, kwargs, request_method,
-                           ws, ip_addr=ws.ip_addr))
+                WebRequest(endpoint, kwargs, request_method, ws,
+                           ip_addr=ws.ip_addr, user=ws.current_user))
             return result
         return func
 
@@ -319,5 +328,5 @@ class WebSocket(WebSocketHandler):
     # Check Authorized User
     def prepare(self):
         auth = self.server.lookup_component('authorization', None)
-        if auth is not None and not auth.check_authorized(self.request):
-            raise tornado.web.HTTPError(401, "Unauthorized")
+        if auth is not None:
+            self.current_user = auth.check_authorized(self.request)
