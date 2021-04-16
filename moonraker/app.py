@@ -391,6 +391,10 @@ class FileRequestHandler(AuthorizedFileHandler):
                 raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
 
+    def should_return_304(self):
+        # Disable file caching
+        return False
+
 @tornado.web.stream_request_body
 class FileUploadHandler(AuthorizedRequestHandler):
     def initialize(self, max_upload_size):
