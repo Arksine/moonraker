@@ -8,6 +8,7 @@ import os
 import mimetypes
 import logging
 import json
+import datetime
 import tornado
 import tornado.iostream
 import tornado.httputil
@@ -479,9 +480,32 @@ class FileRequestHandler(AuthorizedFileHandler):
         else:
             assert self.request.method == "HEAD"
 
-    def should_return_304(self):
-        # Disable file caching
-        return False
+    @classmethod
+    def _get_cached_version(cls, abs_path: str):
+        with cls._lock:
+            hashes = cls._static_hashes
+            try:
+                mtime = datetime.datetime.fromtimestamp(
+                    os.path.getmtime(abs_path), tz=datetime.timezone.utc)
+            except Exception:
+                logging.exception(
+                    f"Unable to get modified time for file: {abs_path}")
+                hashes.pop(abs_path, None)
+                return None
+            if abs_path not in hashes or mtime != hashes[abs_path]['modified']:
+                try:
+                    hashes[abs_path] = {
+                        'modified': mtime,
+                        'hash': cls.get_content_version(abs_path)
+                    }
+                except Exception:
+                    logging.exception(f"Could not open static file {abs_path}")
+                    hashes.pop(abs_path, None)
+                    return None
+            hsh = hashes.get(abs_path, {}).get('hash')
+            if hsh:
+                return hsh
+        return None
 
 @tornado.web.stream_request_body
 class FileUploadHandler(AuthorizedRequestHandler):
