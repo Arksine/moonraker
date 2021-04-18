@@ -211,6 +211,9 @@ class Server:
     def get_klippy_info(self):
         return dict(self.klippy_info)
 
+    def get_klippy_state(self):
+        return self.klippy_state
+
     # ***** Klippy Connection *****
     async def _connect_klippy(self):
         if not self.server_running:

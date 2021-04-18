@@ -28,12 +28,15 @@ class OctoprintCompat:
         self.software_version = config['system_args'].get('software_version')
 
         # Local variables
-        self.klippy_apis = None
-        self.heaters = []
+        self.klippy_apis = self.server.lookup_component('klippy_apis')
+        self.heaters = {}
+        self.last_print_stats = {}
 
         # Register status update event
         self.server.register_event_handler(
             'server:klippy_ready', self._init)
+        self.server.register_event_handler(
+            'server:status_update', self._handle_status_update)
 
         # Version & Server information
         self.server.register_endpoint(
@@ -76,55 +79,59 @@ class OctoprintCompat:
         # TODO: shutdown/reboot/restart operations
 
     async def _init(self):
-        self.klippy_apis = self.server.lookup_component('klippy_apis')
+        self.heaters = {}
         # Fetch heaters
         try:
             result = await self.klippy_apis.query_objects({'heaters': None})
+            sensors = result.get('heaters', {}).get('available_sensors', [])
         except self.server.error as e:
             logging.info(f'Error Configuring heaters: {e}')
-            return
-        self.heaters = result.get('heaters', {}).get('available_sensors', [])
+            sensors = []
+        # subscribe objects
+        sub = {s: None for s in sensors}
+        sub['print_stats'] = None
+        result = await self.klippy_apis.subscribe_objects(sub)
+        self.last_print_stats = result.get('print_stats', {})
+        if sensors:
+            self.heaters = {name: result.get(name, {}) for name in sensors}
 
-    async def printer_state(self):
-        if not self.klippy_apis:
+    def _handle_status_update(self, status):
+        if 'print_stats' in status:
+            self.last_print_stats.update(status['print_stats'])
+        for heater_name, data in self.heaters.items():
+            if heater_name in status:
+                data.update(status[heater_name])
+
+    def printer_state(self):
+        klippy_state = self.server.get_klippy_state()
+        if klippy_state in ["disconnected", "startup"]:
             return 'Offline'
-        klippy_state = self.server.get_klippy_info().get('state')
-        if klippy_state != 'ready':
+        elif klippy_state != 'ready':
             return 'Error'
-        result = await self.klippy_apis.query_objects({'print_stats': None})
-        pstats = result.get('print_stats', {})
         return {
             'standby': 'Operational',
             'printing': 'Printing',
             'paused': 'Paused',
             'complete': 'Operational'
-        }.get(pstats.get('state', 'standby'), 'Error')
+        }.get(self.last_print_stats.get('state', 'standby'), 'Error')
 
-    async def printer_temps(self):
+    def printer_temps(self):
         temps = {}
-        if not self.klippy_apis:
-            return temps
-        if self.heaters:
-            result = await self.klippy_apis.query_objects(
-                {heater: None for heater in self.heaters})
-            for heater in self.heaters:
-                if heater not in result:
-                    continue
-                data = result[heater]
-                name = 'bed'
-                if heater.startswith('extruder'):
-                    try:
-                        tool_no = int(heater[8:])
-                    except ValueError:
-                        tool_no = 0
-                    name = f'tool{tool_no}'
-                elif heater != "heater_bed":
-                    continue
-                temps[name] = {
-                    'actual': round(data.get('temperature', 0.), 2),
-                    'offset': 0,
-                    'target': data.get('target', 0.),
-                }
+        for heater, data in self.heaters.items():
+            name = 'bed'
+            if heater.startswith('extruder'):
+                try:
+                    tool_no = int(heater[8:])
+                except ValueError:
+                    tool_no = 0
+                name = f'tool{tool_no}'
+            elif heater != "heater_bed":
+                continue
+            temps[name] = {
+                'actual': round(data.get('temperature', 0.), 2),
+                'offset': 0,
+                'target': data.get('target', 0.),
+            }
         return temps
 
     async def _get_version(self, web_request):
@@ -141,7 +148,7 @@ class OctoprintCompat:
         """
         Server status
         """
-        klippy_state = self.server.get_klippy_info().get('state')
+        klippy_state = self.server.get_klippy_state()
         return {
             'server': OCTO_VERSION,
             'safemode': (
@@ -220,16 +227,16 @@ class OctoprintCompat:
                 'printTimeLeft': None,
                 'printTimeOrigin': None,
             },
-            'state': await self.printer_state()
+            'state': self.printer_state()
         }
 
     async def _get_printer(self, web_request):
         """
         Get Printer status
         """
-        state = await self.printer_state()
+        state = self.printer_state()
         return {
-            'temperature': await self.printer_temps(),
+            'temperature': self.printer_temps(),
             'state': {
                 'text': state,
                 'flags': {
