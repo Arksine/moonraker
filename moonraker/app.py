@@ -92,19 +92,19 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
-        debug = config.getboolean('enable_debug_logging', False)
-        log_level = logging.DEBUG if debug else logging.INFO
+
+        self.debug = config.getboolean('enable_debug_logging', False)
+        log_level = logging.DEBUG if self.debug else logging.INFO
         logging.getLogger().setLevel(log_level)
         app_args = {
-            'serve_traceback': debug,
+            'serve_traceback': self.debug,
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
             'parent': self,
             'default_handler_class': AuthorizedErrorHandler,
-            'default_handler_args': {}
+            'default_handler_args': {},
+            'log_function': self.log_request
         }
-        if not debug:
-            app_args['log_function'] = self.log_release_mode
 
         # Set up HTTP only requests
         self.mutable_router = MutableRouter(self)
@@ -127,10 +127,10 @@ class MoonrakerApp:
             port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
 
-    def log_release_mode(self, handler):
+    def log_request(self, handler):
         status_code = handler.get_status()
-        if status_code in [200, 204]:
-            # don't log OK and No Content
+        if not self.debug and status_code in [200, 204, 206, 304]:
+            # don't log successful requests in release mode
             return
         if status_code < 400:
             log_method = access_log.info
@@ -139,8 +139,13 @@ class MoonrakerApp:
         else:
             log_method = access_log.error
         request_time = 1000.0 * handler.request.request_time()
-        log_method("%d %s %.2fms", status_code,
-                   handler._request_summary(), request_time)
+        user = handler.current_user
+        username = "No User"
+        if user is not None and 'username' in user:
+            username = user['username']
+        log_method(
+            f"{status_code} {handler._request_summary()} "
+            f"[{username}] {request_time:.2f}ms")
 
     def get_server(self):
         return self.server
