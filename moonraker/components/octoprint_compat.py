@@ -88,15 +88,17 @@ class OctoprintCompat:
     async def printer_state(self):
         if not self.klippy_apis:
             return 'Offline'
-        if self.server.klippy_state != 'ready':
+        klippy_state = self.server.get_klippy_info().get('state')
+        if klippy_state != 'ready':
             return 'Error'
         result = await self.klippy_apis.query_objects({'print_stats': None})
+        pstats = result.get('print_stats', {})
         return {
             'standby': 'Operational',
             'printing': 'Printing',
             'paused': 'Paused',
             'complete': 'Operational'
-        }.get(result.get('state', 'standby'), 'Error')
+        }.get(pstats.get('state', 'standby'), 'Error')
 
     async def printer_temps(self):
         temps = {}
@@ -139,10 +141,11 @@ class OctoprintCompat:
         """
         Server status
         """
+        klippy_state = self.server.get_klippy_info().get('state')
         return {
             'server': OCTO_VERSION,
             'safemode': (
-                None if self.server.klippy_state == 'ready' else 'settings')
+                None if klippy_state == 'ready' else 'settings')
         }
 
     async def _post_login_user(self, web_request):
