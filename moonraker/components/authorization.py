@@ -487,7 +487,8 @@ class Authorization:
         request.set_header(
             "Access-Control-Allow-Headers",
             "Origin, Accept, Content-Type, X-Requested-With, "
-            "X-CRSF-Token")
+            "X-CRSF-Token, Authorization, X-Access-Token, "
+            "X-Api-Key")
 
     def close(self):
         self.prune_handler.stop()
