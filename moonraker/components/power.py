@@ -507,7 +507,7 @@ class Shelly(PowerDevice):
             if self.timer != "":
                 out_cmd = f"relay/{self.output_id}?turn=on&timer={self.timer}"
             else:
-                out_cmd = f"relay/{self.output_id}?turn={command}&timer={self.timer}"
+                out_cmd = f"relay/{self.output_id}?turn={command}"
         elif command == "info":
             out_cmd = f"relay/{self.output_id}"
         else:
