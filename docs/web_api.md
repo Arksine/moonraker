@@ -1347,22 +1347,35 @@ below.
 HTTP request:
 ```http
 POST /server/files/upload`
+Content-Type: multipart/form-data
+
+------FormBoundaryemap3PkuvKX0B3HH
+Content-Disposition: form-data; name="file"; filename="myfile.gcode"
+Content-Type: application/octet-stream
+
+<binary data>
+------FormBoundaryemap3PkuvKX0B3HH--
 ```
 
 The file must be uploaded in the request's body `multipart/form-data` (ie:
-`<input type="file">`).  The following fields may also be added to the form:
+`<input type="file">`).  The following arguments may also be added to the
+form-data:
 
 - `root`: The root location in which to upload the file.  Currently this may
-be `gcodes` or `config`.  If not specified the default is `gcodes`.
+  be `gcodes` or `config`.  If not specified the default is `gcodes`.
 - `path`: This argument may contain a path (relative to the root) indicating
-a subdirectory to which the file is written. If a `path` is present the
-server will attempt to create any subdirectories that do not exist.
+  a subdirectory to which the file is written. If a `path` is present the
+  server will attempt to create any subdirectories that do not exist.
+- `checksum`: A SHA256 hex digest calculated by the client for the uploaded
+  file.  If this argument is supplied the server will compare it to its own
+  checksum calculation after the upload has completed.  A checksum mismatch
+  will result in a 422 error.
 
 Arguments available only for the `gcodes` root:
 
 - `print`: If set to "true", Klippy will attempt to start the print after
-uploading.  Note that this value should be a string type, not boolean. This
-provides compatibility with Octoprint's legacy upload API.
+  uploading.  Note that this value should be a string type, not boolean. This
+  provides compatibility with Octoprint's legacy upload API.
 
 JSON-RPC request: Not Available
 
