@@ -602,6 +602,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
         self.max_upload_size = max_upload_size
 
     def prepare(self):
+        super(FileUploadHandler, self).prepare()
         if self.request.method == "POST":
             self.request.connection.set_max_body_size(self.max_upload_size)
             tmpname = self.file_manager.gen_temp_upload_path()
