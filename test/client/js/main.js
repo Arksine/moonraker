@@ -300,6 +300,29 @@ function process_mesh(result) {
     console.log("Processed Mesh Coordinates:");
     console.log(coordinates);
 }
+
+async function calculate_checksum(file) {
+    let done_promise = new Promise((resolve, reject) => {
+        let reader = file.stream().getReader();
+        let hash = SHA256.createHash();
+        reader.read().then(function read_file({done, value}) {
+            if (done) {
+                resolve(hash.digest("hex"));
+                return;
+            }
+            hash.update(value);
+            return reader.read().then(read_file)
+        });
+    })
+    let checksum = await done_promise;
+    if (checksum == null) {
+        console.log("Unable to calculate checksum for file")
+        return null;
+    } else {
+        console.log(`Calculated Checksum: ${checksum}`)
+        return checksum;
+    }
+}
 //***********End UI Update Functions****************/
 
 //***********Websocket-Klipper API Functions (JSON-RPC)************/
@@ -1701,7 +1724,7 @@ window.onload = () => {
     });
 
     // Uploads a selected file to the server
-    $('#upload-file').change(() => {
+    $('#upload-file').change(async () => {
         update_progress(0, 100);
         let file = $('#upload-file').prop('files')[0];
         let dir = get_selected_item("dir");
@@ -1712,6 +1735,8 @@ window.onload = () => {
             let root = dir[0];
             let directory = dir.slice(1).join("/");
             console.log("Sending Upload Request...");
+            // First, calculate the file checksum
+            let chksum = await calculate_checksum(file);
             // It might not be a bad idea to validate that this is
             // a gcode file here, and reject and other files.
 
@@ -1723,6 +1748,8 @@ window.onload = () => {
             fdata.append("file", file);
             fdata.append("root", root);
             fdata.append("path", directory);
+            if (chksum != null)
+                fdata.append("checksum", chksum);
             let settings = {
                 url: origin + api.upload.url,
                 data: fdata,
