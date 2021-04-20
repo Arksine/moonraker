@@ -20,7 +20,7 @@ from tornado.log import access_log
 from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from streaming_form_data import StreamingFormDataParser
-from streaming_form_data.targets import FileTarget, ValueTarget
+from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
@@ -609,10 +609,13 @@ class FileUploadHandler(AuthorizedRequestHandler):
                 'root': ValueTarget(),
                 'print': ValueTarget(),
                 'path': ValueTarget(),
+                'checksum': ValueTarget(),
             }
             self._file = FileTarget(tmpname)
+            self._sha256_target = SHA256Target()
             self._parser = StreamingFormDataParser(self.request.headers)
             self._parser.register('file', self._file)
+            self._parser.register('file', self._sha256_target)
             for name, target in self._targets.items():
                 self._parser.register(name, target)
 
@@ -622,6 +625,20 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
     async def post(self):
         form_args = {}
+        chk_target = self._targets.pop('checksum')
+        calc_chksum = self._sha256_target.value.lower()
+        if chk_target.value:
+            # Validate checksum
+            recd_cksum = chk_target.value.decode().lower()
+            if calc_chksum != recd_cksum:
+                # remove temporary file
+                try:
+                    os.remove(self._file.filename)
+                except Exception:
+                    pass
+                raise self.server.error(
+                    f"File checksum mismatch: expected {recd_cksum}, "
+                    f"calculated {calc_chksum}", 422)
         for name, target in self._targets.items():
             if target.value:
                 form_args[name] = target.value.decode()
@@ -630,6 +647,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
         debug_msg = "\nFile Upload Arguments:"
         for name, value in form_args.items():
             debug_msg += f"\n{name}: {value}"
+        debug_msg += f"\nChecksum: {calc_chksum}"
         logging.debug(debug_msg)
         try:
             result = await self.file_manager.finalize_upload(form_args)
