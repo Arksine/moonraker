@@ -286,7 +286,8 @@ class MoonrakerDatabase:
                 f"Error decoding value {bvalue}, format: {chr(fmt)}")
 
     async def _handle_list_request(self, web_request):
-        return {'namespaces': list(self.namespaces.keys())}
+        ns_list = set(self.namespaces.keys()) - self.forbidden_namespaces
+        return {'namespaces': list(ns_list)}
 
     async def _handle_item_request(self, web_request):
         action = web_request.get_action()
