@@ -213,8 +213,11 @@ address:
 port:
 #   The above options are used for "tplink_smartplug" devices.  The
 #   address should be a valid ip or hostname for the tplink device.
-#   The port should be the port the device is configured to use.  The
-#   address must be provided. The port defaults to 9999.
+#   The port should be the port the device is configured to use.
+#   "Power Strips" can be controlled by including the socket index
+#   in the ip address.  For example, to control socket index 1:
+#     192.168.1.127/1
+#    The address must be provided. The port defaults to 9999.
 address:
 password:
 output_id:
