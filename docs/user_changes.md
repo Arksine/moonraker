@@ -2,6 +2,19 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### April 19th 2021
+- The `[authorization]` module is now a component, thus is only
+  loaded if the user has it configured in `moonraker.conf`.  This
+  deprecates the previous `enable` option, as it is enabled
+  if configured and disabled otherwise.
+- The API Key is now stored in the database.  This deprecates the
+  `api_key_file` option in the `[authorization]` module.  Users can
+  no longer read the contents of the API Key file to retreive the
+  API Key.  Instead, users can run `scripts/fetch-apikey.sh` to
+  print the API Key.  Alternative a user can navigate to
+  `http://{moonraker-host}/access/api_key` from a trusted client
+  to retreive the API Key.
+
 ### March 10th 2021
 - The `cors_domain` option in the `[authoriztion]` section is now
   checked for dangerous entries.  If a domain entry contains a

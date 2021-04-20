@@ -178,6 +178,29 @@ These options may be changed by editing
 `/etc/systemd/system/moonraker.service`.  The `install-moonraker.sh` script
 may also be used to modify the config file location.
 
+### Retreiving the API Key
+
+Some clients may require an API Key to connect to Moonraker.  After the
+`[authorization]` component is first configured Moonraker will automatically
+generate an API Key.  There are two ways in which the key may be retreived
+by the user:
+
+Retreive the API Key via the command line (SSH):
+```
+cd ~/moonraker/scripts
+./fetch-apikey.sh
+```
+
+Retreive the API Key via the browser from a trusted client:
+
+- Navigate to `http://{moonraker-host}/access/api_key`, where
+  `{moonraker-host}` is the host name or ip address of the desired
+  moonraker instance.
+- The result will appear in the browser window in JSON format. Copy
+  The API Key without the quotes.
+
+        {"result": "8ce6ae5d354a4365812b83140ed62e4b"}
+
 ### Additional Notes
 
 - Make sure that Moonraker and Klipper both have read and write access to the

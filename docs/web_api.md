@@ -1431,9 +1431,209 @@ The requested file
 
 ### Authorization
 
-Untrusted Clients must use a key to access the API by including it in the
-`X-Api-Key` header for each HTTP Request.  The APIs below allow authorized
-clients to request or modify the current API Key.
+The Authorization endpoints are enabled when the user has the
+`[authorization]` component configured in `moonraker.conf`.
+
+Untrusted clients must use either a JSON Web Token or an API key to access
+Moonraker's HTTP APIs.  JWTs should be included in the `Authorization`
+header as a `Bearer` type for each HTTP request.  If using an API Key it
+should be included in the `X-Api-Key` header for each HTTP Request.
+
+!!! warning
+    Clients should not use the query string to pass arguments to these
+    APIs.  Arguments may be passed as part of the body either in JSON
+    format or as form-data.
+
+#### Login User
+HTTP Request:
+```http
+POST /access/login
+Content-Type: application/json
+
+{
+    "username": "my_user",
+    "password": "my_password"
+}
+```
+JSON-RPC request: Not Available
+
+Returns: An object the logged in username, auth token, refresh token,
+and action summary:
+```json
+{
+    "username": "my_user",
+    "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY4MDAuNDgxNjU1LCAiZXhwIjogMTYxODg4MDQwMC40ODE2NTUsICJ1c2VybmFtZSI6ICJteV91c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.QdieeEskrU0FrH7rXKuPDSZxscM54kV_vH60uJqdU9g",
+    "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY4MDAuNDgxNzUxNCwgImV4cCI6IDE2MjY2NTI4MDAuNDgxNzUxNCwgInVzZXJuYW1lIjogIm15X3VzZXIiLCAidG9rZW5fdHlwZSI6ICJyZWZyZXNoIn0.btJF0LJfymInhGJQ2xvPwkp2dFUqwgcw4OA_wE-EcCM",
+    "action": "user_logged_in"
+}
+```
+- The `token` field is a JSON Web Token used to authorize the user.  It should
+  be included in the `Authorization` header as a `Bearer` type for all HTTP
+  requests.  The `token` expires after 1 hour.
+- The `refresh_token` field contains a JWT that can be used to generate new
+  tokens after they are expire. See the
+  [refresh token section](#refresh-json-web-token) for details.
+
+!!! Note
+    This endpoint may be accessed by unauthorized clients.  A 401 would
+    only be returned if the username and/or password is invalid.
+
+#### Logout Current User
+HTTP Request:
+```http
+POST /access/logout
+```
+JSON-RPC request: Not Available
+
+Returns: An object containing the logged out username and action summary.
+```json
+{
+    "username": "my_user",
+    "action": "user_logged_out"
+}
+
+```
+
+#### Get Current User
+HTTP Request:
+```http
+GET /access/user
+```
+JSON-RPC request: Not Available
+
+Returns: An object containing the currently logged in user name and
+the date on which the user was created (in unix time).
+```json
+{
+    "username": "my_user",
+    "created_on": 1618876783.8896716
+}
+```
+
+#### Create User
+HTTP Request:
+```http
+POST /access/user
+Content-Type: application/json
+
+{
+    "username": "my_user",
+    "password": "my_password"
+}
+```
+JSON-RPC request: Not Available
+
+Returns: An object containing the created user name, an auth token,
+a refresh token, and an action summary.  Creating a user also effectively
+logs the user in.
+```json
+{
+    "username": "my_user",
+    "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNjE5LCAiZXhwIjogMTYxODg4MDM4My44OTE2MTksICJ1c2VybmFtZSI6ICJteV91c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.oH0IShTL7mdlVs4kcx3BIs_-1j0Oe-qXezJKjo-9Xgo",
+    "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNzAyNCwgImV4cCI6IDE2MjY2NTI3ODMuODkxNzAyNCwgInVzZXJuYW1lIjogIm15X3VzZXIiLCAidG9rZW5fdHlwZSI6ICJyZWZyZXNoIn0.a6ZeRjk8RQQJDDH0JV-qGY_d_HIgfI3XpsqUlUaFT7c",
+    "action": "user_created"
+}
+```
+!!! note
+    Unlike `/access/login`, `/access/user` is a protected endpoint.  To
+    create a new user a client must either be trusted, use the API Key,
+    or be logged in as another user.
+
+#### Delete User
+Deletes the currently logged in user.
+
+HTTP Request:
+```http
+DELETE /access/user
+Content-Type: application/json
+
+{
+    "password": "my_password"
+}
+```
+JSON-RPC request: Not Available
+
+Returns: The username of the deleted user and an action summary.  This
+effectively logs the user out.
+```json
+{
+    "username": "my_user",
+    "action": "user_deleted"
+}
+```
+
+#### Reset User Password
+HTTP Request:
+```http
+POST /access/user/password
+Content-Type: application/json
+
+{
+    "password": "my_current_password",
+    "new_password": "my_new_pass"
+}
+```
+JSON-RPC request: Not Available
+
+Returns:  The username and action summary.
+```json
+{
+    "username": "my_user",
+    "action": "user_password_reset"
+}
+```
+
+#### Refresh JSON Web Token
+This endpoint can be used to refresh an expired auth token.  If this
+request returns an error then the refresh token is no longer valid and
+the user must login with their credentials.
+
+HTTP Request:
+```http
+POST /access/refresh_jwt
+Content-Type: application/json
+
+{
+    "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4Nzc0ODUuNzcyMjg5OCwgImV4cCI6IDE2MjY2NTM0ODUuNzcyMjg5OCwgInVzZXJuYW1lIjogInRlc3R1c2VyIiwgInRva2VuX3R5cGUiOiAicmVmcmVzaCJ9.Y5YxGuYSzwJN2WlunxlR7XNa2Y3GWK-2kt-MzHvLbP8"
+}
+```
+
+JSON-RPC request: Not Available
+
+Returns:  The username, new auth token, and action summary.
+```json
+{
+    "username": "my_user",
+    "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzgyNDMuNTE2Nzc5MiwgImV4cCI6IDE2MTg4ODE4NDMuNTE2Nzc5MiwgInVzZXJuYW1lIjogInRlc3R1c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.Ia_X_pf20RR4RAEXcxalZIOzOBOs2OwearWHfRnTSGU",
+    "action": "user_jwt_refresh"
+}
+```
+!!! Note
+    This endpoint may be accessed by unauthorized clients.  A 401 would
+    only be returned if the refresh token is invalid.
+
+#### Generate a Oneshot Token
+
+Javascript is not capable of modifying the headers for some HTTP requests
+(for example, the `websocket`), which is a requirement to apply JWT or API Key
+authorization.  To work around this clients may request a Oneshot Token and
+pass it via the query string for these requests.  Tokens expire in 5 seconds
+and may only be used once, making them relatively safe for inclusion in the
+query string.
+
+HTTP request:
+```http
+GET /access/oneshot_token
+```
+JSON-RPC request: Not Available
+
+Returns:
+
+A temporary token that may be added to a request's query string for access
+to any API endpoint.  The query string should be added in the form of:
+```
+?token={base32_ramdom_token}
+```
 
 #### Get the Current API Key
 HTTP request:
@@ -1458,29 +1658,6 @@ Returns:
 The newly generated API key.  This overwrites the previous key.  Note that
 the API key change is applied immediately, all subsequent HTTP requests
 from untrusted clients must use the new key.
-
-#### Generate a Oneshot Token
-
-Javascript is not capable of modifying the headers for some HTTP requests
-(for example, the `websocket`), which is a requirement to apply `X-Api-Key`
-authorization.  To work around this clients may request a Oneshot Token and
-pass it via the query string for these requests.  Tokens expire in 5 seconds
-and may only be used once, making them relatively safe for inclusion in the
-query string.
-
-HTTP request:
-```http
-GET /access/oneshot_token
-```
-JSON-RPC request: Not Available
-
-Returns:
-
-A temporary token that may be added to a request's query string for access
-to any API endpoint.  The query string should be added in the form of:
-```
-?token={base32_ramdom_token}
-```
 
 ### Database APIs
 The following endpoints provide access to Moonraker's ldbm database.  The

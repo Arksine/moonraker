@@ -54,19 +54,17 @@ gcode_store_size:  1000
 ## `[authorization]`
 
 The `[authorization]` section provides configuration for Moonraker's
-authorization module. This section is required.
+authorization module.
 
 ```ini
 # moonraker.conf
 
 [authorization]
-enabled: True
-#   Enables authorization.  When set to true, requests must either contain
-#   a valid API key or originate from a trusted client. Default is True.
-api_key_file: ~/.moonraker_api_key
-#   Path of the file that stores Moonraker's API key.  The default is
-#   ~/.moonraker_api_key
-trusted_clients:
+login_timeout:
+#   The time, in days, after which a user is forced to re-enter their
+#   credentials to log in.  This period begins when a logged out user
+#   first logs in.  Successive logins without logging out will not
+#   renew the timeout.  The default is 90 days.
  192.168.1.30
  192.168.1.0/24
 #   A list of newline separated ip addresses and/or ip ranges that are
