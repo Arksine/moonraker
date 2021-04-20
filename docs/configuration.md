@@ -65,6 +65,7 @@ login_timeout:
 #   credentials to log in.  This period begins when a logged out user
 #   first logs in.  Successive logins without logging out will not
 #   renew the timeout.  The default is 90 days.
+trusted_clients:
  192.168.1.30
  192.168.1.0/24
 #   A list of newline separated ip addresses and/or ip ranges that are
