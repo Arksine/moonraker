@@ -2,5 +2,5 @@
 tornado==6.1.0
 pyserial==3.4
 pillow==8.1.2
-lmdb==1.2.0
+lmdb==1.2.1
 streaming-form-data==1.8.1
