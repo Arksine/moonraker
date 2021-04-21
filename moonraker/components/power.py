@@ -97,10 +97,10 @@ class PrinterPower:
         ep = web_request.get_endpoint()
         if not args:
             raise self.server.error("No arguments provided")
-        requsted_devs = {k: self.devices.get(k, None) for k in args}
+        requested_devs = {k: self.devices.get(k, None) for k in args}
         result = {}
         req = ep.split("/")[-1]
-        for name, device in requsted_devs.items():
+        for name, device in requested_devs.items():
             if device is not None:
                 result[name] = await self._process_request(device, req)
             else:
