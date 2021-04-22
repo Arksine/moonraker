@@ -10,6 +10,7 @@ import pathlib
 import logging
 from collections import deque
 from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.locks import Lock
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
@@ -52,7 +53,8 @@ class ProcStats:
         self.proc_stat_queue = deque(maxlen=30)
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
-        self.throttled = False
+        self.throttle_check_lock = Lock()
+        self.total_throttled = 0
         self.update_sequence = 0
         self.stat_update_cb.start()
 
@@ -93,25 +95,28 @@ class ProcStats:
             self.update_sequence = 0
             if self.vcgencmd is not None:
                 ts = await self._check_throttled_state()
-                cur_throttled = ts['bits'] & 0xF
-                if cur_throttled and not self.throttled:
-                    logging.info(
-                        f"CPU Throttled State Detected: {ts['flags']}")
+                cur_throttled = ts['bits']
+                if cur_throttled & ~self.total_throttled:
+                    self.server.add_log_rollover_item(
+                        'throttled', f"CPU Throttled Flags: {ts['flags']}",
+                        True)
+                    self.need_log = False
                     self.server.send_event("proc_stats:cpu_throttled", ts)
-                self.throttled = cur_throttled
+                self.total_throttled |= cur_throttled
 
     async def _check_throttled_state(self):
-        try:
-            resp = await self.vcgencmd.run_with_response(
-                timeout=.5, log_complete=False)
-            ts = int(resp.strip().split("=")[-1], 16)
-        except Exception:
-            return {'bits': 0, 'flags': ["?"]}
-        flags = []
-        for flag, desc in THROTTLED_FLAGS.items():
-            if flag & ts:
-                flags.append(desc)
-        return {'bits': ts, 'flags': flags}
+        async with self.throttle_check_lock:
+            try:
+                resp = await self.vcgencmd.run_with_response(
+                    timeout=.5, log_complete=False)
+                ts = int(resp.strip().split("=")[-1], 16)
+            except Exception:
+                return {'bits': 0, 'flags': ["?"]}
+            flags = []
+            for flag, desc in THROTTLED_FLAGS.items():
+                if flag & ts:
+                    flags.append(desc)
+            return {'bits': ts, 'flags': flags}
 
     def _get_memory_usage(self):
         try:
