@@ -212,6 +212,9 @@ class FileManager:
         return "ok"
 
     async def _handle_operation_check(self, requested_path):
+        if not self.get_relative_path("gcodes", requested_path):
+            # Path not in the gcodes path
+            return True
         # Get virtual_sdcard status
         klippy_apis = self.server.lookup_component('klippy_apis')
         result = await klippy_apis.query_objects({'print_stats': None})
@@ -547,12 +550,11 @@ class FileManager:
             full_path = os.path.join(root_path, filename)
             if not os.path.isfile(full_path):
                 raise self.server.error(f"Invalid file path: {path}")
-            if root == "gcodes":
-                try:
-                    await self._handle_operation_check(full_path)
-                except self.server.error as e:
-                    if e.status_code == 403:
-                        raise
+            try:
+                await self._handle_operation_check(full_path)
+            except self.server.error as e:
+                if e.status_code == 403:
+                    raise
             os.remove(full_path)
         return filename
 
