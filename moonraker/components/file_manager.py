@@ -201,7 +201,13 @@ class FileManager:
                     # Make sure that the directory does not contain a file
                     # loaded by the virtual_sdcard
                     await self._handle_operation_check(dir_path)
-                    shutil.rmtree(dir_path)
+                    ioloop = IOLoop.current()
+                    self.notify_sync_lock = NotifySyncLock(dir_path)
+                    with ThreadPoolExecutor(max_workers=1) as tpe:
+                        await ioloop.run_in_executor(
+                            tpe, shutil.rmtree, dir_path)
+                    await self.notify_sync_lock.wait(30.)
+                    self.notify_sync_lock = None
                 else:
                     try:
                         os.rmdir(dir_path)
