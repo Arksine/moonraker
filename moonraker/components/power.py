@@ -97,10 +97,10 @@ class PrinterPower:
         ep = web_request.get_endpoint()
         if not args:
             raise self.server.error("No arguments provided")
-        requsted_devs = {k: self.devices.get(k, None) for k in args}
+        requested_devs = {k: self.devices.get(k, None) for k in args}
         result = {}
         req = ep.split("/")[-1]
-        for name, device in requsted_devs.items():
+        for name, device in requested_devs.items():
             if device is not None:
                 result[name] = await self._process_request(device, req)
             else:
@@ -501,9 +501,11 @@ class Shelly(PowerDevice):
         self.timer = config.get("timer","")
 
     async def _send_shelly_command(self, command):
-        if command in ["on", "off"]:
+        if command == "on":
+            out_cmd = f"relay/{self.output_id}?turn={command}"
+        elif command == "off":
             if self.timer != "":
-                out_cmd = f"relay/{self.output_id}?turn={command}&timer={self.timer}"
+                out_cmd = f"relay/{self.output_id}?turn=on&timer={self.timer}"
             else:
                 out_cmd = f"relay/{self.output_id}?turn={command}"
         elif command == "info":
@@ -539,23 +541,25 @@ class Shelly(PowerDevice):
         try:
             res = await self._send_shelly_command("info")
             state = res[f"ison"]
+            timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
         except Exception:
             self.state = "error"
             msg = f"Error Refeshing Device Status: {self.name}"
             logging.exception(msg)
             raise self.server.error(msg) from None
-        self.state = "on" if state else "off"
+        self.state = "on" if state and timer_remaining == 0 else "off"
 
     async def set_power(self, state):
         try:
             res = await self._send_shelly_command(state)
             state = res[f"ison"]
+            timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
         except Exception:
             self.state = "error"
             msg = f"Error Setting Device Status: {self.name} to {state}"
             logging.exception(msg)
             raise self.server.error(msg) from None
-        self.state = "on" if state else "off"
+        self.state = "on" if state and timer_remaining == 0 else "off"
 
 class HomeSeer(PowerDevice):
     def __init__(self, config):
