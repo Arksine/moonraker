@@ -178,8 +178,8 @@ and Tasmota (via http) devices are supported.
 
 [power device_name]
 type: gpio
-#   The type of device.  Can be either gpio, tplink_smartplug, tasmota
-#   or homeseer.
+#   The type of device.  Can be either gpio, tplink_smartplug, tplink_tapo,
+#   tasmota or homeseer.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -218,6 +218,13 @@ port:
 #   in the ip address.  For example, to control socket index 1:
 #     192.168.1.127/1
 #    The address must be provided. The port defaults to 9999.
+address:
+email:
+password:
+#   The above options are used for "tplink_tapo" devices.  The
+#   address should be a valid ip address for the tapo device.
+#   The email and password must be those supplied for the device
+#   registration within the tplink tapo mobile application. 
 address:
 password:
 output_id:
