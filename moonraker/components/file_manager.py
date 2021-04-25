@@ -182,6 +182,9 @@ class FileManager:
             dir_info = self._list_directory(dir_path, is_extended)
             return dir_info
         async with self.write_mutex:
+            result = {
+                'item': {'path': directory, 'root': root},
+                'action': "create_dir"}
             if action == 'POST' and root in FULL_ACCESS_ROOTS:
                 # Create a new directory
                 try:
@@ -190,6 +193,7 @@ class FileManager:
                     raise self.server.error(str(e))
             elif action == 'DELETE' and root in FULL_ACCESS_ROOTS:
                 # Remove a directory
+                result['action'] = "delete_dir"
                 if directory.strip("/") == root:
                     raise self.server.error(
                         "Cannot delete root directory")
@@ -203,9 +207,14 @@ class FileManager:
                     await self._handle_operation_check(dir_path)
                     ioloop = IOLoop.current()
                     self.notify_sync_lock = NotifySyncLock(dir_path)
-                    with ThreadPoolExecutor(max_workers=1) as tpe:
-                        await ioloop.run_in_executor(
-                            tpe, shutil.rmtree, dir_path)
+                    try:
+                        with ThreadPoolExecutor(max_workers=1) as tpe:
+                            await ioloop.run_in_executor(
+                                tpe, shutil.rmtree, dir_path)
+                    except Exception:
+                        self.notify_sync_lock.cancel()
+                        self.notify_sync_lock = None
+                        raise
                     await self.notify_sync_lock.wait(30.)
                     self.notify_sync_lock = None
                 else:
@@ -215,7 +224,7 @@ class FileManager:
                         raise self.server.error(str(e))
             else:
                 raise self.server.error("Operation Not Supported", 405)
-        return "ok"
+        return result
 
     async def _handle_operation_check(self, requested_path):
         if not self.get_relative_path("gcodes", requested_path):
@@ -262,6 +271,7 @@ class FileManager:
             raise self.server.error(
                 f"Destination path is read-only: {dest_root}")
         async with self.write_mutex:
+            result = {'item': {'root': dest_root}}
             if not os.path.exists(source_path):
                 raise self.server.error(f"File {source_path} does not exist")
             # make sure the destination is not in use
@@ -274,10 +284,18 @@ class FileManager:
                 # if moving the file, make sure the source is not in use
                 await self._handle_operation_check(source_path)
                 op_func = shutil.move
+                result['source_item'] = {
+                    'path': source,
+                    'root': source_root
+                }
+                result['action'] = "move_dir" if os.path.isdir(source_path) \
+                    else "move_file"
             elif ep == "/server/files/copy":
                 if os.path.isdir(source_path):
+                    result['action'] = "create_dir"
                     op_func = shutil.copytree
                 else:
+                    result['action'] = "create_file"
                     op_func = shutil.copy2
             ioloop = IOLoop.current()
             self.notify_sync_lock = NotifySyncLock(dest_path)
@@ -292,7 +310,8 @@ class FileManager:
             self.notify_sync_lock.update_dest(full_dest)
             await self.notify_sync_lock.wait(600.)
             self.notify_sync_lock = None
-        return "ok"
+        result['item']['path'] = self.get_relative_path(dest_root, full_dest)
+        return result
 
     def _list_directory(self, path, is_extended=False):
         if not os.path.isdir(path):
@@ -426,13 +445,23 @@ class FileManager:
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
         return {
-            'result': upload_info['filename'],
-            'print_started': start_print
+            'item': {
+                'path': upload_info['filename'],
+                'root': "gcodes"
+            },
+            'print_started': start_print,
+            'action': "create_file"
         }
 
     async def _finish_standard_upload(self, upload_info):
         self._process_uploaded_file(upload_info)
-        return {'result': upload_info['filename']}
+        return {
+            'item': {
+                'path': upload_info['filename'],
+                'root': upload_info['root']
+            },
+            'action': "create_file"
+        }
 
     def _process_uploaded_file(self, upload_info):
         try:
@@ -562,7 +591,9 @@ class FileManager:
                 if e.status_code == 403:
                     raise
             os.remove(full_path)
-        return filename
+        return {
+            'item': {'path': filename, 'root': root},
+            'action': "delete_file"}
 
     def close(self):
         self.inotify_handler.close()
