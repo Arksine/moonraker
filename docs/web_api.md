@@ -2839,9 +2839,10 @@ following notification when it detectes an active throttled condition.
 ```
 
 Where `throtled_state` is an object that matches the `throttled_state` field
-in the response from a [process info](#get-process-info) request.  It is
-possible for clients to receive this notification multiple times if the system
-repeatedly transitions between an active and inactive throttled condition.
+in the response from a [Moonraker process stats](#get-moonraker-process-stats)
+request. It is possible for clients to receive this notification multiple times
+if the system repeatedly transitions between an active and inactive throttled
+condition.
 
 #### History Changed
 If the `[history]` module is enabled the following notification is sent when
