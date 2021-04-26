@@ -54,7 +54,7 @@ class ProcStats:
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
         self.throttle_check_lock = Lock()
-        self.total_throttled = 0
+        self.total_throttled = self.last_throttled = 0
         self.update_sequence = 0
         self.stat_update_cb.start()
 
@@ -98,10 +98,10 @@ class ProcStats:
                 cur_throttled = ts['bits']
                 if cur_throttled & ~self.total_throttled:
                     self.server.add_log_rollover_item(
-                        'throttled', f"CPU Throttled Flags: {ts['flags']}",
-                        True)
-                    self.need_log = False
+                        'throttled', f"CPU Throttled Flags: {ts['flags']}")
+                if cur_throttled != self.last_throttled:
                     self.server.send_event("proc_stats:cpu_throttled", ts)
+                self.last_throttled = cur_throttled
                 self.total_throttled |= cur_throttled
 
     async def _check_throttled_state(self):
