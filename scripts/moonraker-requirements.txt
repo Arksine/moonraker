@@ -4,3 +4,4 @@ pyserial==3.4
 pillow==8.1.2
 lmdb==1.2.1
 streaming-form-data==1.8.1
+distro==1.5.0

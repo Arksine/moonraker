@@ -8,6 +8,7 @@ import re
 import pathlib
 import logging
 import platform
+import distro
 from tornado.ioloop import IOLoop
 
 ALLOWED_SERVICES = ["moonraker", "klipper", "webcamd"]
@@ -21,9 +22,12 @@ SD_MFGRS = {
 class Machine:
     def __init__(self, config):
         self.server = config.get_server()
+        dist_info = {'name': distro.name(pretty=True)}
+        dist_info.update(distro.info())
         self.system_info = {
             'cpu_info': self._get_cpu_info(),
-            'sd_info': self._get_sdcard_info()
+            'sd_info': self._get_sdcard_info(),
+            'distribution': dist_info
         }
         # Add system info to log rollover
         sys_info_msg = "\nSystem Info:"
