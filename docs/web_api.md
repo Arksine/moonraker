@@ -787,6 +787,61 @@ Returns:
 
 ### Machine Commands
 
+#### Get System Info
+HTTP request:
+```http
+GET /machine/system_info
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.system_info",
+    "id": 4665
+}
+```
+Returns: Information about the host system in the following format:
+```json
+{
+    "system_info": {
+        "cpu_info": {
+            "cpu_count": 1,
+            "bits": "32bit",
+            "processor": "armv6l",
+            "cpu_desc": "ARMv6-compatible processor rev 7 (v6l)",
+            "hardware_desc": "BCM2835",
+            "model": "Raspberry Pi Zero W Rev 1.1"
+        },
+        "sd_info": {
+            "manufacturer_id": "03",
+            "manufacturer": "Sandisk",
+            "oem_id": "5344",
+            "product_name": "SS08G",
+            "product_revision": "8.0",
+            "serial_number": "00112233",
+            "manufacturer_date": "9/2017",
+            "capacity": "7.4 GiB",
+            "total_bytes": 7948206080
+        },
+        "distribution": {
+            "name": "Raspbian GNU/Linux 10 (buster)",
+            "id": "raspbian",
+            "version": "10",
+            "version_parts": {
+                "major": "10",
+                "minor": "",
+                "build_number": ""
+            },
+            "like": "debian",
+            "codename": "buster"
+        }
+    }
+}
+```
+
+!!! note
+   If no SD Card is detected the `sd_info` field will contain an empty object.
+
 #### Shutdown the Operating System
 HTTP request:
 ```http
