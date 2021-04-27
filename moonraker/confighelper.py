@@ -116,13 +116,17 @@ def get_configuration(server, system_args):
     cfg_file_path = os.path.normpath(os.path.expanduser(
         system_args.configfile))
     if not os.path.isfile(cfg_file_path):
-        raise ConfigError(f"Configuration File Not Found: '{cfg_file_path}''")
+        raise ConfigError(
+            f"Configuration File Not Found: '{cfg_file_path}''")
+    if not os.access(cfg_file_path, os.R_OK | os.W_OK):
+        raise ConfigError(
+            "Moonraker does not have Read/Write permission for "
+            f"config file at path '{cfg_file_path}'")
     config = configparser.ConfigParser(interpolation=None)
     try:
         config.read(cfg_file_path)
-    except Exception:
-        raise ConfigError(f"Error Reading Config: '{cfg_file_path}'") from None
-
+    except Exception as e:
+        raise ConfigError(f"Error Reading Config: '{cfg_file_path}'") from e
     try:
         server_cfg = config['server']
     except KeyError:
