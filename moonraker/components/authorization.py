@@ -14,6 +14,7 @@ import datetime
 import ipaddress
 import json
 import re
+import socket
 import logging
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.web import HTTPError
@@ -80,29 +81,34 @@ class Authorization:
         # Get Trusted Clients
         self.trusted_ips = []
         self.trusted_ranges = []
+        self.trusted_domains = []
         trusted_clients = config.get('trusted_clients', "")
         trusted_clients = [c.strip() for c in trusted_clients.split('\n')
                            if c.strip()]
-        for ip in trusted_clients:
+        for val in trusted_clients:
             # Check IP address
             try:
-                tc = ipaddress.ip_address(ip)
+                tc = ipaddress.ip_address(val)
             except ValueError:
-                tc = None
-            if tc is None:
-                # Check ip network
-                try:
-                    tc = ipaddress.ip_network(ip)
-                except ValueError:
-                    raise ServerError(
-                        f"Invalid option in trusted_clients: {ip}")
-                self.trusted_ranges.append(tc)
+                pass
             else:
                 self.trusted_ips.append(tc)
+                continue
+            # Check ip network
+            try:
+                tc = ipaddress.ip_network(val)
+            except ValueError:
+                pass
+            else:
+                self.trusted_ranges.append(tc)
+                continue
+            # Check hostname
+            self.trusted_domains.append(val.lower())
 
         t_clients = "\n".join(
             [str(ip) for ip in self.trusted_ips] +
-            [str(rng) for rng in self.trusted_ranges])
+            [str(rng) for rng in self.trusted_ranges] +
+            self.trusted_domains)
         c_domains = "\n".join(self.cors_domains)
 
         logging.info(
@@ -376,6 +382,9 @@ class Authorization:
         for rng in self.trusted_ranges:
             if ip in rng:
                 return True
+        fqdn = socket.getfqdn(str(ip)).lower()
+        if fqdn in self.trusted_domains:
+            return True
         return False
 
     def _check_trusted_connection(self, ip):
