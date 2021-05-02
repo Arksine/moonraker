@@ -172,7 +172,7 @@ gcode:
 
 ## `[power]`
 Enables device power control.  Currently GPIO (relays), TPLink Smartplug,
-and Tasmota (via http) devices are supported.
+and Tasmota (via http) devices, HomeAssistant switch are supported.
 
 ```ini
 # moonraker.conf
@@ -258,6 +258,13 @@ password:
 #   "ID" in the "advanced information" section.
 #   Provide a user and password with access to "device control"
 #   and at least the specific device you want to control
+address:
+port:
+device:
+token:
+#   The above options are used for "homeassistant" devices.  The
+#   address should be a valid ip or hostname for the homeassistant controller.
+#   "device" should be the ID of the switch to control.
 
 ```
 Below are some potential examples:
@@ -294,6 +301,13 @@ type: shelly
 address: 192.168.1.125
 user: user2
 password: password2
+
+[power homeassistant_switch]
+type: homeassistant
+address: 192.168.1.126
+port: 8123
+device: switch.1234567890abcdefghij
+token: home-assistant-very-long-token
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
