@@ -814,6 +814,18 @@ function handle_metadata_update(metadata) {
 }
 json_rpc.register_method("notify_metadata_update", handle_metadata_update);
 
+function handle_cpu_throttled(tdata) {
+    console.log("CPU Throttled");
+    console.log(tdata);
+}
+json_rpc.register_method("notify_cpu_throttled", handle_cpu_throttled);
+
+function handle_proc_stat_update(proc_stats) {
+    // TODO: Display Temp
+    return;
+}
+json_rpc.register_method("notify_proc_stat_update", handle_proc_stat_update);
+
 //***********End Klipper Event Handlers (JSON-RPC)*****************/
 
 //*****************Websocket Batch GCode Tests*********************/
