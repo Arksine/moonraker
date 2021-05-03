@@ -14,6 +14,7 @@ from tornado.locks import Lock
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
+TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 STAT_UPDATE_TIME_MS = 1000
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
@@ -45,11 +46,13 @@ class ProcStats:
         else:
             logging.info("Unable to find 'vcgencmd', throttle checking "
                          "disabled")
+        self.temp_file = pathlib.Path(TEMPERATURE_PATH)
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_shutdown)
+        self.server.register_notification("proc_stats:proc_stat_update")
         self.proc_stat_queue = deque(maxlen=30)
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
@@ -64,13 +67,15 @@ class ProcStats:
             ts = await self._check_throttled_state()
         return {
             'moonraker_stats': list(self.proc_stat_queue),
-            'throttled_state': ts
+            'throttled_state': ts,
+            'cpu_temp': self._get_cpu_temperature()
         }
 
     async def _handle_shutdown(self):
         msg = "\nMoonraker System Usage Statistics:"
         for stats in self.proc_stat_queue:
             msg += f"\n{self._format_stats(stats)}"
+        msg += f"\nCPU Temperature: {self._get_cpu_temperature()}"
         logging.info(msg)
         if self.vcgencmd is not None:
             ts = await self._check_throttled_state()
@@ -82,11 +87,17 @@ class ProcStats:
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
         mem, mem_units = self._get_memory_usage()
-        self.proc_stat_queue.append({
+        cpu_temp = self._get_cpu_temperature()
+        result = {
             "time": update_time,
             "cpu_usage": usage,
             "memory": mem,
-            "mem_units": mem_units
+            "mem_units": mem_units,
+        }
+        self.proc_stat_queue.append(result)
+        self.server.send_event("proc_stats:proc_stat_update", {
+            'moonraker_stats': result,
+            'cpu_temp': cpu_temp
         })
         self.last_update_time = update_time
         self.last_proc_time = proc_time
@@ -129,6 +140,17 @@ class ProcStats:
         except Exception:
             return None, None
         return mem, units
+
+    def _get_cpu_temperature(self):
+        temp = None
+        if self.temp_file.exists():
+            try:
+                temp = int(self.temp_file.read_text().strip())
+                temp = temp / 1000.
+            except Exception:
+                return None
+        return temp
+
 
     def _format_stats(self, stats):
         return f"System Time: {stats['time']:2f}, " \
