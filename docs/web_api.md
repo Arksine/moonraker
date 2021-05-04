@@ -989,7 +989,8 @@ An object in the following format:
     "throttled_state": {
         "bits": 0,
         "flags": []
-    }
+    },
+    "cpu_temp": 46.148
 }
 ```
 Process information is sampled every second.  The `moonraker_stats` field
@@ -1024,6 +1025,10 @@ The first four flags indicate an active throttling condition,
 whereas the last four indicate a previous condition (may or
 may not still be active).  If `vcgencmd` is not available
 `throttled_state` will report `null`.
+
+If the system reports CPU temp at `/sys/class/thermal/thermal_zone0`
+then temperature will be supplied in the `cpu_temp` field.  Otherwise
+the field will be set to `null`.
 
 ### File Operations
 
@@ -2884,7 +2889,8 @@ Where `update_info` is an object that matches the response from an
 
 #### CPU Throttled
 If the system supports throttled CPU monitoring Moonraker will send the
-following notification when it detectes an active throttled condition.
+following notification when it detects a change to the current throttled
+state:
 ```json
 {
     "jsonrpc": "2.0",
@@ -2898,6 +2904,29 @@ in the response from a [Moonraker process stats](#get-moonraker-process-stats)
 request. It is possible for clients to receive this notification multiple times
 if the system repeatedly transitions between an active and inactive throttled
 condition.
+
+#### Moonraker Process Statistic Update
+Moonraker will emit the following notification each time it samples its
+process statistics:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_proc_stat_update",
+    "params": [{
+        "moonraker_stats": {
+            "time": 1615837812.0894408,
+            "cpu_usage": 1.99,
+            "memory": 23636,
+            "mem_units": "kB"
+        },
+        "cpu_temp": 44.008
+    }]
+}
+```
+
+As with the [proc_stats request](#get-moonraker-process-stats) the `cpu_temp`
+field will be set to `null` if the host machine does not support retreiving CPU
+temperatures at `/sys/class/thermal/thermal_zone0`.
 
 #### History Changed
 If the `[history]` module is enabled the following notification is sent when
