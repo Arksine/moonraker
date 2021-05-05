@@ -634,27 +634,33 @@ class HomeAssistant(PowerDevice):
     async def _send_homeassistant_command(self, command):
         if command == "on":
             out_cmd = f"api/services/switch/turn_on"
-            body = { "entity_id": self.device }
+            body = {"entity_id": self.device}
             method = "POST"
         elif command == "off":
             out_cmd = f"api/services/switch/turn_off"
-            body = { "entity_id": self.device }
+            body = {"entity_id": self.device}
             method = "POST"
         elif command == "info":
             out_cmd = f"api/states/{self.device}"
             method = "GET"
         else:
-            raise self.server.error(f"Invalid homeassistant command: {command}")
+            raise self.server.error(
+                f"Invalid homeassistant command: {command}")
         url = f"http://{self.addr}:{self.port}/{out_cmd}"
-        headers = {'Authorization': f'Bearer {self.token}', 'Content-Type': 'application/json'}
+        headers = {
+            'Authorization': f'Bearer {self.token}',
+            'Content-Type': 'application/json'
+        }
         data = ""
         http_client = AsyncHTTPClient()
         try:
             if (method == "POST"):
-                response = await http_client.fetch(url, method="POST", body=json.dumps(body), headers=headers)
+                response = await http_client.fetch(
+                    url, method="POST", body=json.dumps(body), headers=headers)
                 data = json_decode(response.body)
             else:
-                response = await http_client.fetch(url, method="GET", headers=headers)
+                response = await http_client.fetch(
+                    url, method="GET", headers=headers)
                 data = json_decode(response.body)
         except Exception:
             msg = f"Error sending homeassistant command: {command}"
