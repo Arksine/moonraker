@@ -24,24 +24,25 @@ class PrinterPower:
         self.devices = {}
         prefix_sections = config.get_prefix_sections("power")
         logging.info(f"Power component loading devices: {prefix_sections}")
+        dev_types = {
+            "gpio": GpioDevice,
+            "tplink_smartplug": TPLinkSmartPlug,
+            "tasmota": Tasmota,
+            "shelly": Shelly,
+            "homeseer": HomeSeer,
+            "homeassistant": HomeAssistant,
+        }
         try:
             for section in prefix_sections:
                 cfg = config[section]
                 dev_type = cfg.get("type")
-                if dev_type == "gpio":
-                    dev = GpioDevice(cfg, self.chip_factory)
-                elif dev_type == "tplink_smartplug":
-                    dev = TPLinkSmartPlug(cfg)
-                elif dev_type == "tasmota":
-                    dev = Tasmota(cfg)
-                elif dev_type == "shelly":
-                    dev = Shelly(cfg)
-                elif dev_type == "homeseer":
-                    dev = HomeSeer(cfg)
-                elif dev_type == "homeassistant":
-                    dev = HomeAssistant(cfg)
-                else:
+                dev_class = dev_types.get(dev_type)
+                if dev_class is None:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
+                elif dev_type == "gpio":
+                    dev = dev_class(cfg, self.chip_factory)
+                else:
+                    dev = dev_class(cfg)
                 self.devices[dev.get_name()] = dev
         except Exception:
             self.chip_factory.close()
