@@ -38,6 +38,8 @@ class PrinterPower:
                     dev = Shelly(cfg)
                 elif dev_type == "homeseer":
                     dev = HomeSeer(cfg)
+                elif dev_type == "homeassistant":
+                    dev = HomeAssistant(cfg)
                 else:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 self.devices[dev.get_name()] = dev
@@ -613,6 +615,83 @@ class HomeSeer(PowerDevice):
                 state_hs = "Off"
             res = await self._send_homeseer("controldevicebylabel",
                                             f"label={state_hs}")
+        except Exception:
+            self.state = "error"
+            msg = f"Error Setting Device Status: {self.name} to {state}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+
+class HomeAssistant(PowerDevice):
+    def __init__(self, config):
+        super().__init__(config)
+        self.server = config.get_server()
+        self.addr = config.get("address")
+        self.port = config.getint("port", 8123)
+        self.device = config.get("device")
+        self.token = config.get("token")
+
+    async def _send_homeassistant_command(self, command):
+        if command == "on":
+            out_cmd = f"api/services/switch/turn_on"
+            body = {"entity_id": self.device}
+            method = "POST"
+        elif command == "off":
+            out_cmd = f"api/services/switch/turn_off"
+            body = {"entity_id": self.device}
+            method = "POST"
+        elif command == "info":
+            out_cmd = f"api/states/{self.device}"
+            method = "GET"
+        else:
+            raise self.server.error(
+                f"Invalid homeassistant command: {command}")
+        url = f"http://{self.addr}:{self.port}/{out_cmd}"
+        headers = {
+            'Authorization': f'Bearer {self.token}',
+            'Content-Type': 'application/json'
+        }
+        data = ""
+        http_client = AsyncHTTPClient()
+        try:
+            if (method == "POST"):
+                response = await http_client.fetch(
+                    url, method="POST", body=json.dumps(body), headers=headers)
+                data = json_decode(response.body)
+            else:
+                response = await http_client.fetch(
+                    url, method="GET", headers=headers)
+                data = json_decode(response.body)
+        except Exception:
+            msg = f"Error sending homeassistant command: {command}"
+            logging.exception(msg)
+            raise self.server.error(msg)
+        return data
+
+    async def initialize(self):
+        await self.refresh_status()
+
+    def get_device_info(self):
+        return {
+            **super().get_device_info(),
+            'type': "homeassistant"
+        }
+
+    async def refresh_status(self):
+        try:
+            res = await self._send_homeassistant_command("info")
+            state = res[f"state"]
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+
+    async def set_power(self, state):
+        try:
+            res = await self._send_homeassistant_command(state)
+            state = res[0][f"state"]
         except Exception:
             self.state = "error"
             msg = f"Error Setting Device Status: {self.name} to {state}"
