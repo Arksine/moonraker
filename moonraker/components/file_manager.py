@@ -666,9 +666,7 @@ class InotifyNode:
             if os.path.isdir(item_path):
                 new_child = self.create_child_node(fname, False)
                 metadata_events.extend(new_child.scan_node(visited_dirs))
-            elif os.path.isfile(item_path) and \
-                    self.get_root() == "gcodes" and \
-                    ext in VALID_GCODE_EXTS:
+            elif os.path.isfile(item_path) and self.get_root() == "gcodes":
                 mevt = self.ihdlr.parse_gcode_metadata(item_path)
                 metadata_events.append(mevt)
         return metadata_events
@@ -988,13 +986,6 @@ class INotifyHandler:
 
     def parse_gcode_metadata(self, file_path):
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
-        if not rel_path:
-            logging.info(
-                f"File at path '{file_path}' is not in the gcode path"
-                ", metadata extraction aborted")
-            mevt = Event()
-            mevt.set()
-            return mevt
         path_info = self.file_manager.get_path_info(file_path)
         ext = os.path.splitext(file_path)[-1].lower()
         if ext == ".ufp":
@@ -1292,7 +1283,9 @@ class MetadataStorage:
 
     def parse_metadata(self, fname, path_info):
         mevt = Event()
+        ext = os.path.splitext(fname)[1]
         if fname in self.pending_requests or \
+                ext not in VALID_GCODE_EXTS or \
                 self._has_valid_data(fname, path_info):
             # request already pending or not necessary
             mevt.set()
