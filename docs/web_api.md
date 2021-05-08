@@ -1158,15 +1158,13 @@ modified time, and size.
             "width": 32,
             "height": 32,
             "size": 2596,
-            "data": "{base64_data}"
-            "relative_path": "thumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-32x32.png"
+            "relative_path": ".thumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-32x32.png"
         },
         {
             "width": 400,
             "height": 300,
             "size": 73308,
-            "data": "{base64_data}",
-            "relative_path": "thumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-400x300.png"
+            "relative_path": "lthumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-400x300.png"
         }
     ],
     "first_layer_bed_temp": 60,
@@ -1180,11 +1178,6 @@ modified time, and size.
     The `print_start_time` and `job_id` fields are initialized to
     `null`.  They will be updated for each print job if the user has the
     `[history]` component configured
-
-!!! warning
-    The `data` field for each thumbnail is deprecated and will be removed
-    in a future release.  Clients should retrieve the png directly using the
-    `relative_path` field.
 
 #### Get directory information
 Returns a list of files and subdirectories given a supplied path.
@@ -1285,9 +1278,16 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
-`ok`
+Returns: Information about the created directory
+```json
+{
+    "item": {
+        "path": "gcodes/testdir",
+        "root": "gcodes"
+    },
+    "action": "create_dir"
+}
+```
 
 #### Delete directory
 Deletes a directory at the specified path.
@@ -1312,9 +1312,16 @@ JSON-RPC request:
     If the specified directory contains files then the delete request
     will fail unless the `force` argument is set to `true`.
 
-Returns:
-
-`ok`
+Returns:  Information about the deleted directory
+```json
+{
+    "item": {
+        "path": "gcodes/testdir",
+        "root": "gcodes"
+    },
+    "action": "delete_dir"
+}
+```
 
 #### Move a file or directory
 Moves a file or directory from one location to another. The following
@@ -1351,9 +1358,22 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
-`ok`
+Returns:  Information about the moved file or directory
+```json
+{
+    "result": {
+        "item": {
+            "root": "gcodes",
+            "path": "test4/test3"
+        },
+        "source_item": {
+            "path": "gcodes/test4/test3",
+            "root": "gcodes"
+        },
+        "action": "move_dir"
+    }
+}
+```
 
 #### Copy a file or directory
 Copies a file or directory from one location to another.  A successful copy has
@@ -1378,9 +1398,16 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
-`ok`
+Returns: Information about the copied file or directory
+```json
+{
+    "item": {
+        "root": "gcodes",
+        "path": "test4/Voron_v2_350_aferburner_Filament Cover_0.2mm_ABS.gcode"
+    },
+    "action": "create_file"
+}
+```
 
 #### File download
 Retreives file `filename` at root `root`.  The `filename` must include
@@ -1439,21 +1466,16 @@ Arguments available only for the `gcodes` root:
 
 JSON-RPC request: Not Available
 
-Returns:
-
-The name of the uploaded file.
+Returns:  Information about the uploaded file.  Note that `print_started`
+is only included when the supplied root is set to `gcodes`.
 ```json
 {
-    "result": "{file_name}"
-}
-```
-
-If the supplied root is "gcodes", a "print_started" field is also
-returned.
-```json
-{
-    "result": "{file_name}",
-    "print_started": false
+    "item": {
+        "path": "Lock Body Shim 1mm_0.2mm_FLEX_MK3S_2h30m.gcode",
+        "root": "gcodes"
+    },
+    "print_started": false,
+    "action": "create_file"
 }
 ```
 
@@ -1476,9 +1498,16 @@ JSON-RPC request:
     "id": 1323
 }
 ```
-Returns:
-
-The name of the deleted file
+Returns:  Information about the deleted file
+```json
+{
+    "item": {
+        "path": "Lock Body Shim 1mm_0.2mm_FLEX_MK3S_2h30m.gcode",
+        "root": "gcodes"
+    },
+    "action": "delete_file"
+}
+```
 
 #### Download klippy.log
 HTTP request:
@@ -2908,29 +2937,22 @@ to alert all connected clients of the change:
 }
 ```
 The `source_item` field is only present for `move_item` and
-`copy_item` actions.  The following `action` field will be set
+`copy_item` actions.  The `action` field will be set
 to one of the following values:
 
-- `upload_file`
-- `delete_file`
+- `create_file`
 - `create_dir`
+- `delete_file`
 - `delete_dir`
-- `move_item`
-- `copy_item`
+- `move_file`
+- `move_dir`
+- `modify_file`
+- `root_update`
 
-#### Metadata Update
-When a new file is uploaded via the API a websocket notification is broadcast
-to all connected clients after parsing is complete:
-```json
-{
-    "jsonrpc": "2.0",
-    "method": "notify_metadata_update",
-    "params": [{metadata}]
-}
-```
-
-Where `metadata` is an object matching that returned from a
-[gcode metadata request](#get-gcode-metadata).
+Most of the above actions are self explanatory.  The `root_update`
+notification is sent when a `root` folder has changed its location,
+for example when a user configures a different gcode file path
+in Klipper.
 
 #### Update Manager Response
 The update manager will send asyncronous messages to the client during an

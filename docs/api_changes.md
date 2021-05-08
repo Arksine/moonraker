@@ -1,6 +1,48 @@
 ##
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### May 8th 2021
+- The `file_manager` has been refactored to support system file
+  file events through `inotify`.  Only mutable `roots` are monitored,
+  (currently `gcodes` and `config`).  Subfolders within these
+  these roots are also monitored, however hidden folders are not.
+  The following changes API changes have been made to acccommodate
+  this functionality:
+    - The `notify_filelist_changed` actions have changed.  The new
+      actions are as follows:
+        - `create_file`: sent when a new file has been created.  This
+          includes file uploads and copied files.
+        - `create_dir`: sent when a new directory has been created.
+        - `delete_file`: sent when a file has been deleted.
+        - `delete_dir`: sent when a directory has been deleted.
+        - `move_file`: sent when a file has moved.
+        - `move_dir`: sent when a directory has moved.
+        - `modify_file`: sent when an existing file has been modified
+        - `root_update`: sent when a root directory location has been set.
+          For example, if a user changes the gcode path in Klipper, this
+          action is sent with a `notify_filelist_changed` notification.
+    - File list notifications for gcode files are now only sent after
+      all metadata has been processed.  Likewise, requests to copy,
+      move, or upload a file will only return after metadata has been
+      processed.  Notifications are synced with requests so that the
+      request should always return before the notification is sent.
+    - Thumbnails are now stored in the `.thumbs` directory to prevent
+      changes to thumbnails from emitting filelist notications. This
+      change will be reflected in the metadata's `relative_path` field,
+      so clients that use this field should not need to take additional
+      action.  Note that existing thumbnails will remain in the `thumbs`
+      directory and filelist notifications will be sent for changes to
+      these thumbnails.
+    - The `notify_metadata_update` notification has been removed  Clients
+    - can reliably expect metadata to be available for new or moved gcode
+      files when a request returns.
+    - The return values for several endpoints have been updated.  They
+      now contain information similar to that which is pushed by the
+      `notify_filelist_changed` notification.
+- The deprecated `data` field in gcode metadata has been removed.
+  The `size` field now returns the size of the `.png` file.
+
+
 ### March 15th 2021
 - The `data` field for gcode thumbnails is now deprecated and will
   be removed in the near future.  Thumbnails are now saved to png
