@@ -847,6 +847,7 @@ class GitRepo:
             """
 
         self.init_condition = None
+        self.initialized = False
         self.git_operation_lock = Lock()
         self.fetch_timeout_handle = None
         self.fetch_input_recd = False
@@ -855,7 +856,9 @@ class GitRepo:
         if self.init_condition is not None:
             # No need to initialize multiple requests
             await self.init_condition.wait()
-            return
+            if self.initialized:
+                return
+        self.initialized = False
         self.init_condition = Condition()
         self.git_messages.clear()
         try:
@@ -936,6 +939,8 @@ class GitRepo:
         except Exception:
             logging.exception(f"Git Repo {self.alias}: Initialization failure")
             raise
+        else:
+            self.initialized = True
         finally:
             self.init_condition.notify_all()
             self.init_condition = None
@@ -943,6 +948,9 @@ class GitRepo:
     async def wait_for_init(self):
         if self.init_condition is not None:
             await self.init_condition.wait()
+            if not self.initialized:
+                raise self.server.error(
+                    f"Git Repo {self.alias}: Initialization failure")
 
     async def update_repo_status(self):
         async with self.git_operation_lock:
