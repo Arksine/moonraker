@@ -882,6 +882,7 @@ class GitRepo:
 
             if need_fetch:
                 await self.fetch()
+            await self.run_fsck()
 
             self.upstream_url = await self.remote("get-url")
             self.current_commit = await self.rev_parse("HEAD")
@@ -1100,6 +1101,10 @@ class GitRepo:
             branch = branch or f"{self.git_remote}/{self.git_branch}"
             await self._run_git_cmd(f"checkout {branch} -q")
 
+    async def run_fsck(self):
+        async with self.git_operation_lock:
+            await self._run_git_cmd("fsck --full", timeout=300., retries=1)
+
     async def get_commits_behind(self):
         self._verify_repo()
         if self.is_current():
@@ -1265,6 +1270,14 @@ class GitRepo:
             if ret == 0:
                 self.git_messages.clear()
                 return
+            elif "loose object" in "\n".join(self.git_messages):
+                # attempt to remove corrupt objects
+                try:
+                    await self.cmd_helper.run_cmd_with_response(
+                        "find .git/objects/ -type f -empty | xargs rm",
+                        timeout=10., retries=1, cwd=self.git_path)
+                except self.server.error:
+                    pass
             retries -= 1
             await tornado.gen.sleep(.5)
             self._check_lock_file_exists(remove=True)
