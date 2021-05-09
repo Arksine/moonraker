@@ -94,7 +94,7 @@ class SCProcess(asyncio.subprocess.Process):
 class ShellCommand:
     IDX_SIGINT = 0
     IDX_SIGTERM = 1
-    IDX_SIGKILL_= 2
+    IDX_SIGKILL = 2
     def __init__(self, cmd, std_out_callback, std_err_callback,
                  env=None, log_stderr=False, cwd=None):
         self.name = cmd
