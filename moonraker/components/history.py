@@ -99,7 +99,7 @@ class History:
         start = web_request.get_int("start", 0)
         order = web_request.get_str("order", "desc")
 
-        if not order in ["asc", "desc"]:
+        if order not in ["asc", "desc"]:
             raise self.server.error(f"Invalid `order` value: {order}", 400)
 
         reverse_order = (order == "desc")
