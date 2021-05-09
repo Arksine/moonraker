@@ -422,7 +422,7 @@ class Tasmota(PowerDevice):
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
         self.password = config.get("password", "")
-        self.timer = config.get("timer","")
+        self.timer = config.get("timer", "")
 
     async def _send_tasmota_command(self, command, password=None):
         if command in ["on", "off"]:
@@ -459,10 +459,10 @@ class Tasmota(PowerDevice):
     async def refresh_status(self):
         try:
             res = await self._send_tasmota_command("info")
-            try: 
+            try:
                 state = res[f"POWER{self.output_id}"].lower()
             except KeyError as e:
-                if self.output_id == 1 :
+                if self.output_id == 1:
                     state = res[f"POWER"].lower()
                 else:
                     raise KeyError(e)
@@ -477,10 +477,10 @@ class Tasmota(PowerDevice):
         try:
             res = await self._send_tasmota_command(state)
             if self.timer == "" or state != "off":
-                try: 
+                try:
                     state = res[f"POWER{self.output_id}"].lower()
                 except KeyError as e:
-                    if self.output_id == 1 :
+                    if self.output_id == 1:
                         state = res[f"POWER"].lower()
                     else:
                         raise KeyError(e)
@@ -500,7 +500,7 @@ class Shelly(PowerDevice):
         self.output_id = config.getint("output_id", 0)
         self.user = config.get("user", "admin")
         self.password = config.get("password", "")
-        self.timer = config.get("timer","")
+        self.timer = config.get("timer", "")
 
     async def _send_shelly_command(self, command):
         if command == "on":
