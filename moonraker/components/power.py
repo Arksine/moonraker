@@ -111,8 +111,12 @@ class PrinterPower:
         return result
 
     async def _process_request(self, device, req):
+        ret = device.refresh_status()
+        if asyncio.iscoroutine(ret):
+            await ret
+        dev_info = device.get_device_info()
         if req in ["on", "off"]:
-            cur_state = device.get_device_info()['status']
+            cur_state = dev_info['status']
             if req == cur_state:
                 # device is already in requested state, do nothing
                 return cur_state
@@ -127,12 +131,7 @@ class PrinterPower:
             dev_info = device.get_device_info()
             self.server.send_event("power:power_changed", dev_info)
             device.run_power_changed_action()
-        elif req == "status":
-            ret = device.refresh_status()
-            if asyncio.iscoroutine(ret):
-                await ret
-            dev_info = device.get_device_info()
-        else:
+        elif req != "status":
             raise self.server.error(f"Unsupported power request: {req}")
         return dev_info['status']
 
