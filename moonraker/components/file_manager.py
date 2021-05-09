@@ -519,7 +519,7 @@ class FileManager:
         if list_format:
             flist = []
             for fname in sorted(filelist, key=str.lower):
-                fdict = {'filename': fname}
+                fdict = {'path': fname}
                 fdict.update(filelist[fname])
                 flist.append(fdict)
             return flist
