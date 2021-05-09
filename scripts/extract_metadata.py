@@ -407,7 +407,7 @@ class Simplify3D(BaseSlicer):
         return self._parse_min_float(r"G1\sZ\d+\.\d*", self.header_data)
 
     def parse_layer_height(self):
-        self.layer_height =  _regex_find_first(
+        self.layer_height = _regex_find_first(
             r";\s+layerHeight,(\d+\.?\d*)", self.header_data)
         return self.layer_height
 
@@ -563,7 +563,7 @@ class IdeaMaker(BaseSlicer):
         if len(length) == len(density) == len(diameter):
             # calc individual weight for each filament with m=pi/4*d²*l*rho
             weights = [(pi/4 * diameter[i]**2 * length[i] * density[i]/10**6)
-                      for i in range(len(length))]
+                       for i in range(len(length))]
             return sum(weights)
         return None
 
