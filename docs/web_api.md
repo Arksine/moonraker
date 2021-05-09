@@ -1082,27 +1082,27 @@ A list of objects, where each object contains file data.
 ```json
 [
     {
-        "filename": "3DBenchy_0.15mm_PLA_MK3S_2h6m.gcode",
+        "path": "3DBenchy_0.15mm_PLA_MK3S_2h6m.gcode",
         "modified": 1615077020.2025201,
         "size": 4926481
     },
     {
-        "filename": "Shape-Box_0.2mm_PLA_Ender2_20m.gcode",
+        "path": "Shape-Box_0.2mm_PLA_Ender2_20m.gcode",
         "modified": 1614910966.946807,
         "size": 324236
     },
     {
-        "filename": "test_dir/A-Wing.gcode",
+        "path": "test_dir/A-Wing.gcode",
         "modified": 1605202259,
         "size": 1687387
     },
     {
-        "filename": "test_dir/CE2_CubeTest.gcode",
+        "path": "test_dir/CE2_CubeTest.gcode",
         "modified": 1614644445.4025,
         "size": 1467339
     },
     {
-        "filename": "test_dir/V350_Engine_Block_-_2_-_Scaled.gcode",
+        "path": "test_dir/V350_Engine_Block_-_2_-_Scaled.gcode",
         "modified": 1615768477.5133543,
         "size": 189713016
     },
