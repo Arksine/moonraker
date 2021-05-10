@@ -53,13 +53,16 @@ class PrinterPower:
             self._handle_list_devices)
         self.server.register_endpoint(
             "/machine/device_power/status", ['GET'],
-            self._handle_power_request)
+            self._handle_batch_power_request)
         self.server.register_endpoint(
             "/machine/device_power/on", ['POST'],
-            self._handle_power_request)
+            self._handle_batch_power_request)
         self.server.register_endpoint(
             "/machine/device_power/off", ['POST'],
-            self._handle_power_request)
+            self._handle_batch_power_request)
+        self.server.register_endpoint(
+            "/machine/device_power/device", ['GET', 'POST'],
+            self._handle_single_power_request)
         self.server.register_remote_method(
             "set_device_power", self.set_device_power)
         self.server.register_event_handler(
@@ -95,7 +98,23 @@ class PrinterPower:
         output = {"devices": dev_list}
         return output
 
-    async def _handle_power_request(self, web_request):
+    async def _handle_single_power_request(self, web_request):
+        dev_name = web_request.get_str('device')
+        req_action = web_request.get_action()
+        if dev_name not in self.devices:
+            raise self.server.error(f"No valid device named {dev_name}")
+        dev = self.devices[dev_name]
+        if req_action == 'GET':
+            action = "status"
+        elif req_action == "POST":
+            action = web_request.get_str('action').lower()
+            if action not in ["on", "off", "toggle"]:
+                raise self.server.error(
+                    f"Invalid requested action '{action}'")
+        result = await self._process_request(dev, action)
+        return {dev_name: result}
+
+    async def _handle_batch_power_request(self, web_request):
         args = web_request.get_args()
         ep = web_request.get_endpoint()
         if not args:
@@ -115,6 +134,8 @@ class PrinterPower:
         if asyncio.iscoroutine(ret):
             await ret
         dev_info = device.get_device_info()
+        if req == "toggle":
+            req = "on" if dev_info['status'] == "off" else "off"
         if req in ["on", "off"]:
             cur_state = dev_info['status']
             if req == cur_state:
