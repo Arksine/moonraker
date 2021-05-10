@@ -333,7 +333,6 @@ class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config):
         super().__init__(config)
-        self.server = config.get_server()
         self.addr = config.get("address").split('/')
         self.port = config.getint("port", 9999)
 
@@ -439,7 +438,6 @@ class TPLinkSmartPlug(PowerDevice):
 class Tasmota(PowerDevice):
     def __init__(self, config):
         super().__init__(config)
-        self.server = config.get_server()
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 1)
         self.password = config.get("password", "")
@@ -516,7 +514,6 @@ class Tasmota(PowerDevice):
 class Shelly(PowerDevice):
     def __init__(self, config):
         super().__init__(config)
-        self.server = config.get_server()
         self.addr = config.get("address")
         self.output_id = config.getint("output_id", 0)
         self.user = config.get("user", "admin")
@@ -587,7 +584,6 @@ class Shelly(PowerDevice):
 class HomeSeer(PowerDevice):
     def __init__(self, config):
         super().__init__(config)
-        self.server = config.get_server()
         self.addr = config.get("address")
         self.device = config.getint("device")
         self.user = config.get("user", "admin")
@@ -646,7 +642,6 @@ class HomeSeer(PowerDevice):
 class HomeAssistant(PowerDevice):
     def __init__(self, config):
         super().__init__(config)
-        self.server = config.get_server()
         self.addr = config.get("address")
         self.port = config.getint("port", 8123)
         self.device = config.get("device")
