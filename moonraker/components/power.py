@@ -13,7 +13,7 @@ import socket
 import gpiod
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
-from tornado import gen
+from tornado.locks import Lock
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
 
@@ -238,6 +238,7 @@ class HTTPDevice(PowerDevice):
                  default_user=None, default_password=None):
         super().__init__(config)
         self.client = AsyncHTTPClient()
+        self.request_mutex = Lock()
         self.addr = config.get("address")
         self.port = config.getint("port", default_port)
         self.user = config.get("user", default_user)
@@ -265,24 +266,26 @@ class HTTPDevice(PowerDevice):
             "_send_status_request must be implemented by children")
 
     async def refresh_status(self):
-        try:
-            state = await self._send_status_request()
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
+        async with self.request_mutex:
+            try:
+                state = await self._send_status_request()
+            except Exception:
+                self.state = "error"
+                msg = f"Error Refeshing Device Status: {self.name}"
+                logging.exception(msg)
+                raise self.server.error(msg) from None
+            self.state = state
 
     async def set_power(self, state):
-        try:
-            state = await self._send_power_request(state)
-        except Exception:
-            self.state = "error"
-            msg = f"Error Setting Device Status: {self.name} to {state}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
+        async with self.request_mutex:
+            try:
+                state = await self._send_power_request(state)
+            except Exception:
+                self.state = "error"
+                msg = f"Error Setting Device Status: {self.name} to {state}"
+                logging.exception(msg)
+                raise self.server.error(msg) from None
+            self.state = state
 
 
 class GpioChipFactory:
@@ -381,6 +384,7 @@ class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config):
         super().__init__(config)
+        self.request_mutex = Lock()
         self.addr = config.get("address").split('/')
         self.port = config.getint("port", 9999)
 
@@ -448,33 +452,35 @@ class TPLinkSmartPlug(PowerDevice):
         await self.refresh_status()
 
     async def refresh_status(self):
-        try:
-            res = await self._send_tplink_command("info")
-            if len(self.addr) == 2:
-                # TPLink device controls multiple devices
-                children = res['system']['get_sysinfo']['children']
-                state = children[int(self.addr[1])]['state']
-            else:
-                state = res['system']['get_sysinfo']['relay_state']
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = "on" if state else "off"
+        async with self.request_mutex:
+            try:
+                res = await self._send_tplink_command("info")
+                if len(self.addr) == 2:
+                    # TPLink device controls multiple devices
+                    children = res['system']['get_sysinfo']['children']
+                    state = children[int(self.addr[1])]['state']
+                else:
+                    state = res['system']['get_sysinfo']['relay_state']
+            except Exception:
+                self.state = "error"
+                msg = f"Error Refeshing Device Status: {self.name}"
+                logging.exception(msg)
+                raise self.server.error(msg) from None
+            self.state = "on" if state else "off"
 
     async def set_power(self, state):
-        try:
-            res = await self._send_tplink_command(state)
-            err = res['system']['set_relay_state']['err_code']
-        except Exception:
-            err = 1
-            logging.exception(f"Power Toggle Error: {self.name}")
-        if err:
-            self.state = "error"
-            raise self.server.error(
-                f"Error Toggling Device Power: {self.name}")
-        self.state = state
+        async with self.request_mutex:
+            try:
+                res = await self._send_tplink_command(state)
+                err = res['system']['set_relay_state']['err_code']
+            except Exception:
+                err = 1
+                logging.exception(f"Power Toggle Error: {self.name}")
+            if err:
+                self.state = "error"
+                raise self.server.error(
+                    f"Error Toggling Device Power: {self.name}")
+            self.state = state
 
 
 class Tasmota(HTTPDevice):
