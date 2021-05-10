@@ -2252,6 +2252,66 @@ An array of objects containing info for each configured device.
 ```
 
 #### Get Device Status
+Returns the status for a single configured device.
+
+HTTP request:
+```http
+GET /machine/device_power/device?device=green_led
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.device_power.get_device",
+    "params": {
+        "device": "green_led"
+    },
+    "id": 4564
+}
+```
+Returns:
+
+An object containing power state for the requested device:
+```json
+{
+    "green_led": "off"
+}
+```
+
+#### Set Device State
+Toggle, turn on, or turn off a specified device.
+
+HTTP request:
+```http
+POST /machine/device_power/device?device=green_led&action=on
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.device_power.post_device",
+    "params": {
+        "device": "green_led",
+        "action": "on"
+    },
+    "id": 4564
+}
+```
+
+!!! note
+    The `action` argument may be `on`, `off`, or `toggle`.  Any
+    other value will result in an error.
+
+Returns:
+
+An object containing new power state for the requested device:
+```json
+{
+    "green_led": "off"
+}
+```
+
+#### Get Batch Device Status
 Get power status for the requested devices.  At least one device must be
 specified.
 
@@ -2281,7 +2341,7 @@ An object containing power state for each requested device:
 }
 ```
 
-#### Power On Devices
+#### Batch Power On Devices
 Power on the requested devices.  At least one device must be
 specified.
 
@@ -2309,7 +2369,7 @@ An object containing power state for each requested device:
 }
 ```
 
-#### Power Off Devices
+#### Batch Power Off Devices
 Power off the requested devices.  At least one device must be
 specified.
 

@@ -180,7 +180,7 @@ and Tasmota (via http) devices, HomeAssistant switch are supported.
 [power device_name]
 type: gpio
 #   The type of device.  Can be either gpio, tplink_smartplug, tasmota
-#   or homeseer.
+#   shelly, homeseer, homeassistant, or loxonev1.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -241,10 +241,10 @@ timer:
 #   Provide a user and password if configured in Shelly (default is empty).
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
-#   more than one (default is 0).
-#   When timer option is used to delay the turn off make sure to set
-#   the state to "on" in action call_remote_method.
-#   So we send a command to turn it on for x sec when its already on then it turns off.
+#   more than one (default is 0). When timer option is used to delay the turn
+#   off make sure to set the state to "on" in action call_remote_method.
+#   So we send a command to turn it on for x sec when its already on then
+#   it turns off.
 address:
 device:
 user:
@@ -265,7 +265,17 @@ token:
 #   The above options are used for "homeassistant" devices.  The
 #   address should be a valid ip or hostname for the homeassistant controller.
 #   "device" should be the ID of the switch to control.
-
+address:
+user:
+password:
+output_id:
+#   The above options are used for "loxone smart home miniserver v1 " devices.
+#   The address should be a valid ip or hostname for the loxone miniserver v1
+#   device. All entries must be configured in advance in the loxone config.
+#   Provide a user and password configured in loxone config.
+#   The output_id is the name of a programmed output, virtual input or virtual
+#   output in the loxone config his output_id (name) may only be used once in
+#   the loxone config
 ```
 Below are some potential examples:
 ```ini
