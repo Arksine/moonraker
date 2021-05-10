@@ -31,6 +31,7 @@ class PrinterPower:
             "shelly": Shelly,
             "homeseer": HomeSeer,
             "homeassistant": HomeAssistant,
+            "loxonev1": Loxonev1
         }
         try:
             for section in prefix_sections:
@@ -637,6 +638,36 @@ class HomeAssistant(HTTPDevice):
     async def _send_power_request(self, state):
         res = await self._send_homeassistant_command(state)
         return res[0][f"state"]
+
+class Loxonev1(HTTPDevice):
+    def __init__(self, config):
+        super().__init__(config, default_user="admin",
+                         default_password="admin")
+        self.output_id = config.get("output_id", "")
+
+    async def _send_loxonev1_command(self, command):
+        if command in ["on", "off"]:
+            out_cmd = f"jdev/sps/io/{self.output_id}/{command}"
+        elif command == "info":
+            out_cmd = f"jdev/sps/io/{self.output_id}"
+        else:
+            raise self.server.error(f"Invalid loxonev1 command: {command}")
+        if self.password != "":
+            out_pwd = f"{self.user}:{self.password}@"
+        else:
+            out_pwd = f""
+        url = f"http://{out_pwd}{self.addr}/{out_cmd}"
+        return await self._send_http_command(url, command)
+
+    async def _send_status_request(self):
+        res = await self._send_loxonev1_command("info")
+        state = res[f"LL"][f"value"]
+        return "on" if int(state) == 1 else "off"
+
+    async def _send_power_request(self, state):
+        res = await self._send_loxonev1_command(state)
+        state = res[f"LL"][f"value"]
+        return "on" if int(state) == 1 else "off"
 
 
 # The power component has multiple configuration sections
