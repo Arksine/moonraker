@@ -199,6 +199,7 @@ class PowerDevice:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
         self.server = config.get_server()
         self.name = name_parts[1]
+        self.type = config.get('type')
         self.state = "init"
         self.locked_while_printing = config.getboolean(
             'locked_while_printing', False)
@@ -218,7 +219,8 @@ class PowerDevice:
         return {
             'device': self.name,
             'status': self.state,
-            'locked_while_printing': self.locked_while_printing
+            'locked_while_printing': self.locked_while_printing,
+            'type': self.type
         }
 
     def get_locked_while_printing(self):
@@ -230,6 +232,58 @@ class PowerDevice:
             klippy_apis = self.server.lookup_component("klippy_apis")
             ioloop.call_later(self.restart_delay, klippy_apis.do_restart,
                               "FIRMWARE_RESTART")
+
+class HTTPDevice(PowerDevice):
+    def __init__(self, config, default_port=None,
+                 default_user=None, default_password=None):
+        super().__init__(config)
+        self.client = AsyncHTTPClient()
+        self.addr = config.get("address")
+        self.port = config.getint("port", default_port)
+        self.user = config.get("user", default_user)
+        self.password = config.get("password", default_password)
+
+    async def initialize(self):
+        await self.refresh_status()
+
+    async def _send_http_command(self, url, command):
+        try:
+            response = await self.client.fetch(url)
+            data = json_decode(response.body)
+        except Exception:
+            msg = f"Error sending '{self.type}' command: {command}"
+            logging.exception(msg)
+            raise self.server.error(msg)
+        return data
+
+    async def _send_power_request(self, state):
+        raise NotImplementedError(
+            "_send_power_request must be implemented by children")
+
+    async def _send_status_request(self):
+        raise NotImplementedError(
+            "_send_status_request must be implemented by children")
+
+    async def refresh_status(self):
+        try:
+            state = await self._send_status_request()
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+
+    async def set_power(self, state):
+        try:
+            state = await self._send_power_request(state)
+        except Exception:
+            self.state = "error"
+            msg = f"Error Setting Device Status: {self.name} to {state}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+
 
 class GpioChipFactory:
     def __init__(self):
@@ -292,12 +346,6 @@ class GpioDevice(PowerDevice):
 
     def initialize(self):
         self.set_power("on" if self.initial_state else "off")
-
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "gpio"
-        }
 
     def refresh_status(self):
         try:
@@ -399,12 +447,6 @@ class TPLinkSmartPlug(PowerDevice):
     async def initialize(self):
         await self.refresh_status()
 
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "tplink_smartplug"
-        }
-
     async def refresh_status(self):
         try:
             res = await self._send_tplink_command("info")
@@ -435,12 +477,10 @@ class TPLinkSmartPlug(PowerDevice):
         self.state = state
 
 
-class Tasmota(PowerDevice):
+class Tasmota(HTTPDevice):
     def __init__(self, config):
-        super().__init__(config)
-        self.addr = config.get("address")
+        super().__init__(config, default_password="")
         self.output_id = config.getint("output_id", 1)
-        self.password = config.get("password", "")
         self.timer = config.get("timer", "")
 
     async def _send_tasmota_command(self, command, password=None):
@@ -455,29 +495,22 @@ class Tasmota(PowerDevice):
 
         url = f"http://{self.addr}/cm?user=admin&password=" \
             f"{self.password}&cmnd={out_cmd}"
-        data = ""
-        http_client = AsyncHTTPClient()
+        return await self._send_http_command(url, command)
+
+    async def _send_status_request(self):
+        res = await self._send_tasmota_command("info")
         try:
-            response = await http_client.fetch(url)
-            data = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending tplink command: {command}"
-            logging.exception(msg)
-            raise self.server.error(msg)
-        return data
+            state = res[f"POWER{self.output_id}"].lower()
+        except KeyError as e:
+            if self.output_id == 1:
+                state = res[f"POWER"].lower()
+            else:
+                raise KeyError(e)
+        return state
 
-    async def initialize(self):
-        await self.refresh_status()
-
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "tasmota"
-        }
-
-    async def refresh_status(self):
-        try:
-            res = await self._send_tasmota_command("info")
+    async def _send_power_request(self, state):
+        res = await self._send_tasmota_command(state)
+        if self.timer == "" or state != "off":
             try:
                 state = res[f"POWER{self.output_id}"].lower()
             except KeyError as e:
@@ -485,39 +518,13 @@ class Tasmota(PowerDevice):
                     state = res[f"POWER"].lower()
                 else:
                     raise KeyError(e)
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
-
-    async def set_power(self, state):
-        try:
-            res = await self._send_tasmota_command(state)
-            if self.timer == "" or state != "off":
-                try:
-                    state = res[f"POWER{self.output_id}"].lower()
-                except KeyError as e:
-                    if self.output_id == 1:
-                        state = res[f"POWER"].lower()
-                    else:
-                        raise KeyError(e)
-        except Exception:
-            self.state = "error"
-            msg = f"Error Setting Device Status: {self.name} to {state}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
+        return state
 
 
-class Shelly(PowerDevice):
+class Shelly(HTTPDevice):
     def __init__(self, config):
-        super().__init__(config)
-        self.addr = config.get("address")
+        super().__init__(config, default_user="admin", default_password="")
         self.output_id = config.getint("output_id", 0)
-        self.user = config.get("user", "admin")
-        self.password = config.get("password", "")
         self.timer = config.get("timer", "")
 
     async def _send_shelly_command(self, command):
@@ -537,113 +544,49 @@ class Shelly(PowerDevice):
         else:
             out_pwd = f""
         url = f"http://{out_pwd}{self.addr}/{out_cmd}"
-        data = ""
-        http_client = AsyncHTTPClient()
-        try:
-            response = await http_client.fetch(url)
-            data = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending shelly command: {command}"
-            logging.exception(msg)
-            raise self.server.error(msg)
-        return data
+        return await self._send_http_command(url, command)
 
-    async def initialize(self):
-        await self.refresh_status()
+    async def _send_status_request(self):
+        res = await self._send_shelly_command("info")
+        state = res[f"ison"]
+        timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
+        return "on" if state and timer_remaining == 0 else "off"
 
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "shelly"
-        }
+    async def _send_power_request(self, state):
+        res = await self._send_shelly_command(state)
+        state = res[f"ison"]
+        timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
+        return "on" if state and timer_remaining == 0 else "off"
 
-    async def refresh_status(self):
-        try:
-            res = await self._send_shelly_command("info")
-            state = res[f"ison"]
-            timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = "on" if state and timer_remaining == 0 else "off"
 
-    async def set_power(self, state):
-        try:
-            res = await self._send_shelly_command(state)
-            state = res[f"ison"]
-            timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
-        except Exception:
-            self.state = "error"
-            msg = f"Error Setting Device Status: {self.name} to {state}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = "on" if state and timer_remaining == 0 else "off"
-
-class HomeSeer(PowerDevice):
+class HomeSeer(HTTPDevice):
     def __init__(self, config):
-        super().__init__(config)
-        self.addr = config.get("address")
+        super().__init__(config, default_user="admin", default_password="")
         self.device = config.getint("device")
-        self.user = config.get("user", "admin")
-        self.password = config.get("password", "")
 
     async def _send_homeseer(self, request, additional=""):
         url = (f"http://{self.user}:{self.password}@{self.addr}"
                f"/JSON?user={self.user}&pass={self.password}"
                f"&request={request}&ref={self.device}&{additional}")
-        data = ""
-        http_client = AsyncHTTPClient()
-        try:
-            response = await http_client.fetch(url)
-            data = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending HomeSeer command: {request}"
-            logging.exception(msg)
-            raise self.server.error(msg)
-        return data
+        return await self._send_http_command(url, request)
 
-    async def initialize(self):
-        await self.refresh_status()
+    async def _send_status_request(self):
+        res = await self._send_homeseer("getstatus")
+        return res[f"Devices"][0]["status"].lower()
 
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "homeseer"
-        }
+    async def _send_power_request(self, state):
+        if state == "on":
+            state_hs = "On"
+        elif state == "off":
+            state_hs = "Off"
+        res = await self._send_homeseer("controldevicebylabel",
+                                        f"label={state_hs}")
+        return state
 
-    async def refresh_status(self):
-        try:
-            res = await self._send_homeseer("getstatus")
-            state = res[f"Devices"][0]["status"].lower()
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
 
-    async def set_power(self, state):
-        try:
-            if state == "on":
-                state_hs = "On"
-            elif state == "off":
-                state_hs = "Off"
-            res = await self._send_homeseer("controldevicebylabel",
-                                            f"label={state_hs}")
-        except Exception:
-            self.state = "error"
-            msg = f"Error Setting Device Status: {self.name} to {state}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
-
-class HomeAssistant(PowerDevice):
+class HomeAssistant(HTTPDevice):
     def __init__(self, config):
-        super().__init__(config)
-        self.addr = config.get("address")
-        self.port = config.getint("port", 8123)
+        super().__init__(config, default_port=8123)
         self.device = config.get("device")
         self.token = config.get("token")
 
@@ -667,53 +610,28 @@ class HomeAssistant(PowerDevice):
             'Authorization': f'Bearer {self.token}',
             'Content-Type': 'application/json'
         }
-        data = ""
-        http_client = AsyncHTTPClient()
         try:
             if (method == "POST"):
-                response = await http_client.fetch(
+                response = await self.client.fetch(
                     url, method="POST", body=json.dumps(body), headers=headers)
-                data = json_decode(response.body)
             else:
-                response = await http_client.fetch(
+                response = await self.client.fetch(
                     url, method="GET", headers=headers)
-                data = json_decode(response.body)
+            data = json_decode(response.body)
         except Exception:
             msg = f"Error sending homeassistant command: {command}"
             logging.exception(msg)
             raise self.server.error(msg)
         return data
 
-    async def initialize(self):
-        await self.refresh_status()
+    async def _send_status_request(self):
+        res = await self._send_homeassistant_command("info")
+        return res[f"state"]
 
-    def get_device_info(self):
-        return {
-            **super().get_device_info(),
-            'type': "homeassistant"
-        }
+    async def _send_power_request(self, state):
+        res = await self._send_homeassistant_command(state)
+        return res[0][f"state"]
 
-    async def refresh_status(self):
-        try:
-            res = await self._send_homeassistant_command("info")
-            state = res[f"state"]
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
-
-    async def set_power(self, state):
-        try:
-            res = await self._send_homeassistant_command(state)
-            state = res[0][f"state"]
-        except Exception:
-            self.state = "error"
-            msg = f"Error Setting Device Status: {self.name} to {state}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
 
 # The power component has multiple configuration sections
 def load_component_multi(config):
