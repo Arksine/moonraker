@@ -1646,8 +1646,14 @@ Returns: A list of created users on the system
 ```json
 {
     "users": [
-        "testuser",
-        "testuser2"
+        {
+            "username": "testuser",
+            "created_on": 1618771331.1685035
+        },
+        {
+            "username": "testuser2",
+            "created_on": 1620943153.0191233
+        }
     ]
 }
 ```
