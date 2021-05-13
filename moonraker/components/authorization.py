@@ -147,6 +147,8 @@ class Authorization:
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
             self._handle_token_request, protocol=['http'])
+        self.server.register_notification("authorization:user_created")
+        self.server.register_notification("authorization:user_deleted")
 
     async def _handle_apikey_request(self, web_request):
         action = web_request.get_action()
@@ -281,6 +283,11 @@ class Authorization:
         refresh_token = self._generate_jwt(
             username, jwt_secret, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
+        if create:
+            IOLoop.current().call_later(
+                .005, self.server.send_event,
+                "authorization:user_created",
+                {'username': username})
         return {
             'username': username,
             'token': token,
@@ -303,6 +310,10 @@ class Authorization:
         if hashed_pass != user_info['password']:
             raise self.server.error("Invalid Password")
         del self.users[username]
+        IOLoop.current().call_later(
+            .005, self.server.send_event,
+            "authorization:user_deleted",
+            {'username': username})
         return {
             "username": username,
             "action": "user_deleted"
