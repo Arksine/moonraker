@@ -124,16 +124,23 @@ class Authorization:
         self.permitted_paths.add("/access/login")
         self.permitted_paths.add("/access/refresh_jwt")
         self.server.register_endpoint(
-            "/access/login", ['POST'], self._handle_login)
+            "/access/login", ['POST'], self._handle_login,
+            protocol=['http'])
         self.server.register_endpoint(
-            "/access/logout", ['POST'], self._handle_logout)
+            "/access/logout", ['POST'], self._handle_logout,
+            protocol=['http'])
         self.server.register_endpoint(
-            "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt)
+            "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
+            protocol=['http'])
         self.server.register_endpoint(
             "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request)
+            self._handle_user_request, protocol=['http'])
         self.server.register_endpoint(
-            "/access/user/password", ['POST'], self._handle_password_reset)
+            "/access/users/list", ['GET'], self._handle_list_request,
+            protocol=['http'])
+        self.server.register_endpoint(
+            "/access/user/password", ['POST'], self._handle_password_reset,
+            protocol=['http'])
         self.server.register_endpoint(
             "/access/api_key", ['GET', 'POST'],
             self._handle_apikey_request, protocol=['http'])
@@ -202,6 +209,13 @@ class Authorization:
         elif action == "DELETE":
             # Delete User
             return self._delete_jwt_user(web_request)
+
+    async def _handle_list_request(self, web_request):
+        user_list = list(self.users.keys())
+        user_list.remove(API_USER)
+        return {
+            'users': user_list
+        }
 
     async def _handle_password_reset(self, web_request):
         password = web_request.get_str('password')
