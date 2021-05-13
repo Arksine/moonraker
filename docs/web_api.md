@@ -1635,6 +1635,23 @@ effectively logs the user out.
 }
 ```
 
+#### List Available Users
+HTTP Request:
+```http
+GET /access/users/list
+```
+JSON-RPC request: Not Available
+
+Returns: A list of created users on the system
+```json
+{
+    "users": [
+        "testuser",
+        "testuser2"
+    ]
+}
+```
+
 #### Reset User Password
 HTTP Request:
 ```http
@@ -3006,6 +3023,36 @@ a job is added or finished:
 The `action` field may be `added` or `finished`. The `job` field contains
 an object matches the one returned when requesting
 [job data](#get-a-single-job).
+
+#### Authorized User Created
+If the `[authorization]` module is enabled the following notification is
+sent when a new user is created:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_user_created",
+    "params": [
+        {
+            "username": "<username>"
+        }
+    ]
+}
+```
+
+#### Authorized User Deleted
+If the `[authorization]` module is enabled the following notification is
+sent when an existing user is deleted.
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_user_deleted",
+    "params": [
+        {
+            "username": "<username>"
+        }
+    ]
+}
+```
 
 ### Appendix
 
