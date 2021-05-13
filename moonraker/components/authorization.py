@@ -213,8 +213,14 @@ class Authorization:
             return self._delete_jwt_user(web_request)
 
     async def _handle_list_request(self, web_request):
-        user_list = list(self.users.keys())
-        user_list.remove(API_USER)
+        user_list = []
+        for user in self.users.values():
+            if user['username'] == API_USER:
+                continue
+            user_list.append({
+                'username': user['username'],
+                'created_on': user['created_on']
+            })
         return {
             'users': user_list
         }
