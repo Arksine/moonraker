@@ -450,7 +450,8 @@ class Authorization:
             return None
 
     def check_authorized(self, request):
-        if request.path in self.permitted_paths:
+        if request.path in self.permitted_paths or \
+                request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
