@@ -108,6 +108,26 @@ Progress: <progress id="progressbar" value="0" max="100"></progress>
     </div>
 </div>
 
+<a id="do_deleteuser" rel="leanModal" name="deleteuser" href="#deleteuser" hidden>Hidden Delete</a>
+<div id="deleteuser" class="user">
+    <div id="login-ct">
+        <div id="deleteuser-header" class="user-header">
+            <h2>Delete User</h2>
+            <button id="deleteuser_close" class="modal_close"></a>
+        </div>
+
+        <form id="deleteuser_form" class="user-form">
+            <div class="text-field">
+                <label for="deleteuser_username">Username</label>
+                <input id="deleteuser_username" class="good_input" name="deleteuser_username" type="text" />
+            </div>
+            <div class="button-field">
+                <button type="submit" class="user-button">Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <a id="do_signup" rel="leanModal" name="signup" href="#signup" hidden>Hidden Signup</a>
 <div id="signup" class="user">
     <div id="signup-ct">

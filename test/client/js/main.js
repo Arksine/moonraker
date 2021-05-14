@@ -1370,20 +1370,17 @@ function logout_jwt_user() {
     });
 }
 
-function delete_jwt_user(pass) {
-    if (!pass) {
-        alert("Invalid Password, Cannot Delete User");
+function delete_jwt_user(user) {
+    if (!user) {
+        alert("Invalid username or password, Cannot Delete User");
         return;
     }
-    if (auth_token == null) {
-        console.log("No User Logged In")
-        return;
-    }
+
     let settings = {
         method: 'DELETE',
         url: origin + api.user.url,
         contentType: "application/json",
-        data: JSON.stringify({password: pass}),
+        data: JSON.stringify({username: user}),
         dataType: 'json',
         headers: {
             "Authorization": `Bearer ${auth_token}`
@@ -1392,16 +1389,15 @@ function delete_jwt_user(pass) {
             let res = resp.result;
             console.log("Delete User Response:");
             console.log(res);
-            auth_token = null;
-            refresh_token = null;
-            window.localStorage.removeItem('refresh_token');
-            $('.req-login').prop('disabled', true);
+            $("#deleteuser_close").click()
         }
     }
 
     $.ajax(settings)
     .fail(() => {
         console.log("Delete User Failed");
+        $("#deleteuser_close").click()
+        window.alert("Unable to delete user!")
     });
 }
 
@@ -1973,8 +1969,7 @@ window.onload = () => {
     });
 
     $('#btndeluser').click(() => {
-        let password = window.prompt("Verify your password:")
-        delete_jwt_user(password);
+        $("#do_deleteuser").click()
     });
 
     $('#btnchangepass').click(() => {
@@ -2011,6 +2006,13 @@ window.onload = () => {
         closeButton: "#changepass_close"
     });
 
+    $("#do_deleteuser").leanModal({
+        top : 200,
+        overlay : 0.4,
+        closeButton: "#deleteuser_close"
+    });
+
+
     $("#login_close").click(() => {
         //$("#login_username").val("");
         $("#login_password").val("");
@@ -2028,6 +2030,11 @@ window.onload = () => {
         $("#changepass_oldpass").val("");
         $("#changepass_newpass").val("");
         $("#changepass_verify_pass").val("");
+        $("#nav_home").click();
+    });
+
+    $("#deleteuser_close").click(() => {
+        $("#deleteuser_username").val("");
         $("#nav_home").click();
     });
 
@@ -2060,6 +2067,15 @@ window.onload = () => {
             change_jwt_password(old_pass, new_pass)
         else
             alert("All fields are required to change password");
+        return false;
+    });
+
+    $("#deleteuser_form").submit((evt)=> {
+        let user = $("#deleteuser_username").val()
+        if (user != "")
+            delete_jwt_user(user);
+        else
+            alert("Invalid username/password");
         return false;
     });
 
