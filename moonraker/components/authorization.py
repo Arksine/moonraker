@@ -302,19 +302,19 @@ class Authorization:
         }
 
     def _delete_jwt_user(self, web_request):
-        password = web_request.get_str('password')
-        user_info = web_request.get_current_user()
-        if user_info is None:
-            raise self.server.error("No Current User")
-        username = user_info['username']
+        username = web_request.get_str('username')
+        current_user = web_request.get_current_user()
+        if current_user is not None:
+            curname = current_user.get('username', None)
+            if curname is not None and curname == username:
+                raise self.server.error(
+                    f"Cannot delete logged in user {curname}")
         if username in RESERVED_USERS:
             raise self.server.error(
-                f"Invalid request for user {username}")
-        salt = bytes.fromhex(user_info['salt'])
-        hashed_pass = hashlib.pbkdf2_hmac(
-            'sha256', password.encode(), salt, HASH_ITER).hex()
-        if hashed_pass != user_info['password']:
-            raise self.server.error("Invalid Password")
+                f"Invalid Request for reserved user {username}")
+        user_info = self.users.get(username)
+        if user_info is None:
+            raise self.server.error(f"No registered user: {username}")
         del self.users[username]
         IOLoop.current().call_later(
             .005, self.server.send_event,
