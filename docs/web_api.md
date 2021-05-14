@@ -1613,7 +1613,12 @@ logs the user in.
     or be logged in as another user.
 
 #### Delete User
-Deletes the currently logged in user.
+Deletes a registered user.
+
+!!! note
+    A request to delete a user MUST come from an authorized source
+    other than the account to be deleted.  This can be a "trusted user",
+    the "api key user", or any other user account.
 
 HTTP Request:
 ```http
@@ -1621,13 +1626,13 @@ DELETE /access/user
 Content-Type: application/json
 
 {
-    "password": "my_password"
+    "username": "my_username"
 }
 ```
 JSON-RPC request: Not Available
 
 Returns: The username of the deleted user and an action summary.  This
-effectively logs the user out.
+effectively logs the user out, as all outstanding tokens will be invalid.
 ```json
 {
     "username": "my_user",
