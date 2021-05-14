@@ -3,6 +3,8 @@
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+
+from __future__ import annotations
 import os
 import re
 import pathlib
@@ -10,6 +12,18 @@ import logging
 import platform
 import distro
 from tornado.ioloop import IOLoop
+
+# Annotation imports
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+)
+if TYPE_CHECKING:
+    from confighelper import ConfigHelper
+    from websockets import WebRequest
+    from . import shell_command
+    SCMDComp = shell_command.ShellCommandFactory
 
 ALLOWED_SERVICES = ["moonraker", "klipper", "webcamd"]
 SD_CID_PATH = "/sys/block/mmcblk0/device/cid"
@@ -20,11 +34,12 @@ SD_MFGRS = {
 }
 
 class Machine:
-    def __init__(self, config):
+    def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
-        self.system_info = {
+        self.system_info: Dict[str, Dict[str, Any]] = {
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
             'distribution': dist_info
@@ -60,7 +75,7 @@ class Machine:
         self.server.register_remote_method(
             "reboot_machine", self.reboot_machine)
 
-    async def _handle_machine_request(self, web_request):
+    async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
         if ep == "/machine/shutdown":
             await self.shutdown_machine()
@@ -70,18 +85,21 @@ class Machine:
             raise self.server.error("Unsupported machine request")
         return "ok"
 
-    async def shutdown_machine(self):
+    async def shutdown_machine(self) -> None:
         await self._execute_cmd("sudo shutdown now")
 
-    async def reboot_machine(self):
+    async def reboot_machine(self) -> None:
         await self._execute_cmd("sudo shutdown -r now")
 
-    async def do_service_action(self, action, service_name):
+    async def do_service_action(self,
+                                action: str,
+                                service_name: str
+                                ) -> None:
         await self._execute_cmd(
             f'sudo systemctl {action} {service_name}')
 
-    async def _handle_service_request(self, web_request):
-        name = web_request.get('service').lower()
+    async def _handle_service_request(self, web_request: WebRequest) -> str:
+        name: str = web_request.get('service').lower()
         action = web_request.get_endpoint().split('/')[-1]
         if name == "moonraker":
             if action != "restart":
@@ -96,23 +114,25 @@ class Machine:
                 f"Invalid argument recevied for 'name': {name}")
         return "ok"
 
-    async def _handle_sysinfo_request(self, web_request):
+    async def _handle_sysinfo_request(self,
+                                      web_request: WebRequest
+                                      ) -> Dict[str, Any]:
         return {'system_info': self.system_info}
 
-    async def _execute_cmd(self, cmd):
-        shell_command = self.server.lookup_component('shell_command')
-        scmd = shell_command.build_shell_command(cmd, None)
+    async def _execute_cmd(self, cmd: str) -> None:
+        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
+        scmd = shell_cmd.build_shell_command(cmd, None)
         try:
             await scmd.run(timeout=2., verbose=False)
         except Exception:
             logging.exception(f"Error running cmd '{cmd}'")
             raise
 
-    def get_system_info(self):
+    def get_system_info(self) -> Dict[str, Dict[str, Any]]:
         return self.system_info
 
-    def _get_sdcard_info(self):
-        sd_info = {}
+    def _get_sdcard_info(self) -> Dict[str, Any]:
+        sd_info: Dict[str, Any] = {}
         cid_file = pathlib.Path(SD_CID_PATH)
         if not cid_file.exists():
             # No SDCard detected at mmcblk0
@@ -143,12 +163,12 @@ class Machine:
             csd_type = (csd_reg[0] >> 6) & 0x3
             if csd_type == 0:
                 # Standard Capacity (CSD Version 1.0)
-                max_block_len = 2**(csd_reg[5] & 0xF)
+                max_block_len: int = 2**(csd_reg[5] & 0xF)
                 c_size = ((csd_reg[6] & 0x3) << 10) | (csd_reg[7] << 2) | \
                     ((csd_reg[8] >> 6) & 0x3)
                 c_mult_reg = ((csd_reg[9] & 0x3) << 1) | (csd_reg[10] >> 7)
                 c_mult = 2**(c_mult_reg + 2)
-                total_bytes = (c_size + 1) * c_mult * max_block_len
+                total_bytes: int = (c_size + 1) * c_mult * max_block_len
                 sd_info['capacity'] = f"{(total_bytes / (1024.0**2)):.1f} MiB"
             elif csd_type == 1:
                 # High Capacity (CSD Version 2.0)
@@ -170,7 +190,7 @@ class Machine:
             logging.info("Error Reading SDCard CSD Register")
         return sd_info
 
-    def _get_cpu_info(self):
+    def _get_cpu_info(self) -> Dict[str, Any]:
         cpu_file = pathlib.Path("/proc/cpuinfo")
         cpu_info = {
             'cpu_count': os.cpu_count(),
@@ -201,5 +221,5 @@ class Machine:
             logging.info("Error Reading /proc/cpuinfo")
         return cpu_info
 
-def load_component(config):
+def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
