@@ -803,7 +803,7 @@ class GitUpdater:
         return status
 
 
-GIT_FETCH_TIMEOUT = 30.
+GIT_FETCH_TIMEOUT = 300.
 GIT_FETCH_ENV_VARS = {
     'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
     'GIT_HTTP_LOW_SPEED_TIME ': "20"
