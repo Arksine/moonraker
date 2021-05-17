@@ -352,14 +352,7 @@ class GpioDevice(PowerDevice):
         self.set_power("on" if self.initial_state else "off")
 
     def refresh_status(self):
-        try:
-            val = self.line.get_value()
-        except Exception:
-            self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = "on" if val else "off"
+        pass
 
     def set_power(self, state):
         try:
