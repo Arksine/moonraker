@@ -331,7 +331,7 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
 
     def prepare(self):
         auth = self.server.lookup_component('authorization', None)
-        if auth is not None:
+        if auth is not None and self.request.method != "GET":
             self.current_user = auth.check_authorized(self.request)
 
     def options(self, *args, **kwargs):
