@@ -131,6 +131,10 @@ class FileManager:
             if root in FULL_ACCESS_ROOTS:
                 # Refresh the file list and add watches
                 self.inotify_handler.add_root_watch(root, path)
+            else:
+                IOLoop.current().spawn_callback(
+                    self.inotify_handler.notify_filelist_changed,
+                    "root_update", root, path)
         return True
 
     def get_sd_directory(self):
