@@ -55,7 +55,7 @@ RESERVED_ENDPOINTS = [
 
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
-EXCLUDED_ARGS = ["_", "token", "connection_id"]
+EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):

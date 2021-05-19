@@ -450,6 +450,11 @@ class Authorization:
             auth_token = request.headers.get("X-Access-Token")
         if auth_token and auth_token.startswith("Bearer "):
             auth_token = auth_token[7:]
+        else:
+            qtoken = request.query_arguments.get('access_token', None)
+            if qtoken is not None:
+                auth_token = qtoken[-1].decode()
+        if auth_token:
             try:
                 return self._decode_jwt(auth_token)
             except Exception as e:
