@@ -41,6 +41,10 @@ database_path: ~/.moonraker_database
 #   Moonraker (such as the "config_path" or the location where gcode
 #   files are stored).  If the folder does not exist an attempt will be made
 #   to create it.  The default is ~/.moonraker_database.
+log_path:
+#   An optional path to a directory where log files are located.  Users may
+#   configure various applications to store logs here and Moonraker will serve
+#   them at "/server/files/logs/*".  The default is no log paths.
 enable_database_debug: False
 #   For developer use only.  End users should leave this option set to False.
 temperature_store_size: 1200
