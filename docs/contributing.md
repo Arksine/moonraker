@@ -15,8 +15,19 @@ are near those of Klipper:
         #
         # This file may be distributed under the terms of the GNU GPLv3 license
 
-- No line in the source code or documentation should exceed 80 characters.
-  Be sure there is no trailing whitespace.
+- No line in the source code should exceed 80 characters.  Be sure there is no
+  trailing whitespace.  To validate code before submission one may use `pycodestyle`
+  with the following options:
+      - `--ignore=E226,E301,E302,E303,W503,W504`
+      - `--max-line-length=80`
+      - `--max-doc-length=80`
+- Generally speaking, each line in submitted documentation should also be no
+  longer than 80 characters, however there are situations where this isn't
+  possible, such as long hyperlinks or example return values.
+- Python code should be fully annotated.  Moonraker uses the `mypy` static
+  type checker for code validation with the following options:
+      - `--ignore-missing-imports`
+      - `--follow-imports=silent`
 - Each Commit message should be in the following format:
 
         module name: brief description of commit
