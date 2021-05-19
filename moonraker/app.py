@@ -11,6 +11,7 @@ import logging
 import json
 import datetime
 import traceback
+import urllib.parse
 import tornado
 import tornado.iostream
 import tornado.httputil
@@ -530,8 +531,11 @@ class FileRequestHandler(AuthorizedFileHandler):
         # a file
         assert isinstance(self.absolute_path, str)
         basename = os.path.basename(self.absolute_path)
+        ascii_basename = self._escape_filename_to_ascii(basename)
+        utf8_basename = self._escape_filename_to_utf8(basename)
         self.set_header(
-            "Content-Disposition", f"attachment; filename={basename}")
+            "Content-Disposition", f"attachment; filename={ascii_basename}; "
+                                   f"filename*=UTF-8\'\'{utf8_basename}")
 
     async def delete(self, path: str) -> None:
         path = self.request.path.lstrip("/").split("/", 2)[-1]
@@ -632,6 +636,12 @@ class FileRequestHandler(AuthorizedFileHandler):
                     return
         else:
             assert self.request.method == "HEAD"
+
+    def _escape_filename_to_ascii(self, basename: str) -> str:
+        return basename.encode("ascii", "replace").decode()
+
+    def _escape_filename_to_utf8(self, basename: str) -> str:
+        return urllib.parse.quote(basename, encoding="utf-8")
 
     @classmethod
     def _get_cached_version(cls, abs_path: str) -> Optional[str]:
