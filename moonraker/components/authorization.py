@@ -71,6 +71,7 @@ class Authorization:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.login_timeout = config.getint('login_timeout', 90)
+        self.force_logins = config.getboolean('force_logins', False)
         database: DBComp = self.server.lookup_component('database')
         database.register_local_namespace('authorized_users', forbidden=True)
         self.users = database.wrap_namespace('authorized_users')
@@ -532,6 +533,11 @@ class Authorization:
         key: Optional[str] = request.headers.get("X-Api-Key")
         if key and key == self.api_key:
             return self.users[API_USER]
+
+        # If the force_logins option is enabled and at least one
+        # user is created this is an unauthorized request
+        if self.force_logins and len(self.users) > 1:
+            raise HTTPError(401, "Unauthorized")
 
         # Check if IP is trusted
         trusted_user = self._check_trusted_connection(ip)
