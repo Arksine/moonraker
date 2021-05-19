@@ -16,6 +16,7 @@ import zipfile
 import io
 import time
 import tempfile
+import site
 import tornado.gen
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
@@ -604,16 +605,29 @@ class GitUpdater(BaseUpdater):
             if len(matches) == 1:
                 self.env_package_path = matches[0]
             else:
-                raise config.error("No match for 'env_package_path': %s"
-                                   % (env_package_path,))
+                matches = glob.glob(site.getusersitepackages())
+                if len(matches) == 1:
+                    self.env_package_path = matches[0]
+                else:
+                    raise config.error("No match for 'env_package_path': %s"
+                                       % (env_package_path,))
+
         for opt in ["repo_path", "env", "python_reqs", "install_script",
-                    "python_dist_path", "env_package_path"]:
+                    "env_package_path"]:
             val = getattr(self, opt)
             if val is None:
                 continue
             if not os.path.exists(val):
                 raise config.error("Invalid path for option '%s': %s"
                                    % (val, opt))
+        if not os.path.exists(getattr(self, "python_dist_path")):
+            for val in site.getsitepackages():
+                if os.path.exists(val) and len(glob.glob(val + "/gpio*")) > 0:
+                    self.python_dist_path = val
+                    break
+            else:
+                raise config.error("No match for 'python_dist_path': %s"
+                                   % (python_dist_path,))
 
     def _get_version_info(self) -> Dict[str, Any]:
         ver_path = os.path.join(self.repo_path, "scripts/version.txt")
