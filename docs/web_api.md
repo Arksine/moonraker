@@ -1541,10 +1541,15 @@ Moonraker's HTTP APIs.  JWTs should be included in the `Authorization`
 header as a `Bearer` type for each HTTP request.  If using an API Key it
 should be included in the `X-Api-Key` header for each HTTP Request.
 
+!!! note
+    For requests in which clients cannot modify headers it is acceptable
+    to pass the JWT via the query string's `access_token` argument.
+    Alternatively client developers may request a `oneshot_token` and
+    send the result via the `token` query string argument.
+
 !!! warning
-    Clients should not use the query string to pass arguments to these
-    APIs.  Arguments may be passed as part of the body either in JSON
-    format or as form-data.
+    It is strongly recommended that arguments for the below APIs are
+    passed in the request's body.
 
 #### Login User
 HTTP Request:

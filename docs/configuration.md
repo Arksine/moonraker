@@ -98,6 +98,11 @@ cors_domains:
 #   When CORS is enabled by adding an entry to this option, all origins
 #   matching the "trusted_clients" option will have CORS headers set as
 #   well.  If this option is not specified then CORS is disabled.
+force_logins: False
+#   When set to True a user login is required for authorization if at least
+#   one user has been created, overriding the "trusted_clients" configuration.
+#   If no users have been created then trusted client checks will apply.
+#   The default is False.
 ```
 
 ## `[octoprint_compat]`
