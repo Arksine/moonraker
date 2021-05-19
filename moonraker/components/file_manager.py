@@ -100,6 +100,14 @@ class FileManager:
                 raise config.error(
                     "Option 'config_path' is not a valid directory")
 
+        # Register logs path
+        log_path = config.get('log_path', None)
+        if log_path is not None:
+            ret = self.register_directory('logs', log_path)
+            if not ret:
+                raise config.error(
+                    "Option 'log_path' is not a valid directory")
+
         # If gcode path is in the database, register it
         if gc_path:
             self.register_directory('gcodes', gc_path)
