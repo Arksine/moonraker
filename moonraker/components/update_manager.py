@@ -1349,7 +1349,6 @@ class GitRepo:
         git_cmd = f"git -C {self.git_path} {cmd}"
         scmd = self.cmd_helper.build_shell_command(
             git_cmd, callback=self._handle_process_output,
-            std_err_callback=self._handle_process_output,
             env=env)
         while retries:
             self.git_messages.clear()
