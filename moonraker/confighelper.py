@@ -143,17 +143,19 @@ class ConfigHelper:
     def validate_config(self) -> None:
         for sect in self.orig_sections:
             if sect not in self.parsed:
-                logging.warn(
-                    f"Invalid config section [{sect}] detected. In "
-                    "the future this will result in a startup error")
+                self.server.add_warning(
+                    f"Unparsed config section [{sect}] detected.  This "
+                    "may be the result of a component that failed to "
+                    "load.  In the future this will result in a startup "
+                    "error.")
                 continue
             parsed_opts = self.parsed[sect]
             for opt, val in self.config.items(sect):
                 if opt not in parsed_opts:
-                    logging.warn(
-                        f"Invalid option '{opt}' detected in section "
-                        f"[{sect}].  In the future this will result in a "
-                        "startup error.")
+                    self.server.add_warning(
+                        f"Invalid config option '{opt}' detected in section "
+                        f"[{sect}]. Remove the option to resolve this issue. "
+                        "In the future this will result in a startup error.")
 
 def get_configuration(server: Server,
                       system_args: Namespace

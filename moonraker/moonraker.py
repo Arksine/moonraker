@@ -93,6 +93,7 @@ class Server:
         self.klippy_disconnect_evt: Optional[Event] = None
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
         self.failed_components: List[str] = []
+        self.warnings: List[str] = []
 
         # Server/IOLoop
         self.server_running: bool = False
@@ -155,6 +156,11 @@ class Server:
             self.file_logger.set_rollover_info(name, item)
         if log and item is not None:
             logging.info(item)
+
+    def add_warning(self, warning: str, log: bool = True) -> None:
+        self.warnings.append(warning)
+        if log:
+            logging.warn(warning)
 
     # ***** Component Management *****
     def _load_components(self, config: confighelper.ConfigHelper) -> None:
@@ -586,7 +592,9 @@ class Server:
             'failed_components': self.failed_components,
             'plugins': list(self.components.keys()),
             'failed_plugins': self.failed_components,
-            'registered_directories': reg_dirs}
+            'registered_directories': reg_dirs,
+            'warnings': self.warnings
+        }
 
     async def _handle_config_request(self,
                                      web_request: WebRequest
