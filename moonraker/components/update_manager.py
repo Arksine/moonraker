@@ -973,7 +973,7 @@ class GitRepo:
                 await self.fetch()
             await self.run_fsck()
 
-            self.upstream_url = await self.remote("get-url")
+            self.upstream_url = await self.remote(f"get-url {self.git_remote}")
             self.current_commit = await self.rev_parse("HEAD")
             self.upstream_commit = await self.rev_parse(
                 f"{self.git_remote}/{self.git_branch}")
@@ -1163,7 +1163,7 @@ class GitRepo:
         self._verify_repo(check_remote=True)
         async with self.git_operation_lock:
             resp = await self._run_git_cmd(
-                f"remote {command} {self.git_remote}")
+                f"remote {command}")
             return resp.strip()
 
     async def describe(self, args: str = "") -> str:
