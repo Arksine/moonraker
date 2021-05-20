@@ -56,6 +56,7 @@ RESERVED_ENDPOINTS = [
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
+AUTHORIZED_EXTS = [".png"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
@@ -383,7 +384,7 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
 
     def prepare(self) -> None:
         auth: AuthComp = self.server.lookup_component('authorization', None)
-        if auth is not None and self.request.method != "GET":
+        if auth is not None and self._check_need_auth():
             self.current_user = auth.check_authorized(self.request)
 
     def options(self, *args, **kwargs) -> None:
@@ -400,6 +401,14 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
             err['traceback'] = "\n".join(
                 traceback.format_exception(*kwargs['exc_info']))
         self.finish({'error': err})
+
+    def _check_need_auth(self) -> bool:
+        if self.request.method != "GET":
+            return True
+        ext = os.path.splitext(self.request.path)[-1].lower()
+        if ext in AUTHORIZED_EXTS:
+            return False
+        return True
 
 class DynamicRequestHandler(AuthorizedRequestHandler):
     def initialize(
