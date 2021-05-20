@@ -415,7 +415,11 @@ An object containing various fields that report server state.
         "power"
     ],
     "failed_components": [],
-    "registered_directories": ["config", "gcodes", "config_examples", "docs"]
+    "registered_directories": ["config", "gcodes", "config_examples", "docs"],
+    "warnings": [
+        "Invalid config option 'api_key_path' detected in section [authorization]. Remove the option to resolve this issue. In the future this will result in a startup error.",
+        "Unparsed config section [fake_section] detected.  This may be the result of a component that failed to load.  In the future this will result in a startup error."
+    ]
   }
 ```
 !!! warning
