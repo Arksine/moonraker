@@ -192,6 +192,13 @@ class FileManager:
             return ""
         return os.path.relpath(full_path, start=root_dir)
 
+    def has_hidden_dir(self, rel_path: str) -> bool:
+        parts = rel_path.split("/")
+        for part in parts:
+            if part and part[0] == '.':
+                return True
+        return False
+
     def check_file_exists(self, root: str, filename: str) -> bool:
         root_dir = self.file_paths.get(root, "")
         file_path = os.path.join(root_dir, filename)
@@ -267,7 +274,8 @@ class FileManager:
                         self.notify_sync_lock.cancel()
                         self.notify_sync_lock = None
                         raise
-                    await self.notify_sync_lock.wait(30.)
+                    if not self.has_hidden_dir(directory):
+                        await self.notify_sync_lock.wait(30.)
                     self.notify_sync_lock = None
                 else:
                     try:
@@ -363,7 +371,9 @@ class FileManager:
                 self.notify_sync_lock = None
                 raise self.server.error(str(e))
             self.notify_sync_lock.update_dest(full_dest)
-            await self.notify_sync_lock.wait(600.)
+            if not self.has_hidden_dir(self.get_relative_path(
+                    dest_root, full_dest)):
+                await self.notify_sync_lock.wait(600.)
             self.notify_sync_lock = None
         result['item']['path'] = self.get_relative_path(dest_root, full_dest)
         return result
@@ -420,7 +430,7 @@ class FileManager:
             try:
                 upload_info = self._parse_upload_args(form_args)
                 root = upload_info['root']
-                if root == "gcodes":
+                if root == "gcodes" and upload_info['ext'] in VALID_GCODE_EXTS:
                     result = await self._finish_gcode_upload(upload_info)
                 elif root in FULL_ACCESS_ROOTS:
                     result = await self._finish_standard_upload(upload_info)
@@ -472,7 +482,8 @@ class FileManager:
             'dest_path': dest_path,
             'tmp_file_path': upload_args['tmp_file_path'],
             'start_print': start_print,
-            'unzip_ufp': unzip_ufp
+            'unzip_ufp': unzip_ufp,
+            'ext': f_ext
         }
 
     async def _finish_gcode_upload(self,
@@ -507,7 +518,9 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        await self.notify_sync_lock.wait(300.)
+        rel_dir_path = os.path.dirname(upload_info['filename'])
+        if not self.has_hidden_dir(rel_dir_path):
+            await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
         return {
             'item': {
@@ -521,7 +534,12 @@ class FileManager:
     async def _finish_standard_upload(self,
                                       upload_info: Dict[str, Any]
                                       ) -> Dict[str, Any]:
+        self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
         self._process_uploaded_file(upload_info)
+        rel_dir_path = os.path.dirname(upload_info['filename'])
+        if not self.has_hidden_dir(rel_dir_path):
+            await self.notify_sync_lock.wait(5.)
+        self.notify_sync_lock = None
         return {
             'item': {
                 'path': upload_info['filename'],
@@ -1211,9 +1229,6 @@ class INotifyHandler:
         ext: str = os.path.splitext(evt.name)[-1].lower()
         root = node.get_root()
         node_path = node.get_path()
-        if root == "gcodes" and ext not in VALID_GCODE_EXTS:
-            # Don't notify files with invalid gcode extensions
-            return
         if evt.mask & iFlags.CREATE:
             logging.debug(f"Inotify file create: {root}, "
                           f"{node_path}, {evt.name}")
