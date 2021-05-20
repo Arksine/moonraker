@@ -1255,48 +1255,6 @@ class GitRepo:
             # Return tagged commits as SHA keys mapped to tag values
             return {v: k for k, v in tagged_commits.items()}
 
-    async def restore_repo(self) -> None:
-        async with self.git_operation_lock:
-            # Make sure that a backup exists
-            backup_git_dir = os.path.join(self.backup_path, ".git")
-            if not os.path.exists(backup_git_dir):
-                err_msg = f"Git Repo {self.alias}: Unable to restore repo, " \
-                          f"no backup exists.\n{self.recovery_message}"
-                self.git_messages.append(err_msg)
-                logging.info(err_msg)
-                raise self.server.error(err_msg)
-            logging.info(f"Git Repo {self.alias}: Attempting to restore "
-                         "corrupt repo from backup...")
-            await self._rsync_repo(self.backup_path, self.git_path)
-
-    async def backup_repo(self) -> None:
-        async with self.git_operation_lock:
-            if not os.path.isdir(self.backup_path):
-                try:
-                    os.mkdir(self.backup_path)
-                except Exception:
-                    logging.exception(
-                        f"Git Repo {self.alias}: Unable to create backup  "
-                        f"directory {self.backup_path}")
-                    return
-                else:
-                    # Creating a first time backup.  Could take a while
-                    # on low resource systems
-                    logging.info(
-                        f"Git Repo {self.alias}: Backing up git repo to "
-                        f"'{self.backup_path}'. This may take a while to "
-                        "complete.")
-            await self._rsync_repo(self.git_path, self.backup_path)
-
-    async def _rsync_repo(self, source: str, dest: str) -> None:
-        try:
-            await self.cmd_helper.run_cmd(
-                f"rsync -a --delete {source}/ {dest}",
-                timeout=1200.)
-        except Exception:
-            logging.exception(
-                f"Git Repo {self.git_path}: Backup Error")
-
     def get_repo_status(self) -> Dict[str, Any]:
         return {
             'remote_alias': self.git_remote,
