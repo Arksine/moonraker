@@ -518,6 +518,8 @@ class CommandHelper:
                                resp: Union[str, bytes],
                                is_complete: bool = False
                                ) -> None:
+        if self.cur_update_app is None:
+            return
         resp = resp.strip()
         if isinstance(resp, bytes):
             resp = resp.decode()
@@ -667,16 +669,12 @@ class GitUpdater(BaseUpdater):
                 f"Repo validation checks failed:\n{msgs}")
             if self.debug:
                 self.is_valid = True
-                if not self.repo.is_dirty():
-                    await self.repo.backup_repo()
                 self._log_info(
                     "Repo debug enabled, overriding validity checks")
             else:
                 self._log_info("Updates on repo disabled")
         else:
             self.is_valid = True
-            if not self.repo.is_dirty():
-                await self.repo.backup_repo()
             self._log_info("Validity check for git repo passed")
 
     async def update(self) -> None:
@@ -863,13 +861,8 @@ class GitUpdater(BaseUpdater):
         npm_mtime = self._get_file_mtime(self.npm_pkg_json)
 
         if hard:
-            self._notify_status("Restoring repo from backup...")
-            if os.path.exists(self.repo_path):
-                shutil.rmtree(self.repo_path)
-            os.mkdir(self.repo_path)
-            await self.repo.restore_repo()
+            await self.repo.clone()
             await self._update_repo_state()
-            await self._pull_repo()
         else:
             self._notify_status("Resetting Git Repo...")
             await self.repo.reset()
@@ -894,8 +887,8 @@ class GitUpdater(BaseUpdater):
         return status
 
 
-GIT_FETCH_TIMEOUT = 300.
-GIT_FETCH_ENV_VARS = {
+GIT_ASYNC_TIMEOUT = 300.
+GIT_ENV_VARS = {
     'GIT_HTTP_LOW_SPEED_LIMIT': "1000",
     'GIT_HTTP_LOW_SPEED_TIME ': "20"
 }
@@ -1201,6 +1194,26 @@ class GitRepo:
         async with self.git_operation_lock:
             await self._run_git_cmd("fsck --full", timeout=300., retries=1)
 
+    async def clone(self) -> None:
+        async with self.git_operation_lock:
+            self.cmd_helper.notify_update_response(
+                f"Git Repo {self.alias}: Starting Clone Recovery...")
+            if os.path.exists(self.backup_path):
+                shutil.rmtree(self.backup_path)
+            self._check_lock_file_exists(remove=True)
+            git_cmd = f"clone {self.origin_url} {self.backup_path}"
+            try:
+                await self._run_git_cmd_async(git_cmd, 1, False, False)
+            except Exception as e:
+                self.cmd_helper.notify_update_response(
+                    f"Git Repo {self.alias}: Git Clone Failed")
+                raise self.server.error("Git Clone Error") from e
+            if os.path.exists(self.git_path):
+                shutil.rmtree(self.git_path)
+            shutil.move(self.backup_path, self.git_path)
+            self.cmd_helper.notify_update_response(
+                f"Git Repo {self.alias}: Git Clone Complete")
+
     async def get_commits_behind(self) -> List[Dict[str, Any]]:
         self._verify_repo()
         if self.is_current():
@@ -1339,14 +1352,22 @@ class GitRepo:
                 return
         self._check_lock_file_exists(remove=True)
 
-    async def _run_git_cmd_async(self, cmd: str, retries: int = 5) -> None:
+    async def _run_git_cmd_async(self,
+                                 cmd: str,
+                                 retries: int = 5,
+                                 need_git_path: bool = True,
+                                 fix_loose: bool = True
+                                 ) -> None:
         # Fetch and pull require special handling.  If the request
         # gets delayed we do not want to terminate it while the command
         # is processing.
         await self._wait_for_lock_release()
         env = os.environ.copy()
-        env.update(GIT_FETCH_ENV_VARS)
-        git_cmd = f"git -C {self.git_path} {cmd}"
+        env.update(GIT_ENV_VARS)
+        if need_git_path:
+            git_cmd = f"git -C {self.git_path} {cmd}"
+        else:
+            git_cmd = f"git {cmd}"
         scmd = self.cmd_helper.build_shell_command(
             git_cmd, callback=self._handle_process_output,
             env=env)
@@ -1355,8 +1376,8 @@ class GitRepo:
             ioloop = IOLoop.current()
             self.fetch_input_recd = False
             self.fetch_timeout_handle = ioloop.call_later(
-                GIT_FETCH_TIMEOUT, self._check_process_active,  # type: ignore
-                scmd)
+                GIT_ASYNC_TIMEOUT, self._check_process_active,  # type: ignore
+                scmd, cmd)
             try:
                 await scmd.run(timeout=0)
             except Exception:
@@ -1366,7 +1387,7 @@ class GitRepo:
             if ret == 0:
                 self.git_messages.clear()
                 return
-            elif "loose object" in "\n".join(self.git_messages):
+            elif fix_loose and "loose object" in "\n".join(self.git_messages):
                 # attempt to remove corrupt objects
                 try:
                     await self.cmd_helper.run_cmd_with_response(
@@ -1384,28 +1405,30 @@ class GitRepo:
         out = output.decode().strip()
         if out:
             self.git_messages.append(out)
-        logging.debug(
-            f"Git Repo {self.alias}: Fetch/Pull Response: {out}")
+            self.cmd_helper.notify_update_response(out)
+            logging.debug(
+                f"Git Repo {self.alias}: {out}")
 
     async def _check_process_active(self,
-                                    scmd: shell_command.ShellCommand
+                                    scmd: shell_command.ShellCommand,
+                                    cmd_name: str
                                     ) -> None:
         ret = scmd.get_return_code()
         if ret is not None:
-            logging.debug(f"Git Repo {self.alias}: Fetch/Pull returned")
+            logging.debug(f"Git Repo {self.alias}: {cmd_name} returned")
             return
         if self.fetch_input_recd:
             # Received some input, reschedule timeout
             logging.debug(
-                f"Git Repo {self.alias}: Fetch/Pull active, rescheduling")
+                f"Git Repo {self.alias}: {cmd_name} active, rescheduling")
             ioloop = IOLoop.current()
             self.fetch_input_recd = False
             self.fetch_timeout_handle = ioloop.call_later(
-                GIT_FETCH_TIMEOUT, self._check_process_active,  # type: ignore
-                scmd)
+                GIT_ASYNC_TIMEOUT, self._check_process_active,  # type: ignore
+                scmd, cmd_name)
         else:
             # Request has timed out with no input, terminate it
-            logging.debug(f"Git Repo {self.alias}: Fetch/Pull timed out")
+            logging.debug(f"Git Repo {self.alias}: {cmd_name} timed out")
             # Cancel with SIGKILL
             await scmd.cancel(2)
 
