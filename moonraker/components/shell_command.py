@@ -20,6 +20,7 @@ from typing import (
     Callable,
     Coroutine,
     Dict,
+    Set,
 )
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
@@ -125,6 +126,7 @@ class ShellCommand:
     IDX_SIGTERM = 1
     IDX_SIGKILL = 2
     def __init__(self,
+                 factory: ShellCommandFactory,
                  cmd: str,
                  std_out_callback: OutputCallback,
                  std_err_callback: OutputCallback,
@@ -132,6 +134,7 @@ class ShellCommand:
                  log_stderr: bool = False,
                  cwd: Optional[str] = None
                  ) -> None:
+        self.factory = factory
         self.name = cmd
         self.std_out_cb = std_out_callback
         self.std_err_cb = std_err_callback
@@ -162,6 +165,7 @@ class ShellCommand:
                   log_complete: bool = True,
                   sig_idx: int = 1
                   ) -> bool:
+        self.factory.add_running_command(self)
         self._reset_command_data()
         if not timeout:
             # Never timeout
@@ -171,6 +175,7 @@ class ShellCommand:
             # No callbacks set so output cannot be verbose
             verbose = False
         if not await self._create_subprocess():
+            self.factory.remove_running_command(self)
             return False
         assert self.proc is not None
         try:
@@ -184,6 +189,7 @@ class ShellCommand:
             await self.proc.cancel(sig_idx)
         else:
             complete = not self.cancelled
+        self.factory.remove_running_command(self)
         return self._check_proc_success(complete, log_complete)
 
     async def run_with_response(self,
@@ -192,6 +198,7 @@ class ShellCommand:
                                 log_complete: bool = True,
                                 sig_idx: int = 1
                                 ) -> str:
+        self.factory.add_running_command(self)
         retries = max(1, retries)
         while retries > 0:
             self._reset_command_data()
@@ -212,6 +219,7 @@ class ShellCommand:
                     if self.log_stderr and stderr:
                         logging.info(f"{self.command[0]}: {stderr.decode()}")
                 if self._check_proc_success(complete, log_complete):
+                    self.factory.remove_running_command(self)
                     return stdout.decode().rstrip("\n")
                 if stdout:
                     logging.debug(
@@ -221,6 +229,7 @@ class ShellCommand:
                     break
             retries -= 1
             await gen.sleep(.5)
+        self.factory.remove_running_command(self)
         raise ShellCommandError(
             f"Error running shell command: '{self.command}'",
             self.return_code, stdout, stderr)
@@ -271,6 +280,15 @@ class ShellCommand:
 
 class ShellCommandFactory:
     error = ShellCommandError
+    def __init__(self, config: ConfigHelper) -> None:
+        self.running_commands: Set[ShellCommand] = set()
+
+    def add_running_command(self, cmd: ShellCommand) -> None:
+        self.running_commands.add(cmd)
+
+    def remove_running_command(self, cmd: ShellCommand) -> None:
+        self.running_commands.remove(cmd)
+
     def build_shell_command(self,
                             cmd: str,
                             callback: OutputCallback = None,
@@ -279,8 +297,12 @@ class ShellCommandFactory:
                             log_stderr: bool = False,
                             cwd: Optional[str] = None
                             ) -> ShellCommand:
-        return ShellCommand(cmd, callback, std_err_callback, env,
+        return ShellCommand(self, cmd, callback, std_err_callback, env,
                             log_stderr, cwd)
 
+    async def close(self) -> None:
+        for cmd in self.running_commands:
+            await cmd.cancel()
+
 def load_component(config: ConfigHelper) -> ShellCommandFactory:
-    return ShellCommandFactory()
+    return ShellCommandFactory(config)
