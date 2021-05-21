@@ -895,6 +895,7 @@ GIT_ENV_VARS = {
 GIT_MAX_LOG_CNT = 100
 GIT_LOG_FMT = \
     "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
+GIT_OBJ_ERR = "fatal: loose object"
 
 class GitRepo:
     def __init__(self,
@@ -971,7 +972,6 @@ class GitRepo:
 
             if need_fetch:
                 await self.fetch()
-            await self.run_fsck()
 
             self.upstream_url = await self.remote(f"get-url {self.git_remote}")
             self.current_commit = await self.rev_parse("HEAD")
@@ -1051,9 +1051,25 @@ class GitRepo:
                 return False
             await self._wait_for_lock_release()
             self.valid_git_repo = False
-            try:
-                resp = await self._run_git_cmd("status -u no")
-            except Exception:
+            retries = 3
+            while retries:
+                self.git_messages.clear()
+                try:
+                    resp: Optional[str] = await self._run_git_cmd(
+                        "status -u no", retries=1)
+                except Exception:
+                    retries -= 1
+                    resp = None
+                    # Attempt to recover from "loose object" error
+                    if retries and GIT_OBJ_ERR in "\n".join(self.git_messages):
+                        ret = await self._repair_loose_objects()
+                        if not ret:
+                            # Since we are unable to recover, immediately
+                            # return
+                            return False
+                else:
+                    break
+            if resp is None:
                 return False
             resp = resp.strip().split('\n', 1)[0]
             self.head_detached = resp.startswith("HEAD detached")
@@ -1310,6 +1326,19 @@ class GitRepo:
                 return
         self._check_lock_file_exists(remove=True)
 
+    async def _repair_loose_objects(self) -> bool:
+        try:
+            await self.cmd_helper.run_cmd_with_response(
+                "find .git/objects/ -type f -empty | xargs rm",
+                timeout=10., retries=1, cwd=self.git_path)
+            await self._run_git_cmd_async(
+                "fetch --all -p", retries=1, fix_loose=False)
+            await self._run_git_cmd("fsck --full", timeout=300., retries=1)
+        except Exception:
+            logging.exception("Attempt to repair loose objects failed")
+            return False
+        return True
+
     async def _run_git_cmd_async(self,
                                  cmd: str,
                                  retries: int = 5,
@@ -1345,14 +1374,15 @@ class GitRepo:
             if ret == 0:
                 self.git_messages.clear()
                 return
-            elif fix_loose and "loose object" in "\n".join(self.git_messages):
-                # attempt to remove corrupt objects
-                try:
-                    await self.cmd_helper.run_cmd_with_response(
-                        "find .git/objects/ -type f -empty | xargs rm",
-                        timeout=10., retries=1, cwd=self.git_path)
-                except self.server.error:
-                    pass
+            elif fix_loose:
+                if GIT_OBJ_ERR in "\n".join(self.git_messages):
+                    ret = await self._repair_loose_objects()
+                    if ret:
+                        break
+                    # since the attept to repair failed, bypass retries
+                    # and immediately raise an exception
+                    raise self.server.error(
+                        f"Unable to repair loose objects, use hard recovery")
             retries -= 1
             await tornado.gen.sleep(.5)
             self._check_lock_file_exists(remove=True)
