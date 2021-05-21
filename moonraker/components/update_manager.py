@@ -16,6 +16,7 @@ import zipfile
 import io
 import time
 import tempfile
+import hashlib
 import tornado.gen
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
@@ -687,12 +688,12 @@ class GitUpdater(BaseUpdater):
         if self.repo.is_current():
             # No need to update
             return
-        inst_mtime = self._get_file_mtime(self.install_script)
-        pyreqs_mtime = self._get_file_mtime(self.python_reqs)
-        npm_mtime = self._get_file_mtime(self.npm_pkg_json)
+        inst_hash = self._get_file_hash(self.install_script)
+        pyreqs_hash = self._get_file_hash(self.python_reqs)
+        npm_hash = self._get_file_hash(self.npm_pkg_json)
         await self._pull_repo()
         # Check Semantic Versions
-        await self._update_dependencies(inst_mtime, pyreqs_mtime, npm_mtime)
+        await self._update_dependencies(inst_hash, pyreqs_hash, npm_hash)
         # Refresh local repo state
         await self._update_repo_state(need_fetch=False)
         if self.name == "moonraker":
@@ -718,19 +719,19 @@ class GitUpdater(BaseUpdater):
             raise self._log_exc("Error running 'git pull'")
 
     async def _update_dependencies(self,
-                                   inst_mtime: Optional[float],
-                                   pyreqs_mtime: Optional[float],
-                                   npm_mtime: Optional[float],
+                                   inst_hash: Optional[str],
+                                   pyreqs_hash: Optional[str],
+                                   npm_hash: Optional[str],
                                    force: bool = False
                                    ) -> None:
         vinfo = self._get_version_info()
         cur_version: Tuple = vinfo.get('version', ())
         need_env_rebuild = cur_version < vinfo.get('env_version', ())
-        if force or self._check_need_update(inst_mtime, self.install_script):
+        if force or self._check_need_update(inst_hash, self.install_script):
             await self._install_packages()
-        if force or self._check_need_update(pyreqs_mtime, self.python_reqs):
+        if force or self._check_need_update(pyreqs_hash, self.python_reqs):
             await self._update_virtualenv(need_env_rebuild)
-        if force or self._check_need_update(npm_mtime, self.npm_pkg_json):
+        if force or self._check_need_update(npm_hash, self.npm_pkg_json):
             if self.npm_pkg_json is not None:
                 self._notify_status("Updating Node Packages...")
                 try:
@@ -740,19 +741,24 @@ class GitUpdater(BaseUpdater):
                 except Exception:
                     self._notify_status("Node Package Update failed")
 
-    def _get_file_mtime(self, filename: Optional[str]) -> Optional[float]:
+    def _get_file_hash(self, filename: Optional[str]) -> Optional[str]:
         if filename is None or not os.path.isfile(filename):
             return None
-        return os.path.getmtime(filename)
+        try:
+            with open(filename, "rb") as f:
+                data = f.read()
+        except Exception:
+            return None
+        return hashlib.sha256(data).hexdigest()
 
     def _check_need_update(self,
-                           prev_mtime: Optional[float],
+                           prev_hash: Optional[str],
                            filename: Optional[str]
                            ) -> bool:
-        cur_mtime = self._get_file_mtime(filename)
-        if prev_mtime is None or cur_mtime is None:
+        cur_hash = self._get_file_hash(filename)
+        if prev_hash is None or cur_hash is None:
             return False
-        return cur_mtime != prev_mtime
+        return prev_hash != cur_hash
 
     async def _install_packages(self) -> None:
         if self.install_script is None:
@@ -856,9 +862,9 @@ class GitUpdater(BaseUpdater):
                       force_dep_update: bool = False
                       ) -> None:
         self._notify_status("Attempting Repo Recovery...")
-        inst_mtime = self._get_file_mtime(self.install_script)
-        pyreqs_mtime = self._get_file_mtime(self.python_reqs)
-        npm_mtime = self._get_file_mtime(self.npm_pkg_json)
+        inst_hash = self._get_file_hash(self.install_script)
+        pyreqs_hash = self._get_file_hash(self.python_reqs)
+        npm_hash = self._get_file_hash(self.npm_pkg_json)
 
         if hard:
             await self.repo.clone()
@@ -871,7 +877,7 @@ class GitUpdater(BaseUpdater):
         if self.repo.is_dirty() or not self.is_valid:
             raise self.server.error(
                 "Recovery attempt failed, repo state not pristine", 500)
-        await self._update_dependencies(inst_mtime, pyreqs_mtime, npm_mtime,
+        await self._update_dependencies(inst_hash, pyreqs_hash, npm_hash,
                                         force=force_dep_update)
         if self.name == "moonraker":
             IOLoop.current().call_later(
