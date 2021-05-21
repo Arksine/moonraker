@@ -11,6 +11,7 @@ import logging
 import json
 import datetime
 import traceback
+import ssl
 import urllib.parse
 import tornado
 import tornado.iostream
@@ -117,11 +118,22 @@ class APIDefinition:
 class MoonrakerApp:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.tornado_server: Optional[HTTPServer] = None
+        self.http_server: Optional[HTTPServer] = None
+        self.secure_server: Optional[HTTPServer] = None
         self.api_cache: Dict[str, APIDefinition] = {}
         self.registered_base_handlers: List[str] = []
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
+
+        # SSL config
+        self.cert_path: str = config.get('ssl_certificate_path', "")
+        self.key_path: str = config.get('ssl_key_path', "")
+        if self.cert_path:
+            self.cert_path = os.path.abspath(
+                os.path.expanduser(self.cert_path))
+        if self.key_path:
+            self.key_path = os.path.abspath(
+                os.path.expanduser(self.key_path))
 
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
@@ -159,10 +171,17 @@ class MoonrakerApp:
         self.register_static_file_handler(
             "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
 
-    def listen(self, host: str, port: int) -> None:
-        self.tornado_server = self.app.listen(
+    def listen(self, host: str, port: int, ssl_port: int) -> None:
+        self.http_server = self.app.listen(
             port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
+        if os.path.exists(self.cert_path) and os.path.exists(self.key_path):
+            logging.info(f"Starting secure server on port {ssl_port}")
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.load_cert_chain(self.cert_path, self.key_path)
+            self.secure_server = self.app.listen(
+                ssl_port, address=host, max_body_size=MAX_BODY_SIZE,
+                xheaders=True, ssl_options=ssl_ctx)
 
     def log_request(self, handler: tornado.web.RequestHandler) -> None:
         status_code = handler.get_status()
@@ -191,9 +210,12 @@ class MoonrakerApp:
         return self.wsm
 
     async def close(self) -> None:
-        if self.tornado_server is not None:
-            self.tornado_server.stop()
-            await self.tornado_server.close_all_connections()
+        if self.http_server is not None:
+            self.http_server.stop()
+            await self.http_server.close_all_connections()
+        if self.secure_server is not None:
+            self.secure_server.stop()
+            await self.secure_server.close_all_connections()
         await self.wsm.close()
 
     def register_remote_handler(self, endpoint: str) -> None:

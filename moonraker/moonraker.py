@@ -75,6 +75,7 @@ class Server:
         self.add_log_rollover_item('config', cfg_item)
         self.host: str = config.get('host', "0.0.0.0")
         self.port: int = config.getint('port', 7125)
+        self.ssl_port: int = config.getint('ssl_port', 7130)
         self.exit_reason: str = ""
 
         # Event initialization
@@ -140,7 +141,7 @@ class Server:
         logging.info(
             f"Starting Moonraker on ({self.host}, {hostport}), "
             f"Hostname: {hostname}")
-        self.moonraker_app.listen(self.host, self.port)
+        self.moonraker_app.listen(self.host, self.port, self.ssl_port)
         self.server_running = True
         self.ioloop.spawn_callback(self._init_signals)
         self.ioloop.spawn_callback(self._connect_klippy)
