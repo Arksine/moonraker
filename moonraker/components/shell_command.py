@@ -192,9 +192,10 @@ class ShellCommand:
                                 log_complete: bool = True,
                                 sig_idx: int = 1
                                 ) -> str:
-        self._reset_command_data()
         retries = max(1, retries)
         while retries > 0:
+            self._reset_command_data()
+            timed_out = False
             stdout = stderr = b""
             if await self._create_subprocess():
                 assert self.proc is not None
@@ -204,6 +205,7 @@ class ShellCommand:
                         ret, timeout=timeout)
                 except asyncio.TimeoutError:
                     complete = False
+                    timed_out = True
                     await self.proc.cancel(sig_idx)
                 else:
                     complete = not self.cancelled
@@ -211,10 +213,12 @@ class ShellCommand:
                         logging.info(f"{self.command[0]}: {stderr.decode()}")
                 if self._check_proc_success(complete, log_complete):
                     return stdout.decode().rstrip("\n")
-                elif stdout:
+                if stdout:
                     logging.debug(
                         f"Shell command '{self.name}' output:"
                         f"\n{stdout.decode()}")
+                if self.cancelled and not timed_out:
+                    break
             retries -= 1
             await gen.sleep(.5)
         raise ShellCommandError(
