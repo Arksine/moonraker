@@ -7,7 +7,7 @@
 import JsonRPC from "./json-rpc.js?v=0.1.2";
 
 var origin = location.origin;
-var ws_url = (window.location.protocol == "https" ? "wss://" : "ws://")
+var ws_url = (window.location.protocol == "https:" ? "wss://" : "ws://")
     + location.host;
 
 // API Definitions
