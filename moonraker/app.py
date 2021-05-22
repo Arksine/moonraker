@@ -126,14 +126,10 @@ class MoonrakerApp:
         self.max_upload_size *= 1024 * 1024
 
         # SSL config
-        self.cert_path: str = config.get('ssl_certificate_path', "")
-        self.key_path: str = config.get('ssl_key_path', "")
-        if self.cert_path:
-            self.cert_path = os.path.abspath(
-                os.path.expanduser(self.cert_path))
-        if self.key_path:
-            self.key_path = os.path.abspath(
-                os.path.expanduser(self.key_path))
+        self.cert_path: str = self._get_path_option(
+            config, 'ssl_certificate_path')
+        self.key_path: str = self._get_path_option(
+            config, 'ssl_key_path')
 
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
@@ -171,6 +167,17 @@ class MoonrakerApp:
         self.register_static_file_handler(
             "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
 
+    def _get_path_option(self, config: ConfigHelper, option: str) -> str:
+        path: Optional[str] = config.get(option, None)
+        if path is None:
+            return ""
+        expanded = os.path.abspath(os.path.expanduser(path))
+        if not os.path.exists(expanded):
+            raise self.server.error(
+                f"Invalid path for option '{option}', "
+                f"{path} does not exist")
+        return expanded
+
     def listen(self, host: str, port: int, ssl_port: int) -> None:
         self.http_server = self.app.listen(
             port, address=host, max_body_size=MAX_BODY_SIZE,
@@ -182,6 +189,9 @@ class MoonrakerApp:
             self.secure_server = self.app.listen(
                 ssl_port, address=host, max_body_size=MAX_BODY_SIZE,
                 xheaders=True, ssl_options=ssl_ctx)
+        else:
+            logging.info("SSL Certificate/Key not configured, "
+                         "aborting HTTPS Server startup")
 
     def log_request(self, handler: tornado.web.RequestHandler) -> None:
         status_code = handler.get_status()
