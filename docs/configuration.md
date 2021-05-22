@@ -20,6 +20,16 @@ host: 0.0.0.0
 #  to all interfaces
 port: 7125
 #   The port the HTTP server will listen on.  Default is 7125
+ssl_port: 7130
+#   The port to listen on for SSS (HTTPS) connections.  Note that the HTTPS
+#   server will only be started of the certificate and key options outlined
+#   below are provied.  The default is 7130.
+ssl_certificate_path:
+#   The path to a self signed ssl certificate.  The default is no path, which
+#   disables HTTPS.
+ssl_key_path:
+#   The path to the private key used to signed the certificate.  The default
+#   is no path, which disables HTTPS.
 klippy_uds_address: /tmp/klippy_uds
 #   The address of Unix Domain Socket used to communicate with Klippy. Default
 #   is /tmp/klippy_uds
