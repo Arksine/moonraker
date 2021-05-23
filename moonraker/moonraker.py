@@ -161,7 +161,7 @@ class Server:
     def add_warning(self, warning: str, log: bool = True) -> None:
         self.warnings.append(warning)
         if log:
-            logging.warn(warning)
+            logging.warning(warning)
 
     # ***** Component Management *****
     def _load_components(self, config: confighelper.ConfigHelper) -> None:

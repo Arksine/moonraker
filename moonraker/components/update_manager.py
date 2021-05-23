@@ -328,7 +328,7 @@ class CommandHelper:
         self.server = config.get_server()
         self.debug_enabled = config.getboolean('enable_repo_debug', False)
         if self.debug_enabled:
-            logging.warn("UPDATE MANAGER: REPO DEBUG ENABLED")
+            logging.warning("UPDATE MANAGER: REPO DEBUG ENABLED")
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         self.scmd_error = shell_cmd.error
         self.build_shell_command = shell_cmd.build_shell_command
