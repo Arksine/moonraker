@@ -6,3 +6,4 @@ lmdb==1.2.1
 streaming-form-data==1.8.1
 distro==1.5.0
 inotify-simple==1.3.5
+python-jose[cryptography]==3.2.0
