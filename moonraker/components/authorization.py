@@ -184,7 +184,7 @@ class Authorization:
             self._handle_apikey_request, protocol=['http'])
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
-            self._handle_token_request, protocol=['http'])
+            self._handle_oneshot_request, protocol=['http'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
@@ -195,7 +195,7 @@ class Authorization:
             self.users[f'{API_USER}.api_key'] = self.api_key
         return self.api_key
 
-    async def _handle_token_request(self, web_request: WebRequest) -> str:
+    async def _handle_oneshot_request(self, web_request: WebRequest) -> str:
         ip = web_request.get_ip_address()
         assert ip is not None
         user_info = web_request.get_current_user()
