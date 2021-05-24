@@ -613,14 +613,15 @@ class Authorization:
         if req_hdlr is None:
             return
         req_hdlr.set_header("Access-Control-Allow-Origin", origin)
-        req_hdlr.set_header(
-            "Access-Control-Allow-Methods",
-            "GET, POST, PUT, DELETE, OPTIONS")
-        req_hdlr.set_header(
-            "Access-Control-Allow-Headers",
-            "Origin, Accept, Content-Type, X-Requested-With, "
-            "X-CRSF-Token, Authorization, X-Access-Token, "
-            "X-Api-Key")
+        if req_hdlr.request.method == "OPTIONS":
+            req_hdlr.set_header(
+                "Access-Control-Allow-Methods",
+                "GET, POST, PUT, DELETE, OPTIONS")
+            req_hdlr.set_header(
+                "Access-Control-Allow-Headers",
+                "Origin, Accept, Content-Type, X-Requested-With, "
+                "X-CRSF-Token, Authorization, X-Access-Token, "
+                "X-Api-Key")
 
     def close(self) -> None:
         self.prune_handler.stop()
