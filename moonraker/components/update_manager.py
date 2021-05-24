@@ -814,6 +814,10 @@ class GitUpdater(BaseUpdater):
         pip = os.path.join(bin_dir, "pip")
         self._notify_status("Updating python packages...")
         try:
+            # First attempt to update pip
+            await self.cmd_helper.run_cmd(
+                f"{pip} install -U pip", timeout=1200., notify=True,
+                retries=3)
             await self.cmd_helper.run_cmd(
                 f"{pip} install -r {reqs}", timeout=1200., notify=True,
                 retries=3)
