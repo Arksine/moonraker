@@ -19,13 +19,8 @@ import logging
 from jose import jwt
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.web import HTTPError
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.serialization import (
-    PrivateFormat,
-    Encoding,
-    NoEncryption,
-    load_pem_private_key,
-)
+import cryptography.hazmat.primitives.asymmetric.ec as ec
+import cryptography.hazmat.primitives.serialization as serialization
 
 # Annotation imports
 from typing import (
@@ -338,7 +333,8 @@ class Authorization:
         if jwt_secret_hex is None:
             private_key = ec.generate_private_key(ec.SECP256R1())
             serialized: bytes = cast(ECPrivateKey, private_key).private_bytes(
-                Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
+                serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption())
             user_info['jwt_secret'] = serialized.hex()
             self.users[username] = user_info
         else:
@@ -431,7 +427,8 @@ class Authorization:
 
     def _load_private_key(self, secret: str) -> ec.EllipticCurvePrivateKey:
         try:
-            key = load_pem_private_key(bytes.fromhex(secret), None)
+            key = serialization.load_pem_private_key(
+                bytes.fromhex(secret), None)
         except Exception:
             raise self.server.error(
                 "Error decoding private key, user data may"
