@@ -317,10 +317,14 @@ class FileManager:
         root = parts[0]
         if root not in self.file_paths:
             raise self.server.error(f"Invalid root path ({root})")
-        disk_path = self.file_paths[root]
+        root_path = dest_path = self.file_paths[root]
         if len(parts) > 1:
-            disk_path = os.path.join(disk_path, parts[1])
-        return root, disk_path
+            dest_path = os.path.abspath(os.path.join(dest_path, parts[1]))
+            if not dest_path.startswith(root_path):
+                raise self.server.error(
+                    f"Invalid path request, '{request_path}'' is outside "
+                    f"root '{root}'")
+        return root, dest_path
 
     async def _handle_file_move_copy(self,
                                      web_request: WebRequest
@@ -677,7 +681,10 @@ class FileManager:
                 raise self.server.error(
                     f"Path not available for DELETE: {path}", 405)
             root_path = self.file_paths[root]
-            full_path = os.path.join(root_path, filename)
+            full_path = os.path.abspath(os.path.join(root_path, filename))
+            if not full_path.startswith(root_path):
+                raise self.server.error(
+                    f"Delete request on file outside of root: {path}")
             if not os.path.isfile(full_path):
                 raise self.server.error(f"Invalid file path: {path}")
             try:
