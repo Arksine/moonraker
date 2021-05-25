@@ -192,13 +192,6 @@ class FileManager:
             return ""
         return os.path.relpath(full_path, start=root_dir)
 
-    def has_hidden_dir(self, rel_path: str) -> bool:
-        parts = rel_path.split("/")
-        for part in parts:
-            if part and part[0] == '.':
-                return True
-        return False
-
     def check_file_exists(self, root: str, filename: str) -> bool:
         root_dir = self.file_paths.get(root, "")
         file_path = os.path.join(root_dir, filename)
@@ -274,8 +267,7 @@ class FileManager:
                         self.notify_sync_lock.cancel()
                         self.notify_sync_lock = None
                         raise
-                    if not self.has_hidden_dir(directory):
-                        await self.notify_sync_lock.wait(30.)
+                    await self.notify_sync_lock.wait(30.)
                     self.notify_sync_lock = None
                 else:
                     try:
@@ -375,9 +367,7 @@ class FileManager:
                 self.notify_sync_lock = None
                 raise self.server.error(str(e))
             self.notify_sync_lock.update_dest(full_dest)
-            if not self.has_hidden_dir(self.get_relative_path(
-                    dest_root, full_dest)):
-                await self.notify_sync_lock.wait(600.)
+            await self.notify_sync_lock.wait(600.)
             self.notify_sync_lock = None
         result['item']['path'] = self.get_relative_path(dest_root, full_dest)
         return result
@@ -522,9 +512,7 @@ class FileManager:
             except self.server.error:
                 # Attempt to start print failed
                 start_print = False
-        rel_dir_path = os.path.dirname(upload_info['filename'])
-        if not self.has_hidden_dir(rel_dir_path):
-            await self.notify_sync_lock.wait(300.)
+        await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
         return {
             'item': {
@@ -540,9 +528,7 @@ class FileManager:
                                       ) -> Dict[str, Any]:
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
         self._process_uploaded_file(upload_info)
-        rel_dir_path = os.path.dirname(upload_info['filename'])
-        if not self.has_hidden_dir(rel_dir_path):
-            await self.notify_sync_lock.wait(5.)
+        await self.notify_sync_lock.wait(5.)
         self.notify_sync_lock = None
         return {
             'item': {
@@ -1197,8 +1183,8 @@ class INotifyHandler:
                                  evt: InotifyEvent,
                                  node: InotifyNode
                                  ) -> None:
-        if evt.name and evt.name[0] == ".":
-            # ignore changes to the hidden directories
+        if evt.name in ['.', ".."]:
+            # ignore events for self and parent
             return
         root = node.get_root()
         node_path = node.get_path()
