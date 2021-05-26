@@ -1295,7 +1295,7 @@ class INotifyHandler:
             logging.debug(f"Syncing notification: {full_path}")
             IOLoop.current().spawn_callback(
                 self._delay_notification, result, sync_lock.sync(full_path))
-        else:
+        elif self._check_need_notify(file_info):
             self.server.send_event("file_manager:filelist_changed", result)
 
     async def _delay_notification(self,
@@ -1303,7 +1303,15 @@ class INotifyHandler:
                                   sync_fut: Coroutine
                                   ) -> None:
         await sync_fut
-        self.server.send_event("file_manager:filelist_changed", result)
+        if self._check_need_notify(result['item']):
+            self.server.send_event("file_manager:filelist_changed", result)
+
+    def _check_need_notify(self, file_info: Dict[str, Any]) -> bool:
+        if file_info['root'] == "gcodes":
+            ext = os.path.splitext(file_info['path'])[-1]
+            if ext and ext not in VALID_GCODE_EXTS:
+                return False
+        return True
 
     def close(self) -> None:
         IOLoop.current().remove_handler(self.inotify.fileno())
