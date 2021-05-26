@@ -5,11 +5,12 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import os
+import sys
 import logging
 import json
 import struct
 import socket
-import gpiod
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
 from tornado.locks import Lock
@@ -28,6 +29,20 @@ from typing import (
     Tuple,
     Union,
 )
+
+# Special handling for gpiod import
+HAS_GPIOD = True
+DIST_PATH = "/usr/lib/python3/dist-packages"
+if os.path.exists(DIST_PATH):
+    sys.path.insert(0, DIST_PATH)
+    try:
+        import gpiod
+    except ImportError:
+        HAS_GPIOD = False
+    sys.path.pop(0)
+else:
+    HAS_GPIOD = False
+
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
@@ -37,6 +52,10 @@ if TYPE_CHECKING:
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        if not HAS_GPIOD:
+            self.server.add_warning(
+                "Unable to load gpiod library, GPIO power "
+                "devices will not be loaded")
         self.chip_factory = GpioChipFactory()
         self.devices: Dict[str, PowerDevice] = {}
         prefix_sections = config.get_prefix_sections("power")
@@ -60,6 +79,8 @@ class PrinterPower:
                     raise config.error(f"Unsupported Device Type: {dev_type}")
                 dev = dev_class(cfg)
                 if isinstance(dev, GpioDevice):
+                    if not HAS_GPIOD:
+                        continue
                     dev.configure_line(cfg, self.chip_factory)
                 self.devices[dev.get_name()] = dev
         except Exception:
