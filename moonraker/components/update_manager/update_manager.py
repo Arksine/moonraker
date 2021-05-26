@@ -702,13 +702,10 @@ class GitUpdater(BaseUpdater):
                                    npm_hash: Optional[str],
                                    force: bool = False
                                    ) -> None:
-        vinfo = self._get_version_info()
-        cur_version: Tuple = vinfo.get('version', ())
-        need_env_rebuild = cur_version < vinfo.get('env_version', ())
         if force or self._check_need_update(inst_hash, self.install_script):
             await self._install_packages()
         if force or self._check_need_update(pyreqs_hash, self.python_reqs):
-            await self._update_virtualenv(need_env_rebuild)
+            await self._update_virtualenv()
         if force or self._check_need_update(npm_hash, self.npm_pkg_json):
             if self.npm_pkg_json is not None:
                 self._notify_status("Updating Node Packages...")
@@ -767,24 +764,11 @@ class GitUpdater(BaseUpdater):
             self._log_exc("Error updating packages via apt-get")
             return
 
-    async def _update_virtualenv(self, rebuild_env: bool = False) -> None:
+    async def _update_virtualenv(self) -> None:
         if self.env is None:
             return
         # Update python dependencies
         bin_dir = os.path.dirname(self.env)
-        env_path = os.path.normpath(os.path.join(bin_dir, ".."))
-        if rebuild_env:
-            self._notify_status(f"Creating virtualenv at: {env_path}...")
-            if os.path.exists(env_path):
-                shutil.rmtree(env_path)
-            try:
-                await self.cmd_helper.run_cmd(
-                    f"virtualenv {self.venv_args} {env_path}", timeout=300.)
-            except Exception:
-                self._log_exc(f"Error creating virtualenv")
-                return
-            if not os.path.exists(self.env):
-                raise self._log_exc("Failed to create new virtualenv", False)
         reqs = self.python_reqs
         if reqs is None or not os.path.isfile(reqs):
             self._log_exc(f"Invalid path to requirements_file '{reqs}'")
@@ -801,6 +785,23 @@ class GitUpdater(BaseUpdater):
                 retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
+
+    async def _build_virtualenv(self) -> None:
+        if self.env is None:
+            return
+        bin_dir = os.path.dirname(self.env)
+        env_path = os.path.normpath(os.path.join(bin_dir, ".."))
+        self._notify_status(f"Creating virtualenv at: {env_path}...")
+        if os.path.exists(env_path):
+            shutil.rmtree(env_path)
+        try:
+            await self.cmd_helper.run_cmd(
+                f"virtualenv {self.venv_args} {env_path}", timeout=300.)
+        except Exception:
+            self._log_exc(f"Error creating virtualenv")
+            return
+        if not os.path.exists(self.env):
+            raise self._log_exc("Failed to create new virtualenv", False)
 
     async def restart_service(self) -> None:
         self._notify_status("Restarting Service...")
