@@ -184,16 +184,6 @@ class Server:
                        ) -> Union[_T, Any]:
         if component_name in self.components:
             return self.components[component_name]
-        # Make sure component exists
-        mod_path = os.path.join(
-            os.path.dirname(__file__), 'components', component_name + '.py')
-        if not os.path.exists(mod_path):
-            msg = f"Component ({component_name}) does not exist"
-            logging.info(msg)
-            self.failed_components.append(component_name)
-            if isinstance(default, SentinelClass):
-                raise ServerError(msg)
-            return default
         try:
             module = importlib.import_module("components." + component_name)
             func_name = "load_component"
