@@ -1113,7 +1113,14 @@ class INotifyHandler:
 
     def parse_gcode_metadata(self, file_path: str) -> Event:
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
-        path_info = self.file_manager.get_path_info(file_path)
+        try:
+            path_info = self.file_manager.get_path_info(file_path)
+        except Exception:
+            logging.exception(
+                f"Error retreiving path info for file {file_path}")
+            evt = Event()
+            evt.set()
+            return evt
         ext = os.path.splitext(file_path)[-1].lower()
         if ext == ".ufp":
             rel_path = os.path.splitext(rel_path)[0] + ".gcode"
@@ -1280,8 +1287,14 @@ class INotifyHandler:
                                 ) -> None:
         rel_path = self.file_manager.get_relative_path(root, full_path)
         file_info: Dict[str, Any] = {'size': 0, 'modified': 0}
+        is_valid = True
         if os.path.exists(full_path):
-            file_info = self.file_manager.get_path_info(full_path)
+            try:
+                file_info = self.file_manager.get_path_info(full_path)
+            except Exception:
+                is_valid = False
+        elif action not in ["delete_file", "delete_dir"]:
+            is_valid = False
         file_info['path'] = rel_path
         file_info['root'] = root
         result = {'action': action, 'item': file_info}
@@ -1294,16 +1307,18 @@ class INotifyHandler:
             # Delay this notification so that it occurs after an item
             logging.debug(f"Syncing notification: {full_path}")
             IOLoop.current().spawn_callback(
-                self._delay_notification, result, sync_lock.sync(full_path))
-        elif self._check_need_notify(file_info):
+                self._sync_with_request, result,
+                sync_lock.sync(full_path), is_valid)
+        elif is_valid and self._check_need_notify(file_info):
             self.server.send_event("file_manager:filelist_changed", result)
 
-    async def _delay_notification(self,
-                                  result: Dict[str, Any],
-                                  sync_fut: Coroutine
-                                  ) -> None:
+    async def _sync_with_request(self,
+                                 result: Dict[str, Any],
+                                 sync_fut: Coroutine,
+                                 is_valid: bool
+                                 ) -> None:
         await sync_fut
-        if self._check_need_notify(result['item']):
+        if is_valid and self._check_need_notify(result['item']):
             self.server.send_event("file_manager:filelist_changed", result)
 
     def _check_need_notify(self, file_info: Dict[str, Any]) -> bool:
