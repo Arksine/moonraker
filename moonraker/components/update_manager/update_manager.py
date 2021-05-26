@@ -47,9 +47,9 @@ if TYPE_CHECKING:
     DBComp = database.MoonrakerDatabase
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "../.."))
+    os.path.dirname(__file__), "../../.."))
 SUPPLEMENTAL_CFG_PATH = os.path.join(
-    MOONRAKER_PATH, "scripts/update_manager.conf")
+    os.path.dirname(__file__), "update_manager.conf")
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
 SUPPORTED_DISTROS = ["debian"]
 
