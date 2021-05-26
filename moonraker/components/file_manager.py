@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp', '.nc']
 FULL_ACCESS_ROOTS = ["gcodes", "config"]
 METADATA_SCRIPT = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "../../scripts/extract_metadata.py"))
+    os.path.dirname(__file__), "metadata.py"))
 WATCH_FLAGS = iFlags.CREATE | iFlags.DELETE | iFlags.MODIFY \
     | iFlags.MOVED_TO | iFlags.MOVED_FROM | iFlags.ONLYDIR \
     | iFlags.CLOSE_WRITE
