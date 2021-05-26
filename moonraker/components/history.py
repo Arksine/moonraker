@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from websockets import WebRequest
     from . import database
     from . import klippy_apis
-    from . import file_manager
+    from .file_manager import file_manager
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI
     FMComp = file_manager.FileManager

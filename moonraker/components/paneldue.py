@@ -31,7 +31,7 @@ from typing import (
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from . import klippy_apis
-    from . import file_manager
+    from .file_manager import file_manager
     APIComp = klippy_apis.KlippyAPI
     FMComp = file_manager.FileManager
     FlexCallback = Callable[..., Optional[Coroutine]]
