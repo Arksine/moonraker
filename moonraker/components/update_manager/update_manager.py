@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import os
-import glob
 import re
 import logging
 import json
@@ -578,11 +577,9 @@ class GitUpdater(BaseUpdater):
                 raise config.error(
                     f"Cannot enable node updates, no file "
                     f"{self.npm_pkg_json}")
-        dist_packages: Optional[str] = None
         self.python_reqs: Optional[str] = None
         if self.env is not None:
             self.env = os.path.expanduser(self.env)
-            dist_packages = config.get('python_dist_packages', None)
             self.python_reqs = os.path.join(
                 self.repo_path, config.get("requirements"))
         self.install_script = config.get('install_script', None)
@@ -590,27 +587,8 @@ class GitUpdater(BaseUpdater):
             self.install_script = os.path.abspath(os.path.join(
                 self.repo_path, self.install_script))
         self.venv_args: Optional[str] = config.get('venv_args', None)
-        self.python_dist_packages: Optional[List[str]] = None
-        self.python_dist_path: Optional[str] = None
-        self.env_package_path: Optional[str] = None
-        if dist_packages is not None:
-            self.python_dist_packages = [
-                p.strip() for p in dist_packages.split('\n')
-                if p.strip()]
-            self.python_dist_path = os.path.abspath(
-                config.get('python_dist_path'))
-            assert self.env is not None
-            env_package_path = os.path.abspath(os.path.join(
-                os.path.dirname(self.env), "..",
-                config.get('env_package_path')))
-            matches = glob.glob(env_package_path)
-            if len(matches) == 1:
-                self.env_package_path = matches[0]
-            else:
-                raise config.error("No match for 'env_package_path': %s"
-                                   % (env_package_path,))
-        for opt in ["repo_path", "env", "python_reqs", "install_script",
-                    "python_dist_path", "env_package_path"]:
+        for opt in ["repo_path", "env", "python_reqs",
+                    "install_script"]:
             val = getattr(self, opt)
             if val is None:
                 continue
@@ -823,31 +801,6 @@ class GitUpdater(BaseUpdater):
                 retries=3)
         except Exception:
             self._log_exc("Error updating python requirements")
-        self._install_python_dist_requirements()
-
-    def _install_python_dist_requirements(self) -> None:
-        dist_reqs = self.python_dist_packages
-        if dist_reqs is None:
-            return
-        dist_path = self.python_dist_path
-        site_path = self.env_package_path
-        assert dist_path is not None
-        assert site_path is not None
-        for pkg in dist_reqs:
-            for f in os.listdir(dist_path):
-                if f.startswith(pkg):
-                    src = os.path.join(dist_path, f)
-                    dest = os.path.join(site_path, f)
-                    self._notify_status(f"Linking to dist package: {pkg}")
-                    if os.path.islink(dest):
-                        os.remove(dest)
-                    elif os.path.exists(dest):
-                        self._notify_status(
-                            f"Error symlinking dist package: {pkg}, "
-                            f"file already exists: {dest}")
-                        continue
-                    os.symlink(src, dest)
-                    break
 
     async def restart_service(self) -> None:
         self._notify_status("Restarting Service...")
