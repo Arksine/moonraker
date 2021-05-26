@@ -39,9 +39,9 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from utils import ServerError
-    from . import klippy_apis
-    from . import shell_command
-    from . import database
+    from components import klippy_apis
+    from components import shell_command
+    from components import database
     APIComp = klippy_apis.KlippyAPI
     SCMDComp = shell_command.ShellCommandFactory
     DBComp = database.MoonrakerDatabase
