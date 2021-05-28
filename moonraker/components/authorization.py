@@ -421,8 +421,11 @@ class Authorization:
         if public_key is None:
             raise self.server.error(
                 f"Invalid JWT, user {username} not logged in", 401)
-        jwt.decode(token, [public_key], algorithms=['ES256'],
-                   audience="Moonraker")
+        try:
+            jwt.decode(token, [public_key], algorithms=['ES256'],
+                       audience="Moonraker")
+        except jwt.JWTError as e:
+            raise self.server.error(str(e), 401) from None
         return user_info
 
     def _load_private_key(self, secret: str) -> ec.EllipticCurvePrivateKey:
@@ -433,7 +436,7 @@ class Authorization:
             raise self.server.error(
                 "Error decoding private key, user data may"
                 " be corrupt", 500) from None
-        return key
+        return cast(ec.EllipticCurvePrivateKey, key)
 
     def _prune_conn_handler(self) -> None:
         cur_time = time.time()
