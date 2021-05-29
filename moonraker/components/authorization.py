@@ -154,6 +154,7 @@ class Authorization:
         self.prune_handler.start()
 
         # Register Authorization Endpoints
+        self.permitted_paths.add("/server/redirect")
         self.permitted_paths.add("/access/login")
         self.permitted_paths.add("/access/refresh_jwt")
         self.server.register_endpoint(

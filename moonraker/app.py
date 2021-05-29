@@ -155,7 +155,8 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers: List[Any] = [
             (AnyMatches(), self.mutable_router),
-            (r"/websocket", WebSocket)]
+            (r"/websocket", WebSocket),
+            (r"/server/redirect", RedirectHandler)]
         self.app = tornado.web.Application(app_handlers, **app_args)
         self.get_handler_delegate = self.app.get_handler_delegate
 
@@ -793,3 +794,18 @@ class AuthorizedErrorHandler(AuthorizedRequestHandler):
             err['traceback'] = "\n".join(
                 traceback.format_exception(*kwargs['exc_info']))
         self.finish({'error': err})
+
+class RedirectHandler(AuthorizedRequestHandler):
+    def get(self, *args, **kwargs) -> None:
+        url: Optional[str] = self.get_argument('url', None)
+        if url is None:
+            try:
+                body_args: Dict[str, Any] = json.loads(self.request.body)
+            except json.JSONDecodeError:
+                body_args = {}
+            if 'url' not in body_args:
+                raise tornado.web.HTTPError(
+                    400, "No url argument provided")
+            url = body_args['url']
+            assert url is not None
+        self.redirect(url)
