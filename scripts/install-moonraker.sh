@@ -61,7 +61,6 @@ create_virtualenv()
 
     if [ ! -d ${PYTHONDIR} ]; then
         virtualenv -p /usr/bin/python3 ${PYTHONDIR}
-        ln -s /usr/lib/python3/dist-packages/gpiod* ${PYTHONDIR}/lib/python*/site-packages
     fi
 
     # Install/update dependencies
@@ -78,7 +77,7 @@ install_script()
     sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
 #Systemd service file for moonraker
 [Unit]
-Description=Starts Moonraker on startup
+Description=API Server for Klipper
 After=network.target
 
 [Install]
@@ -88,12 +87,14 @@ WantedBy=multi-user.target
 Type=simple
 User=$USER
 RemainAfterExit=yes
-ExecStart=${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH} -l ${LOG_PATH}
+WorkingDirectory=${SRCDIR}
+ExecStart=${LAUNCH_CMD} -c ${CONFIG_PATH} -l ${LOG_PATH}
 Restart=always
 RestartSec=10
 EOF
 # Use systemctl to enable the klipper systemd service script
     sudo systemctl enable moonraker.service
+    sudo systemctl daemon-reload
 }
 
 
@@ -125,6 +126,7 @@ set -e
 
 # Find SRCDIR from the pathname of this script
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
+LAUNCH_CMD="${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py"
 
 # Parse command line arguments
 while getopts "rfc:l:" arg; do
