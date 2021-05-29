@@ -281,7 +281,8 @@ class HTTPDevice(PowerDevice):
                  config: ConfigHelper,
                  default_port: int = -1,
                  default_user: str = "",
-                 default_password: str = ""
+                 default_password: str = "",
+                 default_protocol: str = "http"
                  ) -> None:
         super().__init__(config)
         self.client = AsyncHTTPClient()
@@ -290,6 +291,7 @@ class HTTPDevice(PowerDevice):
         self.port = config.getint("port", default_port)
         self.user = config.get("user", default_user)
         self.password = config.get("password", default_password)
+        self.protocol = config.get("protocol", default_protocol)
 
     async def initialize(self) -> None:
         await self.refresh_status()
@@ -673,7 +675,7 @@ class HomeAssistant(HTTPDevice):
         else:
             raise self.server.error(
                 f"Invalid homeassistant command: {command}")
-        url = f"http://{self.addr}:{self.port}/{out_cmd}"
+        url = f"{self.protocol}://{self.addr}:{self.port}/{out_cmd}"
         headers = {
             'Authorization': f'Bearer {self.token}',
             'Content-Type': 'application/json'
