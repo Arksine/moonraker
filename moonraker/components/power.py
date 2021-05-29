@@ -699,8 +699,9 @@ class HomeAssistant(HTTPDevice):
         return res[f"state"]
 
     async def _send_power_request(self, state: str) -> str:
-        res = await self._send_homeassistant_command(state)
-        return res[0][f"state"]
+        await self._send_homeassistant_command(state)
+        res = await self._send_status_request()
+        return res
 
 class Loxonev1(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
