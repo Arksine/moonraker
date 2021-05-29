@@ -7,6 +7,7 @@ SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="n"
 FORCE_DEFAULTS="n"
 CONFIG_PATH="${HOME}/moonraker.conf"
+LOG_PATH="/tmp/moonraker.log"
 
 # Step 1:  Verify Klipper has been installed
 check_klipper()
@@ -87,7 +88,7 @@ WantedBy=multi-user.target
 Type=simple
 User=$USER
 RemainAfterExit=yes
-ExecStart=${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH}
+ExecStart=${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py -c ${CONFIG_PATH} -l ${LOG_PATH}
 Restart=always
 RestartSec=10
 EOF
@@ -126,11 +127,12 @@ set -e
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
 
 # Parse command line arguments
-while getopts "rfc:" arg; do
+while getopts "rfc:l:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
         f) FORCE_DEFAULTS="y";;
         c) CONFIG_PATH=$OPTARG;;
+        l) LOG_PATH=$OPTARG;;
     esac
 done
 
