@@ -15,6 +15,7 @@ from tornado.ioloop import IOLoop
 
 # Annotation imports
 from typing import (
+    List,
     TYPE_CHECKING,
     Any,
     Dict,
@@ -25,7 +26,10 @@ if TYPE_CHECKING:
     from . import shell_command
     SCMDComp = shell_command.ShellCommandFactory
 
-ALLOWED_SERVICES = ["moonraker", "klipper", "webcamd"]
+ALLOWED_SERVICES = [
+    "moonraker", "klipper", "webcamd", "MoonCord",
+    "KlipperScreen"]
+SYSTEMD_PATH = "/etc/systemd/system"
 SD_CID_PATH = "/sys/block/mmcblk0/device/cid"
 SD_CSD_PATH = "/sys/block/mmcblk0/device/csd"
 SD_MFGRS = {
@@ -39,7 +43,7 @@ class Machine:
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
-        self.system_info: Dict[str, Dict[str, Any]] = {
+        self.system_info: Dict[str, Any] = {
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
             'distribution': dist_info
@@ -51,6 +55,7 @@ class Machine:
             for key, val in info.items():
                 sys_info_msg += f"\n  {key}: {val}"
         self.server.add_log_rollover_item('system_info', sys_info_msg)
+        self.available_services: List[str] = []
 
         self.server.register_endpoint(
             "/machine/reboot", ['POST'], self._handle_machine_request)
@@ -74,6 +79,9 @@ class Machine:
             "shutdown_machine", self.shutdown_machine)
         self.server.register_remote_method(
             "reboot_machine", self.reboot_machine)
+
+        # Retreive list of services
+        IOLoop.current().spawn_callback(self._find_active_services)
 
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
@@ -107,7 +115,7 @@ class Machine:
                     f"Service action '{action}' not available for moonraker")
             IOLoop.current().spawn_callback(
                 self.do_service_action, action, name)
-        elif name in ALLOWED_SERVICES:
+        elif name in self.available_services:
             await self.do_service_action(action, name)
         else:
             raise self.server.error(
@@ -220,6 +228,23 @@ class Machine:
         except Exception:
             logging.info("Error Reading /proc/cpuinfo")
         return cpu_info
+
+    async def _find_active_services(self):
+        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
+        scmd = shell_cmd.build_shell_command(
+            "systemctl list-units --type=service")
+        try:
+            resp = await scmd.run_with_response()
+            lines = resp.split('\n')
+            services = [line.split()[0].strip() for line in lines
+                        if ".service" in line.strip()]
+        except Exception:
+            services = []
+        for sname in ALLOWED_SERVICES:
+            if f"{sname}.service" in services:
+                self.available_services.append(sname)
+        self.system_info['available_services'] = self.available_services
+
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
