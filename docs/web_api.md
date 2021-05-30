@@ -808,6 +808,7 @@ Returns: Information about the host system in the following format:
 ```json
 {
     "system_info": {
+        "available_services": ["moonraker", "klipper"],
         "cpu_info": {
             "cpu_count": 1,
             "bits": "32bit",
@@ -884,7 +885,8 @@ and the socket connection will drop.
 
 #### Restart a system service
 Restarts a system service via `sudo systemctl restart {name}`. Currently
-only the `moonraker`, `klipper`, and `webcamd` services are supported.
+the `moonraker`, `klipper`, `MoonCord`, `KlipperScreen` and `webcamd`
+services are supported.
 
 HTTP request:
 ```http
