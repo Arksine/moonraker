@@ -107,7 +107,7 @@ class Machine:
             f'sudo systemctl {action} {service_name}')
 
     async def _handle_service_request(self, web_request: WebRequest) -> str:
-        name: str = web_request.get('service').lower()
+        name: str = web_request.get('service')
         action = web_request.get_endpoint().split('/')[-1]
         if name == "moonraker":
             if action != "restart":
@@ -118,8 +118,11 @@ class Machine:
         elif name in self.available_services:
             await self.do_service_action(action, name)
         else:
+            if name in ALLOWED_SERVICES and \
+                    name not in self.available_services:
+                raise self.server.error(f"Service '{name}' not installed")
             raise self.server.error(
-                f"Invalid argument recevied for 'name': {name}")
+                f"Service '{name}' not allowed")
         return "ok"
 
     async def _handle_sysinfo_request(self,
