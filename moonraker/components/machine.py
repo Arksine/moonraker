@@ -243,9 +243,11 @@ class Machine:
                         if ".service" in line.strip()]
         except Exception:
             services = []
-        for sname in ALLOWED_SERVICES:
-            if f"{sname}.service" in services:
-                self.available_services.append(sname)
+        for svc in services:
+            sname = svc.rsplit('.', 1)[0]
+            for allowed in ALLOWED_SERVICES:
+                if sname.startswith(allowed):
+                    self.available_services.append(sname)
         self.system_info['available_services'] = self.available_services
 
 
