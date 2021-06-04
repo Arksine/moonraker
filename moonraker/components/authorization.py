@@ -96,7 +96,7 @@ class Authorization:
                 try:
                     priv_key = self._load_private_key(user_info['jwt_secret'])
                     jwk_id = user_info['jwk_id']
-                except self.server.error:
+                except (self.server.error, KeyError):
                     logging.info("Invalid key found for user, removing")
                     user_info.pop('jwt_secret', None)
                     user_info.pop('jwk_id', None)
