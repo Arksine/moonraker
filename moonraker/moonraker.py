@@ -541,18 +541,27 @@ class Server:
 
     async def _stop_server(self, exit_reason: str = "restart") -> None:
         self.server_running = False
-        for method in ["on_exit", "close"]:
-            for name, component in self.components.items():
-                if not hasattr(component, method):
-                    continue
-                func: FlexCallback = getattr(component, method)
+        # Call each component's "on_exit" method
+        for name, component in self.components.items():
+            if hasattr(component, "on_exit"):
+                func: FlexCallback = getattr(component, "on_exit")
                 try:
                     ret = func()
                     if ret is not None:
                         await ret
                 except Exception:
                     logging.exception(
-                        f"Error executing '{method}()' for component: {name}")
+                        f"Error executing 'on_exit()' for component: {name}")
+
+        # Sleep for 100ms to allow connected websockets to write out
+        # remaining data
+        await gen.sleep(.1)
+        try:
+            await self.moonraker_app.close()
+        except Exception:
+            logging.exception("Error Closing App")
+
+        # Disconnect from Klippy
         try:
             if self.klippy_connection.is_connected():
                 self.klippy_disconnect_evt = Event()
@@ -562,13 +571,19 @@ class Server:
                 self.klippy_disconnect_evt = None
         except Exception:
             logging.exception("Klippy Disconnect Error")
-        # Sleep for 100ms to allow connected websockets
-        # to write out remaining data
-        await gen.sleep(.1)
-        try:
-            await self.moonraker_app.close()
-        except Exception:
-            logging.exception("Error Closing App")
+
+        # Close all components
+        for name, component in self.components.items():
+            if hasattr(component, "close"):
+                func = getattr(component, "close")
+                try:
+                    ret = func()
+                    if ret is not None:
+                        await ret
+                except Exception:
+                    logging.exception(
+                        f"Error executing 'close()' for component: {name}")
+
         self.exit_reason = exit_reason
         aioloop = asyncio.get_event_loop()
         aioloop.remove_signal_handler(signal.SIGTERM)
