@@ -188,7 +188,11 @@ class History:
                 elif self.current_job is not None:
                     if new_state == "complete":
                         self.finish_job("completed", new_ps)
-                    if new_state == "standby":
+                    elif new_state == "cancelled":
+                        self.finish_job("cancelled", new_ps)
+                    elif new_state == "standby":
+                        # Backward compatibility with
+                        # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
                         self.finish_job("cancelled", self.print_stats)
                     elif new_state == "error":
                         self.finish_job("error", new_ps)
