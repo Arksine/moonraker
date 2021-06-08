@@ -1090,7 +1090,7 @@ class INotifyHandler:
                     self.gcode_metadata.move_directory_metadata(
                         prev_rel_path, new_rel_path)
                 else:
-                    self.gcode_metadata.move_file_metadata(
+                    return self.gcode_metadata.move_file_metadata(
                         prev_rel_path, new_rel_path)
             else:
                 # move from a non-gcodes root to gcodes root needs a rescan
@@ -1440,11 +1440,11 @@ class MetadataStorage:
                            prev_fname: str,
                            new_fname: str,
                            move_thumbs: bool = True
-                           ) -> None:
+                           ) -> bool:
         metadata: Optional[Dict[str, Any]]
         metadata = self.mddb.pop(prev_fname, None)
         if metadata is None:
-            return
+            return False
         self.mddb[new_fname] = metadata
         prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
         new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
@@ -1464,6 +1464,7 @@ class MetadataStorage:
                 except Exception:
                     logging.debug(f"Error moving thumb from {thumb_path}"
                                   f" to {new_path}")
+        return True
 
     def parse_metadata(self,
                        fname: str,
