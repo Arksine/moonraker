@@ -203,33 +203,47 @@ class Machine:
 
     def _get_cpu_info(self) -> Dict[str, Any]:
         cpu_file = pathlib.Path("/proc/cpuinfo")
+        mem_file = pathlib.Path("/proc/meminfo")
         cpu_info = {
             'cpu_count': os.cpu_count(),
             'bits': platform.architecture()[0],
             'processor': platform.processor() or platform.machine(),
             'cpu_desc': "",
             'hardware_desc': "",
-            'model': ""
+            'model': "",
+            'total_memory': None,
+            'memory_units': ""
         }
-        if not cpu_file.exists():
-            return cpu_info
-        try:
-            cpu_text = cpu_file.read_text().strip()
-            cpu_items = [item.strip() for item in cpu_text.split("\n\n")
-                         if item.strip()]
-            for item in cpu_items:
-                cpu_desc_match = re.search(r"model name\s+:\s+(.+)", item)
-                if cpu_desc_match is not None:
-                    cpu_info['cpu_desc'] = cpu_desc_match.group(1).strip()
-                    continue
-            hw_match = re.search(r"Hardware\s+:\s+(.+)", cpu_items[-1])
-            if hw_match is not None:
-                cpu_info['hardware_desc'] = hw_match.group(1).strip()
-            model_match = re.search(r"Model\s+:\s+(.+)", cpu_items[-1])
-            if model_match is not None:
-                cpu_info['model'] = model_match.group(1).strip()
-        except Exception:
-            logging.info("Error Reading /proc/cpuinfo")
+        if cpu_file.exists():
+            try:
+                cpu_text = cpu_file.read_text().strip()
+                cpu_items = [item.strip() for item in cpu_text.split("\n\n")
+                             if item.strip()]
+                for item in cpu_items:
+                    cpu_desc_match = re.search(r"model name\s+:\s+(.+)", item)
+                    if cpu_desc_match is not None:
+                        cpu_info['cpu_desc'] = cpu_desc_match.group(1).strip()
+                        continue
+                hw_match = re.search(r"Hardware\s+:\s+(.+)", cpu_items[-1])
+                if hw_match is not None:
+                    cpu_info['hardware_desc'] = hw_match.group(1).strip()
+                model_match = re.search(r"Model\s+:\s+(.+)", cpu_items[-1])
+                if model_match is not None:
+                    cpu_info['model'] = model_match.group(1).strip()
+            except Exception:
+                logging.info("Error Reading /proc/cpuinfo")
+        if mem_file.exists():
+            try:
+                mem_text = mem_file.read_text().strip()
+                for line in mem_text.split('\n'):
+                    line = line.strip()
+                    if line.startswith("MemTotal:"):
+                        parts = line.split()
+                        cpu_info['total_memory'] = int(parts[1])
+                        cpu_info['memory_units'] = parts[2]
+                        break
+            except Exception:
+                logging.info("Error Reading /proc/meminfo")
         return cpu_info
 
     async def _find_active_services(self):
