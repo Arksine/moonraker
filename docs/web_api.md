@@ -815,7 +815,9 @@ Returns: Information about the host system in the following format:
             "processor": "armv6l",
             "cpu_desc": "ARMv6-compatible processor rev 7 (v6l)",
             "hardware_desc": "BCM2835",
-            "model": "Raspberry Pi Zero W Rev 1.1"
+            "model": "Raspberry Pi Zero W Rev 1.1",
+            "total_memory": 439276,
+            "memory_units": "kB"
         },
         "sd_info": {
             "manufacturer_id": "03",
