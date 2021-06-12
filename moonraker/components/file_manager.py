@@ -501,7 +501,7 @@ class FileManager:
         # Don't start if another print is currently in progress
         start_print = start_print and not print_ongoing
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
-        finfo = self._process_uploaded_file(upload_info)
+        finfo = await self._process_uploaded_file(upload_info)
         await self.gcode_metadata.parse_metadata(
             upload_info['filename'], finfo).wait()
         if start_print:
@@ -527,7 +527,7 @@ class FileManager:
                                       upload_info: Dict[str, Any]
                                       ) -> Dict[str, Any]:
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
-        self._process_uploaded_file(upload_info)
+        await self._process_uploaded_file(upload_info)
         await self.notify_sync_lock.wait(5.)
         self.notify_sync_lock = None
         return {
@@ -538,13 +538,21 @@ class FileManager:
             'action': "create_file"
         }
 
-    def _process_uploaded_file(self,
-                               upload_info: Dict[str, Any]
-                               ) -> Dict[str, Any]:
+    async def _process_uploaded_file(self,
+                                     upload_info: Dict[str, Any]
+                                     ) -> Dict[str, Any]:
         try:
             if upload_info['dir_path']:
-                os.makedirs(os.path.dirname(
-                    upload_info['dest_path']), exist_ok=True)
+                cur_path = self.file_paths[upload_info['root']]
+                dirs: List[str]
+                dirs = upload_info['dir_path'].strip('/').split('/')
+                for subdir in dirs:
+                    cur_path = os.path.join(cur_path, subdir)
+                    if os.path.exists(cur_path):
+                        continue
+                    os.mkdir(cur_path)
+                    # wait for inotify to create a watch before proceeding
+                    await asyncio.sleep(.1)
             if upload_info['unzip_ufp']:
                 tmp_path = upload_info['tmp_file_path']
                 finfo = self.get_path_info(tmp_path)
