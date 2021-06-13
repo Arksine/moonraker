@@ -104,6 +104,15 @@ class MoonrakerDatabase:
                              debug_counter)
         if debug_counter:
             logging.info(f"Database Debug Count: {debug_counter}")
+
+        # Track unsafe shutdowns
+        unsafe_shutdowns: int = self.get_item(
+            "moonraker", "database.unsafe_shutdowns", 0)
+        logging.info(f"Unsafe Shutdown Count: {unsafe_shutdowns}")
+        # Increment unsafe shutdown counter.  This will be reset if
+        # moonraker is safely restarted
+        self.insert_item("moonraker", "database.unsafe_shutdowns",
+                         unsafe_shutdowns + 1)
         self.server.register_endpoint(
             "/server/database/list", ['GET'], self._handle_list_request)
         self.server.register_endpoint(
@@ -392,6 +401,12 @@ class MoonrakerDatabase:
         return {'namespace': namespace, 'key': key, 'value': val}
 
     def close(self) -> None:
+        # Decrement unsafe shutdown counter
+        unsafe_shutdowns: int = self.get_item(
+            "moonraker", "database.unsafe_shutdowns", 0)
+        self.insert_item("moonraker", "database.unsafe_shutdowns",
+                         unsafe_shutdowns - 1)
+
         # log db stats
         msg = ""
         with self.lmdb_env.begin() as txn:
