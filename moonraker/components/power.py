@@ -657,16 +657,17 @@ class HomeAssistant(HTTPDevice):
         super().__init__(config, default_port=8123)
         self.device: str = config.get("device")
         self.token: str = config.get("token")
+        self.domain: str = config.get("domain", "switch")
 
     async def _send_homeassistant_command(self,
                                           command: str
                                           ) -> Dict[Union[str, int], Any]:
         if command == "on":
-            out_cmd = f"api/services/switch/turn_on"
+            out_cmd = f"api/services/{self.domain}/turn_on"
             body = {"entity_id": self.device}
             method = "POST"
         elif command == "off":
-            out_cmd = f"api/services/switch/turn_off"
+            out_cmd = f"api/services/{self.domain}/turn_off"
             body = {"entity_id": self.device}
             method = "POST"
         elif command == "info":
