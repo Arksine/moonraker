@@ -281,9 +281,11 @@ address:
 port:
 device:
 token:
+domain:
 #   The above options are used for "homeassistant" devices.  The
 #   address should be a valid ip or hostname for the homeassistant controller.
 #   "device" should be the ID of the switch to control.
+#   "domain" is the class of device set managed by homeassistant, defaults to "switch".
 address:
 user:
 password:
@@ -337,6 +339,7 @@ address: 192.168.1.126
 port: 8123
 device: switch.1234567890abcdefghij
 token: home-assistant-very-long-token
+domain: switch
 ```
 
 It is possible to toggle device power from the Klippy host, this can be done
