@@ -316,12 +316,21 @@ class MoonrakerDatabase:
                 f"Invalid database namespace '{namespace}'")
         db = self.namespaces[namespace]
         result = {}
+        invalid_key_result = None
         with self.lmdb_env.begin(buffers=True, db=db) as txn:
             cursor = txn.cursor()
             cursor.first()
             for db_key, value in cursor:
                 k = bytes(db_key).decode()
+                if not k:
+                    invalid_key_result = self._decode_value(value)
+                    continue
                 result[k] = self._decode_value(value)
+        if invalid_key_result:
+            logging.info(f"Invalid Key found in namespace '{namespace}', "
+                         f"dropping value: {repr(invalid_key_result)}")
+            with self.lmdb_env.begin(write=True, buffers=True, db=db) as txn:
+                txn.delete(b"")
         return result
 
     def _encode_value(self, value: DBRecord) -> bytes:
