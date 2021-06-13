@@ -89,6 +89,9 @@ class MoonrakerDatabase:
                 txn.put(b'database_version',
                         self._encode_value(DATABASE_VERSION),
                         db=mrdb)
+        # Read out all namespaces to remove any invalid keys on init
+        for ns in self.namespaces.keys():
+            self._get_namespace(ns)
         # Protected Namespaces have read-only API access.  Write access can
         # be granted by enabling the debug option.  Forbidden namespaces
         # have no API access.  This cannot be overridden.
