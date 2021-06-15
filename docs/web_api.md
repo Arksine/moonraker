@@ -1172,7 +1172,7 @@ modified time, and size.
             "width": 400,
             "height": 300,
             "size": 73308,
-            "relative_path": "lthumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-400x300.png"
+            "relative_path": ".thumbs/3DBenchy_0.15mm_PLA_MK3S_2h6m-400x300.png"
         }
     ],
     "first_layer_bed_temp": 60,
