@@ -60,13 +60,13 @@ class KlippyAPI(Subscribable):
             "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
 
     async def _gcode_pause(self, web_request: WebRequest) -> str:
-        return await self.run_gcode("PAUSE")
+        return await self._send_klippy_request("pause_resume/pause", {})
 
     async def _gcode_resume(self, web_request: WebRequest) -> str:
-        return await self.run_gcode("RESUME")
+        return await self._send_klippy_request("pause_resume/resume", {})
 
     async def _gcode_cancel(self, web_request: WebRequest) -> str:
-        return await self.run_gcode("CANCEL_PRINT")
+        return await self._send_klippy_request("pause_resume/cancel", {})
 
     async def _gcode_start_print(self, web_request: WebRequest) -> str:
         filename: str = web_request.get_str('filename')
