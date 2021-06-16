@@ -251,8 +251,13 @@ The `print_stats` object reports `virtual_sdcard` print state:
   equivalent to `total_duration` - time paused.
 - `filament_used`:  The amount of filament used during the current print
   (in mm).  Any extrusion during a pause is excluded.
-- `state`: Current print state.  Can be "standby", "printing", "paused",
-  "complete", or "error".  If an error is detected the print will abort.
+- `state`: Current print state.  Can be one of the following values:
+    - `"standby"`
+    - `"printing"`
+    - `"paused"`
+    - `"complete"`
+    - `"cancelled"`
+    - `"error"` - Note that if an error is detected the print will abort
 - `message`:  If an error is detected, this field contains the error
   message generated.  Otherwise it will be a null string.
 
