@@ -135,6 +135,22 @@ Enables print history tracking.
 [history]
 ```
 
+## `[notifications]`
+
+```ini
+# moonraker.conf
+[notifications]
+
+[notifications]
+type: mqtt
+host: 127.0.0.1
+port: 1883
+username: mqttuser
+password: mqttpassword
+topic: printer
+
+```
+
 ## `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
