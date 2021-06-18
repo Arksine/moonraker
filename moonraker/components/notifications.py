@@ -56,6 +56,12 @@ class Notifications:
         self.server.register_event_handler(
             "server:status_update", self._status_update)
 
+        self.server.register_notification("printer:state_cancelled")
+        self.server.register_notification("printer:state_complete")
+        self.server.register_notification("printer:state_error")
+        self.server.register_notification("printer:state_paused")
+        self.server.register_notification("printer:state_printing")
+
     def on_exit(self) -> None:
         for notify in self.notifications:
             self.notifications[notify].on_exit()
@@ -88,13 +94,20 @@ class Notifications:
             if new_state is not old_state:
                 logging.info("New state: %s" % new_state)
                 if new_state == "printing":
+                    self.server.send_event("printer:state_printing")
                     await self._notify("printing")
+                elif new_state == "paused":
+                    self.server.send_event("printer:state_paused")
+                    await self._notify("paused")
                 elif old_state in ['printing', 'paused']:
                     if new_state == "complete":
-                        await self._notify("completed")
+                        self.server.send_event("printer:state_complete")
+                        await self._notify("complete")
                     elif new_state == "cancelled" or new_state == "standby":
+                        self.server.send_event("printer:state_cancelled")
                         await self._notify("cancelled")
                     elif new_state == "error":
+                        self.server.send_event("printer:state_error")
                         await self._notify("error")
         else:
             self.print_stats.update(ps)

@@ -56,6 +56,16 @@ class History:
             "server:klippy_shutdown", self._handle_shutdown)
         self.server.register_notification("history:history_changed")
 
+        self.server.register_event_handler(
+            "printer:state_cancelled", self._state_cancelled)
+        self.server.register_event_handler(
+            "printer:state_complete", self._state_complete)
+        self.server.register_event_handler(
+            "printer:state_error", self._state_error)
+        self.server.register_event_handler(
+            "printer:state_printing", self._state_printing)
+
+
         self.server.register_endpoint(
             "/server/history/job", ['GET', 'DELETE'], self._handle_job_request)
         self.server.register_endpoint(
@@ -173,36 +183,28 @@ class History:
                                  ) -> Dict[str, Dict[str, float]]:
         return {'job_totals': self.job_totals}
 
+    async def _state_cancelled(self) -> None:
+        if self.current_job is not None:
+            self.finish_job("cancelled", self.print_stats)
+
+    async def _state_complete(self) -> None:
+        if self.current_job is not None:
+            self.finish_job("completed", self.print_stats)
+
+    async def _state_error(self) -> None:
+        if self.current_job is not None:
+            self.finish_job("error", self.print_stats)
+
+    async def _state_printing(self) -> None:
+        if self.current_job is None:
+            # always add new job if no existing job is present
+            self.add_job(PrinterJob(self.print_stats))
+        elif self._check_need_cancel(self.print_stats):
+            self.finish_job("cancelled", self.print_stats)
+            self.add_job(PrinterJob(self.print_stats))
+
     async def _status_update(self, data: Dict[str, Any]) -> None:
-        ps = data.get("print_stats", {})
-        if "state" in ps:
-            old_state: str = self.print_stats['state']
-            new_state: str = ps['state']
-            new_ps = dict(self.print_stats)
-            new_ps.update(ps)
-
-            if new_state is not old_state:
-                if new_state == "printing" and self.current_job is None:
-                    # always add new job if no existing job is present
-                    self.add_job(PrinterJob(new_ps))
-                elif self.current_job is not None:
-                    if new_state == "complete":
-                        self.finish_job("completed", new_ps)
-                    elif new_state == "cancelled":
-                        self.finish_job("cancelled", new_ps)
-                    elif new_state == "standby":
-                        # Backward compatibility with
-                        # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
-                        self.finish_job("cancelled", self.print_stats)
-                    elif new_state == "error":
-                        self.finish_job("error", new_ps)
-                    elif new_state == "printing" and \
-                            self._check_need_cancel(new_ps):
-                        # Finish with the previous state
-                        self.finish_job("cancelled", self.print_stats)
-                        self.add_job(PrinterJob(new_ps))
-
-        self.print_stats.update(ps)
+        self.print_stats.update(data.get("print_stats", {}))
 
     def _handle_shutdown(self) -> None:
         self.finish_job("klippy_shutdown", self.print_stats)
