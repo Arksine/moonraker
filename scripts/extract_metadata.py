@@ -704,11 +704,13 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
                 if not os.path.exists(dest_thumb_dir):
                     os.mkdir(dest_thumb_dir)
                 shutil.move(tmp_thumb_path, dest_thumb_path)
-    finally:
-        try:
-            os.remove(ufp_path)
-        except Exception:
-            log_to_stderr(f"Error removing ufp file: {ufp_path}")
+    except Exception:
+        log_to_stderr(traceback.format_exc())
+        sys.exit(-1)
+    try:
+        os.remove(ufp_path)
+    except Exception:
+        log_to_stderr(f"Error removing ufp file: {ufp_path}")
 
 def main(path: str, filename: str, ufp: Optional[str]) -> None:
     file_path = os.path.join(path, filename)
