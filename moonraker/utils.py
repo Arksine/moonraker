@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import os
+import pathlib
 import sys
 import subprocess
 import asyncio
@@ -76,26 +77,35 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
 
 # Parse the git version from the command line.  This code
 # is borrowed from Klipper.
+def retreive_git_version(source_path: str) -> str:
+    # Obtain version info from "git" program
+    prog = ('git', '-C', source_path, 'describe', '--always',
+            '--tags', '--long', '--dirty')
+    process = subprocess.Popen(prog, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    ver, err = process.communicate()
+    retcode = process.wait()
+    if retcode == 0:
+        return ver.strip().decode()
+    raise Exception(f"Failed to retreive git version: {err.decode()}")
+
 def get_software_version() -> str:
     moonraker_path = os.path.join(
         os.path.dirname(__file__), '..')
+    version = "?"
 
-    # Obtain version info from "git" program
-    prog = ('git', '-C', moonraker_path, 'describe', '--always',
-            '--tags', '--long', '--dirty')
     try:
-        process = subprocess.Popen(prog, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE)
-        ver, err = process.communicate()
-        retcode = process.wait()
-        if retcode == 0:
-            return ver.strip().decode()
-        else:
-            logging.debug(f"Error getting git version: {err.decode()}")
-    except OSError:
-        logging.exception("Error runing git describe")
-
-    return "?"
+        version = retreive_git_version(moonraker_path)
+    except Exception:
+        vfile = pathlib.Path(os.path.join(
+            moonraker_path, "moonraker/.version"))
+        if vfile.exists():
+            try:
+                version = vfile.read_text().strip()
+            except Exception:
+                logging.exception("Unable to extract version from file")
+                version = "?"
+    return version
 
 def setup_logging(log_file: str,
                   software_version: str
