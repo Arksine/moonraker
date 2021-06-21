@@ -1,0 +1,51 @@
+# CI Code for generating and publishing beta assets
+
+name: publish_assets
+on:
+  release:
+    types: [published]
+jobs:
+  generate_assets:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Moonraker
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        ref: ${{ github.ref }}
+        path: moonraker
+
+    - name: Checkout Klipper
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        repository: KevinOConnor/klipper
+        path: klipper
+
+    - name: Build Beta Assets
+      if: ${{ github.event.release.prerelease  }}
+      run: >
+        ./moonraker/scripts/build-zip-release.sh -b
+        -o ${{ github.workspace }}
+        -k ${{ github.workspace }}/klipper
+
+    - name: Build Stable Assets
+      if: ${{ !github.event.release.prerelease  }}
+      run: >
+        ./moonraker/scripts/build-zip-release.sh
+        -o ${{ github.workspace }}
+        -k ${{ github.workspace }}/klipper
+
+    - name: Upload assets
+      run: |
+        cd moonraker
+        gh release upload ${{ env.TAG }} ${{ env.FILES }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        FILES: >
+          ${{ github.workspace }}/moonraker.zip
+          ${{ github.workspace }}/klipper.zip
+          ${{ github.workspace }}/RELEASE_INFO
+          ${{ github.workspace }}/COMMIT_LOG
+        TAG: ${{ github.event.release.tag_name }}
+
