@@ -222,6 +222,10 @@ class Server:
             raise ServerError(f"Component ({component_name}) not found")
         return component
 
+    def set_failed_component(self, component_name: str) -> None:
+        if component_name not in self.failed_components:
+            self.failed_components.append(component_name)
+
     def register_notification(self,
                               event_name: str,
                               notify_name: Optional[str] = None
