@@ -142,8 +142,9 @@ class WebRequest:
         return self._get_converted_arg(key, default, bool)
 
 class JsonRPC:
-    def __init__(self) -> None:
+    def __init__(self, transport: str = "Websocket") -> None:
         self.methods: Dict[str, RPCCallback] = {}
+        self.transport = transport
 
     def register_method(self,
                         name: str,
@@ -156,35 +157,35 @@ class JsonRPC:
 
     async def dispatch(self,
                        data: str,
-                       ws: WebSocket
+                       conn: Optional[WebSocket] = None
                        ) -> Optional[str]:
         response: Any = None
         try:
             request: Union[Dict[str, Any], List[dict]] = json.loads(data)
         except Exception:
-            msg = f"Websocket data not json: {data}"
+            msg = f"{self.transport} data not json: {data}"
             logging.exception(msg)
             response = self.build_error(-32700, "Parse error")
             return json.dumps(response)
-        logging.debug(f"Websocket Request::{data}")
+        logging.debug(f"{self.transport} Request::{data}")
         if isinstance(request, list):
             response = []
             for req in request:
-                resp = await self.process_request(req, ws)
+                resp = await self.process_request(req, conn)
                 if resp is not None:
                     response.append(resp)
             if not response:
                 response = None
         else:
-            response = await self.process_request(request, ws)
+            response = await self.process_request(request, conn)
         if response is not None:
             response = json.dumps(response)
-            logging.debug("Websocket Response::" + response)
+            logging.debug(f"{self.transport} Response::{response}")
         return response
 
     async def process_request(self,
                               request: Dict[str, Any],
-                              ws: WebSocket
+                              conn: Optional[WebSocket]
                               ) -> Optional[Dict[str, Any]]:
         req_id: Optional[int] = request.get('id', None)
         rpc_version: str = request.get('jsonrpc', "")
@@ -198,25 +199,28 @@ class JsonRPC:
             params = request['params']
             if isinstance(params, list):
                 response = await self.execute_method(
-                    method, req_id, ws, *params)
+                    method, req_id, conn, *params)
             elif isinstance(params, dict):
                 response = await self.execute_method(
-                    method, req_id, ws, **params)
+                    method, req_id, conn, **params)
             else:
                 return self.build_error(-32600, "Invalid Request", req_id)
         else:
-            response = await self.execute_method(method, req_id, ws)
+            response = await self.execute_method(method, req_id, conn)
         return response
 
     async def execute_method(self,
                              method: RPCCallback,
                              req_id: Optional[int],
-                             ws: WebSocket,
+                             conn: Optional[WebSocket],
                              *args,
                              **kwargs
                              ) -> Optional[Dict[str, Any]]:
         try:
-            result = await method(ws, *args, **kwargs)
+            if conn is not None:
+                result = await method(conn, *args, **kwargs)
+            else:
+                result = await method(*args, **kwargs)
         except TypeError as e:
             return self.build_error(
                 -32603, f"Invalid params:\n{e}", req_id, True)
