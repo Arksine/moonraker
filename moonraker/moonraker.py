@@ -40,7 +40,7 @@ from typing import (
     TypeVar,
 )
 if TYPE_CHECKING:
-    from websockets import WebRequest, WebSocket, Subscribable
+    from websockets import WebRequest, Subscribable
     from components.data_store import DataStore
     from components.klippy_apis import KlippyAPI
     from components.file_manager import FileManager
@@ -102,6 +102,8 @@ class Server:
         self.register_endpoint = app.register_local_handler
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
+        self.get_websocket_manager = app.get_websocket_manager
+        self.register_api_transport = app.register_api_transport
         self.ioloop = IOLoop.current()
 
         self.register_endpoint(
@@ -230,7 +232,7 @@ class Server:
                               event_name: str,
                               notify_name: Optional[str] = None
                               ) -> None:
-        wsm = self.moonraker_app.get_websocket_manager()
+        wsm = self.get_websocket_manager()
         wsm.register_notification(event_name, notify_name)
 
     def register_event_handler(self,
