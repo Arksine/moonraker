@@ -258,7 +258,14 @@ class JsonRPC:
             'id': req_id
         }
 
-class WebsocketManager:
+class APITransport:
+    def register_api_handler(self, api_def: APIDefinition) -> None:
+        raise NotImplementedError
+
+    def remove_api_handler(self, api_def: APIDefinition) -> None:
+        raise NotImplementedError
+
+class WebsocketManager(APITransport):
     def __init__(self, server: Server) -> None:
         self.server = server
         self.websockets: Dict[int, WebSocket] = {}
@@ -279,23 +286,26 @@ class WebsocketManager:
         self.server.register_event_handler(
             event_name, notify_handler)
 
-    def register_local_handler(self,
-                               api_def: APIDefinition,
-                               callback: Callable[[WebRequest], Coroutine]
-                               ) -> None:
-        for ws_method, req_method in \
-                zip(api_def.ws_methods, api_def.request_methods):
-            rpc_cb = self._generate_local_callback(
-                api_def.endpoint, req_method, callback)
+    def register_api_handler(self, api_def: APIDefinition) -> None:
+        if api_def.callback is None:
+            # Remote API, uses RPC to reach out to Klippy
+            ws_method = api_def.jrpc_methods[0]
+            rpc_cb = self._generate_callback(api_def.endpoint)
             self.rpc.register_method(ws_method, rpc_cb)
+        else:
+            # Local API, uses local callback
+            for ws_method, req_method in \
+                    zip(api_def.jrpc_methods, api_def.request_methods):
+                rpc_cb = self._generate_local_callback(
+                    api_def.endpoint, req_method, api_def.callback)
+                self.rpc.register_method(ws_method, rpc_cb)
+        logging.info(
+            "Registering Websocket JSON-RPC methods: "
+            f"{', '.join(api_def.jrpc_methods)}")
 
-    def register_remote_handler(self, api_def: APIDefinition) -> None:
-        ws_method = api_def.ws_methods[0]
-        rpc_cb = self._generate_callback(api_def.endpoint)
-        self.rpc.register_method(ws_method, rpc_cb)
-
-    def remove_handler(self, ws_method: str) -> None:
-        self.rpc.remove_method(ws_method)
+    def remove_api_handler(self, api_def: APIDefinition) -> None:
+        for jrpc_method in api_def.jrpc_methods:
+            self.rpc.remove_method(jrpc_method)
 
     def _generate_callback(self, endpoint: str) -> RPCCallback:
         async def func(ws: WebSocket, **kwargs) -> Any:

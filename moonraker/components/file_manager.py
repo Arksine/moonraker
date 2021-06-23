@@ -82,7 +82,7 @@ class FileManager:
             "/server/files/copy", ['POST'], self._handle_file_move_copy)
         self.server.register_endpoint(
             "/server/files/delete_file", ['DELETE'], self._handle_file_delete,
-            protocol=["websocket"])
+            transports=["websocket"])
         # register client notificaitons
         self.server.register_notification("file_manager:filelist_changed")
         # Register APIs to handle file uploads

@@ -168,28 +168,28 @@ class Authorization:
         self.permitted_paths.add("/access/refresh_jwt")
         self.server.register_endpoint(
             "/access/login", ['POST'], self._handle_login,
-            protocol=['http'])
+            transports=['http'])
         self.server.register_endpoint(
             "/access/logout", ['POST'], self._handle_logout,
-            protocol=['http'])
+            transports=['http'])
         self.server.register_endpoint(
             "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
-            protocol=['http'])
+            transports=['http'])
         self.server.register_endpoint(
             "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request, protocol=['http'])
+            self._handle_user_request, transports=['http'])
         self.server.register_endpoint(
             "/access/users/list", ['GET'], self._handle_list_request,
-            protocol=['http'])
+            transports=['http'])
         self.server.register_endpoint(
             "/access/user/password", ['POST'], self._handle_password_reset,
-            protocol=['http'])
+            transports=['http'])
         self.server.register_endpoint(
             "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, protocol=['http'])
+            self._handle_apikey_request, transports=['http'])
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
-            self._handle_oneshot_request, protocol=['http'])
+            self._handle_oneshot_request, transports=['http'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 

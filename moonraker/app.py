@@ -42,10 +42,12 @@ if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
     from moonraker import Server
     from confighelper import ConfigHelper
+    from websockets import APITransport
     from components.file_manager import FileManager
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
     AuthComp = Optional[components.authorization.Authorization]
+    APICallback = Callable[[WebRequest], Coroutine]
 
 # These endpoints are reserved for klippy/server communication only and are
 # not exposed via http or the websocket
@@ -59,6 +61,7 @@ MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
+ALL_TRANSPORTS = ["http", "websocket", "mqtt"]
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application: MoonrakerApp) -> None:
@@ -104,15 +107,19 @@ class APIDefinition:
     def __init__(self,
                  endpoint: str,
                  http_uri: str,
-                 ws_methods: List[str],
+                 jrpc_methods: List[str],
                  request_methods: Union[str, List[str]],
+                 transports: List[str],
+                 callback: Optional[APICallback],
                  need_object_parser: bool):
         self.endpoint = endpoint
         self.uri = http_uri
-        self.ws_methods = ws_methods
+        self.jrpc_methods = jrpc_methods
         if not isinstance(request_methods, list):
             request_methods = [request_methods]
         self.request_methods = request_methods
+        self.supported_transports = transports
+        self.callback = callback
         self.need_object_parser = need_object_parser
 
 class MoonrakerApp:
@@ -133,6 +140,9 @@ class MoonrakerApp:
 
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
+        self.api_transports: Dict[str, APITransport] = {
+            "websocket": self.wsm
+        }
 
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
@@ -229,6 +239,13 @@ class MoonrakerApp:
             await self.secure_server.close_all_connections()
         await self.wsm.close()
 
+    def register_api_transport(self,
+                               name: str,
+                               transport: APITransport
+                               ) -> Dict[str, APIDefinition]:
+        self.api_transports[name] = transport
+        return self.api_cache
+
     def register_remote_handler(self, endpoint: str) -> None:
         if endpoint in RESERVED_ENDPOINTS:
             return
@@ -237,10 +254,8 @@ class MoonrakerApp:
             # reserved handler or already registered
             return
         logging.info(
-            f"Registering remote endpoint - "
-            f"HTTP: ({' '.join(api_def.request_methods)}) {api_def.uri}; "
-            f"Websocket: {', '.join(api_def.ws_methods)}")
-        self.wsm.register_remote_handler(api_def)
+            f"Registering HTTP endpoint: "
+            f"({' '.join(api_def.request_methods)}) {api_def.uri}")
         params: Dict[str, Any] = {}
         params['methods'] = api_def.request_methods
         params['callback'] = api_def.endpoint
@@ -248,32 +263,34 @@ class MoonrakerApp:
         self.mutable_router.add_handler(
             api_def.uri, DynamicRequestHandler, params)
         self.registered_base_handlers.append(api_def.uri)
+        for name, transport in self.api_transports.items():
+            transport.register_api_handler(api_def)
 
     def register_local_handler(self,
                                uri: str,
                                request_methods: List[str],
-                               callback: Callable[[WebRequest], Coroutine],
-                               protocol: List[str] = ["http", "websocket"],
+                               callback: APICallback,
+                               transports: List[str] = ALL_TRANSPORTS,
                                wrap_result: bool = True
                                ) -> None:
         if uri in self.registered_base_handlers:
             return
         api_def = self._create_api_definition(
-            uri, request_methods, is_remote=False)
-        msg = "Registering local endpoint"
-        if "http" in protocol:
-            msg += f" - HTTP: ({' '.join(request_methods)}) {uri}"
+            uri, request_methods, callback, transports=transports)
+        if "http" in transports:
+            logging.info(
+                f"Registering HTTP Endpoint: "
+                f"({' '.join(request_methods)}) {uri}")
             params: dict[str, Any] = {}
             params['methods'] = request_methods
             params['callback'] = callback
             params['wrap_result'] = wrap_result
             params['is_remote'] = False
             self.mutable_router.add_handler(uri, DynamicRequestHandler, params)
-            self.registered_base_handlers.append(uri)
-        if "websocket" in protocol:
-            msg += f" - Websocket: {', '.join(api_def.ws_methods)}"
-            self.wsm.register_local_handler(api_def, callback)
-        logging.info(msg)
+        self.registered_base_handlers.append(uri)
+        for name, transport in self.api_transports.items():
+            if name in transports:
+                transport.register_api_handler(api_def)
 
     def register_static_file_handler(self,
                                      pattern: str,
@@ -301,17 +318,19 @@ class MoonrakerApp:
             {'max_upload_size': self.max_upload_size})
 
     def remove_handler(self, endpoint: str) -> None:
-        api_def = self.api_cache.get(endpoint)
+        api_def = self.api_cache.pop(endpoint, None)
         if api_def is not None:
             self.mutable_router.remove_handler(api_def.uri)
-            for ws_method in api_def.ws_methods:
-                self.wsm.remove_handler(ws_method)
+            for name, transport in self.api_transports.items():
+                transport.remove_api_handler(api_def)
 
     def _create_api_definition(self,
                                endpoint: str,
                                request_methods: List[str] = [],
-                               is_remote=True
+                               callback: Optional[APICallback] = None,
+                               transports: List[str] = ALL_TRANSPORTS
                                ) -> APIDefinition:
+        is_remote = callback is None
         if endpoint in self.api_cache:
             return self.api_cache[endpoint]
         if endpoint[0] == '/':
@@ -320,28 +339,29 @@ class MoonrakerApp:
             uri = "/printer/" + endpoint
         else:
             uri = "/server/" + endpoint
-        ws_methods = []
+        jrpc_methods = []
         if is_remote:
             # Remote requests accept both GET and POST requests.  These
             # requests execute the same callback, thus they resolve to
             # only a single websocket method.
-            ws_methods.append(uri[1:].replace('/', '.'))
+            jrpc_methods.append(uri[1:].replace('/', '.'))
             request_methods = ['GET', 'POST']
         else:
             name_parts = uri[1:].split('/')
             if len(request_methods) > 1:
                 for req_mthd in request_methods:
                     func_name = req_mthd.lower() + "_" + name_parts[-1]
-                    ws_methods.append(".".join(name_parts[:-1] + [func_name]))
+                    jrpc_methods.append(".".join(
+                        name_parts[:-1] + [func_name]))
             else:
-                ws_methods.append(".".join(name_parts))
-        if not is_remote and len(request_methods) != len(ws_methods):
+                jrpc_methods.append(".".join(name_parts))
+        if not is_remote and len(request_methods) != len(jrpc_methods):
             raise self.server.error(
                 "Invalid API definition.  Number of websocket methods must "
                 "match the number of request methods")
         need_object_parser = endpoint.startswith("objects/")
-        api_def = APIDefinition(endpoint, uri, ws_methods,
-                                request_methods, need_object_parser)
+        api_def = APIDefinition(endpoint, uri, jrpc_methods, request_methods,
+                                transports, callback, need_object_parser)
         self.api_cache[endpoint] = api_def
         return api_def
 
