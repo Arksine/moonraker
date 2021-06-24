@@ -427,7 +427,8 @@ persistent_files:
 ```
 
 This second example is for git repositories that have a service that need
-updating.
+updating.  Note that git repos must have at least one tag for Moonraker
+to identify its version.
 
 ```ini
 # moonraker.conf
@@ -467,4 +468,61 @@ enable_node_updates:
 #   to package-lock.json.  Note that if your project does not have a
 #   package-lock.json in its root directory then the plugin will fail to load.
 #   Default is False.
+```
+
+## `[mqtt]`
+
+Enables an MQTT Client.  When configured most of Moonraker's APIs are availble
+by publishing JSON-RPC requests to `{instance_name}/moonraker/api/request`.
+Responses will be published to `{instance_name}/moonraker/api/response`. See
+the [API Documentation](web_api.md#json-rpc-api-overview) for details on
+on JSON-RPC.
+
+It is also possible for other components within Moonraker to use MQTT to
+publish and subscribe to topics.
+
+```ini
+address:
+#   Address of the Broker.  This may be a hostname or IP Address.  This
+#   parameter must be provided.
+port:
+#   Port the Broker is listening on.  Default is 1883.
+username:
+#   An optional username used to log in to the Broker.  Default is no
+#   username (an anonymous login will be attempted)
+password_file:
+#   An optional path to a text file containing a password used to log in
+#   to the broker.  It is strongly recommended that this file be located
+#   in a folder not served by Moonraker.  It is also recommended that the
+#   password be unique and not used for other logins, as it is stored in
+#   plain text.  To create a password file, one may ssh in to the device
+#   and enter the following commands:
+#      cd ~
+#      echo mypassword > .mqttpass
+#   Then set this option to:
+#     ~/.mqttpass
+#   If this option is omitted no password will be used to login.
+mqtt_protocol: v3.1.1
+#   The protocol to use when connecting to the Broker.  May be v3.1,
+#   v3.1.1, and v5.  The default is v3.1.1
+enable_moonraker_api: True
+#   If set to true the MQTT client will subscribe to API topic, ie:
+#     {instance_name}/moonraker/api/request
+#   This can be set to False if the user does not wish to allow API
+#   requests over MQTT.  The default is True.
+instance_name:
+#   An identifer used to create unique API topics for each instance of
+#   Moonraker on network.  This name cannot contain wildcards (+ or #).
+#   For example, if the instance name is set to my_printer, Moonraker
+#   will subscribe to the following topic for API requests:
+#     my_printer/moonraker/api/request
+#   Responses will be published to the following topic:
+#     my_printer/moonraker/api/response
+#   The default is the machine's hostname.
+default_qos: 0
+#   The default QOS level used when publishing or subscribing to topics.
+#   Must be an integer value from 0 to 2.  The default is 0.
+api_qos:
+#   The QOS level to use for the API topics. If not provided, the
+#   value specified by "default_qos" will be used.
 ```

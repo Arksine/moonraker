@@ -153,7 +153,7 @@ when it needs a reference to core component.
 If the component fails to load `default` will be returned.  If `default`
 is not provided a `ServerError` will be raised.
 
-#### *Server.register_endpoint(uri, request_methods, callback, protocol=["http", "websocket"], wrap_result=True)*
+#### *Server.register_endpoint(uri, request_methods, callback, transports=["http", "websocket", "mqtt"], wrap_result=True)*
 
 Registers the supplied `uri` with the server.
 
@@ -166,10 +166,11 @@ The `callback` is executed when a request matching the `uri` and a
 should be able of handling each registered `request_method`.  The
 provided callback must be a coroutine.
 
-The `protocol` is a list containing any combination of `http` and `websocket`.
-If `websocket` is selected associated JSON-RPC methods will be generated based
-on what is supplied by the `uri` and `request_methods` argument. A unique
-JSON_RPC method is generated for each request method.  For example:
+The `transports` argument is a list containing any combination of
+`http`, `websocket` and `mqtt`.  JSON-RPC methods for `websocket` and `mqtt`
+will be generated based on what is supplied by the `uri` and
+request_methods` argument. A unique JSON_RPC method is generated for each
+request method.  For example:
 ```python
 self.server.register_endpoint("/server/example", ["POST"], self._handle_request)
 ```
@@ -273,32 +274,90 @@ passing the WebRequest on to another request handler.
 
 Returns the request argument at the provided `key`.  If the key is not
 present `default` will be returned. If `default` is not provided a
-`SeverError` will be raised.
+`ServerError` will be raised.
 
 #### *WebRequest.get_str(key, default=Sentinel)*
 
 Retrieves the request argument at the provided `key` and converts it
 to a string, returning the result. If the key is not present the `default`
 value will be returned.  If `default` is not provided or if the attempt at
-type conversion fails a `SeverError` will be raised.
+type conversion fails a `ServerError` will be raised.
 
 #### *WebRequest.get_int(key, default=Sentinel)*
 
 Retrieves the request argument at the provided `key` and converts it
 to an integer, returning the result. If the key is not present the `default`
 value will be returned.  If `default` is not provided or if the attempt at
-type conversion fails a `SeverError` will be raised.
+type conversion fails a `ServerError` will be raised.
 
 #### *WebRequest.get_float(key, default=Sentinel)*
 
 Retrieves the request argument at the provided `key` and converts it
 to a float, returning the result. If the key is not present the `default`
 value will be returned.  If `default` is not provided or if the attempt at
-type conversion fails a `SeverError` will be raised.
+type conversion fails a `ServerError` will be raised.
 
 #### *WebRequest.get_boolean(key, default=Sentinel)*
 
 Retrieves the request argument at the provided `key` and converts it
 to a boolean, returning the result. If the key is not present the `default`
 value will be returned.  If `default` is not provided or if the attempt at
-type conversion fails a `SeverError` will be raised.
+type conversion fails a `ServerError` will be raised.
+
+### MQTT
+
+If configured by the user the MQTT component is available for lookup.
+Developers may use this to subscribe and publish topics.
+
+#### *MQTTClient.is_connected()*
+
+Returns true if Moonraker is currently connected to the Broker, false
+otherwise.
+
+#### *MQTTClient.wait_connection(timeout=None)*
+
+Blocks until a connection with the broker has been successfully established.
+If the optional `timeout` argument is specified then `asyncio.TimeoutError`
+will be raised if the timeout has exceeded.
+
+#### *MQTTClient.publish_topic(topic, payload=None, qos=None, retain=False)*
+
+Attempts to publish a topic to the Broker.  The `payload` may be a bool, int,
+float, string, or json encodable (Dict or List).  If omitted then an empty
+payload is sent.  The `qos` may be an integer from 0 to 2. If not specifed
+then the QOS level will use the configured default.  If `retain` is set to
+`True` then the retain flag for the payload will be set.
+
+Returns a Future that will block until topic is confirmed as published.
+For QOS level 0 an exception will be raised if the broker is not connected.
+
+
+#### *MQTTClient.publish_topic_with_response(topic, response_topic, payload=None, qos=None, retain=False, timeout=None)*
+
+Publishes the supplied `topic` with the arguments specified by `payload`,
+`qos`, and `retain`, then subscribes to the `response_topic`.  The payload
+delivered by the response topic is returned.  Note that this method is
+a coroutine, it must always be awaited.  The call will block until the
+entire process has completed unless a `timeout` (in seconds) is specifed.
+The `timeout` is applied to both the attempt to publish and the pending
+response, so the maximum waiting time would be approximately 2*timeout.
+
+!!! warning
+    This should only be used when it is guaranteed that the `response_topic`
+    does not have a retained value.  Otherwise the returned response will
+    be the retained value.
+
+#### *MQTTClient.subscribe_topic(topic, callback, qos=None)*
+
+Subscibes to the supplied `topic` with the specified `qos`.  If `qos` is not
+supplied the configured default will be used.  The `callback` should be a
+callable that accepts a `payload` argument of a `bytes` type.  The callable
+may be a coroutine.  The callback will be run each time the subscribed topic
+is published by another client.
+
+Returns a `SubscriptionHandle` that may be used to unsubscribe the topic.
+
+#### *MQTTClinet.unsubscribe(hdl)*
+
+Unsubscribes the callback associated with `hdl`.  If no outstanding callbacks
+exist for the topic then the topic is unsubscribed from the broker.

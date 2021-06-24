@@ -1,10 +1,10 @@
 #
 
-Most API methods are supported over both the Websocket and HTTP transports.
-File Transfer and `/access` requests are only available over HTTP. The
-Websocket is required to receive server generated events such as gcode
-responses.  For information on how to set up the Websocket, please see the
-Appendix at the end of this document.
+Most API methods are supported over the Websocket, HTTP, and MQTT
+(if configured) transports. File Transfer and `/access` requests are only
+available over HTTP. The Websocket is required to receive server generated
+events such as gcode responses.  For information on how to set up the
+Websocket, please see the Appendix at the end of this document.
 
 ### HTTP API Overview
 
@@ -71,10 +71,19 @@ thus using this functionality should be seen as a "last resort."  If at
 all possible clients should attempt to put these arguments in the body
 of a request.
 
-### Websocket API Overview
+### JSON-RPC API Overview
 
-The Websocket API is based on JSON-RPC, an encoded request should look
-something like:
+The Websocket and MQTT transports use the [JSON-RPC 2.0](https://jsonrpc.org)
+protocol.  The Websocket transmits objects in a text frame,  whereas MQTT
+transmits them in the payload of a topic.  When MQTT is configured Moonraker
+subscribes to an api request topic. After an api request is processed Moonraker
+publishes the return value to a response topic. By default these topics are
+`{instance_name}/moonraker/api/request` and
+`{instance_name}/moonraker/api/response`.  The `{instance_name}` should be a
+unique identifier for each instance of Moonraker and defaults to the machine's
+host name.
+
+An encoded request should look something like:
 ```json
 {
     "jsonrpc": "2.0",
@@ -85,9 +94,18 @@ something like:
 ```
 
 The `params` field may be left out if the API request takes no arguments.
-The `id` should be a unique integer value that has no chance of colliding
+The `id` should be a unique value that has no chance of colliding
 with other JSON-RPC requests.  The `method` is the API method, as defined
 for each API in this document.
+
+!!! tip
+    MQTT requests may provide an optional `mqtt_timestamp` keyword
+    argument in the `params` field of the JSON-RPC request.  To avoid
+    potential collisions from time drift it is recommended to specify
+    the timestamp in microseconds since the Unix Epoch.  If provided
+    Moonraker will use the timestamp to discard duplicate requests.
+    It is recommended to either provide a timestamp or publish API
+    requests at a QoS level of 0 or 2.
 
 A successful request will return a response like the following:
 ```json
@@ -114,7 +132,7 @@ Some errors may not return a request ID, such as an improperly formatted request
 
 The `test/client` folder includes a basic test interface with example usage for
 most of the requests below.  It also includes a basic JSON-RPC implementation
-that uses promises to return responses and errors (see json-rcp.js).
+that uses promises to return responses and errors (see json-rpc.js).
 
 ### Printer Administration
 
@@ -302,6 +320,9 @@ POST /printer/objects/subscribe?connection_id=123456789&gcode_move&extruder`
     [ID reported](#get-websocket-id) from a currently connected websocket. A
     request that includes only the `connection_id` argument will cancel the
     subscription on the specified websocket.
+
+    This request is not available over MQTT, as it is not possible to
+    associate a connected websocket with an MQTT client.
 
 JSON-RPC request:
 ```json
@@ -2794,7 +2815,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method":"server.history.get_job",
     "params":{"uid": "{uid}"},
-    "id": 4564,
+    "id": 4564
 }
 ```
 Returns:
@@ -2848,6 +2869,133 @@ An array of deleted job ids
     "000001",
 ]
 ```
+
+### MQTT APIs
+
+The following API is available when `[mqtt]` has been configured.
+
+!!! Note
+    These requests are not available over the `mqtt` transport as they
+    are redundant.  MQTT clients can publish and subscribe to
+    topics directly.
+
+#### Publish a topic
+
+HTTP request:
+```http
+POST /server/mqtt/publish
+Content-Type: application/json
+
+{
+    "topic": "home/test/pub",
+    "payload": "hello",
+    "qos": 0,
+    "retain": false,
+    "timeout": 5
+}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"server.mqtt.publish",
+    "params":{
+        "topic": "home/test/pub",
+        "payload": "hello",
+        "qos": 0,
+        "retain": false,
+        "timeout": 5
+    },
+    "id": 4564
+}
+```
+Only the `topic` parameter is required.  Below is an explanation for
+each paramater:
+
+- `topic`: The topic to publish.
+- `payload`: Payload to send with the topic.  May be a boolean, float,
+  integer, string, object, or array. All values are converted to strings prior
+  to publishing.  Objects and Arrays are JSON encoded.  If omitted an empty
+  payload is sent.
+- `qos`: QOS level to use when publishing the topic.  Must be an integer value
+  from 0 to 2.  If omitted the system configured default is used.
+- `retain`: If set to `true` the MQTT broker will retain the payload of this
+  request.  Note that only the mostly recently tagged payload is retained.
+  When other clients first subscribe to the topic they immediately recieve the
+  retained message.  The default is `false`.
+- `timeout`: A float value in seconds.  By default requests with QoS levels of
+  1 or 2 will block until the Broker acknowledges confirmation.  This option
+  applies a timeout to the request, returning a 504 error if the timeout is
+  exceeded. Note that the topic will still be published if the QoS level is 1
+  or 2.
+
+!!! tip
+    To clear a retained value of a topic, publish the topic with an empty
+    payload and `retain` set to `true`.
+
+Returns:
+
+The published topic:
+```json
+{
+    "topic": "home/test/pub"
+}
+```
+
+#### Subscribe to a topic
+
+
+HTTP request:
+```http
+POST /server/mqtt/subscribe
+Content-Type: application/json
+
+{
+    "topic": "home/test/sub",
+    "qos": 0,
+    "timeout": 5
+}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"server.mqtt.subscribe",
+    "params":{
+        "topic": "home/test/sub",
+        "qos": 0,
+        "timeout": 5
+    },
+    "id": 4564
+}
+```
+
+Only the `topic` parameter is required.  Below is an explanation for
+each paramater:
+
+- `topic`: The topic to subscribe.  Note that wildcards may not be used.
+- `qos`: QOS level to use when subscribing to the topic.  Must be an integer
+  value from 0 to 2.  If omitted the system configured default is used.
+- `timeout`: A float value in seconds.  By default requests will block
+  indefinitely until a response is received. This option applies a timeout to
+  the request, returning a 504 error if the timeout is exceeded.  The
+  subscription will be removed after a timeout.
+
+!!! note
+    If the topic was previously published with a retained payload this request
+    will return with the retained value.
+
+Returns:
+
+The subscribed topic and its payload:
+```json
+{
+    "topic": "home/test/pub",
+    "payload": "test"
+}
+```
+If the payload is json encodable it will be returned as an object or array.
+Otherwise it will be a string.
 
 ### Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
