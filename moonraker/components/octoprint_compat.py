@@ -53,18 +53,22 @@ class OctoprintCompat:
 
         # Version & Server information
         self.server.register_endpoint(
-            '/api/version', ['GET'], self._get_version, wrap_result=False)
+            '/api/version', ['GET'], self._get_version,
+            transports=['http'], wrap_result=False)
         self.server.register_endpoint(
-            '/api/server', ['GET'], self._get_server, wrap_result=False)
+            '/api/server', ['GET'], self._get_server,
+            transports=['http'], wrap_result=False)
 
         # Login, User & Settings
         self.server.register_endpoint(
-            '/api/login', ['POST'], self._post_login_user, wrap_result=False)
+            '/api/login', ['POST'], self._post_login_user,
+            transports=['http'], wrap_result=False)
         self.server.register_endpoint(
             '/api/currentuser', ['GET'], self._post_login_user,
-            wrap_result=False)
+            transports=['http'], wrap_result=False)
         self.server.register_endpoint(
-            '/api/settings', ['GET'], self._get_settings, wrap_result=False)
+            '/api/settings', ['GET'], self._get_settings,
+            transports=['http'], wrap_result=False)
 
         # File operations
         # Note that file upload is handled in file_manager.py
@@ -72,21 +76,23 @@ class OctoprintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', ['GET'], self._get_job, wrap_result=False)
+            '/api/job', ['GET'], self._get_job,
+            transports=['http'], wrap_result=False)
         # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
-            '/api/printer', ['GET'], self._get_printer, wrap_result=False)
+            '/api/printer', ['GET'], self._get_printer,
+            transports=['http'], wrap_result=False)
         self.server.register_endpoint(
             '/api/printer/command', ['POST'], self._post_command,
-            wrap_result=False)
+            transports=['http'], wrap_result=False)
         # TODO: head/tool/bed/chamber specific read/issue
 
         # Printer profiles
         self.server.register_endpoint(
             '/api/printerprofiles', ['GET'], self._get_printerprofiles,
-            wrap_result=False)
+            transports=['http'], wrap_result=False)
 
         # System
         # TODO: shutdown/reboot/restart operations
