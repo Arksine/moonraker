@@ -34,6 +34,7 @@ TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 STAT_UPDATE_TIME_MS = 1000
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
+REPORT_BLOCKED_TIME = 5.
 
 THROTTLED_FLAGS = {
     1: "Under-Voltage Detected",
@@ -106,6 +107,10 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
+        if time_diff > REPORT_BLOCKED_TIME:
+            logging.info(
+                f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds, "
+                f"Moonraker Process Usage: {usage}%")
         mem, mem_units = self._get_memory_usage()
         cpu_temp = self._get_cpu_temperature()
         result = {
