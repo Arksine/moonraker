@@ -10,6 +10,7 @@ import mimetypes
 import logging
 import json
 import datetime
+from concurrent.futures import ThreadPoolExecutor
 import traceback
 import ssl
 import urllib.parse
@@ -22,6 +23,7 @@ from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
+from tornado.ioloop import IOLoop
 from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from streaming_form_data import StreamingFormDataParser
@@ -761,9 +763,11 @@ class FileUploadHandler(AuthorizedRequestHandler):
             for name, target in self._targets.items():
                 self._parser.register(name, target)
 
-    def data_received(self, chunk: bytes) -> None:
+    async def data_received(self, chunk: bytes) -> None:
         if self.request.method == "POST":
-            self._parser.data_received(chunk)
+            with ThreadPoolExecutor(max_workers=1) as tpe:
+                await IOLoop.current().run_in_executor(
+                    tpe, self._parser.data_received, chunk)
 
     async def post(self) -> None:
         form_args = {}
