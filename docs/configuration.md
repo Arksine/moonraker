@@ -368,7 +368,7 @@ gcode:
 
 [idle_timeout]
 gcode:
-  TURN_OFF_MOTORS
+  M84
   TURN_OFF_HEATERS
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
