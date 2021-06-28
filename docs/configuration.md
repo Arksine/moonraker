@@ -482,6 +482,7 @@ It is also possible for other components within Moonraker to use MQTT to
 publish and subscribe to topics.
 
 ```ini
+[mqtt]
 address:
 #   Address of the Broker.  This may be a hostname or IP Address.  This
 #   parameter must be provided.

@@ -316,9 +316,11 @@ otherwise.
 
 #### *MQTTClient.wait_connection(timeout=None)*
 
-Blocks until a connection with the broker has been successfully established.
-If the optional `timeout` argument is specified then `asyncio.TimeoutError`
-will be raised if the timeout has exceeded.
+Blocks until a connection with the broker has been successfully established
+or until the specified timeout has exceeded.  Returns true if the connection
+was successful established, or False on timeout.  If no timeout is specified
+then this method will block indefinitely until a connection has been
+established.
 
 #### *MQTTClient.publish_topic(topic, payload=None, qos=None, retain=False)*
 
