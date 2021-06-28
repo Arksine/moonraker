@@ -339,10 +339,12 @@ class MQTTClient(APITransport):
             break
         self.reconnect_task = None
 
-    async def wait_connection(self, timeout: Optional[float] = None) -> None:
-        if self.connect_evt.is_set():
-            return
-        await asyncio.wait_for(self.connect_evt.wait(), timeout)
+    async def wait_connection(self, timeout: Optional[float] = None) -> bool:
+        try:
+            await asyncio.wait_for(self.connect_evt.wait(), timeout)
+        except asyncio.TimeoutError:
+            return False
+        return True
 
     def is_connected(self) -> bool:
         return self.connect_evt.is_set()
