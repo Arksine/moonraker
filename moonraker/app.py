@@ -9,7 +9,6 @@ import os
 import mimetypes
 import logging
 import json
-import datetime
 from concurrent.futures import ThreadPoolExecutor
 import traceback
 import ssl
@@ -39,6 +38,7 @@ from typing import (
     Union,
     Dict,
     List,
+    AsyncGenerator,
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
@@ -628,6 +628,7 @@ class FileRequestHandler(AuthorizedFileHandler):
         self.modified = self.get_modified_time()
         self.set_headers()
 
+        self.request.headers.pop("If-None-Match", None)
         if self.should_return_304():
             self.set_status(304)
             return
@@ -682,6 +683,7 @@ class FileRequestHandler(AuthorizedFileHandler):
         elif end is not None:
             content_length = end
         elif start is not None:
+            end = size
             content_length = size - start
         else:
             end = size
@@ -689,10 +691,8 @@ class FileRequestHandler(AuthorizedFileHandler):
         self.set_header("Content-Length", content_length)
 
         if include_body:
-            content = self.get_content(self.absolute_path, start, end)
-            if isinstance(content, bytes):
-                content = [content]
-            for chunk in content:
+            content = self.get_content_nonblock(self.absolute_path, start, end)
+            async for chunk in content:
                 try:
                     self.write(chunk)
                     await self.flush()
@@ -708,31 +708,36 @@ class FileRequestHandler(AuthorizedFileHandler):
         return urllib.parse.quote(basename, encoding="utf-8")
 
     @classmethod
+    async def get_content_nonblock(
+        cls, abspath: str, start: Optional[int] = None,
+        end: Optional[int] = None
+    ) -> AsyncGenerator[bytes, None]:
+        ioloop = IOLoop.current()
+        with open(abspath, "rb") as file:
+            if start is not None:
+                file.seek(start)
+            if end is not None:
+                remaining = end - (start or 0)  # type: Optional[int]
+            else:
+                remaining = None
+            while True:
+                chunk_size = 64 * 1024
+                if remaining is not None and remaining < chunk_size:
+                    chunk_size = remaining
+                with ThreadPoolExecutor(max_workers=1) as tpe:
+                    chunk = await ioloop.run_in_executor(
+                        tpe, file.read, chunk_size)
+                if chunk:
+                    if remaining is not None:
+                        remaining -= len(chunk)
+                    yield chunk
+                else:
+                    if remaining is not None:
+                        assert remaining == 0
+                    return
+
+    @classmethod
     def _get_cached_version(cls, abs_path: str) -> Optional[str]:
-        with cls._lock:
-            hashes: Dict[str, Dict[str, Any]] = \
-                cls._static_hashes  # type: ignore
-            try:
-                mtime = datetime.datetime.fromtimestamp(
-                    os.path.getmtime(abs_path), tz=datetime.timezone.utc)
-            except Exception:
-                logging.exception(
-                    f"Unable to get modified time for file: {abs_path}")
-                hashes.pop(abs_path, None)
-                return None
-            if abs_path not in hashes or mtime != hashes[abs_path]['modified']:
-                try:
-                    hashes[abs_path] = {
-                        'modified': mtime,
-                        'hash': cls.get_content_version(abs_path)
-                    }
-                except Exception:
-                    logging.exception(f"Could not open static file {abs_path}")
-                    hashes.pop(abs_path, None)
-                    return None
-            hsh = hashes.get(abs_path, {}).get('hash')
-            if hsh:
-                return hsh
         return None
 
 @tornado.web.stream_request_body
