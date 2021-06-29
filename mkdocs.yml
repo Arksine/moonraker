@@ -1,4 +1,5 @@
 site_name: Moonraker
+site_url: https://moonraker.readthedocs.io
 repo_url: https://github.com/Arksine/moonraker
 nav:
     - 'User Documentation':
