@@ -7,7 +7,6 @@
 from __future__ import annotations
 import configparser
 import os
-import logging
 from utils import SentinelClass
 
 # Annotation imports
@@ -15,7 +14,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Type,
     IO,
     TypeVar,
     Union,
@@ -23,7 +21,6 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from argparse import Namespace
     from moonraker import Server
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str]
@@ -158,10 +155,10 @@ class ConfigHelper:
                         "In the future this will result in a startup error.")
 
 def get_configuration(server: Server,
-                      system_args: Namespace
+                      app_args: Dict[str, Any]
                       ) -> ConfigHelper:
     cfg_file_path: str = os.path.normpath(os.path.expanduser(
-        system_args.configfile))
+        app_args['config_file']))
     if not os.path.isfile(cfg_file_path):
         raise ConfigError(
             f"Configuration File Not Found: '{cfg_file_path}''")
@@ -185,8 +182,4 @@ def get_configuration(server: Server,
     except Exception:
         pass
 
-    config['system_args'] = {
-        'configfile': system_args.configfile,
-        'logfile': system_args.logfile,
-        'software_version': system_args.software_version}
     return ConfigHelper(server, config, 'server', orig_sections)

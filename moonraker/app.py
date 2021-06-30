@@ -173,7 +173,7 @@ class MoonrakerApp:
         self.get_handler_delegate = self.app.get_handler_delegate
 
         # Register handlers
-        logfile = config['system_args'].get('logfile')
+        logfile = self.server.get_app_args().get('log_file')
         if logfile:
             self.register_static_file_handler(
                 "moonraker.log", logfile, force=True)

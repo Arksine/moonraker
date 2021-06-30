@@ -21,7 +21,8 @@ from typing import (
     Optional,
     ClassVar,
     Tuple,
-    Dict
+    Dict,
+    Any,
 )
 
 class ServerError(Exception):
@@ -53,15 +54,13 @@ class LocalQueueHandler(logging.handlers.QueueHandler):
 
 # Timed Rotating File Handler, based on Klipper's implementation
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
-    def __init__(self,
-                 software_version: str,
-                 filename: str,
-                 **kwargs) -> None:
-        super(MoonrakerLoggingHandler, self).__init__(filename, **kwargs)
+    def __init__(self, app_args: Dict[str, Any], **kwargs) -> None:
+        super().__init__(app_args['log_file'], **kwargs)
         self.rollover_info: Dict[str, str] = {
-            'header': f"{'-'*20}Moonraker Log Start{'-'*20}",
-            'version': f"Git Version: {software_version}",
+            'header': f"{'-'*20}Moonraker Log Start{'-'*20}"
         }
+        self.rollover_info['application_args'] = "\n".join(
+            [f"{k}: {v}" for k, v in app_args.items()])
         lines = [line for line in self.rollover_info.values() if line]
         if self.stream is not None:
             self.stream.write("\n".join(lines) + "\n")
@@ -70,7 +69,7 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
         self.rollover_info[name] = item
 
     def doRollover(self) -> None:
-        super(MoonrakerLoggingHandler, self).doRollover()
+        super().doRollover()
         lines = [line for line in self.rollover_info.values() if line]
         if self.stream is not None:
             self.stream.write("\n".join(lines) + "\n")
@@ -107,8 +106,7 @@ def get_software_version() -> str:
                 version = "?"
     return version
 
-def setup_logging(log_file: str,
-                  software_version: str
+def setup_logging(app_args: Dict[str, Any]
                   ) -> Tuple[logging.handlers.QueueListener,
                              Optional[MoonrakerLoggingHandler]]:
     root_logger = logging.getLogger()
@@ -121,9 +119,9 @@ def setup_logging(log_file: str,
         '[%(filename)s:%(funcName)s()] - %(message)s')
     stdout_hdlr.setFormatter(stdout_fmt)
     file_hdlr = None
-    if log_file:
+    if app_args.get('log_file', ""):
         file_hdlr = MoonrakerLoggingHandler(
-            software_version, log_file, when='midnight', backupCount=2)
+            app_args, when='midnight', backupCount=2)
         formatter = logging.Formatter(
             '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
         file_hdlr.setFormatter(formatter)

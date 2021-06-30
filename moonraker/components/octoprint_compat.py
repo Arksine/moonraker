@@ -38,7 +38,8 @@ class OctoprintCompat:
 
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.software_version = config['system_args'].get('software_version')
+        self.software_version = self.server.get_app_args().get(
+            'software_version')
 
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')

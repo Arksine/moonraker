@@ -60,10 +60,11 @@ SENTINEL = SentinelClass.get_instance()
 class Server:
     error = ServerError
     def __init__(self,
-                 args: argparse.Namespace,
+                 args: Dict[str, Any],
                  file_logger: Optional[utils.MoonrakerLoggingHandler]
                  ) -> None:
         self.file_logger = file_logger
+        self.app_args = args
         self.config = config = confighelper.get_configuration(self, args)
         # log config file
         strio = io.StringIO()
@@ -138,6 +139,9 @@ class Server:
         self.klippy_apis: KlippyAPI = self.lookup_component('klippy_apis')
         config.validate_config()
 
+    def get_app_args(self) -> Dict[str, Any]:
+        return dict(self.app_args)
+
     def start(self) -> None:
         hostname, hostport = self.get_host_info()
         logging.info(
@@ -172,8 +176,8 @@ class Server:
             self.load_component(config, component)
 
         # check for optional components
-        opt_sections = set([s.split()[0] for s in config.sections()]) - \
-            set(['server', 'system_args'])
+        opt_sections = set([s.split()[0] for s in config.sections()])
+        opt_sections.remove('server')
         for section in opt_sections:
             self.load_component(config, section, None)
 
@@ -722,18 +726,18 @@ def main() -> None:
     parser.add_argument(
         "-n", "--nologfile", action='store_true',
         help="disable logging to a file")
-    system_args = parser.parse_args()
+    cmd_line_args = parser.parse_args()
+    app_args = {'config_file': cmd_line_args.configfile}
 
     # Setup Logging
     version = utils.get_software_version()
-    if system_args.nologfile:
-        log_file = ""
+    if cmd_line_args.nologfile:
+        app_args['log_file'] = ""
     else:
-        log_file = os.path.normpath(os.path.expanduser(
-            system_args.logfile))
-    system_args.logfile = log_file
-    system_args.software_version = version
-    ql, file_logger = utils.setup_logging(log_file, version)
+        app_args['log_file'] = os.path.normpath(
+            os.path.expanduser(cmd_line_args.logfile))
+    app_args['software_version'] = version
+    ql, file_logger = utils.setup_logging(app_args)
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
@@ -748,7 +752,7 @@ def main() -> None:
     estatus = 0
     while True:
         try:
-            server = Server(system_args, file_logger)
+            server = Server(app_args, file_logger)
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1

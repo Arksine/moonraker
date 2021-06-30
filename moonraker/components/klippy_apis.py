@@ -39,8 +39,8 @@ SENTINEL = SentinelClass.get_instance()
 class KlippyAPI(Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        system_args = config['system_args']
-        self.version = system_args.get('software_version')
+        app_args = self.server.get_app_args()
+        self.version = app_args.get('software_version')
         # Maintain a subscription for all moonraker requests, as
         # we do not want to overwrite them
         self.host_subscription: Subscription = {}
