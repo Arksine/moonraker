@@ -13,6 +13,7 @@ import sys
 import subprocess
 import asyncio
 import hashlib
+import json
 from queue import SimpleQueue as Queue
 
 # Annotation imports
@@ -24,6 +25,8 @@ from typing import (
     Dict,
     Any,
 )
+
+MOONRAKER_PATH = os.path.join(os.path.dirname(__file__), '..')
 
 class ServerError(Exception):
     def __init__(self, message: str, status_code: int = 400) -> None:
@@ -89,15 +92,13 @@ def retreive_git_version(source_path: str) -> str:
     raise Exception(f"Failed to retreive git version: {err.decode()}")
 
 def get_software_version() -> str:
-    moonraker_path = os.path.join(
-        os.path.dirname(__file__), '..')
     version = "?"
 
     try:
-        version = retreive_git_version(moonraker_path)
+        version = retreive_git_version(MOONRAKER_PATH)
     except Exception:
         vfile = pathlib.Path(os.path.join(
-            moonraker_path, "moonraker/.version"))
+            MOONRAKER_PATH, "moonraker/.version"))
         if vfile.exists():
             try:
                 version = vfile.read_text().strip()
@@ -118,6 +119,8 @@ def setup_logging(app_args: Dict[str, Any]
     stdout_fmt = logging.Formatter(
         '[%(filename)s:%(funcName)s()] - %(message)s')
     stdout_hdlr.setFormatter(stdout_fmt)
+    for name, val in app_args.items():
+        logging.info(f"{name}: {val}")
     file_hdlr = None
     if app_args.get('log_file', ""):
         file_hdlr = MoonrakerLoggingHandler(
@@ -157,3 +160,17 @@ def hash_directory(dir_path: str,
             except Exception:
                 pass
     return checksum.hexdigest()
+
+def verify_source(path: str = MOONRAKER_PATH) -> Optional[Tuple[str, bool]]:
+    rfile = pathlib.Path(os.path.join(path, ".release_info"))
+    if not rfile.exists():
+        return None
+    try:
+        rinfo = json.loads(rfile.read_text())
+    except Exception:
+        return None
+    orig_chksum = rinfo['source_checksum']
+    ign_dirs = rinfo['ignored_dirs']
+    ign_exts = rinfo['ignored_exts']
+    checksum = hash_directory(path, ign_exts, ign_dirs)
+    return checksum, checksum == orig_chksum
