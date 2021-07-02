@@ -121,15 +121,18 @@ class ConfigHelper:
         return self._get_option(
             self.config[self.section].getfloat, option, default)
 
-    def read_supplemental_config(self, file_name: str) -> None:
+    def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
         if not os.path.isfile(cfg_file_path):
             raise ConfigError(
                 f"Configuration File Not Found: '{cfg_file_path}''")
         try:
-            self.config.read(cfg_file_path)
+            sup_cfg = configparser.ConfigParser(interpolation=None)
+            sup_cfg.read(cfg_file_path)
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
+        sections = sup_cfg.sections()
+        return ConfigHelper(self.server, sup_cfg, sections[0], sections)
 
     def write_config(self, file_obj: IO[str]) -> None:
         self.config.write(file_obj)
