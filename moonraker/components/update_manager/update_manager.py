@@ -50,7 +50,6 @@ MOONRAKER_PATH = os.path.normpath(os.path.join(
 SUPPLEMENTAL_CFG_PATH = os.path.join(
     os.path.dirname(__file__), "update_manager.conf")
 APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
-SUPPORTED_DISTROS = ["debian"]
 
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL_MS = 3600000
@@ -65,17 +64,16 @@ class UpdateManager:
         self.config = config
         self.config.read_supplemental_config(SUPPLEMENTAL_CFG_PATH)
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
-        self.distro = config.get('distro', "debian").lower()
-        if self.distro not in SUPPORTED_DISTROS:
-            raise config.error(f"Unsupported distro: {self.distro}")
+        enable_sys_updates = config.get('enable_system_updates', True)
         self.cmd_helper = CommandHelper(config)
         env = sys.executable
-        mooncfg = self.config[f"update_manager static {self.distro} moonraker"]
+        mooncfg = self.config[f"update_manager moonraker"]
         self.updaters: Dict[str, BaseUpdater] = {
-            "system": PackageUpdater(config, self.cmd_helper),
             "moonraker": GitUpdater(mooncfg, self.cmd_helper,
                                     MOONRAKER_PATH, env)
         }
+        if enable_sys_updates:
+            self.updaters['system'] = PackageUpdater(config, self.cmd_helper)
         # TODO: The below check may be removed when invalid config options
         # raise a config error.
         if config.get("client_repo", None) is not None or \
@@ -84,8 +82,7 @@ class UpdateManager:
                 "The deprecated 'client_repo' and 'client_path' options\n"
                 "have been removed.  See Moonraker's configuration docs\n"
                 "for details on client configuration.")
-        client_sections = self.config.get_prefix_sections(
-            "update_manager client")
+        client_sections = self.config.get_prefix_sections("update_manager")
         for section in client_sections:
             cfg = self.config[section]
             name = section.split()[-1]
@@ -171,7 +168,7 @@ class UpdateManager:
                     kupdater.env == env:
                 # Current Klipper Updater is valid
                 return
-        kcfg = self.config[f"update_manager static {self.distro} klipper"]
+        kcfg = self.config[f"update_manager klipper"]
         need_notification = "klipper" not in self.updaters
         self.updaters['klipper'] = GitUpdater(kcfg, self.cmd_helper, kpath, env)
         async with self.cmd_request_lock:
@@ -530,6 +527,9 @@ class CommandHelper:
             'complete': is_complete}
         self.server.send_event(
             "update_manager:update_response", notification)
+
+    def get_system_update_command(self):
+        return APT_CMD
 
     def close(self) -> None:
         self.http_client.close()
