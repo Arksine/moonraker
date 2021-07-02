@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     APIComp = klippy_apis.KlippyAPI
     SCMDComp = shell_command.ShellCommandFactory
     DBComp = database.MoonrakerDatabase
+    JsonType = Union[List[Any], Dict[str, Any]]
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "../../.."))
@@ -362,6 +363,7 @@ class CommandHelper:
 
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
+        self.github_request_cache: Dict[str, CachedGithubResponse] = {}
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit: Optional[int] = None
@@ -403,7 +405,7 @@ class CommandHelper:
         while 1:
             try:
                 resp = await self.github_api_request(url, is_init=True)
-                assert resp is not None
+                assert isinstance(resp, dict)
                 core = resp['resources']['core']
                 self.gh_rate_limit = core['limit']
                 self.gh_limit_remaining = core['remaining']
@@ -454,9 +456,8 @@ class CommandHelper:
 
     async def github_api_request(self,
                                  url: str,
-                                 etag: Optional[str] = None,
                                  is_init: Optional[bool] = False
-                                 ) -> Optional[Dict[str, Any]]:
+                                 ) -> JsonType:
         if self.gh_limit_remaining == 0:
             curtime = time.time()
             assert self.gh_limit_reset_time is not None
@@ -464,6 +465,13 @@ class CommandHelper:
                 raise self.server.error(
                     f"GitHub Rate Limit Reached\nRequest: {url}\n"
                     f"Limit Reset Time: {time.ctime(self.gh_limit_remaining)}")
+        if url in self.github_request_cache:
+            cached_request = self.github_request_cache[url]
+            etag: Optional[str] = cached_request.get_etag()
+        else:
+            cached_request = CachedGithubResponse()
+            etag = None
+            self.github_request_cache[url] = cached_request
         headers = {"Accept": "application/vnd.github.v3+json"}
         if etag is not None:
             headers['If-None-Match'] = etag
@@ -498,7 +506,7 @@ class CommandHelper:
                     f"Forbidden GitHub Request: {resp.reason}")
             elif resp.code == 304:
                 logging.info(f"Github Request not Modified: {url}")
-                return None
+                return cached_request.get_cached_result()
             if resp.code != 200:
                 retries -= 1
                 if not retries:
@@ -516,7 +524,8 @@ class CommandHelper:
                 self.gh_limit_reset_time = float(
                     resp.headers['X-Ratelimit-Reset'])
             decoded = json.loads(resp.body)
-            decoded['etag'] = etag
+            if etag is not None:
+                cached_request.update_result(etag, decoded)
             return decoded
         raise self.server.error(
             f"Retries exceeded for GitHub API request: {url}")
@@ -559,11 +568,27 @@ class CommandHelper:
         self.server.send_event(
             "update_manager:update_response", notification)
 
-    def get_system_update_command(self):
+    def get_system_update_command(self) -> str:
         return APT_CMD
 
     def close(self) -> None:
         self.http_client.close()
+
+class CachedGithubResponse:
+    def __init__(self) -> None:
+        self.etag: Optional[str] = None
+        self.cached_result: JsonType = {}
+
+    def get_etag(self) -> Optional[str]:
+        return self.etag
+
+    def get_cached_result(self) -> JsonType:
+        return self.cached_result
+
+    def update_result(self, etag: str, result: JsonType) -> None:
+        self.etag = etag
+        self.cached_result = result
+
 
 class PackageDeploy(BaseDeploy):
     def __init__(self,
@@ -644,7 +669,6 @@ class WebClientDeploy(BaseDeploy):
         self.version: str = "?"
         self.remote_version: str = "?"
         self.dl_url: str = "?"
-        self.etag: Optional[str] = None
         self.refresh_condition: Optional[Condition] = None
         self._get_local_version()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
@@ -674,15 +698,11 @@ class WebClientDeploy(BaseDeploy):
         # Remote state
         url = f"https://api.github.com/repos/{self.repo}/releases/latest"
         try:
-            result = await self.cmd_helper.github_api_request(
-                url, etag=self.etag)
+            result = await self.cmd_helper.github_api_request(url)
+            assert isinstance(result, dict)
         except Exception:
             logging.exception(f"Client {self.repo}: Github Request Error")
             result = {}
-        if result is None:
-            # No change, update not necessary
-            return
-        self.etag = result.get('etag', None)
         self.remote_version = result.get('name', "?")
         release_assets: Dict[str, Any] = result.get('assets', [{}])[0]
         self.dl_url = release_assets.get('browser_download_url', "?")
