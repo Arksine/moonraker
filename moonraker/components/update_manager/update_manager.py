@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import os
+import pathlib
 import logging
 import json
 import sys
@@ -113,16 +114,15 @@ class UpdateManager:
             cfg = config[section]
             name = section.split()[-1]
             if name in self.updaters:
-                raise config.error("Client repo named %s already added"
-                                   % (name,))
+                raise config.error(f"Client repo {name} already added")
             client_type = cfg.get("type")
             if client_type == "git_repo":
                 self.updaters[name] = GitDeploy(cfg, self.cmd_helper)
             elif client_type == "web":
                 self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
             else:
-                raise config.error("Invalid type '%s' for section [%s]"
-                                   % (client_type, section))
+                raise config.error(
+                    f"Invalid type '{client_type}' for section [{section}]")
 
         self.cmd_request_lock = Lock()
         self.initialized_lock = Event()
@@ -630,8 +630,7 @@ class WebClientDeploy(BaseDeploy):
         super().__init__(config, cmd_helper)
         self.repo = config.get('repo').strip().strip("/")
         self.owner = self.repo.split("/", 1)[0]
-        self.path: str = os.path.realpath(os.path.expanduser(
-            config.get("path")))
+        self.path = pathlib.Path(config.get("path")).expanduser().resolve()
         self.persistent_files: List[str] = []
         pfiles = config.get('persistent_files', None)
         if pfiles is not None:
@@ -653,11 +652,9 @@ class WebClientDeploy(BaseDeploy):
                      f"\npath: {self.path}")
 
     def _get_local_version(self) -> None:
-        version_path = os.path.join(self.path, ".version")
-        if os.path.isfile(os.path.join(self.path, ".version")):
-            with open(version_path, "r") as f:
-                v = f.read()
-            self.version = v.strip()
+        version_path = self.path.joinpath(".version")
+        if version_path.is_file():
+            self.version = version_path.read_text().strip()
 
     async def refresh(self) -> None:
         if self.refresh_condition is None:
@@ -714,14 +711,14 @@ class WebClientDeploy(BaseDeploy):
             f"Downloading Client: {self.name}")
         archive = await self.cmd_helper.http_download_request(self.dl_url)
         with tempfile.TemporaryDirectory(
-                suffix=self.name, prefix="client") as tempdir:
-            if os.path.isdir(self.path):
+                suffix=self.name, prefix="client") as tempdirname:
+            tempdir = pathlib.Path(tempdirname)
+            if self.path.is_dir():
                 # find and move persistent files
                 for fname in os.listdir(self.path):
-                    src_path = os.path.join(self.path, fname)
+                    src_path = self.path.joinpath(fname)
                     if fname in self.persistent_files:
-                        dest_dir = os.path.dirname(
-                            os.path.join(tempdir, fname))
+                        dest_dir = tempdir.joinpath(fname).parent
                         os.makedirs(dest_dir, exist_ok=True)
                         shutil.move(src_path, dest_dir)
                 shutil.rmtree(self.path)
@@ -730,15 +727,14 @@ class WebClientDeploy(BaseDeploy):
                 zf.extractall(self.path)
             # Move temporary files back into
             for fname in os.listdir(tempdir):
-                src_path = os.path.join(tempdir, fname)
-                dest_dir = os.path.dirname(os.path.join(self.path, fname))
+                src_path = tempdir.joinpath(fname)
+                dest_dir = self.path.joinpath(fname).parent
                 os.makedirs(dest_dir, exist_ok=True)
                 shutil.move(src_path, dest_dir)
         self.version = self.remote_version
-        version_path = os.path.join(self.path, ".version")
-        if not os.path.exists(version_path):
-            with open(version_path, "w") as f:
-                f.write(self.version)
+        version_path = self.path.joinpath(".version")
+        if not version_path.exists():
+            version_path.write_text(self.version)
         self.cmd_helper.notify_update_response(
             f"Client Update Finished: {self.name}", is_complete=True)
 
