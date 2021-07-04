@@ -128,10 +128,9 @@ class UpdateManager:
 
         self.cmd_request_lock = Lock()
         self.initialized_lock = Event()
-        self.is_refreshing: bool = False
 
         # Auto Status Refresh
-        self.last_auto_update_time: float = 0
+        self.last_refresh_time: float = 0
         self.refresh_cb: Optional[PeriodicCallback] = None
         if auto_refresh_enabled:
             self.refresh_cb = PeriodicCallback(
@@ -171,7 +170,6 @@ class UpdateManager:
                                   initial_updaters: List[BaseDeploy]
                                   ) -> None:
         async with self.cmd_request_lock:
-            self.is_refreshing = True
             await self.cmd_helper.init_api_rate_limit()
             for updater in initial_updaters:
                 if isinstance(updater, PackageDeploy):
@@ -179,7 +177,6 @@ class UpdateManager:
                 else:
                     ret = updater.refresh()
                 await ret
-            self.is_refreshing = False
         self.initialized_lock.set()
 
     async def _set_klipper_repo(self) -> None:
@@ -229,27 +226,22 @@ class UpdateManager:
             return
         cur_time = time.time()
         cur_hour = time.localtime(cur_time).tm_hour
-        time_diff = cur_time - self.last_auto_update_time
+        time_diff = cur_time - self.last_refresh_time
         # Update packages if it has been more than 12 hours
         # and the local time is between 12AM and 5AM
         if time_diff < MIN_REFRESH_TIME or cur_hour >= MAX_PKG_UPDATE_HOUR:
             # Not within the update time window
             return
-        self.last_auto_update_time = cur_time
         vinfo: Dict[str, Any] = {}
-        need_refresh_all = not self.is_refreshing
         async with self.cmd_request_lock:
-            self.is_refreshing = True
             try:
                 for name, updater in list(self.updaters.items()):
-                    if need_refresh_all:
-                        await updater.refresh()
+                    await updater.refresh()
                     vinfo[name] = updater.get_update_status()
             except Exception:
                 logging.exception("Unable to Refresh Status")
                 return
-            finally:
-                self.is_refreshing = False
+        self.last_refresh_time = time.time()
         uinfo = self.cmd_helper.get_rate_limit_stats()
         uinfo['version_info'] = vinfo
         uinfo['busy'] = self.cmd_helper.is_update_busy()
@@ -296,22 +288,25 @@ class UpdateManager:
             check_refresh = False
         need_refresh = False
         if check_refresh:
-            # If there is an outstanding request processing a
-            # refresh, we don't need to do it again.
-            need_refresh = not self.is_refreshing
+            # Acquire the command request lock if we want force a refresh
             await self.cmd_request_lock.acquire()
-            self.is_refreshing = True
+            # If a request to refresh is received within 1 minute of
+            # a previous refresh, don't force a new refresh.  This gives
+            # clients a fresh state by acquiring the lock and waiting
+            # without unnecessary processing.
+            need_refresh = time.time() > (self.last_refresh_time + 60.)
         vinfo: Dict[str, Any] = {}
         try:
             for name, updater in list(self.updaters.items()):
                 if need_refresh:
                     await updater.refresh()
                 vinfo[name] = updater.get_update_status()
+            if need_refresh:
+                self.last_refresh_time = time.time()
         except Exception:
             raise
         finally:
             if check_refresh:
-                self.is_refreshing = False
                 self.cmd_request_lock.release()
         ret = self.cmd_helper.get_rate_limit_stats()
         ret['version_info'] = vinfo
