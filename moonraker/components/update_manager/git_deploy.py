@@ -44,6 +44,12 @@ class GitDeploy(AppDeploy):
         if self.type != 'git_repo':
             self.need_channel_update = True
 
+    @staticmethod
+    async def from_application(app: AppDeploy) -> GitDeploy:
+        new_app = GitDeploy(app.config, app.cmd_helper, app.app_params)
+        await new_app.reinstall()
+        return new_app
+
     async def refresh(self) -> None:
         try:
             await self._update_repo_state()
@@ -53,6 +59,10 @@ class GitDeploy(AppDeploy):
     async def _update_repo_state(self, need_fetch: bool = True) -> None:
         self._is_valid = False
         await self.repo.initialize(need_fetch=need_fetch)
+        self.log_info(
+            f"Channel: {self.channel}, "
+            f"Need Channel Update: {self.need_channel_update}"
+        )
         invalids = self.repo.report_invalids(self.primary_branch)
         if invalids:
             msgs = '\n'.join(invalids)

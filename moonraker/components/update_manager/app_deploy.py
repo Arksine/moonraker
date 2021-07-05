@@ -112,6 +112,9 @@ class AppDeploy(BaseDeploy):
     def check_need_channel_swap(self) -> bool:
         return self.need_channel_update
 
+    def get_configured_type(self) -> str:
+        return self.type
+
     def check_same_paths(self,
                          app_path: Union[str, pathlib.Path],
                          executable: Union[str, pathlib.Path]
@@ -162,7 +165,8 @@ class AppDeploy(BaseDeploy):
             'channel': self.channel,
             'debug_enabled': self.debug,
             'need_channel_update': self.need_channel_update,
-            'is_valid': self._is_valid
+            'is_valid': self._is_valid,
+            'type': self.type
         }
 
     async def _get_file_hash(self,

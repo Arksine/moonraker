@@ -22,6 +22,7 @@ from tornado.locks import Event, Lock
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
+from .zip_deploy import ZipDeploy
 
 # Annotation imports
 from typing import (
@@ -66,8 +67,7 @@ def get_deploy_class(app_path: str) -> Type:
     if AppDeploy._is_git_repo(app_path):
         return GitDeploy
     else:
-        # TODO: This will be Zip deploy after implementation
-        return GitDeploy
+        return ZipDeploy
 
 class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
@@ -75,11 +75,14 @@ class UpdateManager:
         self.app_config = config.read_supplemental_config(
             SUPPLEMENTAL_CFG_PATH)
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
-        enable_sys_updates = config.get('enable_system_updates', True)
         self.channel = config.get('channel', "dev")
+        if self.channel not in ["dev", "beta"]:
+            raise config.error(
+                f"Unsupported channel '{self.channel}' in section"
+                " [update_manager]")
         self.cmd_helper = CommandHelper(config)
         self.updaters: Dict[str, BaseDeploy] = {}
-        if enable_sys_updates:
+        if config.getboolean('enable_system_updates', True):
             self.updaters['system'] = PackageDeploy(config, self.cmd_helper)
         if (
             os.path.exists(KLIPPER_DEFAULT_PATH) and
@@ -105,8 +108,10 @@ class UpdateManager:
 
         # TODO: The below check may be removed when invalid config options
         # raise a config error.
-        if config.get("client_repo", None) is not None or \
-                config.get('client_path', None) is not None:
+        if (
+            config.get("client_repo", None) is not None or
+            config.get('client_path', None) is not None
+        ):
             raise config.error(
                 "The deprecated 'client_repo' and 'client_path' options\n"
                 "have been removed.  See Moonraker's configuration docs\n"
@@ -118,10 +123,12 @@ class UpdateManager:
             if name in self.updaters:
                 raise config.error(f"Client repo {name} already added")
             client_type = cfg.get("type")
-            if client_type == "git_repo":
-                self.updaters[name] = GitDeploy(cfg, self.cmd_helper)
-            elif client_type == "web":
+            if client_type == "web":
                 self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
+            elif client_type in ["git_repo", "zip", "zip_beta"]:
+                path = os.path.expanduser(cfg.get('path'))
+                self.updaters[name] = get_deploy_class(path)(
+                    cfg, self.cmd_helper)
             else:
                 raise config.error(
                     f"Invalid type '{client_type}' for section [{section}]")
@@ -264,7 +271,8 @@ class UpdateManager:
         async with self.cmd_request_lock:
             self.cmd_helper.set_update_info(app, id(web_request))
             try:
-                await updater.update()
+                if not await self._check_need_reinstall(app):
+                    await updater.update()
             except Exception as e:
                 self.cmd_helper.notify_update_response(
                     f"Error updating {app}")
@@ -274,6 +282,28 @@ class UpdateManager:
             finally:
                 self.cmd_helper.clear_update_info()
         return "ok"
+
+    async def _check_need_reinstall(self, name: str) -> bool:
+        if name not in self.updaters:
+            return False
+        updater = self.updaters[name]
+        if not isinstance(updater, AppDeploy):
+            return False
+        if not updater.check_need_channel_swap():
+            return False
+        app_type = updater.get_configured_type()
+        if app_type == "git_repo":
+            deploy_class: Type = GitDeploy
+        else:
+            deploy_class = ZipDeploy
+        if isinstance(updater, deploy_class):
+            # Here the channel swap can be done without instantiating a new
+            # class, as it will automatically be done when the user updates.
+            return False
+        # Instantiate the new updater.  This will perform a reinstallation
+        new_updater = await deploy_class.from_application(updater)
+        self.updaters[name] = new_updater
+        return True
 
     async def _handle_status_request(self,
                                      web_request: WebRequest
