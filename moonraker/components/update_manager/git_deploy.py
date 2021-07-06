@@ -88,6 +88,8 @@ class GitDeploy(AppDeploy):
         if self.repo.is_current():
             # No need to update
             return
+        self.cmd_helper.notify_update_response(
+            f"Updating Application {self.name}...")
         inst_hash = await self._get_file_hash(self.install_script)
         pyreqs_hash = await self._get_file_hash(self.python_reqs)
         npm_hash = await self._get_file_hash(self.npm_pkg_json)

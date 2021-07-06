@@ -16,6 +16,7 @@ import time
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 import tornado.gen
+import tornado.util
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
 from tornado.locks import Event, Lock
@@ -135,6 +136,7 @@ class UpdateManager:
 
         self.cmd_request_lock = Lock()
         self.initialized_lock = Event()
+        self.klippy_identified_evt: Optional[Event] = None
 
         # Auto Status Refresh
         self.last_refresh_time: float = 0
@@ -157,6 +159,9 @@ class UpdateManager:
         self.server.register_endpoint(
             "/machine/update/client", ["POST"],
             self._handle_update_request)
+        self.server.register_endpoint(
+            "/machine/update/full", ["POST"],
+            self._handle_full_update_request)
         self.server.register_endpoint(
             "/machine/update/status", ["GET"],
             self._handle_status_request)
@@ -187,6 +192,8 @@ class UpdateManager:
         self.initialized_lock.set()
 
     async def _set_klipper_repo(self) -> None:
+        if self.klippy_identified_evt is not None:
+            self.klippy_identified_evt.set()
         kinfo = self.server.get_klippy_info()
         if not kinfo:
             logging.info("No valid klippy info received")
@@ -282,6 +289,67 @@ class UpdateManager:
             finally:
                 self.cmd_helper.clear_update_info()
         return "ok"
+
+    async def _handle_full_update_request(self,
+                                          web_request: WebRequest
+                                          ) -> str:
+        async with self.cmd_request_lock:
+            app_name = ""
+            self.cmd_helper.set_update_info('full', id(web_request),
+                                            full_complete=False)
+            self.cmd_helper.notify_update_response(
+                "Preparing full software update...")
+            try:
+                # Perform system updates
+                if 'system' in self.updaters:
+                    app_name = 'system'
+                    await self.updaters['system'].update()
+
+                # Update clients
+                for name, updater in self.updaters.items():
+                    if name in ['klipper', 'moonraker', 'system']:
+                        continue
+                    app_name = name
+                    if not await self._check_need_reinstall(app_name):
+                        await updater.update()
+
+                # Update Klipper
+                app_name = 'klipper'
+                kupdater = self.updaters.get('klipper')
+                if isinstance(kupdater, AppDeploy):
+                    self.klippy_identified_evt = Event()
+                    if not await self._check_need_reinstall(app_name):
+                        await kupdater.update()
+                    self.cmd_helper.notify_update_response(
+                        "Waiting for Klippy to reconnect (this may take"
+                        " up to 2 minutes)...")
+                    try:
+                        await self.klippy_identified_evt.wait(
+                            time.time() + 120.)
+                    except tornado.util.TimeoutError:
+                        self.cmd_helper.notify_update_response(
+                            "Klippy reconnect timed out...")
+                    else:
+                        self.cmd_helper.notify_update_response(
+                            f"Klippy Reconnected")
+                    self.klippy_identified_evt = None
+
+                # Update Moonraker
+                app_name = 'moonraker'
+                if not await self._check_need_reinstall(app_name):
+                    await self.updaters['moonraker'].update()
+                self.cmd_helper.set_full_complete(True)
+                self.cmd_helper.notify_update_response(
+                    "Full Update Complete", is_complete=True)
+            except Exception as e:
+                self.cmd_helper.notify_update_response(
+                    f"Error updating {app_name}")
+                self.cmd_helper.set_full_complete(True)
+                self.cmd_helper.notify_update_response(
+                    str(e), is_complete=True)
+            finally:
+                self.cmd_helper.clear_update_info()
+            return "ok"
 
     async def _check_need_reinstall(self, name: str) -> bool:
         if name not in self.updaters:
@@ -399,6 +467,7 @@ class CommandHelper:
         # Update In Progress Tracking
         self.cur_update_app: Optional[str] = None
         self.cur_update_id: Optional[int] = None
+        self.full_complete: bool = False
 
     def get_server(self) -> Server:
         return self.server
@@ -406,12 +475,21 @@ class CommandHelper:
     def is_debug_enabled(self) -> bool:
         return self.debug_enabled
 
-    def set_update_info(self, app: str, uid: int) -> None:
+    def set_update_info(self,
+                        app: str,
+                        uid: int,
+                        full_complete: bool = True
+                        ) -> None:
         self.cur_update_app = app
         self.cur_update_id = uid
+        self.full_complete = full_complete
+
+    def set_full_complete(self, complete: bool = False):
+        self.full_complete = complete
 
     def clear_update_info(self) -> None:
         self.cur_update_app = self.cur_update_id = None
+        self.full_complete = False
 
     def is_app_updating(self, app_name: str) -> bool:
         return self.cur_update_app == app_name
@@ -511,6 +589,7 @@ class CommandHelper:
                 resp: HTTPResponse
                 resp = await tornado.gen.with_timeout(timeout, fut)
             except Exception:
+                fut.cancel()
                 retries -= 1
                 if retries > 0:
                     logging.exception(
@@ -564,13 +643,14 @@ class CommandHelper:
         retries = 5
         while retries:
             try:
-                timeout = time.time() + timeout + 10.
+                timeout = time.time() + timeout
                 fut = self.http_client.fetch(
                     url, headers={"Accept": content_type},
                     connect_timeout=5., request_timeout=timeout)
                 resp: HTTPResponse
-                resp = await tornado.gen.with_timeout(timeout, fut)
+                resp = await tornado.gen.with_timeout(timeout + 10., fut)
             except Exception:
+                fut.cancel()
                 retries -= 1
                 logging.exception("Error Processing Download")
                 if not retries:
@@ -594,14 +674,15 @@ class CommandHelper:
         while retries:
             dl = StreamingDownload(self, dest, size)
             try:
-                timeout = time.time() + timeout + 10.
+                timeout = time.time() + timeout
                 fut = self.http_client.fetch(
                     url, headers={"Accept": content_type},
                     connect_timeout=5., request_timeout=timeout,
                     streaming_callback=dl.on_chunk_recd)
                 resp: HTTPResponse
-                resp = await tornado.gen.with_timeout(timeout, fut)
+                resp = await tornado.gen.with_timeout(timeout + 10., fut)
             except Exception:
+                fut.cancel()
                 retries -= 1
                 logging.exception("Error Processing Download")
                 if not retries:
@@ -622,11 +703,12 @@ class CommandHelper:
         resp = resp.strip()
         if isinstance(resp, bytes):
             resp = resp.decode()
+        done = is_complete and self.full_complete
         notification = {
             'message': resp,
             'application': self.cur_update_app,
             'proc_id': self.cur_update_id,
-            'complete': is_complete}
+            'complete': done}
         self.server.send_event(
             "update_manager:update_response", notification)
 
@@ -833,6 +915,8 @@ class WebClientDeploy(BaseDeploy):
                 if self.remote_version == "?":
                     raise self.server.error(
                         f"Client {self.repo}: Unable to locate update")
+            self.cmd_helper.notify_update_response(
+                f"Updating Web Client {self.name}...")
             dl_url, content_type, size = self.dl_info
             if dl_url == "?":
                 raise self.server.error(

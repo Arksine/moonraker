@@ -347,6 +347,8 @@ class ZipDeploy(AppDeploy):
             if self.short_version == self.latest_version:
                 # already up to date
                 return
+            self.cmd_helper.notify_update_response(
+                f"Updating Application {self.name}...")
             npm_hash = await self._get_file_hash(self.npm_pkg_json)
             dl_url, content_type, size = self.release_download_info
             self.notify_status("Starting Download...")
