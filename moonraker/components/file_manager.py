@@ -981,7 +981,7 @@ class NotifySyncLock:
             self.wait_fut.set_result(None)
         # Transfer control to waiter
         if timeout is not None:
-            timeout = IOLoop().time() + timeout
+            timeout = IOLoop.current().time() + timeout
         try:
             await self.sync_condition.wait(timeout)
         except Exception:
