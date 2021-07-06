@@ -42,7 +42,10 @@ if TYPE_CHECKING:
 SENTINEL = SentinelClass.get_instance()
 
 class Subscribable:
-    def send_status(self, status: Dict[str, Any]) -> None:
+    def send_status(self,
+                    status: Dict[str, Any],
+                    eventtime: float
+                    ) -> None:
         raise NotImplementedError
 
 class WebRequest:
@@ -428,13 +431,16 @@ class WebSocket(WebSocketHandler, Subscribable):
                     f"Error sending data over websocket: {self.uid}")
         self.queue_busy = False
 
-    def send_status(self, status: Dict[str, Any]) -> None:
+    def send_status(self,
+                    status: Dict[str, Any],
+                    eventtime: float
+                    ) -> None:
         if not status:
             return
         self.queue_message({
             'jsonrpc': "2.0",
             'method': "notify_status_update",
-            'params': [status]})
+            'params': [status, eventtime]})
 
     def on_close(self) -> None:
         self.is_closed = True

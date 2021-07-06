@@ -191,7 +191,10 @@ class KlippyAPI(Subscribable):
             {'response_template': {"method": method_name},
              'remote_method': method_name})
 
-    def send_status(self, status: Dict[str, Any]) -> None:
+    def send_status(self,
+                    status: Dict[str, Any],
+                    eventtime: float
+                    ) -> None:
         self.server.send_event("server:status_update", status)
 
 def load_component(config: ConfigHelper) -> KlippyAPI:
