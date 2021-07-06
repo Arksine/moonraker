@@ -469,6 +469,7 @@ class Server:
                     else:
                         conn_status[name] = {
                             k: v for k, v in val.items() if k in fields}
+            conn_status['eventtime'] = eventtime
             conn.send_status(conn_status)
 
     async def make_request(self, web_request: WebRequest) -> Any:
