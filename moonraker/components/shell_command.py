@@ -70,7 +70,9 @@ class SCProcess(asyncio.subprocess.Process):
             if not output:
                 break
             if fd == 2 and self.log_stderr:
-                logging.info(f"{self.program_name}: {output.decode()}")
+                logging.info(
+                    f"{self.program_name}: "
+                    f"{output.decode(errors='ignore')}")
             output = output.rstrip(b'\n')
             if output and cb is not None:
                 cb(output)
@@ -222,14 +224,15 @@ class ShellCommand:
                         complete = not self.cancelled
                         if self.log_stderr and stderr:
                             logging.info(
-                                f"{self.command[0]}: {stderr.decode()}")
+                                f"{self.command[0]}: "
+                                f"{stderr.decode(errors='ignore')}")
                     if self._check_proc_success(complete, log_complete):
                         self.factory.remove_running_command(self)
-                        return stdout.decode().rstrip("\n")
+                        return stdout.decode(errors='ignore').rstrip("\n")
                     if stdout:
                         logging.debug(
                             f"Shell command '{self.name}' output:"
-                            f"\n{stdout.decode()}")
+                            f"\n{stdout.decode(errors='ignore')}")
                     if self.cancelled and not timed_out:
                         break
                 retries -= 1
@@ -292,7 +295,10 @@ class ShellCommandFactory:
         self.running_commands.add(cmd)
 
     def remove_running_command(self, cmd: ShellCommand) -> None:
-        self.running_commands.remove(cmd)
+        try:
+            self.running_commands.remove(cmd)
+        except KeyError:
+            pass
 
     def build_shell_command(self,
                             cmd: str,
