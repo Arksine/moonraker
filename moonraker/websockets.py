@@ -372,7 +372,7 @@ class WebsocketManager(APITransport):
         for ws in list(self.websockets.values()):
             ws.close()
         try:
-            await self.closed_event.wait(2.)
+            await self.closed_event.wait(IOLoop.current().time() + 2.)
         except tornado.util.TimeoutError:
             pass
         self.closed_event = None
