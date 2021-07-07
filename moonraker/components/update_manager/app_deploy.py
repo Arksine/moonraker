@@ -194,18 +194,13 @@ class AppDeploy(BaseDeploy):
         return prev_hash != cur_hash
 
     async def _install_packages(self, package_list: List[str]) -> None:
-        pkgs = " ".join(package_list)
-        apt_cmd = self.cmd_helper.get_system_update_command()
         self.notify_status("Installing system dependencies...")
         # Install packages with apt-get
         try:
-            await self.cmd_helper.run_cmd(
-                f"{apt_cmd} update", timeout=300., notify=True)
-            await self.cmd_helper.run_cmd(
-                f"{apt_cmd} install --yes {pkgs}", timeout=3600.,
-                notify=True)
+            await self.cmd_helper.install_packages(
+                package_list, timeout=3600., notify=True)
         except Exception:
-            self.log_exc("Error updating packages via apt-get")
+            self.log_exc("Error updating packages")
             return
 
     async def _update_virtualenv(self,

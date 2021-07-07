@@ -53,7 +53,6 @@ SUPPLEMENTAL_CFG_PATH = os.path.join(
     os.path.dirname(__file__), "update_manager.conf")
 KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
 KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
-APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
 
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL_MS = 3600000
@@ -452,6 +451,7 @@ class CommandHelper:
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         self.scmd_error = shell_cmd.error
         self.build_shell_command = shell_cmd.build_shell_command
+        self.pkg_updater: Optional[PackageDeploy] = None
 
         AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
@@ -494,6 +494,9 @@ class CommandHelper:
 
     def is_update_busy(self) -> bool:
         return self.cur_update_app is not None
+
+    def set_package_updater(self, updater: PackageDeploy) -> None:
+        self.pkg_updater = updater
 
     def get_rate_limit_stats(self) -> Dict[str, Any]:
         return {
@@ -704,8 +707,13 @@ class CommandHelper:
         self.server.send_event(
             "update_manager:update_response", notification)
 
-    def get_system_update_command(self) -> str:
-        return APT_CMD
+    async def install_packages(self,
+                               package_list: List[str],
+                               **kwargs
+                               ) -> None:
+        if self.pkg_updater is None:
+            return
+        await self.pkg_updater.install_packages(package_list, **kwargs)
 
     def close(self) -> None:
         self.http_client.close()
@@ -771,13 +779,17 @@ class StreamingDownload:
         self.busy_evt.set()
 
 class PackageDeploy(BaseDeploy):
+    APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
     def __init__(self,
                  config: ConfigHelper,
                  cmd_helper: CommandHelper
                  ) -> None:
         super().__init__(config, cmd_helper)
+        cmd_helper.set_package_updater(self)
         self.available_packages: List[str] = []
         self.refresh_evt: Optional[asyncio.Event] = None
+        # Initialze to current time so an update is not performed on init
+        self.last_apt_update_time: float = time.time()
         self.mutex: asyncio.Lock = asyncio.Lock()
 
     async def refresh(self, fetch_packages: bool = True) -> None:
@@ -788,9 +800,7 @@ class PackageDeploy(BaseDeploy):
         async with self.mutex:
             self.refresh_evt = asyncio.Event()
             try:
-                if fetch_packages:
-                    await self.cmd_helper.run_cmd(
-                        f"{APT_CMD} update", timeout=300., retries=3)
+                await self._update_apt(force=fetch_packages)
                 res = await self.cmd_helper.run_cmd_with_response(
                     "apt list --upgradable", timeout=60.)
                 pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
@@ -809,17 +819,43 @@ class PackageDeploy(BaseDeploy):
 
     async def update(self) -> None:
         async with self.mutex:
+            if not self.available_packages:
+                return
             self.cmd_helper.notify_update_response("Updating packages...")
             try:
+                await self._update_apt(force=True, notify=True)
                 await self.cmd_helper.run_cmd(
-                    f"{APT_CMD} update", timeout=300., notify=True)
-                await self.cmd_helper.run_cmd(
-                    f"{APT_CMD} upgrade --yes", timeout=3600., notify=True)
+                    f"{self.APT_CMD} upgrade --yes", timeout=3600.,
+                    notify=True)
             except Exception:
                 raise self.server.error("Error updating system packages")
             self.available_packages = []
             self.cmd_helper.notify_update_response(
                 "Package update finished...", is_complete=True)
+
+    async def _update_apt(self,
+                          force: bool = False,
+                          notify: bool = False
+                          ) -> None:
+        curtime = time.time()
+        if force or curtime > self.last_apt_update_time + 3600.:
+            # Don't update if a request was done within the last hour
+            await self.cmd_helper.run_cmd(
+                f"{self.APT_CMD} update", timeout=300., notify=notify)
+            self.last_apt_update_time = time.time()
+
+    async def install_packages(self,
+                               package_list: List[str],
+                               **kwargs
+                               ) -> None:
+        timeout: float = kwargs.get('timeout', 300.)
+        retries: int = kwargs.get('retries', 3)
+        notify: bool = kwargs.get('notify', False)
+        pkgs = " ".join(package_list)
+        await self._update_apt(notify=notify)
+        await self.cmd_helper.run_cmd(
+            f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
+            retries=retries, notify=notify)
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
