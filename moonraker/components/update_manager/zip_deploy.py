@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import asyncio
 import os
 import pathlib
 import json
@@ -15,7 +16,6 @@ import tempfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from tornado.ioloop import IOLoop
-from tornado.locks import Event, Lock
 from .app_deploy import AppDeploy
 from utils import verify_source
 
@@ -74,8 +74,8 @@ class ZipDeploy(AppDeploy):
         self.python_pkg_list: List[str] = []
         self.release_download_info: Tuple[str, str, int] = ("?", "?", 0)
         self.errors: List[str] = []
-        self.mutex: Lock = Lock()
-        self.refresh_event: Optional[Event] = None
+        self.mutex: asyncio.Lock = asyncio.Lock()
+        self.refresh_event: Optional[asyncio.Event] = None
 
     @staticmethod
     async def from_application(app: AppDeploy) -> ZipDeploy:
@@ -107,7 +107,7 @@ class ZipDeploy(AppDeploy):
             await self.refresh_event.wait()
             return
         async with self.mutex:
-            self.refresh_event = Event()
+            self.refresh_event = asyncio.Event()
             try:
                 await self._update_repo_state()
             except Exception:
@@ -138,9 +138,8 @@ class ZipDeploy(AppDeploy):
                 f"Owner repo mismatch. Received {owner_repo}, "
                 f"official: {self.official_repo}")
         # validate the local source code
-        ioloop = IOLoop.current()
         with ThreadPoolExecutor(max_workers=1) as tpe:
-            res = await ioloop.run_in_executor(
+            res = await IOLoop.current().run_in_executor(
                 tpe, verify_source, self.path)
         if res is not None:
             self.source_checksum, self.pristine = res

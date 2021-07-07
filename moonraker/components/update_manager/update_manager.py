@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import asyncio
 import os
 import pathlib
 import logging
@@ -15,11 +16,8 @@ import zipfile
 import time
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-import tornado.gen
-import tornado.util
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
-from tornado.locks import Event, Lock
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
@@ -134,9 +132,9 @@ class UpdateManager:
                 raise config.error(
                     f"Invalid type '{client_type}' for section [{section}]")
 
-        self.cmd_request_lock = Lock()
-        self.initialized_lock = Event()
-        self.klippy_identified_evt: Optional[Event] = None
+        self.cmd_request_lock = asyncio.Lock()
+        self.initialized_lock = asyncio.Event()
+        self.klippy_identified_evt: Optional[asyncio.Event] = None
 
         # Auto Status Refresh
         self.last_refresh_time: float = 0
@@ -317,16 +315,16 @@ class UpdateManager:
                 app_name = 'klipper'
                 kupdater = self.updaters.get('klipper')
                 if isinstance(kupdater, AppDeploy):
-                    self.klippy_identified_evt = Event()
+                    self.klippy_identified_evt = asyncio.Event()
                     if not await self._check_need_reinstall(app_name):
                         await kupdater.update()
                     self.cmd_helper.notify_update_response(
                         "Waiting for Klippy to reconnect (this may take"
                         " up to 2 minutes)...")
                     try:
-                        await self.klippy_identified_evt.wait(
-                            time.time() + 120.)
-                    except tornado.util.TimeoutError:
+                        await asyncio.wait_for(
+                            self.klippy_identified_evt.wait(), 120.)
+                    except asyncio.TimeoutError:
                         self.cmd_helper.notify_update_response(
                             "Klippy reconnect timed out...")
                     else:
@@ -516,7 +514,7 @@ class CommandHelper:
                 self.gh_limit_reset_time = core['reset']
             except Exception:
                 logging.exception("Error Initializing GitHub API Rate Limit")
-                await tornado.gen.sleep(30.)
+                await asyncio.sleep(30.)
             else:
                 reset_time = time.ctime(self.gh_limit_reset_time)
                 logging.info(
@@ -582,19 +580,17 @@ class CommandHelper:
         retries = 5
         while retries:
             try:
-                timeout = time.time() + 10.
                 fut = self.http_client.fetch(
                     url, headers=headers, connect_timeout=5.,
                     request_timeout=5., raise_error=False)
                 resp: HTTPResponse
-                resp = await tornado.gen.with_timeout(timeout, fut)
+                resp = await asyncio.wait_for(fut, 10.)
             except Exception:
-                fut.cancel()
                 retries -= 1
                 if retries > 0:
                     logging.exception(
                         f"Error Processing GitHub API request: {url}")
-                    await tornado.gen.sleep(1.)
+                    await asyncio.sleep(1.)
                 continue
             etag = resp.headers.get('etag', None)
             if etag is not None:
@@ -619,7 +615,7 @@ class CommandHelper:
                         f"Github Request failed: {resp.code} {resp.reason}")
                 logging.info(
                     f"Github request error, {retries} retries remaining")
-                await tornado.gen.sleep(1.)
+                await asyncio.sleep(1.)
                 continue
             # Update rate limit on return success
             if 'X-Ratelimit-Limit' in resp.headers and not is_init:
@@ -643,19 +639,17 @@ class CommandHelper:
         retries = 5
         while retries:
             try:
-                timeout = time.time() + timeout
                 fut = self.http_client.fetch(
                     url, headers={"Accept": content_type},
                     connect_timeout=5., request_timeout=timeout)
                 resp: HTTPResponse
-                resp = await tornado.gen.with_timeout(timeout + 10., fut)
+                resp = await asyncio.wait_for(fut, timeout + 10.)
             except Exception:
-                fut.cancel()
                 retries -= 1
                 logging.exception("Error Processing Download")
                 if not retries:
                     raise
-                await tornado.gen.sleep(1.)
+                await asyncio.sleep(1.)
                 continue
             return resp.body
         raise self.server.error(
@@ -674,20 +668,18 @@ class CommandHelper:
         while retries:
             dl = StreamingDownload(self, dest, size)
             try:
-                timeout = time.time() + timeout
                 fut = self.http_client.fetch(
                     url, headers={"Accept": content_type},
                     connect_timeout=5., request_timeout=timeout,
                     streaming_callback=dl.on_chunk_recd)
                 resp: HTTPResponse
-                resp = await tornado.gen.with_timeout(timeout + 10., fut)
+                resp = await asyncio.wait_for(fut, timeout + 10.)
             except Exception:
-                fut.cancel()
                 retries -= 1
                 logging.exception("Error Processing Download")
                 if not retries:
                     raise
-                await tornado.gen.sleep(1.)
+                await asyncio.sleep(1.)
                 continue
             finally:
                 await dl.close()
@@ -746,7 +738,7 @@ class StreamingDownload:
         self.total_recd: int = 0
         self.last_pct: int = 0
         self.chunk_buffer: List[bytes] = []
-        self.busy_evt: Event = Event()
+        self.busy_evt: asyncio.Event = asyncio.Event()
         self.busy_evt.set()
 
     def on_chunk_recd(self, chunk: bytes) -> None:
@@ -785,8 +777,8 @@ class PackageDeploy(BaseDeploy):
                  ) -> None:
         super().__init__(config, cmd_helper)
         self.available_packages: List[str] = []
-        self.refresh_evt: Optional[Event] = None
-        self.mutex: Lock = Lock()
+        self.refresh_evt: Optional[asyncio.Event] = None
+        self.mutex: asyncio.Lock = asyncio.Lock()
 
     async def refresh(self, fetch_packages: bool = True) -> None:
         # TODO: Use python-apt python lib rather than command line for updates
@@ -794,7 +786,7 @@ class PackageDeploy(BaseDeploy):
             self.refresh_evt.wait()
             return
         async with self.mutex:
-            self.refresh_evt = Event()
+            self.refresh_evt = asyncio.Event()
             try:
                 if fetch_packages:
                     await self.cmd_helper.run_cmd(
@@ -856,8 +848,8 @@ class WebClientDeploy(BaseDeploy):
         self.version: str = "?"
         self.remote_version: str = "?"
         self.dl_info: Tuple[str, str, int] = ("?", "?", 0)
-        self.refresh_evt: Optional[Event] = None
-        self.mutex: Lock = Lock()
+        self.refresh_evt: Optional[asyncio.Event] = None
+        self.mutex: asyncio.Lock = asyncio.Lock()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\npath: {self.path}")
 
@@ -876,7 +868,7 @@ class WebClientDeploy(BaseDeploy):
             self.refresh_evt.wait()
             return
         async with self.mutex:
-            self.refresh_evt = Event()
+            self.refresh_evt = asyncio.Event()
             try:
                 await self._get_local_version()
                 await self._get_remote_version()

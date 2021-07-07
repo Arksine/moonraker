@@ -5,14 +5,13 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import asyncio
 import os
 import pathlib
 import shutil
 import re
 import logging
-import tornado
 from concurrent.futures import ThreadPoolExecutor
-from tornado.locks import Condition, Lock
 from tornado.ioloop import IOLoop
 from .app_deploy import AppDeploy
 
@@ -241,20 +240,20 @@ class GitRepo:
             sudo service {self.alias} start
             """
 
-        self.init_condition: Optional[Condition] = None
+        self.init_evt: Optional[asyncio.Event] = None
         self.initialized: bool = False
-        self.git_operation_lock = Lock()
+        self.git_operation_lock = asyncio.Lock()
         self.fetch_timeout_handle: Optional[object] = None
         self.fetch_input_recd: bool = False
 
     async def initialize(self, need_fetch: bool = True) -> None:
-        if self.init_condition is not None:
+        if self.init_evt is not None:
             # No need to initialize multiple requests
-            await self.init_condition.wait()
+            await self.init_evt.wait()
             if self.initialized:
                 return
         self.initialized = False
-        self.init_condition = Condition()
+        self.init_evt = asyncio.Event()
         self.git_messages.clear()
         try:
             await self.update_repo_status()
@@ -337,12 +336,12 @@ class GitRepo:
         else:
             self.initialized = True
         finally:
-            self.init_condition.notify_all()
-            self.init_condition = None
+            self.init_evt.set()
+            self.init_evt = None
 
     async def wait_for_init(self) -> None:
-        if self.init_condition is not None:
-            await self.init_condition.wait()
+        if self.init_evt is not None:
+            await self.init_evt.wait()
             if not self.initialized:
                 raise self.server.error(
                     f"Git Repo {self.alias}: Initialization failure")
@@ -625,7 +624,7 @@ class GitRepo:
                     logging.info(f"Git Repo {self.alias}: Git lock file "
                                  f"exists, {timeout} seconds remaining "
                                  "before removal.")
-                await tornado.gen.sleep(1.)
+                await asyncio.sleep(1.)
                 timeout -= 1
             else:
                 return
@@ -689,7 +688,7 @@ class GitRepo:
                     raise self.server.error(
                         f"Unable to repair loose objects, use hard recovery")
             retries -= 1
-            await tornado.gen.sleep(.5)
+            await asyncio.sleep(.5)
             self._check_lock_file_exists(remove=True)
         raise self.server.error(f"Git Command '{cmd}' failed")
 
