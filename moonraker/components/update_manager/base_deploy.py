@@ -32,8 +32,8 @@ class BaseDeploy:
     async def refresh(self) -> None:
         pass
 
-    async def update(self) -> None:
-        pass
+    async def update(self) -> bool:
+        return False
 
     def get_update_status(self) -> Dict[str, Any]:
         return {}

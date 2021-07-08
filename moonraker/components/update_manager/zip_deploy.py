@@ -339,13 +339,13 @@ class ZipDeploy(AppDeploy):
         with zipfile.ZipFile(release_zip) as zf:
             zf.extractall(self.path)
 
-    async def update(self, force_dep_update: bool = False) -> None:
+    async def update(self, force_dep_update: bool = False) -> bool:
         async with self.mutex:
             if not self._is_valid:
                 raise self.log_exc("Update aborted, repo not valid", False)
             if self.short_version == self.latest_version:
                 # already up to date
-                return
+                return False
             self.cmd_helper.notify_update_response(
                 f"Updating Application {self.name}...")
             npm_hash = await self._get_file_hash(self.npm_pkg_json)
@@ -366,6 +366,7 @@ class ZipDeploy(AppDeploy):
             await self._update_repo_state()
             await self.restart_service()
             self.notify_status("Update Finished...", is_complete=True)
+            return True
 
     async def recover(self,
                       hard: bool = False,

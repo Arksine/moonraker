@@ -77,7 +77,7 @@ class GitDeploy(AppDeploy):
             self._is_valid = True
             self.log_info("Validity check for git repo passed")
 
-    async def update(self) -> None:
+    async def update(self) -> bool:
         await self.repo.wait_for_init()
         if not self._is_valid:
             raise self.log_exc("Update aborted, repo not valid", False)
@@ -86,7 +86,7 @@ class GitDeploy(AppDeploy):
                 "Update aborted, repo has been modified", False)
         if self.repo.is_current():
             # No need to update
-            return
+            return False
         self.cmd_helper.notify_update_response(
             f"Updating Application {self.name}...")
         inst_hash = await self._get_file_hash(self.install_script)
@@ -99,6 +99,7 @@ class GitDeploy(AppDeploy):
         await self._update_repo_state(need_fetch=False)
         await self.restart_service()
         self.notify_status("Update Finished...", is_complete=True)
+        return True
 
     async def recover(self,
                       hard: bool = False,

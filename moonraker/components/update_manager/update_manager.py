@@ -315,21 +315,23 @@ class UpdateManager:
                 kupdater = self.updaters.get('klipper')
                 if isinstance(kupdater, AppDeploy):
                     self.klippy_identified_evt = asyncio.Event()
+                    klippy_updated = True
                     if not await self._check_need_reinstall(app_name):
-                        await kupdater.update()
-                    self.cmd_helper.notify_update_response(
-                        "Waiting for Klippy to reconnect (this may take"
-                        " up to 2 minutes)...")
-                    try:
-                        await asyncio.wait_for(
-                            self.klippy_identified_evt.wait(), 120.)
-                    except asyncio.TimeoutError:
+                        klippy_updated = await kupdater.update()
+                    if klippy_updated:
                         self.cmd_helper.notify_update_response(
-                            "Klippy reconnect timed out...")
-                    else:
-                        self.cmd_helper.notify_update_response(
-                            f"Klippy Reconnected")
-                    self.klippy_identified_evt = None
+                            "Waiting for Klippy to reconnect (this may take"
+                            " up to 2 minutes)...")
+                        try:
+                            await asyncio.wait_for(
+                                self.klippy_identified_evt.wait(), 120.)
+                        except asyncio.TimeoutError:
+                            self.cmd_helper.notify_update_response(
+                                "Klippy reconnect timed out...")
+                        else:
+                            self.cmd_helper.notify_update_response(
+                                f"Klippy Reconnected")
+                        self.klippy_identified_evt = None
 
                 # Update Moonraker
                 app_name = 'moonraker'
@@ -817,10 +819,10 @@ class PackageDeploy(BaseDeploy):
             self.refresh_evt.set()
             self.refresh_evt = None
 
-    async def update(self) -> None:
+    async def update(self) -> bool:
         async with self.mutex:
             if not self.available_packages:
-                return
+                return False
             self.cmd_helper.notify_update_response("Updating packages...")
             try:
                 await self._update_apt(force=True, notify=True)
@@ -832,6 +834,7 @@ class PackageDeploy(BaseDeploy):
             self.available_packages = []
             self.cmd_helper.notify_update_response(
                 "Package update finished...", is_complete=True)
+            return True
 
     async def _update_apt(self,
                           force: bool = False,
@@ -936,22 +939,22 @@ class WebClientDeploy(BaseDeploy):
             f"size: {size}\n"
             f"Content Type: {content_type}")
 
-    async def update(self) -> None:
+    async def update(self) -> bool:
         async with self.mutex:
             if self.remote_version == "?":
                 await self._get_remote_version()
                 if self.remote_version == "?":
                     raise self.server.error(
                         f"Client {self.repo}: Unable to locate update")
-            self.cmd_helper.notify_update_response(
-                f"Updating Web Client {self.name}...")
             dl_url, content_type, size = self.dl_info
             if dl_url == "?":
                 raise self.server.error(
                     f"Client {self.repo}: Invalid download url")
             if self.version == self.remote_version:
                 # Already up to date
-                return
+                return False
+            self.cmd_helper.notify_update_response(
+                f"Updating Web Client {self.name}...")
             self.cmd_helper.notify_update_response(
                 f"Downloading Client: {self.name}")
             with tempfile.TemporaryDirectory(
@@ -975,6 +978,7 @@ class WebClientDeploy(BaseDeploy):
                         tpe, version_path.write_text, self.version)
             self.cmd_helper.notify_update_response(
                 f"Client Update Finished: {self.name}", is_complete=True)
+            return True
 
     def _extract_release(self,
                          persist_dir: pathlib.Path,
