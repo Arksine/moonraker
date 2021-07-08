@@ -394,10 +394,22 @@ enable_auto_refresh: False
 #   When set to False Moonraker will only fetch update state on startup
 #   and clients will need to request that Moonraker updates state.  The
 #   default is False.
-distro: debian
-#   The disto in which moonraker has been installed.  Currently the
-#   update manager only supports "debian", which encompasses all of
-#   its derivatives.  The default is debain.
+enable_system_updates: True
+#   A boolean value that can be used to toggle system package updates.
+#   Currently Moonraker only supports updating packages via APT, so
+#   this option is useful for users that wish to experiment with linux
+#   distros that use other package management applications, or users
+#   that prefer to manage their packages directly.  Note that if this
+#   is set to False users will be need to make sure that all system
+#   dependencies are up to date.  The default is True.
+channel: dev
+#   The update channel applied to Klipper and Moonraker.  May be 'dev'
+#   which will fetch updates using git, or 'beta' which will fetch
+#   zipped beta releases.  Note that this channel does not apply to
+#   client updates, a client's update channel is determined by its
+#   'type' option.  When this option is changed the next "update" will
+#   swap channels, any untracked files in the application's path will be
+#   removed during this process.  The default is dev.
 ```
 
 ### Client Configuration
@@ -412,8 +424,9 @@ service restart such as Fluidd/Mainsail.
 ```ini
 # moonraker.conf
 
-[update_manager client client_name]
+[update_manager client_name]
 type: web
+# Indicates that this is a web client.
 repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
@@ -426,22 +439,29 @@ persistent_files:
 #   themes.  The default is no persistent files.
 ```
 
-This second example is for git repositories that have a service that need
-updating.  Note that git repos must have at least one tag for Moonraker
+This second example is for "applications".  These may be git repositories
+or zipped distributions.
+
+Note that git repos must have at least one tag for Moonraker
 to identify its version.
 
 ```ini
 # moonraker.conf
 
 # service_name must be the name of the systemd service
-[update_manager client service_name]
+[update_manager service_name]
 type: git_repo
+#   Can be git_repo, zip, or zip_beta.  See your the client's documentation
+#   for recommendations on which value to use.  Generally a git_repo is
+#   an applications "dev" channel, zip_beta is its "beta" channel, and zip
+#   is its "stable" channel.  This parameter must be provided.
 path:
-#   The absolute path to the client's files on disk. This parameter must be provided.
+#   The absolute path to the client's files on disk. This parameter must be
+#   provided.
 #   Example:
 #     path: ~/service_name
 origin:
-#   The full GitHub URL of the "origin" remote for the repository.  This can
+#   The full git URL of the "origin" remote for the repository.  This can
 #   be be viewed by navigating to your repository and running:
 #     git remote -v
 #   This parameter must be provided.
@@ -468,6 +488,14 @@ enable_node_updates:
 #   to package-lock.json.  Note that if your project does not have a
 #   package-lock.json in its root directory then the plugin will fail to load.
 #   Default is False.
+host_repo:
+#   The GitHub repo in which zipped releases are hosted.  Note that this does
+#   not need to match the repository in the "origin" option, as it is possible
+#   to use a central GitHub repository to host multiple client builds.  As
+#   an example, Moonraker's repo hosts builds for both Moonraker and Klipper.
+#   This option defaults to the repo extracted from the "origin" option,
+#   however if the origin is not hosted on GitHub then this parameter must
+#   be provided.
 ```
 
 ## `[mqtt]`

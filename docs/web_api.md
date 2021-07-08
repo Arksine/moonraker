@@ -2057,6 +2057,10 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             ]
         },
         "moonraker": {
+            "type": "zip_beta",
+            "channel": "beta",
+            "need_channel_update": false,
+            "pristine": true,
             "remote_alias": "origin",
             "branch": "master",
             "owner": "Arksine",
@@ -2084,6 +2088,10 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "remote_version": "v1.10.0"
         },
         "klipper": {
+            "type": "zip_beta",
+            "channel": "beta",
+            "need_channel_update": false,
+            "pristine": true,
             "remote_alias": "origin",
             "branch": "master",
             "owner": "KevinOConnor",
@@ -2133,9 +2141,23 @@ Below is an explanation for each field:
   reported as seconds since the epoch (aka Unix Time).
 
 The `moonraker`, `klipper` packages, along with and clients configured
-as git repos have the following fields:
+as applications have the following fields:
 
-- `owner`: the owner of the repo
+- `configured_type`: the application type configured by the user
+- `detected_type`:  the applicaiton type as detected by Moonraker.
+- `channel`:  the currently configured update channel.  For Moonraker
+  and Klipper this is set in the `[update_manager]` configuration.
+  For clients the channel is determined by the configured type
+- `need_channel_update`: This will be set to `true` if Moonraker has
+  detected that a channel swap is necessary (ie: the configured type does
+  not match the detected type). The channel swap will be performed on the
+  next update.
+- `pristine`: For `zip` and `zip_beta` types this is set to `true` if an
+  applications source checksum matches the one generated  when the app was
+  built.  This value will be set to the opposite of "dirty" for git repos.
+  Note that a zip application can still be updated if the repo is not
+  pristine.
+- `owner`: the owner of the repo / application
 - `branch`: the name of the current git branch.  This should typically
     be "master".
 - `remote_alias`: the alias for the remote.  This should typically be
@@ -2146,9 +2168,14 @@ as git repos have the following fields:
 - `current_hash`: hash of the most recent commit on disk
 - `remote_hash`: hash of the most recent commit pushed to the remote
 - `is_valid`: true if installation is a valid git repo on the master branch
-    and an "origin" set to the official remote
-- `is_dirty`: true if the repo has been modified
-- `detached`: true if the repo is currently in a detached state
+    and an "origin" set to the official remote.  For `zip` and `zip_beta`
+    types this will report false if Moonraker is unable to fetch the
+    current repo state from GitHub.
+- `is_dirty`: true if the repo has been modified.  This will always be false
+  for `zip` and `zip_beta` types.
+- `detached`: true if the repo is currently in a detached state.  For `zip`
+  and `zip_beta` types it is considered detached if the local release info
+  does not match what is present on the remote.
 - `debug_enabled`: True when `enable_repo_debug` has been configured.  This
     will bypass repo validation allowing detached updates, and updates from
     a remote/branch other than than the primary (typically origin/master).
@@ -2174,6 +2201,32 @@ The `system` package has the following fields:
 - `package_count`: the number of system packages available for update
 - `package_list`: an array containing the names of packages available
   for update
+
+### Perform a full update
+Attempts to update all configured items in Moonraker.  Updates are
+performed in the following order:
+
+- `system` if enabled
+- All configured clients
+- Klipper
+- Moonraker
+
+HTTP request:
+```http
+POST /machine/update/full
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.update.full",
+    "id": 4645
+}
+```
+Returns:
+
+`ok` when complete
+
 
 #### Update Moonraker
 Pulls the most recent version of Moonraker from GitHub and restarts
