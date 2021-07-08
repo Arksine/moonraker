@@ -166,7 +166,7 @@ class AppDeploy(BaseDeploy):
             'debug_enabled': self.debug,
             'need_channel_update': self.need_channel_update,
             'is_valid': self._is_valid,
-            'type': self.type
+            'configured_type': self.type
         }
 
     async def _get_file_hash(self,

@@ -578,6 +578,7 @@ class GitRepo:
 
     def get_repo_status(self) -> Dict[str, Any]:
         return {
+            'detected_type': "git_repo",
             'remote_alias': self.git_remote,
             'branch': self.git_branch,
             'owner': self.git_owner,
@@ -589,7 +590,8 @@ class GitRepo:
             'detached': self.head_detached,
             'commits_behind': self.commits_behind,
             'git_messages': self.git_messages,
-            'full_version_string': self.full_version_string
+            'full_version_string': self.full_version_string,
+            'pristine': not self.dirty
         }
 
     def get_version(self, upstream: bool = False) -> Tuple[Any, ...]:

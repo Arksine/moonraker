@@ -58,6 +58,7 @@ class ZipDeploy(AppDeploy):
                 "Invalid url set for 'origin' option in section "
                 f"[{config.get_name()}].  Unable to extract owner/repo.")
         self.host_repo: str = config.get('host_repo', self.official_repo)
+        self.detected_type: str = "?"
         self.source_checksum: str = ""
         self.pristine = False
         self.verified = False
@@ -125,8 +126,14 @@ class ZipDeploy(AppDeploy):
         for key in RINFO_KEYS:
             if key not in release_info:
                 self._add_error(f"Missing release info item: {key}")
-        local_channel = release_info.get('channel', "?")
-        self.need_channel_update = self.channel != local_channel
+        self.detected_type = "?"
+        self.need_channel_update = False
+        if 'channel' in release_info:
+            local_channel = release_info['channel']
+            self.need_channel_update = self.channel != local_channel
+            self.detected_type = "zip"
+            if local_channel == "beta":
+                self.detected_type = "zip_beta"
         self.full_version = release_info.get('long_version', "?")
         self.short_version = self._get_tag_version(
             release_info.get('git_version', ""))
@@ -245,6 +252,9 @@ class ZipDeploy(AppDeploy):
             self._add_error(
                 "RELEASE_INFO not found in latest release assets")
         self.commit_log = []
+        if self.short_version == self.latest_version:
+            # No need to report the commit log when versions match
+            return
         if "COMMIT_LOG" in asset_info:
             asset_url, content_type, size = asset_info['COMMIT_LOG']
             commit_bytes = await self.cmd_helper.http_download_request(
@@ -388,6 +398,7 @@ class ZipDeploy(AppDeploy):
         # client functionality.  In the future it would be
         # good to report values that are specifc
         status.update({
+            'detected_type': self.detected_type,
             'remote_alias': "origin",
             'branch': "master",
             'owner': self.owner,
