@@ -33,7 +33,7 @@ CHANNEL_TO_TYPE = {
 TYPE_TO_CHANNEL = {
     "zip": "stable",
     "zip_beta": "beta",
-    "dev": "git_repo"
+    "git_repo": "dev"
 }
 
 class AppDeploy(BaseDeploy):
