@@ -429,7 +429,7 @@ class GitRepo:
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
-        if upstream_url != self.origin_url:
+        if upstream_url != self.origin_url.lower():
             invalids.append(f"Unofficial remote url: {self.upstream_url}")
         if self.git_branch != primary_branch or self.git_remote != "origin":
             invalids.append(
