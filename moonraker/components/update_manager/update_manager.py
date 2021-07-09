@@ -121,7 +121,7 @@ class UpdateManager:
             if name in self.updaters:
                 raise config.error(f"Client repo {name} already added")
             client_type = cfg.get("type")
-            if client_type == "web":
+            if client_type in ["web", "web_beta"]:
                 self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
             elif client_type in ["git_repo", "zip", "zip_beta"]:
                 path = os.path.expanduser(cfg.get('path'))
@@ -875,6 +875,8 @@ class WebClientDeploy(BaseDeploy):
         self.repo = config.get('repo').strip().strip("/")
         self.owner = self.repo.split("/", 1)[0]
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
+        self.type = config.get('type')
+        self.channel = "stable" if self.type == "web" else "beta"
         self.persistent_files: List[str] = []
         pfiles = config.get('persistent_files', None)
         if pfiles is not None:
@@ -890,6 +892,7 @@ class WebClientDeploy(BaseDeploy):
         self.refresh_evt: Optional[asyncio.Event] = None
         self.mutex: asyncio.Lock = asyncio.Lock()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
+                     f"\nChannel: {self.channel}"
                      f"\npath: {self.path}")
 
     async def _get_local_version(self) -> None:
@@ -918,13 +921,22 @@ class WebClientDeploy(BaseDeploy):
 
     async def _get_remote_version(self) -> None:
         # Remote state
-        url = f"https://api.github.com/repos/{self.repo}/releases/latest"
+        url = f"https://api.github.com/repos/{self.repo}/releases"
         try:
-            result = await self.cmd_helper.github_api_request(url)
-            assert isinstance(result, dict)
+            releases = await self.cmd_helper.github_api_request(url)
+            assert isinstance(releases, list)
         except Exception:
             logging.exception(f"Client {self.repo}: Github Request Error")
-            result = {}
+            releases = []
+        result: Dict[str, Any] = {}
+        for release in releases:
+            if self.channel == "stable":
+                if not release['prerelease']:
+                    result = release
+                    break
+            else:
+                result = release
+                break
         self.remote_version = result.get('name', "?")
         release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
         dl_url: str = release_asset.get('browser_download_url', "?")
@@ -935,6 +947,7 @@ class WebClientDeploy(BaseDeploy):
             f"Github client Info Received:\nRepo: {self.name}\n"
             f"Local Version: {self.version}\n"
             f"Remote Version: {self.remote_version}\n"
+            f"Pre-release: {release.get('prerelease', '?')}\n"
             f"url: {dl_url}\n"
             f"size: {size}\n"
             f"Content Type: {content_type}")
@@ -1010,7 +1023,9 @@ class WebClientDeploy(BaseDeploy):
             'name': self.name,
             'owner': self.owner,
             'version': self.version,
-            'remote_version': self.remote_version
+            'remote_version': self.remote_version,
+            'configured_type': self.type,
+            'channel': self.channel
         }
 
 def load_component(config: ConfigHelper) -> UpdateManager:
