@@ -417,16 +417,17 @@ This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
 updated in addition to klipper, moonraker, and the system os. Repos that have
 been modified or cloned from unofficial sources are not supported.
 
-There are two types of update manager clients and each will be detailed
-separately. The first one is targeted towards releases that do not need a
-service restart such as Fluidd/Mainsail.
+Moonraker supports updates for "application" based clients and "web" based
+clients. Each are detailed separately below.
 
 ```ini
 # moonraker.conf
 
 [update_manager client_name]
 type: web
-# Indicates that this is a web client.
+#   The client type.  For web clients this should be 'web', or 'web_beta'.
+#   The 'web_beta' type will enable updates for releases tagged with
+#   "prerelease" on GitHub.  This parameter must be provided.
 repo:
 #   This is the GitHub repo of the client, in the format of user/client.
 #   For example, this could be set to cadriel/fluidd to update Fluidd or
