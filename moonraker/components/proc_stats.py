@@ -221,8 +221,7 @@ class Watchdog:
                 f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds")
             # delay the stat logging so we capture the CPU percentage after
             # the next cycle
-            self.wdcb_handle = self.evt_loop.call_later(
-                .2, self.proc_stats.log_last_stats(5))
+            self.evt_loop.call_later(.2, self.proc_stats.log_last_stats(5))
         self.last_watch_time = cur_time
         self.wdcb_handle = self.evt_loop.call_later(
             WATCHDOG_REFRESH_TIME, self._watchdog_callback)
