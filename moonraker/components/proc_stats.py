@@ -12,9 +12,7 @@ import os
 import pathlib
 import logging
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
-from tornado.ioloop import IOLoop, PeriodicCallback
-from tornado.locks import Lock
+from tornado.ioloop import PeriodicCallback
 
 # Annotation imports
 from typing import (
@@ -53,7 +51,7 @@ THROTTLED_FLAGS = {
 class ProcStats:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.ioloop = IOLoop.current()
+        self.event_loop = self.server.get_event_loop()
         self.watchdog = Watchdog(self)
         self.stat_update_cb = PeriodicCallback(
             self._handle_stat_update, STAT_UPDATE_TIME_MS)  # type: ignore
@@ -78,7 +76,7 @@ class ProcStats:
         self.proc_stat_queue: Deque[Dict[str, Any]] = deque(maxlen=30)
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
-        self.throttle_check_lock = Lock()
+        self.throttle_check_lock = asyncio.Lock()
         self.total_throttled: int = 0
         self.last_throttled: int = 0
         self.update_sequence: int = 0
@@ -91,9 +89,8 @@ class ProcStats:
         ts: Optional[Dict[str, Any]] = None
         if self.vcgencmd is not None:
             ts = await self._check_throttled_state()
-        with ThreadPoolExecutor(max_workers=1) as tpe:
-            cpu_temp = await self.ioloop.run_in_executor(
-                tpe, self._get_cpu_temperature)
+        cpu_temp = await self.event_loop.run_in_thread(
+            self._get_cpu_temperature)
         return {
             'moonraker_stats': list(self.proc_stat_queue),
             'throttled_state': ts,
@@ -104,9 +101,8 @@ class ProcStats:
         msg = "\nMoonraker System Usage Statistics:"
         for stats in self.proc_stat_queue:
             msg += f"\n{self._format_stats(stats)}"
-        with ThreadPoolExecutor(max_workers=1) as tpe:
-            cpu_temp = await self.ioloop.run_in_executor(
-                tpe, self._get_cpu_temperature)
+        cpu_temp = await self.event_loop.run_in_thread(
+            self._get_cpu_temperature)
         msg += f"\nCPU Temperature: {cpu_temp}"
         logging.info(msg)
         if self.vcgencmd is not None:
@@ -118,9 +114,8 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
-        with ThreadPoolExecutor(max_workers=1) as tpe:
-            cpu_temp, mem, mem_units = await self.ioloop.run_in_executor(
-                tpe, self._read_system_files)
+        cpu_temp, mem, mem_units = await self.event_loop.run_in_thread(
+            self._read_system_files)
         result = {
             "time": update_time,
             "cpu_usage": usage,
@@ -221,7 +216,7 @@ class Watchdog:
                 f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds")
             # delay the stat logging so we capture the CPU percentage after
             # the next cycle
-            self.evt_loop.call_later(.2, self.proc_stats.log_last_stats(5))
+            self.evt_loop.call_later(.2, self.proc_stats.log_last_stats, 5)
         self.last_watch_time = cur_time
         self.wdcb_handle = self.evt_loop.call_later(
             WATCHDOG_REFRESH_TIME, self._watchdog_callback)
