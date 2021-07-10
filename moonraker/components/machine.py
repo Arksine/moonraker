@@ -11,7 +11,6 @@ import pathlib
 import logging
 import platform
 import distro
-from tornado.ioloop import IOLoop
 
 # Annotation imports
 from typing import (
@@ -81,7 +80,8 @@ class Machine:
             "reboot_machine", self.reboot_machine)
 
         # Retreive list of services
-        IOLoop.current().spawn_callback(self._find_active_services)
+        event_loop = self.server.get_event_loop()
+        event_loop.register_callback(self._find_active_services)
 
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
@@ -113,8 +113,8 @@ class Machine:
             if action != "restart":
                 raise self.server.error(
                     f"Service action '{action}' not available for moonraker")
-            IOLoop.current().spawn_callback(
-                self.do_service_action, action, name)
+            event_loop = self.server.get_event_loop()
+            event_loop.register_callback(self.do_service_action, action, name)
         elif name in self.available_services:
             await self.do_service_action(action, name)
         else:
