@@ -10,8 +10,6 @@ import shlex
 import logging
 import signal
 import asyncio
-from tornado import gen
-from tornado.locks import Lock
 from utils import ServerError
 
 # Annotation imports
@@ -149,7 +147,7 @@ class ShellCommand:
         self.proc: Optional[SCProcess] = None
         self.cancelled = False
         self.return_code: Optional[int] = None
-        self.run_lock = Lock()
+        self.run_lock = asyncio.Lock()
 
     async def cancel(self, sig_idx: int = 1) -> None:
         self.cancelled = True
@@ -236,14 +234,14 @@ class ShellCommand:
                     if self.cancelled and not timed_out:
                         break
                 retries -= 1
-                await gen.sleep(.5)
+                await asyncio.sleep(.5)
             self.factory.remove_running_command(self)
             raise ShellCommandError(
                 f"Error running shell command: '{self.command}'",
                 self.return_code, stdout, stderr)
 
     async def _create_subprocess(self) -> bool:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def protocol_factory():
             return asyncio.subprocess.SubprocessStreamProtocol(
