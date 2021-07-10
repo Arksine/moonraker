@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+import asyncio
 import base64
 import uuid
 import hashlib
@@ -17,7 +18,7 @@ import re
 import socket
 import logging
 import json
-from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.ioloop import PeriodicCallback
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
     DBComp = database.MoonrakerDatabase
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
-    OneshotToken = Tuple[IPAddr, Optional[Dict[str, Any]], object]
+    OneshotToken = Tuple[IPAddr, Optional[Dict[str, Any]], asyncio.Handle]
 
 # Helpers for base64url encoding and decoding
 def base64url_encode(data: bytes) -> bytes:
@@ -359,7 +360,8 @@ class Authorization:
             username, jwk_id, private_key, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
         if create:
-            IOLoop.current().call_later(
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(
                 .005, self.server.send_event,
                 "authorization:user_created",
                 {'username': username})
@@ -386,7 +388,8 @@ class Authorization:
             raise self.server.error(f"No registered user: {username}")
         self.public_jwks.pop(self.users.get(f"{username}.jwk_id"), None)
         del self.users[username]
-        IOLoop.current().call_later(
+        event_loop = self.server.get_event_loop()
+        event_loop.delay_callback(
             .005, self.server.send_event,
             "authorization:user_deleted",
             {'username': username})
@@ -505,8 +508,8 @@ class Authorization:
                           user: Optional[Dict[str, Any]]
                           ) -> str:
         token = base64.b32encode(os.urandom(20)).decode()
-        ioloop = IOLoop.current()
-        hdl = ioloop.call_later(
+        event_loop = self.server.get_event_loop()
+        hdl = event_loop.delay_callback(
             ONESHOT_TIMEOUT, self._oneshot_token_expire_handler, token)
         self.oneshot_tokens[token] = (ip_addr, user, hdl)
         return token
@@ -568,7 +571,7 @@ class Authorization:
                              ) -> Optional[Dict[str, Any]]:
         if token in self.oneshot_tokens:
             ip_addr, user, hdl = self.oneshot_tokens.pop(token)
-            IOLoop.current().remove_timeout(hdl)
+            hdl.cancel()
             if cur_ip != ip_addr:
                 logging.info(f"Oneshot Token IP Mismatch: expected{ip_addr}"
                              f", Recd: {cur_ip}")
