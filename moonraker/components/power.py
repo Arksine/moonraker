@@ -11,9 +11,8 @@ import logging
 import json
 import struct
 import socket
-from tornado.ioloop import IOLoop
+import asyncio
 from tornado.iostream import IOStream
-from tornado.locks import Lock
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
 
@@ -107,7 +106,8 @@ class PrinterPower:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_klippy_shutdown)
         self.server.register_notification("power:power_changed")
-        IOLoop.current().spawn_callback(
+        event_loop = self.server.get_event_loop()
+        event_loop.register_callback(
             self._initalize_devices, list(self.devices.values()))
 
     async def _check_klippy_printing(self) -> bool:
@@ -219,8 +219,8 @@ class PrinterPower:
         if device not in self.devices:
             logging.info(f"No device found: {device}")
             return
-        ioloop = IOLoop.current()
-        ioloop.spawn_callback(
+        event_loop = self.server.get_event_loop()
+        event_loop.register_callback(
             self._process_request, self.devices[device], status)
 
     async def add_device(self, name: str, device: PowerDevice) -> None:
@@ -276,10 +276,10 @@ class PowerDevice:
 
     def run_power_changed_action(self) -> None:
         if self.state == "on" and self.klipper_restart:
-            ioloop = IOLoop.current()
+            event_loop = self.server.get_event_loop()
             kapis: APIComp = self.server.lookup_component("klippy_apis")
-            ioloop.call_later(
-                self.restart_delay, kapis.do_restart,  # type:ignore
+            event_loop.delay_callback(
+                self.restart_delay, kapis.do_restart,
                 "FIRMWARE_RESTART")
 
     def has_off_when_shutdown(self) -> bool:
@@ -307,7 +307,7 @@ class HTTPDevice(PowerDevice):
                  ) -> None:
         super().__init__(config)
         self.client = AsyncHTTPClient()
-        self.request_mutex = Lock()
+        self.request_mutex = asyncio.Lock()
         self.addr: str = config.get("address")
         self.port = config.getint("port", default_port)
         self.user = config.get("user", default_user)
@@ -456,7 +456,7 @@ class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
-        self.request_mutex = Lock()
+        self.request_mutex = asyncio.Lock()
         self.addr: List[str] = config.get("address").split('/')
         self.port = config.getint("port", 9999)
 
