@@ -9,7 +9,6 @@ import os
 import mimetypes
 import logging
 import json
-from concurrent.futures import ThreadPoolExecutor
 import traceback
 import ssl
 import urllib.parse
@@ -22,7 +21,6 @@ from tornado.escape import url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from tornado.ioloop import IOLoop
 from utils import ServerError
 from websockets import WebRequest, WebsocketManager, WebSocket
 from streaming_form_data import StreamingFormDataParser
@@ -43,6 +41,7 @@ from typing import (
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
     from moonraker import Server
+    from eventloop import EventLoop
     from confighelper import ConfigHelper
     from websockets import APITransport
     from components.file_manager.file_manager import FileManager
@@ -691,7 +690,9 @@ class FileRequestHandler(AuthorizedFileHandler):
         self.set_header("Content-Length", content_length)
 
         if include_body:
-            content = self.get_content_nonblock(self.absolute_path, start, end)
+            evt_loop = self.server.get_event_loop()
+            content = self.get_content_nonblock(
+                evt_loop, self.absolute_path, start, end)
             async for chunk in content:
                 try:
                     self.write(chunk)
@@ -709,10 +710,12 @@ class FileRequestHandler(AuthorizedFileHandler):
 
     @classmethod
     async def get_content_nonblock(
-        cls, abspath: str, start: Optional[int] = None,
+        cls,
+        evt_loop: EventLoop,
+        abspath: str,
+        start: Optional[int] = None,
         end: Optional[int] = None
     ) -> AsyncGenerator[bytes, None]:
-        ioloop = IOLoop.current()
         with open(abspath, "rb") as file:
             if start is not None:
                 file.seek(start)
@@ -724,9 +727,7 @@ class FileRequestHandler(AuthorizedFileHandler):
                 chunk_size = 64 * 1024
                 if remaining is not None and remaining < chunk_size:
                     chunk_size = remaining
-                with ThreadPoolExecutor(max_workers=1) as tpe:
-                    chunk = await ioloop.run_in_executor(
-                        tpe, file.read, chunk_size)
+                chunk = await evt_loop.run_in_thread(file.read, chunk_size)
                 if chunk:
                     if remaining is not None:
                         remaining -= len(chunk)
@@ -770,9 +771,8 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
     async def data_received(self, chunk: bytes) -> None:
         if self.request.method == "POST":
-            with ThreadPoolExecutor(max_workers=1) as tpe:
-                await IOLoop.current().run_in_executor(
-                    tpe, self._parser.data_received, chunk)
+            evt_loop = self.server.get_event_loop()
+            await evt_loop.run_in_thread(self._parser.data_received, chunk)
 
     async def post(self) -> None:
         form_args = {}
