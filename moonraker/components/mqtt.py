@@ -12,7 +12,6 @@ import json
 import pathlib
 from collections import deque
 import paho.mqtt.client as paho_mqtt
-from tornado.ioloop import IOLoop
 from websockets import WebRequest, JsonRPC, APITransport
 
 # Annotation imports
@@ -135,6 +134,7 @@ class AIOHelper:
 class MQTTClient(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.event_loop = self.server.get_event_loop()
         self.address: str = config.get('address')
         self.port: int = config.getint('port', 1883)
         self.user_name = config.get('username', None)
@@ -205,7 +205,7 @@ class MQTTClient(APITransport):
                 f"Moonraker API topics - Request: {self.api_request_topic}, "
                 f"Response: {self.api_resp_topic}")
 
-        IOLoop.current().spawn_callback(self._initialize)
+        self.event_loop.register_callback(self._initialize)
 
     async def _initialize(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
@@ -242,8 +242,8 @@ class MQTTClient(APITransport):
         if topic in self.subscribed_topics:
             cb_hdls = self.subscribed_topics[topic][1]
             for hdl in cb_hdls:
-                IOLoop.current().spawn_callback(
-                    hdl.callback, message.payload)  # type: ignore
+                self.event_loop.register_callback(
+                    hdl.callback, message.payload)
         else:
             logging.debug(
                 f"Unregistered MQTT Topic Received: {topic}, "
