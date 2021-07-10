@@ -11,10 +11,9 @@ import time
 import json
 import errno
 import logging
+import asyncio
 from collections import deque
 from utils import ServerError
-from tornado import gen
-from tornado.ioloop import IOLoop
 
 # Annotation imports
 from typing import (
@@ -50,7 +49,7 @@ class SerialConnection:
                  config: ConfigHelper,
                  paneldue: PanelDue
                  ) -> None:
-        self.ioloop = IOLoop.current()
+        self.event_loop = config.get_server().get_event_loop()
         self.paneldue = paneldue
         self.port: str = config.get('serial')
         self.baud = config.getint('baud', 57600)
@@ -61,12 +60,12 @@ class SerialConnection:
         self.send_busy: bool = False
         self.send_buffer: bytes = b""
         self.attempting_connect: bool = True
-        self.ioloop.spawn_callback(self._connect)
+        self.event_loop.register_callback(self._connect)
 
     def disconnect(self, reconnect: bool = False) -> None:
         if self.connected:
             if self.fd is not None:
-                self.ioloop.remove_handler(self.fd)
+                self.event_loop.remove_reader(self.fd)
                 self.fd = None
             self.connected = False
             if self.ser is not None:
@@ -78,7 +77,7 @@ class SerialConnection:
             logging.info("PanelDue Disconnected")
         if reconnect and not self.attempting_connect:
             self.attempting_connect = True
-            self.ioloop.call_later(1., self._connect)  # type: ignore
+            self.event_loop.delay_callback(1., self._connect)
 
     async def _connect(self) -> None:
         start_time = connect_time = time.time()
@@ -95,26 +94,23 @@ class SerialConnection:
                     self.port, self.baud, timeout=0, exclusive=True)
             except (OSError, IOError, serial.SerialException):
                 logging.exception(f"Unable to open port: {self.port}")
-                await gen.sleep(2.)
+                await asyncio.sleep(2.)
                 connect_time += time.time()
                 continue
             self.fd = self.ser.fileno()
             fd = self.fd = self.ser.fileno()
             os.set_blocking(fd, False)
-            self.ioloop.add_handler(fd, self._handle_incoming,
-                                    IOLoop.READ | IOLoop.ERROR)
+            self.event_loop.add_reader(fd, self._handle_incoming)
             self.connected = True
             logging.info("PanelDue Connected")
         self.attempting_connect = False
 
-    def _handle_incoming(self, fd: int, events: int) -> None:
-        if events & IOLoop.ERROR:
-            logging.info("PanelDue Connection Error")
-            self.disconnect(reconnect=True)
-            return
+    def _handle_incoming(self) -> None:
         # Process incoming data using same method as gcode.py
+        if self.fd is None:
+            return
         try:
-            data = os.read(fd, 4096)
+            data = os.read(self.fd, 4096)
         except os.error:
             return
 
@@ -145,7 +141,7 @@ class SerialConnection:
         self.send_buffer += data
         if not self.send_busy:
             self.send_busy = True
-            self.ioloop.spawn_callback(self._do_send)
+            self.event_loop.register_callback(self._do_send)
 
     async def _do_send(self) -> None:
         assert self.fd is not None
@@ -158,7 +154,7 @@ class SerialConnection:
                 if e.errno == errno.EBADF or e.errno == errno.EPIPE:
                     sent = 0
                 else:
-                    await gen.sleep(.001)
+                    await asyncio.sleep(.001)
                     continue
             if sent:
                 self.send_buffer = self.send_buffer[sent:]
@@ -172,7 +168,7 @@ class SerialConnection:
 class PanelDue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.ioloop = IOLoop.current()
+        self.event_loop = self.server.get_event_loop()
         self.file_manager: FMComp = \
             self.server.lookup_component('file_manager')
         self.klippy_apis: APIComp = \
@@ -284,7 +280,7 @@ class PanelDue:
                 retries -= 1
                 if not retries:
                     raise
-                await gen.sleep(1.)
+                await asyncio.sleep(1.)
                 continue
             break
 
@@ -354,7 +350,7 @@ class PanelDue:
         self.debug_queue.append(line)
         # If we find M112 in the line then skip verification
         if "M112" in line.upper():
-            self.ioloop.spawn_callback(self.klippy_apis.emergency_stop)
+            self.event_loop.register_callback(self.klippy_apis.emergency_stop)
             return
 
         if self.enable_checksum:
@@ -435,7 +431,7 @@ class PanelDue:
         self.gc_queue.append(script)
         if not self.gq_busy:
             self.gq_busy = True
-            self.ioloop.spawn_callback(self._process_gcode_queue)
+            self.event_loop.register_callback(self._process_gcode_queue)
 
     async def _process_gcode_queue(self) -> None:
         while self.gc_queue:
@@ -455,7 +451,7 @@ class PanelDue:
         self.command_queue.append((cmd, args, kwargs))
         if not self.cq_busy:
             self.cq_busy = True
-            self.ioloop.spawn_callback(self._process_command_queue)
+            self.event_loop.register_callback(self._process_command_queue)
 
     async def _process_command_queue(self) -> None:
         while self.command_queue:
@@ -590,7 +586,7 @@ class PanelDue:
         sequence = arg_r
         response_type = arg_s
 
-        curtime = self.ioloop.time()
+        curtime = self.event_loop.get_loop_time()
         if curtime - self.last_update_time > INITIALIZE_TIMEOUT:
             self.initialized = False
         self.last_update_time = curtime
