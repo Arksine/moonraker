@@ -8,8 +8,6 @@ from __future__ import annotations
 import pathlib
 import shutil
 import hashlib
-from concurrent.futures.thread import ThreadPoolExecutor
-from tornado.ioloop import IOLoop
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -143,8 +141,8 @@ class AppDeploy(BaseDeploy):
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
-            IOLoop.current().call_later(
-                .1, self._do_restart)  # type: ignore
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(.1, self._do_restart)
         else:
             await self._do_restart()
 
@@ -178,9 +176,8 @@ class AppDeploy(BaseDeploy):
         def hash_func(f: pathlib.Path) -> str:
             return hashlib.sha256(f.read_bytes()).hexdigest()
         try:
-            with ThreadPoolExecutor(max_workers=1) as tpe:
-                return await IOLoop.current().run_in_executor(
-                    tpe, hash_func, filename)
+            event_loop = self.server.get_event_loop()
+            return await event_loop.run_in_thread(hash_func, filename)
         except Exception:
             return None
 
