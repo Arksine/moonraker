@@ -14,8 +14,6 @@ import re
 import time
 import tempfile
 import zipfile
-from concurrent.futures import ThreadPoolExecutor
-from tornado.ioloop import IOLoop
 from .app_deploy import AppDeploy
 from utils import verify_source
 
@@ -87,9 +85,8 @@ class ZipDeploy(AppDeploy):
     async def _parse_info_file(self, file_name: str) -> Dict[str, Any]:
         try:
             info_file = self.path.joinpath(file_name)
-            with ThreadPoolExecutor(max_workers=1) as tpe:
-                info_bytes = await IOLoop.current().run_in_executor(
-                    tpe, info_file.read_text)
+            event_loop = self.server.get_event_loop()
+            info_bytes = await event_loop.run_in_thread(info_file.read_text)
             info: Dict[str, Any] = json.loads(info_bytes)
         except Exception:
             self.log_exc(f"Unable to parse info file {file_name}")
@@ -145,9 +142,8 @@ class ZipDeploy(AppDeploy):
                 f"Owner repo mismatch. Received {owner_repo}, "
                 f"official: {self.official_repo}")
         # validate the local source code
-        with ThreadPoolExecutor(max_workers=1) as tpe:
-            res = await IOLoop.current().run_in_executor(
-                tpe, verify_source, self.path)
+        event_loop = self.server.get_event_loop()
+        res = await event_loop.run_in_thread(verify_source, self.path)
         if res is not None:
             self.source_checksum, self.pristine = res
             if self.name in ["moonraker", "klipper"]:
@@ -369,9 +365,9 @@ class ZipDeploy(AppDeploy):
                     dl_url, temp_download_file, content_type, size)
                 self.notify_status(
                     f"Download Complete, extracting release to '{self.path}'")
-                with ThreadPoolExecutor(max_workers=1) as tpe:
-                    await IOLoop.current().run_in_executor(
-                        tpe, self._extract_release, temp_download_file)
+                event_loop = self.server.get_event_loop()
+                event_loop.run_in_thread(
+                    self._extract_release, temp_download_file)
             await self._update_dependencies(npm_hash, force=force_dep_update)
             await self._update_repo_state()
             await self.restart_service()
