@@ -15,8 +15,7 @@ import shutil
 import zipfile
 import time
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
-from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.ioloop import PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
@@ -70,6 +69,7 @@ def get_deploy_class(app_path: str) -> Type:
 class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.event_loop = self.server.get_event_loop()
         self.app_config = config.read_supplemental_config(
             SUPPLEMENTAL_CFG_PATH)
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
@@ -172,7 +172,7 @@ class UpdateManager:
         self.server.register_event_handler(
             "server:klippy_identified", self._set_klipper_repo)
         # Initialize GitHub API Rate Limits and configured updaters
-        IOLoop.current().spawn_callback(
+        self.event_loop.register_callback(
             self._initalize_updaters, list(self.updaters.values()))
 
     async def _initalize_updaters(self,
@@ -741,7 +741,7 @@ class StreamingDownload:
                  dest: pathlib.Path,
                  download_size: int) -> None:
         self.cmd_helper = cmd_helper
-        self.ioloop = IOLoop.current()
+        self.event_loop = cmd_helper.get_server().get_event_loop()
         self.name = dest.name
         self.file_hdl = dest.open('wb')
         self.download_size = download_size
@@ -758,7 +758,7 @@ class StreamingDownload:
         if not self.busy_evt.is_set():
             return
         self.busy_evt.clear()
-        self.ioloop.spawn_callback(self._process_buffer)
+        self.event_loop.register_callback(self._process_buffer)
 
     async def close(self):
         await self.busy_evt.wait()
@@ -769,9 +769,7 @@ class StreamingDownload:
             chunk = self.chunk_buffer.pop(0)
             self.total_recd += len(chunk)
             pct = int(self.total_recd / self.download_size * 100 + .5)
-            with ThreadPoolExecutor(max_workers=1) as tpe:
-                await self.ioloop.run_in_executor(
-                    tpe, self.file_hdl.write, chunk)
+            await self.event_loop.run_in_thread(self.file_hdl.write, chunk)
             if pct >= self.last_pct + 5:
                 self.last_pct = pct
                 totals = f"{self.total_recd // 1024} KiB / " \
@@ -898,9 +896,8 @@ class WebClientDeploy(BaseDeploy):
     async def _get_local_version(self) -> None:
         version_path = self.path.joinpath(".version")
         if version_path.is_file():
-            with ThreadPoolExecutor(max_workers=1) as tpe:
-                version = await IOLoop.current().run_in_executor(
-                    tpe, version_path.read_text)
+            event_loop = self.server.get_event_loop()
+            version = await event_loop.run_in_thread(version_path.read_text)
             self.version = version.strip()
         else:
             self.version = "?"
@@ -966,6 +963,7 @@ class WebClientDeploy(BaseDeploy):
             if self.version == self.remote_version:
                 # Already up to date
                 return False
+            event_loop = self.server.get_event_loop()
             self.cmd_helper.notify_update_response(
                 f"Updating Web Client {self.name}...")
             self.cmd_helper.notify_update_response(
@@ -979,16 +977,14 @@ class WebClientDeploy(BaseDeploy):
                     dl_url, temp_download_file, content_type, size)
                 self.cmd_helper.notify_update_response(
                     f"Download Complete, extracting release to '{self.path}'")
-                with ThreadPoolExecutor(max_workers=1) as tpe:
-                    await IOLoop.current().run_in_executor(
-                        tpe, self._extract_release, temp_persist_dir,
-                        temp_download_file)
+                await event_loop.run_in_thread(
+                    self._extract_release, temp_persist_dir,
+                    temp_download_file)
             self.version = self.remote_version
             version_path = self.path.joinpath(".version")
             if not version_path.exists():
-                with ThreadPoolExecutor(max_workers=1) as tpe:
-                    await IOLoop.current().run_in_executor(
-                        tpe, version_path.write_text, self.version)
+                await event_loop.run_in_thread(
+                    version_path.write_text, self.version)
             self.cmd_helper.notify_update_response(
                 f"Client Update Finished: {self.name}", is_complete=True)
             return True
