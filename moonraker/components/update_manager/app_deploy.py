@@ -68,6 +68,7 @@ class AppDeploy(BaseDeploy):
             self._verify_path(config, 'env', self.executable)
             self.venv_args = config.get('venv_args', None)
 
+        self.is_service = config.getboolean("is_system_service", True)
         self.need_channel_update = False
         self._is_valid = False
 
@@ -138,6 +139,10 @@ class AppDeploy(BaseDeploy):
         raise NotImplementedError
 
     async def restart_service(self):
+        if not self.is_service:
+            self.notify_status(
+                "Application not configured as service, skipping restart")
+            return
         if self.name == "moonraker":
             # Launch restart async so the request can return
             # before the server restarts
