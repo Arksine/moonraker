@@ -366,7 +366,7 @@ class ZipDeploy(AppDeploy):
                 self.notify_status(
                     f"Download Complete, extracting release to '{self.path}'")
                 event_loop = self.server.get_event_loop()
-                event_loop.run_in_thread(
+                await event_loop.run_in_thread(
                     self._extract_release, temp_download_file)
             await self._update_dependencies(npm_hash, force=force_dep_update)
             await self._update_repo_state()
