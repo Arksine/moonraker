@@ -119,8 +119,14 @@ class Authorization:
                 raise config.error(
                     f"Unsafe CORS Domain '{domain}'.  Wildcards are not"
                     " permitted in the top level domain.")
-            self.cors_domains.append(
-                domain.replace(".", "\\.").replace("*", ".*"))
+            if domain.endswith("/"):
+                self.server.add_warning(
+                    f"Invalid domain '{domain}' in option 'cors_domains',  "
+                    "section [authorization].  Domain's cannot contain a "
+                    "trailing slash.")
+            else:
+                self.cors_domains.append(
+                    domain.replace(".", "\\.").replace("*", ".*"))
 
         # Get Trusted Clients
         self.trusted_ips: List[IPAddr] = []
