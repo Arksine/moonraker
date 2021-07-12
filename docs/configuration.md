@@ -497,6 +497,10 @@ host_repo:
 #   This option defaults to the repo extracted from the "origin" option,
 #   however if the origin is not hosted on GitHub then this parameter must
 #   be provided.
+is_system_service: True
+#   If set to true the update manager will attempt to use systemctl to restart
+#   the service after an update has completed.  This can be set to flase for
+#   repos that are not installed as a service.  The default is True.
 ```
 
 ## `[mqtt]`
