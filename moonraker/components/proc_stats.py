@@ -193,7 +193,7 @@ class ProcStats:
     def log_last_stats(self, count: int = 1):
         count = min(len(self.proc_stat_queue), count)
         msg = ""
-        for stats in self.proc_stat_queue[-count:]:
+        for stats in list(self.proc_stat_queue)[-count:]:
             msg += f"\n{self._format_stats(stats)}"
         logging.info(msg)
 
