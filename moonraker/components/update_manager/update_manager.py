@@ -945,7 +945,7 @@ class WebClientDeploy(BaseDeploy):
             f"Github client Info Received:\nRepo: {self.name}\n"
             f"Local Version: {self.version}\n"
             f"Remote Version: {self.remote_version}\n"
-            f"Pre-release: {release.get('prerelease', '?')}\n"
+            f"Pre-release: {result.get('prerelease', '?')}\n"
             f"url: {dl_url}\n"
             f"size: {size}\n"
             f"Content Type: {content_type}")
