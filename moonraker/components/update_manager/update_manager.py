@@ -142,7 +142,6 @@ class UpdateManager:
             self.refresh_cb = PeriodicCallback(
                 self._handle_auto_refresh,  # type: ignore
                 UPDATE_REFRESH_INTERVAL_MS)
-            self.refresh_cb.start()
 
         self.server.register_endpoint(
             "/machine/update/moonraker", ["POST"],
@@ -187,6 +186,8 @@ class UpdateManager:
                     ret = updater.refresh()
                 await ret
         self.initialized_lock.set()
+        if self.refresh_cb is not None:
+            self.refresh_cb.start()
 
     async def _set_klipper_repo(self) -> None:
         if self.klippy_identified_evt is not None:
