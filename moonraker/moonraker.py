@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 import argparse
+from asyncio.events import new_event_loop
 import sys
 import importlib
 import os
@@ -765,10 +766,13 @@ def main() -> None:
             break
         if server.exit_reason == "terminate":
             break
+        event_loop.close()
         # Since we are running outside of the the server
         # it is ok to use a blocking sleep here
         time.sleep(.5)
         logging.info("Attempting Server Restart...")
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        event_loop = EventLoop()
     event_loop.close()
     logging.info("Server Shutdown")
     ql.stop()
