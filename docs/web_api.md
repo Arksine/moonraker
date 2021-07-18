@@ -1002,24 +1002,35 @@ An object in the following format:
 {
     "moonraker_stats": [
         {
-            "time": 1615837812.0894408,
-            "cpu_usage": 1.99,
-            "memory": 23636,
+            "time": 1626612666.850755,
+            "cpu_usage": 2.66,
+            "memory": 24732,
             "mem_units": "kB"
         },
         {
-            "time": 1615837813.0890627,
-            "cpu_usage": 2.09,
-            "memory": 23636,
+            "time": 1626612667.8521338,
+            "cpu_usage": 2.62,
+            "memory": 24732,
             "mem_units": "kB"
-        },
-        ...
+        }
     ],
     "throttled_state": {
         "bits": 0,
         "flags": []
     },
-    "cpu_temp": 46.148
+    "cpu_temp": 45.622,
+    "network": {
+        "lo": {
+            "rx_bytes": 113516429,
+            "tx_bytes": 113516429,
+            "bandwidth": 3342.68
+        },
+        "wlan0": {
+            "rx_bytes": 48471767,
+            "tx_bytes": 113430843,
+            "bandwidth": 4455.91
+        }
+    }
 }
 ```
 Process information is sampled every second.  The `moonraker_stats` field
@@ -1058,6 +1069,18 @@ may not still be active).  If `vcgencmd` is not available
 If the system reports CPU temp at `/sys/class/thermal/thermal_zone0`
 then temperature will be supplied in the `cpu_temp` field.  Otherwise
 the field will be set to `null`.
+
+If the system reports network statistics at `/proc/net/dev` then the
+`network` field will contain network statistics.  All available interfaces
+will be tracked.  Each interface reports the following fields:
+
+- `rx_bytes`: total number of bytes received over the interface
+- `tx_bytes`: total number of bytes transferred over the interface
+- `bandwidth`: estimated current bandwidth used (both rx and tx) in
+  bytes/second
+
+If network information is not available then the `network` field will
+contain an empty object.
 
 ### File Operations
 
@@ -3247,7 +3270,19 @@ process statistics:
             "memory": 23636,
             "mem_units": "kB"
         },
-        "cpu_temp": 44.008
+        "cpu_temp": 44.008,
+        "network": {
+            "lo": {
+                "rx_bytes": 114555457,
+                "tx_bytes": 114555457,
+                "bandwidth": 2911.49
+            },
+            "wlan0": {
+                "rx_bytes": 48773134,
+                "tx_bytes": 115035939,
+                "bandwidth": 3458.77
+            }
+        }
     }]
 }
 ```
