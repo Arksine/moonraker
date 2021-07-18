@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
+NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 STAT_UPDATE_TIME_MS = 1000
 REPORT_QUEUE_SIZE = 30
@@ -68,6 +69,7 @@ class ProcStats:
                          "disabled")
         self.temp_file = pathlib.Path(TEMPERATURE_PATH)
         self.smaps = pathlib.Path(STATM_FILE_PATH)
+        self.netdev_file = pathlib.Path(NET_DEV_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
@@ -80,6 +82,7 @@ class ProcStats:
         self.total_throttled: int = 0
         self.last_throttled: int = 0
         self.update_sequence: int = 0
+        self.last_net_stats: Dict[str, Dict[str, Any]] = {}
         self.stat_update_cb.start()
         self.watchdog.start()
 
@@ -94,7 +97,8 @@ class ProcStats:
         return {
             'moonraker_stats': list(self.proc_stat_queue),
             'throttled_state': ts,
-            'cpu_temp': cpu_temp
+            'cpu_temp': cpu_temp,
+            'network': self.last_net_stats
         }
 
     async def _handle_shutdown(self) -> None:
@@ -114,18 +118,29 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
-        cpu_temp, mem, mem_units = await self.event_loop.run_in_thread(
+        cpu_temp, mem, mem_units, net = await self.event_loop.run_in_thread(
             self._read_system_files)
+        for dev in net:
+            bytes_sec = 0.
+            if dev in self.last_net_stats:
+                last_dev_stats = self.last_net_stats[dev]
+                cur_total: int = net[dev]['rx_bytes'] + net[dev]['tx_bytes']
+                last_total: int = last_dev_stats['rx_bytes'] + \
+                    last_dev_stats['tx_bytes']
+                bytes_sec = round((cur_total - last_total) / time_diff, 2)
+            net[dev]['bandwidth'] = bytes_sec
+        self.last_net_stats = net
         result = {
-            "time": update_time,
-            "cpu_usage": usage,
-            "memory": mem,
-            "mem_units": mem_units,
+            'time': update_time,
+            'cpu_usage': usage,
+            'memory': mem,
+            'mem_units': mem_units
         }
         self.proc_stat_queue.append(result)
         self.server.send_event("proc_stats:proc_stat_update", {
             'moonraker_stats': result,
-            'cpu_temp': cpu_temp
+            'cpu_temp': cpu_temp,
+            'network': net
         })
         self.last_update_time = update_time
         self.last_proc_time = proc_time
@@ -161,7 +176,8 @@ class ProcStats:
     def _read_system_files(self) -> Tuple:
         mem, units = self._get_memory_usage()
         temp = self._get_cpu_temperature()
-        return temp, mem, units
+        net_stats = self._get_net_stats()
+        return temp, mem, units, net_stats
 
     def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
         try:
@@ -184,6 +200,24 @@ class ProcStats:
             except Exception:
                 return None
         return temp
+
+    def _get_net_stats(self) -> Dict[str, Any]:
+        if self.netdev_file.exists():
+            net_stats: Dict[str, Any] = {}
+            try:
+                ret = self.netdev_file.read_text()
+                dev_info = re.findall(r"([\w]+):(.+)", ret)
+                for (dev_name, stats) in dev_info:
+                    parsed_stats = stats.strip().split()
+                    net_stats[dev_name] = {
+                        'rx_bytes': int(parsed_stats[0]),
+                        'tx_bytes': int(parsed_stats[8])
+                    }
+                return net_stats
+            except Exception:
+                return {}
+        else:
+            return {}
 
     def _format_stats(self, stats: Dict[str, Any]) -> str:
         return f"System Time: {stats['time']:2f}, " \
