@@ -120,10 +120,30 @@ class PrinterPower:
     async def _initalize_devices(self,
                                  inital_devs: List[PowerDevice]
                                  ) -> None:
-        for dev in inital_devs:
-            ret = dev.initialize()
-            if ret is not None:
-                await ret
+        event_loop = self.server.get_event_loop()
+        cur_time = event_loop.get_loop_time()
+        endtime = cur_time + 120.
+        query_devs = inital_devs
+        failed_devs: List[PowerDevice] = []
+        while cur_time < endtime:
+            for dev in query_devs:
+                ret = dev.initialize()
+                if ret is not None:
+                    await ret
+                if dev.get_state() == "error":
+                    failed_devs.append(dev)
+            if not failed_devs:
+                logging.debug("All power devices initialized")
+                return
+            query_devs = failed_devs
+            failed_devs = []
+            await asyncio.sleep(2.)
+            cur_time = event_loop.get_loop_time()
+        if failed_devs:
+            failed_names = [d.get_name() for d in failed_devs]
+            self.server.add_warning(
+                "The following power devices failed init:"
+                f" {failed_names}")
 
     async def _handle_klippy_shutdown(self) -> None:
         for name, dev in self.devices.items():
@@ -262,6 +282,9 @@ class PowerDevice:
 
     def get_name(self) -> str:
         return self.name
+
+    def get_state(self) -> str:
+        return self.state
 
     def get_device_info(self) -> Dict[str, Any]:
         return {
