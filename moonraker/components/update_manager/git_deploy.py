@@ -468,8 +468,11 @@ class GitRepo:
             raise self.server.error(
                 f"Git Repo {self.alias}: Cannot perform pull on a "
                 "detached HEAD")
+        cmd = "pull --progress"
+        if self.cmd_helper.is_debug_enabled():
+            cmd = "pull --progress --rebase"
         async with self.git_operation_lock:
-            await self._run_git_cmd_async("pull --progress")
+            await self._run_git_cmd_async(cmd)
 
     async def list_branches(self) -> List[str]:
         self._verify_repo()
