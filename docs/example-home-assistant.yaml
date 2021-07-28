@@ -14,39 +14,71 @@ sensor:
       - display_status
       - virtual_sdcard
     value_template: 'OK'
+
   - platform: template
     sensors:
+
       vzero_hotend_target:
         friendly_name: 'V0.126 Hotend Target'
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["extruder"]["target"]  | float | round(1) }}'
         device_class: temperature
         unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['extruder']['target'] | float | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_hotend_actual:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["extruder"]["temperature"]  | float | round(1) }}'
         device_class: temperature
         unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['extruder']['temperature'] | float | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_bed_target:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["heater_bed"]["target"]  | float | round(1) }}'
         device_class: temperature
         unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['heater_bed']['target'] | float | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_bed_actual:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["heater_bed"]["temperature"]  | float | round(1) }}'
         device_class: temperature
         unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['heater_bed']['temperature'] | float | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_state:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["state"]}}'
+        icon_template: mdi:printer-3d
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['state'] if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_current_print:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["filename"]}}'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['filename'] if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_current_progress:
-        value_template: '{{ (states.sensor.voron_v0_sensor.attributes["display_status"]["progress"])*100  | round(1) }}'
         unit_of_measurement: '%'
+        icon_template: mdi:file-percent
+        value_template: >-
+          {{ (states.sensor.voron_v0_sensor.attributes['display_status']['progress']) * 100 | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_print_time:
-        value_template: '{{ states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"] |timestamp_custom("%H:%M:%S", 0)}}'
+        icon_template: mdi:clock-start
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] | timestamp_custom("%H:%M:%S", 0) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_time_remaining:
-        value_template: '{{ (((states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]/states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]- states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]) if states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]>0 else 0)) | timestamp_custom("%H:%M:%S", 0)}}'
+        icon_template: mdi:clock-end
+        value_template: >-
+          {{ (((states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] / states.sensor.voron_v0_sensor.attributes['display_status']['progress'] - states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration']) if states.sensor.voron_v0_sensor.attributes['display_status']['progress'] > 0 else 0)) | timestamp_custom("%H:%M:%S", 0) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_eta:
-        value_template: '{{ (as_timestamp(now())+2*60*60+((states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]/states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]- states.sensor.voron_v0_sensor.attributes["print_stats"]["print_duration"]) if states.sensor.voron_v0_sensor.attributes["display_status"]["progress"]>0 else 0)) | timestamp_custom("%H:%M:%S", 0)}}'
+        icon_template: mdi:clock-outline
+        value_template: >-
+          {{ (as_timestamp(now()) + 2 * 60 * 60 + ((states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] / states.sensor.voron_v0_sensor.attributes['display_status']['progress'] - states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration']) if states.sensor.voron_v0_sensor.attributes['display_status']['progress'] > 0 else 0)) | timestamp_custom("%H:%M:%S", 0) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_nozzletemp:
-        value_template: '{{[( states.sensor.voron_v0_sensor.attributes["extruder"]["temperature"]  | float | round(1)| string)," / ",( states.sensor.voron_v0_sensor.attributes["extruder"]["target"]  | float | round(1)| string)]|join}}'
+        icon_template: mdi:thermometer
+        value_template: >-
+          {{ [(states.sensor.voron_v0_sensor.attributes['extruder']['temperature'] | float | round(1) | string), " / ", (states.sensor.voron_v0_sensor.attributes['extruder']['target'] | float | round(1) | string)] | join if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
       vzero_bedtemp:
-        value_template: '{{[( states.sensor.voron_v0_sensor.attributes["heater_bed"]["temperature"]  | float | round(1)| string)," / ",( states.sensor.voron_v0_sensor.attributes["heater_bed"]["target"]  | float | round(1)| string)]|join}}'
+        icon_template: mdi:thermometer
+        value_template: >-
+          {{ [(states.sensor.voron_v0_sensor.attributes['heater_bed']['temperature'] | float | round(1) | string), " / ", (states.sensor.voron_v0_sensor.attributes['heater_bed']['target'] | float | round(1) | string)] | join if states('sensor.voron_v0_sensor') != 'unknown' else None }}
