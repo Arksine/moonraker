@@ -31,8 +31,10 @@ from typing import (
 if TYPE_CHECKING:
     from app import APIDefinition
     from confighelper import ConfigHelper
+    from . import klippy_apis
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
+    APIComp = klippy_apis.KlippyAPI
 
 DUP_API_REQ_CODE = -10000
 MQTT_PROTOCOLS = {
@@ -163,6 +165,7 @@ class MQTTClient(APITransport):
             raise config.error(
                 "Option 'default_qos' in section [mqtt] must be "
                 "between 0 and 2")
+        self.print_stats: Dict[str, Any] = {}
         self.client = paho_mqtt.Client(protocol=self.protocol)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -186,6 +189,12 @@ class MQTTClient(APITransport):
             self._handle_subscription_request,
             transports=["http", "websocket"])
 
+        self.status_print_stats_topic = \
+            f"{self.instance_name}/moonraker/status/print_stats"
+        self.server.register_event_handler(
+            "server:klippy_ready", self._init_ready)
+        self.server.register_event_handler(
+            "server:status_update", self._status_update)
 
         # Subscribe to API requests
         self.json_rpc = JsonRPC(transport="MQTT")
@@ -206,6 +215,22 @@ class MQTTClient(APITransport):
                 f"Response: {self.api_resp_topic}")
 
         self.event_loop.register_callback(self._initialize)
+
+    async def _init_ready(self) -> None:
+        klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+        sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
+        try:
+            result = await klippy_apis.subscribe_objects(sub)
+        except self.server.error as e:
+            logging.info(f"Error subscribing to print_stats")
+        await self._status_update(result)
+
+    async def _status_update(self, status: Dict[str, Any]) -> None:
+        print_stats = status.get("print_stats", None)
+        if print_stats is not None:
+            self.print_stats.update(print_stats)
+            await self.publish_topic(
+                self.status_print_stats_topic, self.print_stats)
 
     async def _initialize(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
