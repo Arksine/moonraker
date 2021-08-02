@@ -37,9 +37,11 @@ if TYPE_CHECKING:
     from websockets import WebRequest
     from components import database
     from components import klippy_apis
+    from components import power
     from components import shell_command
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI
+    PowerComp = Optional[power.PrinterPower]
     SCMDComp = shell_command.ShellCommandFactory
     _T = TypeVar("_T")
 
@@ -499,13 +501,7 @@ class FileManager:
         await self.gcode_metadata.parse_metadata(
             upload_info['filename'], finfo).wait()
         if start_print:
-            # Make a Klippy Request to "Start Print"
-            kapis: APIComp = self.server.lookup_component('klippy_apis')
-            try:
-                await kapis.start_print(upload_info['filename'])
-            except self.server.error:
-                # Attempt to start print failed
-                start_print = False
+            start_print = await self._start_print(upload_info['filename'])
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
         return {
@@ -516,6 +512,22 @@ class FileManager:
             'print_started': start_print,
             'action': "create_file"
         }
+
+    async def _start_print(self, filename: str) -> bool:
+        # Enable power to the printer and wait for klippy
+        power: PowerComp = self.server.lookup_component('power', None)
+        if power is not None and await power.request_power_on_when_upload():
+            await self.server.wait_for_klippy_ready()
+
+        # Make a Klippy Request to "Start Print"
+        kapis: APIComp = self.server.lookup_component('klippy_apis')
+        try:
+            await kapis.start_print(filename)
+        except self.server.error:
+            # Attempt to start print failed
+            return False
+
+        return True
 
     async def _finish_standard_upload(self,
                                       upload_info: Dict[str, Any]

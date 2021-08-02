@@ -263,6 +263,17 @@ class Server:
     def get_klippy_state(self) -> str:
         return self.klippy_state
 
+    async def wait_for_klippy_ready(self, timeout: float = 30.) -> bool:
+        # Retry every 1s
+        end_time = time.time() + timeout
+        while self.get_klippy_state() != "ready" and time.time() < end_time:
+            try:
+                await asyncio.sleep(1.)
+            except asyncio.CancelledError:
+                break
+
+        return self.get_klippy_state() != "ready"
+
     # ***** Klippy Connection *****
     async def _connect_klippy(self) -> None:
         if not self.server_running:

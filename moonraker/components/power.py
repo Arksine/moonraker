@@ -145,6 +145,19 @@ class PrinterPower:
                 "The following power devices failed init:"
                 f" {failed_names}")
 
+    async def request_power_on_when_upload(self) -> bool:
+        enabled = False
+
+        for name, dev in self.devices.items():
+            if dev.has_on_when_upload():
+                logging.info(
+                    f"Ensuring that device [{name}] is powered on to"
+                    " upload event")
+                await self._process_request(dev, "on")
+                enabled = True
+
+        return enabled
+
     async def _handle_klippy_shutdown(self) -> None:
         for name, dev in self.devices.items():
             if dev.has_off_when_shutdown():
@@ -271,6 +284,8 @@ class PowerDevice:
         self.state: str = "init"
         self.locked_while_printing = config.getboolean(
             'locked_while_printing', False)
+        self.on_when_upload = config.getboolean(
+            'on_when_upload', False)
         self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
         self.restart_delay = 1.
         self.klipper_restart = config.getboolean(
@@ -304,6 +319,9 @@ class PowerDevice:
             event_loop.delay_callback(
                 self.restart_delay, kapis.do_restart,
                 "FIRMWARE_RESTART")
+
+    def has_on_when_upload(self) -> bool:
+        return self.on_when_upload
 
     def has_off_when_shutdown(self) -> bool:
         return self.off_when_shutdown

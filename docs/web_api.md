@@ -522,6 +522,7 @@ included.
         "power green_led": {
             "type": "gpio",
             "locked_while_printing": false,
+            "on_when_upload": false,
             "off_when_shutdown": false,
             "restart_klipper_when_powered": false,
             "pin": "gpiochip0/gpio26",

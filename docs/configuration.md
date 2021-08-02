@@ -201,6 +201,9 @@ type: gpio
 #   The type of device.  Can be either gpio, tplink_smartplug, tasmota
 #   shelly, homeseer, homeassistant, or loxonev1.
 #   This parameter must be provided.
+on_when_upload: False
+#   If set to True, Moonraker will power on the device when a upload happens.
+#   The default is False, thus no attempt to start printer is being made.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
 #   the "shutdown" state.  This option applies to all device types.
