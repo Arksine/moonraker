@@ -3,7 +3,6 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import logging
 import time
 
 # Annotation imports
@@ -19,10 +18,9 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from . import database
-    from . import klippy_apis
+    from .job_state import JobState
     from .file_manager import file_manager
     DBComp = database.MoonrakerDatabase
-    APIComp = klippy_apis.KlippyAPI
     FMComp = file_manager.FileManager
 
 HIST_NAMESPACE = "history"
@@ -47,13 +45,19 @@ class History:
             })
 
         self.server.register_event_handler(
-            "server:klippy_ready", self._init_ready)
-        self.server.register_event_handler(
-            "server:status_update", self._status_update)
-        self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_disconnect)
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_shutdown)
+        self.server.register_event_handler(
+            "job_state:started", self._on_job_started)
+        self.server.register_event_handler(
+            "job_state:complete", self._on_job_complete)
+        self.server.register_event_handler(
+            "job_state:cancelled", self._on_job_cancelled)
+        self.server.register_event_handler(
+            "job_state:standby", self._on_job_standby)
+        self.server.register_event_handler(
+            "job_state:error", self._on_job_error)
         self.server.register_notification("history:history_changed")
 
         self.server.register_endpoint(
@@ -69,20 +73,10 @@ class History:
 
         self.current_job: Optional[PrinterJob] = None
         self.current_job_id: Optional[str] = None
-        self.print_stats: Dict[str, Any] = {}
         self.next_job_id: int = 0
         self.cached_job_ids = self.history_ns.keys()
         if self.cached_job_ids:
             self.next_job_id = int(self.cached_job_ids[-1], 16) + 1
-
-    async def _init_ready(self) -> None:
-        klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
-        sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
-        try:
-            result = await klippy_apis.subscribe_objects(sub)
-        except self.server.error as e:
-            logging.info(f"Error subscribing to print_stats")
-        self.print_stats = result.get("print_stats", {})
 
     async def _handle_job_request(self,
                                   web_request: WebRequest
@@ -173,50 +167,50 @@ class History:
                                  ) -> Dict[str, Dict[str, float]]:
         return {'job_totals': self.job_totals}
 
-    async def _status_update(self, data: Dict[str, Any]) -> None:
-        ps = data.get("print_stats", {})
-        if "state" in ps:
-            old_state: str = self.print_stats['state']
-            new_state: str = ps['state']
-            new_ps = dict(self.print_stats)
-            new_ps.update(ps)
+    def _on_job_started(self,
+                        prev_stats: Dict[str, Any],
+                        new_stats: Dict[str, Any]
+                        ) -> None:
+        if self.current_job is not None:
+            # Finish with the previous state
+            self.finish_job("cancelled", prev_stats)
+        self.add_job(PrinterJob(new_stats))
 
-            if new_state is not old_state:
-                if new_state == "printing" and self.current_job is None:
-                    # always add new job if no existing job is present
-                    self.add_job(PrinterJob(new_ps))
-                elif self.current_job is not None:
-                    if new_state == "complete":
-                        self.finish_job("completed", new_ps)
-                    elif new_state == "cancelled":
-                        self.finish_job("cancelled", new_ps)
-                    elif new_state == "standby":
-                        # Backward compatibility with
-                        # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
-                        self.finish_job("cancelled", self.print_stats)
-                    elif new_state == "error":
-                        self.finish_job("error", new_ps)
-                    elif new_state == "printing" and \
-                            self._check_need_cancel(new_ps):
-                        # Finish with the previous state
-                        self.finish_job("cancelled", self.print_stats)
-                        self.add_job(PrinterJob(new_ps))
+    def _on_job_complete(self,
+                         prev_stats: Dict[str, Any],
+                         new_stats: Dict[str, Any]
+                         ) -> None:
+        self.finish_job("completed", new_stats)
 
-        self.print_stats.update(ps)
+    def _on_job_cancelled(self,
+                          prev_stats: Dict[str, Any],
+                          new_stats: Dict[str, Any]
+                          ) -> None:
+        self.finish_job("cancelled", new_stats)
+
+    def _on_job_error(self,
+                      prev_stats: Dict[str, Any],
+                      new_stats: Dict[str, Any]
+                      ) -> None:
+        self.finish_job("error", new_stats)
+
+    def _on_job_standby(self,
+                        prev_stats: Dict[str, Any],
+                        new_stats: Dict[str, Any]
+                        ) -> None:
+        # Backward compatibility with
+        # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
+        self.finish_job("cancelled", prev_stats)
 
     def _handle_shutdown(self) -> None:
-        self.finish_job("klippy_shutdown", self.print_stats)
+        jstate: JobState = self.server.lookup_component("job_state")
+        last_ps = jstate.get_last_stats()
+        self.finish_job("klippy_shutdown", last_ps)
 
     def _handle_disconnect(self) -> None:
-        self.finish_job("klippy_disconnect", self.print_stats)
-
-    def _check_need_cancel(self, new_stats: Dict[str, Any]) -> bool:
-        # Cancel if the file name has changed, total duration has
-        # decreased, or if job is not resuming from a pause
-        ps = self.print_stats
-        return ps['filename'] != new_stats['filename'] or \
-            ps['total_duration'] > new_stats['total_duration'] or \
-            ps['state'] != "paused"
+        jstate: JobState = self.server.lookup_component("job_state")
+        last_ps = jstate.get_last_stats()
+        self.finish_job("klippy_disconnect", last_ps)
 
     def add_job(self, job: PrinterJob) -> None:
         if len(self.cached_job_ids) >= MAX_JOBS:
@@ -241,6 +235,13 @@ class History:
     def finish_job(self, status: str, pstats: Dict[str, Any]) -> None:
         if self.current_job is None:
             return
+        cj = self.current_job
+        if (
+            pstats.get('filename') != cj.get('filename') or
+            pstats.get('total_duration', 0.) < cj.get('total_duration')
+        ):
+            # Print stats have been reset, do not update this job with them
+            pstats = {}
 
         self.current_job.finish(status, pstats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
@@ -318,7 +319,9 @@ class History:
         return job
 
     def on_exit(self) -> None:
-        self.finish_job("server_exit", self.print_stats)
+        jstate: JobState = self.server.lookup_component("job_state")
+        last_ps = jstate.get_last_stats()
+        self.finish_job("server_exit", last_ps)
 
 class PrinterJob:
     def __init__(self, data: Dict[str, Any] = {}) -> None:
