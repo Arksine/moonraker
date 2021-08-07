@@ -454,7 +454,7 @@ class Simplify3D(BaseSlicer):
             return None
         total_time = 0
         time_group = time_match.group()
-        time_patterns = [(r"(\d+)\shours", 60*60), (r"(\d+)\smin", 60),
+        time_patterns = [(r"(\d+)\shours?", 60*60), (r"(\d+)\smin", 60),
                          (r"(\d+)\ssec", 1)]
         try:
             for pattern, multiplier in time_patterns:
