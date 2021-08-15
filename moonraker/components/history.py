@@ -66,6 +66,9 @@ class History:
             "/server/history/list", ['GET'], self._handle_jobs_list)
         self.server.register_endpoint(
             "/server/history/totals", ['GET'], self._handle_job_totals)
+        self.server.register_endpoint(
+            "/server/history/reset_totals", ['POST'],
+            self._handle_job_total_reset)
 
         database.register_local_namespace(HIST_NAMESPACE)
         self.history_ns = database.wrap_namespace(HIST_NAMESPACE,
@@ -166,6 +169,26 @@ class History:
                                  web_request: WebRequest
                                  ) -> Dict[str, Dict[str, float]]:
         return {'job_totals': self.job_totals}
+
+    async def _handle_job_total_reset(self,
+                                      web_request: WebRequest,
+                                      ) -> Dict[str, Dict[str, float]]:
+        if self.current_job is not None:
+            raise self.server.error(
+                "Job in progress, cannot reset totals")
+        last_totals = dict(self.job_totals)
+        self.job_totals = {
+            'total_jobs': 0,
+            'total_time': 0.,
+            'total_print_time': 0.,
+            'total_filament_used': 0.,
+            'longest_job': 0.,
+            'longest_print': 0.
+        }
+        database: DBComp = self.server.lookup_component("database")
+        database.insert_item(
+            "moonraker", "history.job_totals", self.job_totals)
+        return {'last_totals': last_totals}
 
     def _on_job_started(self,
                         prev_stats: Dict[str, Any],
