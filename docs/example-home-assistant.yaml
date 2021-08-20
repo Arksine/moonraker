@@ -56,7 +56,7 @@ sensor:
         unit_of_measurement: '%'
         icon_template: mdi:file-percent
         value_template: >-
-          {{ (states.sensor.voron_v0_sensor.attributes['display_status']['progress']) * 100 | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+          {{ (states.sensor.voron_v0_sensor.attributes['display_status']['progress'] * 100) | round(1) if states('sensor.voron_v0_sensor') != 'unknown' else None }}
 
       vzero_print_time:
         icon_template: mdi:clock-start
