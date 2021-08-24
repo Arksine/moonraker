@@ -843,7 +843,8 @@ class PackageDeploy(BaseDeploy):
         if force or curtime > self.last_apt_update_time + 3600.:
             # Don't update if a request was done within the last hour
             await self.cmd_helper.run_cmd(
-                f"{self.APT_CMD} update", timeout=300., notify=notify)
+                f"{self.APT_CMD} update --allow-releaseinfo-change",
+                timeout=300., notify=notify)
             self.last_apt_update_time = time.time()
 
     async def install_packages(self,
