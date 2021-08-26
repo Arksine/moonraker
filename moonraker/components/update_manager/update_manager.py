@@ -409,6 +409,11 @@ class UpdateManager:
         ret = self.cmd_helper.get_rate_limit_stats()
         ret['version_info'] = vinfo
         ret['busy'] = self.cmd_helper.is_update_busy()
+        if need_refresh:
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(
+                .2, self.server.send_event,
+                "update_manager:update_refreshed", ret)
         return ret
 
     async def _handle_repo_recovery(self,
