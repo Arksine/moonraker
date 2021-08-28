@@ -533,6 +533,8 @@ class Authorization:
         else:
             if auth_token.startswith("Bearer "):
                 auth_token = auth_token[7:]
+            elif auth_token.startswith("Basic "):
+                raise HTTPError(401, "Basic Auth is not supported")
             else:
                 raise HTTPError(
                     401, f"Invalid Authorization Header: {auth_token}")
