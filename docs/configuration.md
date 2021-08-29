@@ -136,19 +136,12 @@ Enables print history tracking.
 ```
 
 ## `[notifications]`
+Enables moonraker to post notifications to a mqtt server.
 
 ```ini
 # moonraker.conf
-[notifications]
-
-[notifications]
+[notifications mqtt]
 type: mqtt
-host: 127.0.0.1
-port: 1883
-username: mqttuser
-password: mqttpassword
-topic: printer
-
 ```
 
 ## `[paneldue]`
