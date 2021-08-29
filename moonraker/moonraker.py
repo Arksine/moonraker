@@ -52,7 +52,7 @@ MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 
 CORE_COMPONENTS = [
     'database', 'file_manager', 'klippy_apis', 'machine',
-    'data_store', 'shell_command', 'proc_stats']
+    'data_store', 'shell_command', 'proc_stats', 'notifications']
 
 SENTINEL = SentinelClass.get_instance()
 
@@ -81,7 +81,7 @@ class Server:
         self.exit_reason: str = ""
 
         # Event initialization
-        self.events: Dict[str, List[FlexCallback]] = {}
+        self.events: Dict[str, List[Tuple[FlexCallback, List[str]]]] = {}
 
         # Klippy Connection Handling
         self.klippy_address: str = config.get(
@@ -230,14 +230,14 @@ class Server:
 
     def register_event_handler(self,
                                event: str,
-                               callback: FlexCallback
-                               ) -> None:
-        self.events.setdefault(event, []).append(callback)
+                               callback: FlexCallback,
+                               *args) -> None:
+        self.events.setdefault(event, []).append((callback, [*args]))
 
     def send_event(self, event: str, *args) -> None:
         events = self.events.get(event, [])
-        for evt in events:
-            self.event_loop.register_callback(evt, *args)
+        for evt, evtargs in events:
+            self.event_loop.register_callback(evt, *(evtargs.copy()), *args)
 
     def register_remote_method(self,
                                method_name: str,

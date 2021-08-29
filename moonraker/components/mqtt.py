@@ -349,6 +349,9 @@ class MQTTClient(APITransport):
     def is_connected(self) -> bool:
         return self.connect_evt.is_set()
 
+    def get_instance_name(self) -> str:
+        return self.instance_name
+
     def subscribe_topic(self,
                         topic: str,
                         callback: FlexCallback,
