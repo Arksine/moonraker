@@ -1,5 +1,5 @@
 #  Example Home Assistant configuration file for a Voron V0.
-#  Credit to GitHub user @Kruppes
+#  Credit to GitHub users @Kruppes and @pedrolamas
 #
 sensor:
   - platform: rest
@@ -82,3 +82,17 @@ sensor:
         icon_template: mdi:thermometer
         value_template: >-
           {{ [(states.sensor.voron_v0_sensor.attributes['heater_bed']['temperature'] | float | round(1) | string), " / ", (states.sensor.voron_v0_sensor.attributes['heater_bed']['target'] | float | round(1) | string)] | join if states('sensor.voron_v0_sensor') != 'unknown' else None }}
+
+#  The following will allow you to control the power of devices configured in the "[power]" sections of moonraker
+#  Make sure to change the `Printer` name below to the device name on your configuration
+#
+switch:
+  - platform: rest
+    name: Voron_V0_power
+    resource: "http://192.168.178.56:7125/machine/device_power/device?device=Printer"
+    body_on: '{"action": "on"}'
+    body_off: '{"action": "off"}'
+    headers:
+      Content-Type: 'application/json'
+    is_on_template: >-
+      {{ (value_json.result.values() | list | first) == "on" }}
