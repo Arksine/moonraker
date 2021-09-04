@@ -3250,7 +3250,7 @@ state:
 }
 ```
 
-Where `throtled_state` is an object that matches the `throttled_state` field
+Where `throttled_state` is an object that matches the `throttled_state` field
 in the response from a [Moonraker process stats](#get-moonraker-process-stats)
 request. It is possible for clients to receive this notification multiple times
 if the system repeatedly transitions between an active and inactive throttled

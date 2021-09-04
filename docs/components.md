@@ -40,7 +40,7 @@ class Example:
         self.example_float_opt = config.getfloat("example_float_option", None)
 
         self.server.register_endpoint("/server/example", ['GET'],
-                                      self._handle_example request)
+                                      self._handle_example_request)
 
     async def request_some_klippy_state(self):
         klippy_apis = self.server.lookup_component('klippy_apis')
