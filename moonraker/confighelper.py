@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import configparser
+from logging import warning
 import os
 from utils import SentinelClass
 
@@ -141,23 +142,29 @@ class ConfigHelper:
         return dict(self.parsed)
 
     def validate_config(self) -> None:
+        warnings: List[str] = []
         for sect in self.orig_sections:
             if sect not in self.parsed:
-                self.server.add_warning(
+                warnings.append(
                     f"Unparsed config section [{sect}] detected.  This "
-                    "may be the result of a component that failed to "
-                    "load.  In the future this will result in a startup "
-                    "error.")
+                    "may be the result of a component that failed to load.")
                 continue
             parsed_opts = self.parsed[sect]
             for opt, val in self.config.items(sect):
                 if opt not in parsed_opts:
-                    self.server.add_warning(
+                    warnings.append(
                         f"Invalid config option '{opt}: {val}' detected in "
-                        f"section [{sect}]. To solve this issue check your "
-                        "moonraker config. This option is invalid and has to "
-                        "be deleted or fixed. In the future this will result "
-                        "in a startup error.")
+                        f"section [{sect}]. Check Moonraker's documentation "
+                        "to verify that the option exists and is spelled "
+                        "correctly.")
+        if warnings:
+            warnings.insert(
+                0,
+                "The following errors have been detected in Moonraker's "
+                "configuration:")
+            warnings.append(
+                "In the future these errors may result in failure to start.")
+            self.server.add_warning("\n".join(warnings))
 
 def get_configuration(server: Server,
                       app_args: Dict[str, Any]
