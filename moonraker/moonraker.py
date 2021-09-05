@@ -94,6 +94,7 @@ class Server:
         self.init_attempts: int = 0
         self.klippy_state: str = "disconnected"
         self.klippy_disconnect_evt: Optional[asyncio.Event] = None
+        self.klippy_cfg_warnings: Optional[str] = None
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
         self.failed_components: List[str] = []
         self.warnings: List[str] = []
@@ -427,7 +428,8 @@ class Server:
             if query_res is None:
                 logging.info(f"Unable to set SD Card path")
             else:
-                config = query_res.get('configfile', {}).get('config', {})
+                cfgfile = query_res.get('configfile', {})
+                config = cfgfile.get('config', {})
                 vsd_config = config.get('virtual_sdcard', {})
                 vsd_path = vsd_config.get('path', None)
                 if vsd_path is not None:
@@ -438,6 +440,7 @@ class Server:
                     logging.info(
                         "Configuration for [virtual_sdcard] not found,"
                         " unable to set SD Card path")
+                self.klippy_cfg_warnings = cfgfile.get('warnings')
 
     def _process_gcode_response(self, response: str) -> None:
         self.send_event("server:gcode_response", response)
@@ -601,6 +604,12 @@ class Server:
         reg_dirs = []
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
+        warnings = list(self.warnings)
+        if self.klippy_cfg_warnings is not None:
+            warnings.append(
+                "The following warnings have been detected in "
+                " Klipper's configuration:\n" +
+                self.klippy_cfg_warnings)
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
@@ -609,7 +618,7 @@ class Server:
             'plugins': list(self.components.keys()),
             'failed_plugins': self.failed_components,
             'registered_directories': reg_dirs,
-            'warnings': self.warnings
+            'warnings': warnings
         }
 
     async def _handle_config_request(self,
