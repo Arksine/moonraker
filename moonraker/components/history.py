@@ -61,7 +61,8 @@ class History:
         self.server.register_endpoint(
             "/server/history/list", ['GET'], self._handle_jobs_list)
         self.server.register_endpoint(
-            "/server/history/totals", ['GET'], self._handle_job_totals)
+            "/server/history/totals", ['GET', 'DELETE'],
+            self._handle_job_totals)
 
         database.register_local_namespace(HIST_NAMESPACE)
         self.history_ns = database.wrap_namespace(HIST_NAMESPACE,
@@ -170,7 +171,20 @@ class History:
 
     async def _handle_job_totals(self,
                                  web_request: WebRequest
-                                 ) -> Dict[str, Dict[str, float]]:
+                                 ) -> Dict[str, Union[bool, Dict[str, float]]]:
+        action = web_request.get_action()
+        if action == "DELETE":
+            for x in self.job_totals:
+                if isinstance(self.job_totals[x], float):
+                    self.job_totals[x] = float(0.)
+                else:
+                    self.job_totals[x] = int(0)
+            database: DBComp = self.server.lookup_component("database")
+            database.insert_item(
+                "moonraker", "history.job_totals", self.job_totals)
+            return {"success": True}
+
+        # Action is GET
         return {'job_totals': self.job_totals}
 
     async def _status_update(self, data: Dict[str, Any]) -> None:
