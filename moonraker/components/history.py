@@ -61,7 +61,9 @@ class History:
         self.server.register_endpoint(
             "/server/history/list", ['GET'], self._handle_jobs_list)
         self.server.register_endpoint(
-            "/server/history/totals", ['GET', 'DELETE'],
+            "/server/history/totals", ['GET'], self._handle_job_totals)
+        self.server.register_endpoint(
+            "/server/history/delete_totals", ['DELETE'],
             self._handle_job_totals)
 
         database.register_local_namespace(HIST_NAMESPACE)
@@ -174,15 +176,17 @@ class History:
                                  ) -> Dict[str, Union[bool, Dict[str, float]]]:
         action = web_request.get_action()
         if action == "DELETE":
-            for x in self.job_totals:
-                if isinstance(self.job_totals[x], float):
-                    self.job_totals[x] = float(0.)
-                else:
-                    self.job_totals[x] = int(0)
+            self.job_totals = {
+                'total_jobs': 0,
+                'total_time': 0.,
+                'total_print_time': 0.,
+                'total_filament_used': 0.,
+                'longest_job': 0.,
+                'longest_print': 0.
+            }
             database: DBComp = self.server.lookup_component("database")
             database.insert_item(
                 "moonraker", "history.job_totals", self.job_totals)
-            return {"success": True}
 
         # Action is GET
         return {'job_totals': self.job_totals}
