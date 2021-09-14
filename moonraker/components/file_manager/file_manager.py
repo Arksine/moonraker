@@ -443,7 +443,7 @@ class FileManager:
         if root not in self.file_paths:
             raise self.server.error(f"Root {root} not available")
         root_path = self.file_paths[root]
-        dir_path: str = upload_args.get('path', "")
+        dir_path: str = upload_args.get('path', "").lstrip("/")
         if os.path.isfile(root_path):
             filename: str = os.path.basename(root_path)
             dest_path = root_path
