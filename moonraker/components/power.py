@@ -5,8 +5,8 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import os
 import sys
+import glob
 import logging
 import json
 import struct
@@ -30,17 +30,19 @@ from typing import (
 )
 
 # Special handling for gpiod import
-HAS_GPIOD = True
-DIST_PATH = "/usr/lib/python3/dist-packages"
-if os.path.exists(DIST_PATH):
-    sys.path.insert(0, DIST_PATH)
+HAS_GPIOD = False
+PKG_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
+PKG_PATHS += glob.glob("/usr/lib/python3*/site-packages")
+for pkg_path in PKG_PATHS:
+    sys.path.insert(0, pkg_path)
     try:
         import gpiod
     except ImportError:
-        HAS_GPIOD = False
-    sys.path.pop(0)
-else:
-    HAS_GPIOD = False
+        sys.path.pop(0)
+    else:
+        HAS_GPIOD = True
+        sys.path.pop(0)
+        break
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
