@@ -440,7 +440,8 @@ An object containing various fields that report server state.
     "warnings": [
         "Invalid config option 'api_key_path' detected in section [authorization]. Remove the option to resolve this issue. In the future this will result in a startup error.",
         "Unparsed config section [fake_section] detected.  This may be the result of a component that failed to load.  In the future this will result in a startup error."
-    ]
+    ],
+    "websocket_count": 2
   }
 ```
 !!! warning
@@ -455,6 +456,8 @@ of enabled components.  This can be used by clients to check if an optional
 component is available.  Optional components that do not load correctly will
 not prevent the server from starting, thus any components that failed to load
 will be reported in the `failed_components` field.
+
+The `websocket_count` field reports the total number of connected websockets.
 
 #### Get Server Configuration
 HTTP request:
