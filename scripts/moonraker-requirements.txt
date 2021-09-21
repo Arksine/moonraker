@@ -8,3 +8,4 @@ distro==1.5.0
 inotify-simple==1.3.5
 libnacl==1.7.2
 paho-mqtt==1.5.1
+pycurl==7.44.1
