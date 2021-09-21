@@ -364,6 +364,9 @@ class WebsocketManager(APITransport):
         for ws in list(self.websockets.values()):
             ws.queue_message(msg)
 
+    def get_count(self) -> int:
+        return len(self.websockets)
+
     async def close(self) -> None:
         if not self.websockets:
             return

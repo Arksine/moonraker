@@ -614,7 +614,8 @@ class Server:
             'plugins': list(self.components.keys()),
             'failed_plugins': self.failed_components,
             'registered_directories': reg_dirs,
-            'warnings': self.warnings
+            'warnings': self.warnings,
+            'websocket_count': self.get_websocket_manager().get_count()
         }
 
     async def _handle_config_request(self,
