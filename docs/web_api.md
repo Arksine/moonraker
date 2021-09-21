@@ -1033,7 +1033,8 @@ An object in the following format:
             "tx_bytes": 113430843,
             "bandwidth": 4455.91
         }
-    }
+    },
+    "websocket_connections": 4
 }
 ```
 Process information is sampled every second.  The `moonraker_stats` field
@@ -1084,6 +1085,9 @@ will be tracked.  Each interface reports the following fields:
 
 If network information is not available then the `network` field will
 contain an empty object.
+
+The `websocket_connections` field reports the number of active websockets
+currently connected to moonraker.
 
 ### File Operations
 
@@ -3285,7 +3289,8 @@ process statistics:
                 "tx_bytes": 115035939,
                 "bandwidth": 3458.77
             }
-        }
+        },
+        "websocket_connections": 2
     }]
 }
 ```
