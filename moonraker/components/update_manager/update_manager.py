@@ -460,8 +460,6 @@ class CommandHelper:
         self.scmd_error = shell_cmd.error
         self.build_shell_command = shell_cmd.build_shell_command
         self.pkg_updater: Optional[PackageDeploy] = None
-
-        AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
         self.http_client = AsyncHTTPClient()
         self.github_request_cache: Dict[str, CachedGithubResponse] = {}
 

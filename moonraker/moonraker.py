@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 import argparse
-from asyncio.events import new_event_loop
 import sys
 import importlib
 import os
@@ -21,6 +20,7 @@ import confighelper
 import utils
 import asyncio
 from tornado import iostream
+from tornado.httpclient import AsyncHTTPClient
 from eventloop import EventLoop
 from app import MoonrakerApp
 from utils import ServerError, SentinelClass
@@ -55,6 +55,11 @@ CORE_COMPONENTS = [
     'data_store', 'shell_command', 'proc_stats']
 
 SENTINEL = SentinelClass.get_instance()
+
+# Configure the http client to use the pycurl based implementation
+AsyncHTTPClient.configure(
+    "tornado.curl_httpclient.CurlAsyncHTTPClient",
+    defaults=dict(user_agent="Moonraker"))
 
 class Server:
     error = ServerError
