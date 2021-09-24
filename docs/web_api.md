@@ -2124,7 +2124,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "pristine": true,
             "remote_alias": "origin",
             "branch": "master",
-            "owner": "KevinOConnor",
+            "owner": "Klipper3d",
             "version": "v0.9.1-317",
             "remote_version": "v0.9.1-324",
             "full_version_string": "v0.9.1-324-gd77928b1",
