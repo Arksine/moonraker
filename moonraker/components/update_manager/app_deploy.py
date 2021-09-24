@@ -76,6 +76,7 @@ class AppDeploy(BaseDeploy):
         # all options apply to each subtype, however we can't limit the
         # options in children if we want to switch between channels and
         # satisfy the confighelper's requirements.
+        self.moved_origin: Optional[str] = config.get('moved_origin', None)
         self.origin: str = config.get('origin')
         self.primary_branch = config.get("primary_branch", "master")
         self.npm_pkg_json: Optional[pathlib.Path] = None

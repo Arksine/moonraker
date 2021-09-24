@@ -37,7 +37,8 @@ class GitDeploy(AppDeploy):
                  app_params: Optional[Dict[str, Any]] = None
                  ) -> None:
         super().__init__(config, cmd_helper, app_params)
-        self.repo = GitRepo(cmd_helper, self.path, self.name, self.origin)
+        self.repo = GitRepo(cmd_helper, self.path, self.name,
+                            self.origin, self.moved_origin)
         if self.type != 'git_repo':
             self.need_channel_update = True
 
@@ -203,7 +204,8 @@ class GitRepo:
                  cmd_helper: CommandHelper,
                  git_path: pathlib.Path,
                  alias: str,
-                 origin_url: str
+                 origin_url: str,
+                 moved_origin_url: Optional[str]
                  ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -213,6 +215,7 @@ class GitRepo:
         git_base = git_path.name
         self.backup_path = git_dir.joinpath(f".{git_base}_repo_backup")
         self.origin_url = origin_url
+        self.moved_origin_url = moved_origin_url
         self.valid_git_repo: bool = False
         self.git_owner: str = "?"
         self.git_remote: str = "?"
@@ -261,6 +264,28 @@ class GitRepo:
                 self.git_remote = await self.get_config_item(
                     f"branch.{self.git_branch}.remote")
 
+            # Fetch the upstream url.  If the repo has been moved,
+            # set the new url
+            self.upstream_url = await self.remote(f"get-url {self.git_remote}")
+            if self.moved_origin_url is not None:
+                origin = self.upstream_url.lower().strip()
+                if not origin.endswith(".git"):
+                    origin += ".git"
+                moved_origin = self.moved_origin_url.lower().strip()
+                if not moved_origin.endswith(".git"):
+                    moved_origin += ".git"
+                if origin == moved_origin:
+                    logging.info(
+                        f"Git Repo {self.alias}: Moved Repo Detected, Moving "
+                        f"from {self.upstream_url} to {self.origin_url}")
+                    need_fetch = True
+                    await self.remote(
+                        f"set-url {self.git_remote} {self.origin_url}")
+                    self.upstream_url = self.origin_url
+
+            if need_fetch:
+                await self.fetch()
+
             # Populate list of current branches
             blist = await self.list_branches()
             self.branches = []
@@ -272,10 +297,6 @@ class GitRepo:
                     continue
                 self.branches.append(branch)
 
-            if need_fetch:
-                await self.fetch()
-
-            self.upstream_url = await self.remote(f"get-url {self.git_remote}")
             self.current_commit = await self.rev_parse("HEAD")
             self.upstream_commit = await self.rev_parse(
                 f"{self.git_remote}/{self.git_branch}")
