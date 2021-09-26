@@ -339,6 +339,16 @@ class SuperSlicer(PrusaSlicer):
             }
         return None
 
+class SliCR3D(SuperSlicer):
+    def check_identity(self, data: str) -> Optional[Dict[str, str]]:
+        match = re.search(r"SliCR-3D\s(.*)\son", data)
+        if match:
+            return {
+                'slicer': "SliCR-3D",
+                'slicer_version': match.group(1)
+            }
+        return None
+
 class Cura(PrusaSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"Cura_SteamEngine\s(.*)", data)
@@ -637,7 +647,7 @@ class IceSL(BaseSlicer):
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
-    PrusaSlicer, Slic3rPE, Slic3r, SuperSlicer,
+    PrusaSlicer, Slic3rPE, Slic3r, SuperSlicer, SliCR3D,
     Cura, Simplify3D, KISSlicer, IdeaMaker, IceSL]
 SUPPORTED_DATA = [
     'layer_height', 'first_layer_height', 'object_height',
