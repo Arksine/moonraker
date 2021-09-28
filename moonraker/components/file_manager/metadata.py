@@ -177,12 +177,18 @@ class UnknownSlicer(BaseSlicer):
 
 class PrusaSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
-        match = re.search(r"PrusaSlicer\s(.*)\son", data)
-        if match:
-            return {
-                'slicer': "PrusaSlicer",
-                'slicer_version': match.group(1)
-            }
+        aliases = {
+            'PrusaSlicer': r"PrusaSlicer\s(.*)\son",
+            'SuperSlicer': r"SuperSlicer\s(.*)\son",
+            'SliCR-3D': r"SliCR-3D\s(.*)\son"
+        }
+        for name, expr in aliases.items():
+            match = re.search(expr, data)
+            if match:
+                return {
+                    'slicer': name,
+                    'slicer_version': match.group(1)
+                }
         return None
 
     def parse_first_layer_height(self) -> Optional[float]:
@@ -327,16 +333,6 @@ class Slic3r(Slic3rPE):
             r";\sfilament\smass\_g\s=\s(\d+\.\d*)", self.footer_data)
 
     def parse_estimated_time(self) -> Optional[float]:
-        return None
-
-class SuperSlicer(PrusaSlicer):
-    def check_identity(self, data: str) -> Optional[Dict[str, str]]:
-        match = re.search(r"SuperSlicer\s(.*)\son", data)
-        if match:
-            return {
-                'slicer': "SuperSlicer",
-                'slicer_version': match.group(1)
-            }
         return None
 
 class Cura(PrusaSlicer):
@@ -637,8 +633,9 @@ class IceSL(BaseSlicer):
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
-    PrusaSlicer, Slic3rPE, Slic3r, SuperSlicer,
-    Cura, Simplify3D, KISSlicer, IdeaMaker, IceSL]
+    PrusaSlicer, Slic3rPE, Slic3r, Cura, Simplify3D,
+    KISSlicer, IdeaMaker, IceSL
+]
 SUPPORTED_DATA = [
     'layer_height', 'first_layer_height', 'object_height',
     'filament_total', 'filament_weight_total', 'estimated_time',
