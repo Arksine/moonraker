@@ -195,13 +195,9 @@ class Server:
             return self.components[component_name]
         try:
             module = importlib.import_module("components." + component_name)
-            func_name = "load_component"
-            if hasattr(module, "load_component_multi"):
-                func_name = "load_component_multi"
-            if component_name not in CORE_COMPONENTS and \
-                    func_name == "load_component":
+            if component_name in config:
                 config = config[component_name]
-            load_func = getattr(module, func_name)
+            load_func = getattr(module, "load_component")
             component = load_func(config)
         except Exception:
             msg = f"Unable to load component: ({component_name})"
