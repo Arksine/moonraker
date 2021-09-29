@@ -139,7 +139,14 @@ When the script completes it should start both Moonraker and Klipper. In
 
 Now you may install a client, such as
 [Mainsail](https://github.com/meteyou/mainsail) or
-[Fluidd](https://github.com/cadriel/fluidd)
+[Fluidd](https://github.com/cadriel/fluidd).
+
+!!! Note
+    Moonraker's install script no longer includes the nginx dependency.
+    If you want to install one of the above clients on the local machine,
+    you may want to first install nginx (`sudo apt install nginx` on
+    debian/ubuntu distros).
+
 
 ### Command line usage
 
