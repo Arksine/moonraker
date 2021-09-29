@@ -6,6 +6,7 @@ PYTHONDIR="${HOME}/moonraker-env"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="n"
 FORCE_DEFAULTS="n"
+INSTALL_NGINX="y"
 CONFIG_PATH="${HOME}/moonraker.conf"
 LOG_PATH="/tmp/moonraker.log"
 
@@ -36,7 +37,11 @@ cleanup_legacy() {
 # Step 3: Install packages
 install_packages()
 {
-    PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
+    if [ $INSTALL_NGINX = "y" ]; then
+        PKGLIST="python3-virtualenv python3-dev nginx libopenjp2-7 python3-libgpiod"
+    else
+        PKGLIST="python3-virtualenv python3-dev libopenjp2-7 python3-libgpiod"
+    fi
     PKGLIST="${PKGLIST} curl libcurl4-openssl-dev libssl-dev liblmdb0"
     PKGLIST="${PKGLIST} libsodium-dev zlib1g-dev"
 
@@ -130,8 +135,9 @@ SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
 LAUNCH_CMD="${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py"
 
 # Parse command line arguments
-while getopts "rfc:l:" arg; do
+while getopts "nrfc:l:" arg; do
     case $arg in
+        n) INSTALL_NGINX="n";;
         r) REBUILD_ENV="y";;
         f) FORCE_DEFAULTS="y";;
         c) CONFIG_PATH=$OPTARG;;
