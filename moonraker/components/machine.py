@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 
 ALLOWED_SERVICES = [
     "moonraker", "klipper", "webcamd", "MoonCord",
-    "KlipperScreen"]
+    "KlipperScreen", "moonraker-telegram-bot"
+]
 SYSTEMD_PATH = "/etc/systemd/system"
 SD_CID_PATH = "/sys/block/mmcblk0/device/cid"
 SD_CSD_PATH = "/sys/block/mmcblk0/device/csd"
