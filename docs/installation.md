@@ -131,6 +131,10 @@ particularly for those upgrading:
   Specifies the path to Moonraker's config file. The default location
   is `/home/<user>/moonraker.conf`.  When using this option to modify
   an existing installation it is necessary to add `-f` as well.
+- `-n`:
+  Prevent install script from installing Nginx. Use if you only want
+  to run Moonraker while serving an actual client like
+  Mainsail or Fluidd from another machine.
 
 When the script completes it should start both Moonraker and Klipper. In
 `/tmp/klippy.log` you should find the following entry:
