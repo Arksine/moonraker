@@ -920,5 +920,5 @@ class Loxonev1(HTTPDevice):
 
 
 # The power component has multiple configuration sections
-def load_component_multi(config: ConfigHelper) -> PrinterPower:
+def load_component(config: ConfigHelper) -> PrinterPower:
     return PrinterPower(config)
