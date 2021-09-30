@@ -481,6 +481,7 @@ class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
+        self.timer = config.get("timer", "")
         self.request_mutex = asyncio.Lock()
         self.addr: List[str] = config.get("address").split('/')
         self.port = config.getint("port", 9999)
@@ -489,7 +490,11 @@ class TPLinkSmartPlug(PowerDevice):
                                    command: str
                                    ) -> Dict[str, Any]:
         out_cmd: Dict[str, Any] = {}
-        if command in ["on", "off"]:
+        if self.timer != "" and command == "off":
+            out_cmd = {
+                f"'count_down': {'delete_all_rules': None}\n'count_down': {'add_rule': {'enable': 1,'delay': {self.timer},'act': 1,'name':'turn off'}}\nsystem': {'set_relay_state': {'state': int(command == 'on')}}"
+            }
+        elif command in ["on", "off"]:
             out_cmd = {
                 'system': {'set_relay_state': {'state': int(command == "on")}}
             }
