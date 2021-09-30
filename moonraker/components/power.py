@@ -492,7 +492,7 @@ class TPLinkSmartPlug(PowerDevice):
         out_cmd: Dict[str, Any] = {}
         if self.timer != "" and command == "off":
             out_cmd = {
-                f"'count_down': {'delete_all_rules': None}\n'count_down': {'add_rule': {'enable': 1,'delay': {self.timer},'act': 1,'name':'turn off'}}\nsystem': {'set_relay_state': {'state': int(command == 'on')}}"
+                "'count_down': {'delete_all_rules': None}\n'count_down': {'add_rule': {'enable': 1,'delay': {self.timer},'act': 1,'name':'turn off'}}\nsystem': {'set_relay_state': {'state': int(command == 'on')}}"
             }
         elif command in ["on", "off"]:
             out_cmd = {
