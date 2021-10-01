@@ -190,7 +190,7 @@ gcode:
 ```
 
 ## `[power]`
-Enables device power control.  Currently GPIO (relays), TPLink Smartplug,
+Enables device power control.  Currently GPIO (relays), RF transmitter, TPLink Smartplug,
 and Tasmota (via http) devices, HomeAssistant switch are supported.
 
 ```ini
@@ -198,7 +198,7 @@ and Tasmota (via http) devices, HomeAssistant switch are supported.
 
 [power device_name]
 type: gpio
-#   The type of device.  Can be either gpio, tplink_smartplug, tasmota
+#   The type of device.  Can be either gpio, rf, tplink_smartplug, tasmota
 #   shelly, homeseer, homeassistant, or loxonev1.
 #   This parameter must be provided.
 off_when_shutdown: False
@@ -217,7 +217,7 @@ restart_delay: 1.
 #   If "restart_klipper_when_powered" is set, this option specifies the amount
 #   of time (in seconds) to delay the restart.  Default is 1 second.
 pin: gpiochip0/gpio26
-#   The pin to use for GPIO devices.  The chip is optional, if left out
+#   The pin to use for GPIO and RF devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
 #   the signal, a "!" may be prefixed to the pin.  Valid examples:
 #      gpiochip0/gpio26
@@ -297,6 +297,12 @@ output_id:
 #   The output_id is the name of a programmed output, virtual input or virtual
 #   output in the loxone config his output_id (name) may only be used once in
 #   the loxone config
+on_code:
+off_code:
+#   The above options are used for "rf" devices.  The
+#   codes should be valid binary codes that are send via the RF transmitter.
+#   For example: 1011.
+
 ```
 Below are some potential examples:
 ```ini
