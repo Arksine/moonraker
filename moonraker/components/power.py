@@ -583,8 +583,7 @@ class TPLinkSmartPlug(PowerDevice):
                 if self.timer != "" and state == "off":
                     await self._send_tplink_command("clear_rules")
                     await self._send_tplink_command("count_off")
-                    res = await self._send_tplink_command("info")
-                    err = res['system']['get_sysinfo']['children']
+                    err = 0
                 else:
                     res = await self._send_tplink_command(state)
                     err = res['system']['set_relay_state']['err_code']
