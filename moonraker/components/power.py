@@ -492,9 +492,25 @@ class TPLinkSmartPlug(PowerDevice):
         out_cmd: Dict[str, Any] = {}
         if self.timer != "" and command == "off":
             out_cmd = {
-                "'count_down': {'delete_all_rules': None}\n'count_down': {'add_rule': {'enable': 1,'delay': {self.timer},'act': 1,'name':'turn off'}}\nsystem': {'set_relay_state': {'state': int(command == 'on')}}"
+                'count_down': {'add_rule': {'enable': 1,'delay': {self.timer},'act': 1,'name':'turn off'}}
             }
-        elif command in ["on", "off"]:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            stream = IOStream(s)
+            await stream.connect((self.addr[0], self.port))
+            await stream.write(self._encrypt(out_cmd))
+            data = await stream.read_bytes(2048, partial=True)
+            length: int = struct.unpack(">I", data[:4])[0]
+            data = data[4:]
+            retries = 5
+            remaining = length - len(data)
+            while remaining and retries:
+                data += await stream.read_bytes(remaining)
+                remaining = length - len(data)
+                retries -= 1
+            if not retries:
+                raise self.server.error("Unable to read tplink packet")
+            stream.close()
+        if command in ["on", "off"]:
             out_cmd = {
                 'system': {'set_relay_state': {'state': int(command == "on")}}
             }
