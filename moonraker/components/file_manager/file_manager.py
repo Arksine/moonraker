@@ -30,6 +30,7 @@ from typing import (
     TypeVar,
     cast,
 )
+
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
     from moonraker import Server
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from components import database
     from components import klippy_apis
     from components import shell_command
+    from components.job_queue import JobQueue
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI
     SCMDComp = shell_command.ShellCommandFactory
@@ -65,6 +67,8 @@ class FileManager:
         self.write_mutex = asyncio.Lock()
         self.notify_sync_lock: Optional[NotifySyncLock] = None
         self.fixed_path_args: Dict[str, Any] = {}
+        self.queue_gcodes: bool = config.getboolean('queue_gcode_uploads',
+                                                    False)
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -287,21 +291,21 @@ class FileManager:
         # Get virtual_sdcard status
         kapis: APIComp = self.server.lookup_component('klippy_apis')
         result: Dict[str, Any]
-        result = await kapis.query_objects({'print_stats': None})
+        result = await kapis.query_objects({'print_stats': None}, {})
         pstats = result.get('print_stats', {})
         loaded_file: str = pstats.get('filename', "")
         state: str = pstats.get('state', "")
         gc_path = self.file_paths.get('gcodes', "")
         full_path = os.path.join(gc_path, loaded_file)
-        if loaded_file and state != "complete":
+        is_printing = state in ["printing", "paused"]
+        if loaded_file and is_printing:
             if os.path.isdir(requested_path):
                 # Check to see of the loaded file is in the request
                 if full_path.startswith(requested_path):
                     raise self.server.error("File currently in use", 403)
             elif full_path == requested_path:
                 raise self.server.error("File currently in use", 403)
-        ongoing = state in ["printing", "paused"]
-        return ongoing
+        return not is_printing
 
     def _convert_request_path(self, request_path: str) -> Tuple[str, str]:
         # Parse the root, relative path, and disk path from a remote request
@@ -504,43 +508,48 @@ class FileManager:
     async def _finish_gcode_upload(self,
                                    upload_info: Dict[str, Any]
                                    ) -> Dict[str, Any]:
-        print_ongoing: bool = False
-        start_print: bool = upload_info['start_print']
         # Verify that the operation can be done if attempting to upload a gcode
+        can_start: bool = False
         try:
             check_path: str = upload_info['dest_path']
-            print_ongoing = await self._handle_operation_check(
-                check_path)
+            can_start = await self._handle_operation_check(check_path)
         except self.server.error as e:
             if e.status_code == 403:
                 raise self.server.error(
                     "File is loaded, upload not permitted", 403)
-            else:
-                # Couldn't reach Klippy, so it should be safe
-                # to permit the upload but not start
-                start_print = False
-        # Don't start if another print is currently in progress
-        start_print = start_print and not print_ongoing
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
         finfo = await self._process_uploaded_file(upload_info)
         await self.gcode_metadata.parse_metadata(
             upload_info['filename'], finfo).wait()
-        if start_print:
-            # Make a Klippy Request to "Start Print"
-            kapis: APIComp = self.server.lookup_component('klippy_apis')
-            try:
-                await kapis.start_print(upload_info['filename'])
-            except self.server.error:
-                # Attempt to start print failed
-                start_print = False
+        started: bool = False
+        queued: bool = False
+        if upload_info['start_print']:
+            if self.queue_gcodes:
+                job_queue: JobQueue = self.server.lookup_component('job_queue')
+                started = await job_queue.queue_job(
+                    upload_info['filename'], check_exists=False)
+                queued = not started
+            elif can_start:
+                kapis: APIComp = self.server.lookup_component('klippy_apis')
+                try:
+                    await kapis.start_print(upload_info['filename'])
+                except self.server.error:
+                    # Attempt to start print failed
+                    pass
+                else:
+                    started = True
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
+        if queued:
+            self.server.send_event("file_manager:upload_queued",
+                                   upload_info['filename'])
         return {
             'item': {
                 'path': upload_info['filename'],
                 'root': "gcodes"
             },
-            'print_started': start_print,
+            'print_started': started,
+            'print_queued': queued,
             'action': "create_file"
         }
 
