@@ -559,6 +559,23 @@ instance_name:
 #   Responses will be published to the following topic:
 #     my_printer/moonraker/api/response
 #   The default is the machine's hostname.
+status_objects:
+#   A newline separated list of Klipper objects whose state will be
+#   published in the payload of the following topic:
+#      {instance_name}/klipper/status
+#   For example, to track the "webhooks" and "toolhead" objects this
+#   option would be set as follows:
+#     status_objects:
+#       webhooks
+#       toolhead
+#   See the "Printer Objects" section of the documentation for an
+#   overview of the most common objects available.  Note that Klipper
+#   will only push an update to an object/field if the field has changed.
+#   An object with no fields that have changed will not be part of the
+#   payload.  Object state is checked and published roughly every
+#   250 ms.
+#   If not configured then no objects will be tracked and published to
+#   the status topic.
 default_qos: 0
 #   The default QOS level used when publishing or subscribing to topics.
 #   Must be an integer value from 0 to 2.  The default is 0.

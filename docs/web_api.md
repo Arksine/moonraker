@@ -321,8 +321,9 @@ POST /printer/objects/subscribe?connection_id=123456789&gcode_move&extruder`
     request that includes only the `connection_id` argument will cancel the
     subscription on the specified websocket.
 
-    This request is not available over MQTT, as it is not possible to
-    associate a connected websocket with an MQTT client.
+    This request is not available over MQTT as it can not be set per client.
+    Instead MQTT can publish printer status by setting the `status_objects`
+    option in the `[mqtt]` section.
 
 JSON-RPC request:
 ```json
