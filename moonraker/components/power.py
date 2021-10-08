@@ -556,7 +556,8 @@ class TPLinkSmartPlug(PowerDevice):
             out_cmd = {'count_down': {'delete_all_rules': None}}
         elif command == "count_off":
             out_cmd = {
-                'count_down': {'add_rule': {'enable': 1,'delay': int(self.timer),'act': 0,'name':'turn off'}}
+                'count_down': {'add_rule': 
+                {'enable': 1, 'delay': int(self.timer), 'act': 0, 'name': 'turn off'}}
             }
         else:
             raise self.server.error(f"Invalid tplink command: {command}")
