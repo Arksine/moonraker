@@ -631,7 +631,8 @@ class TPLinkSmartPlug(PowerDevice):
             try:
                 if self.timer != "" and state == "off":
                     await self._send_tplink_command("clear_rules")
-                    await self._send_tplink_command("count_off")
+                    res = await self._send_tplink_command("count_off")
+                    logging.exception(f"Count off return: {res}")
                     err = 0
                 else:
                     res = await self._send_tplink_command(state)
