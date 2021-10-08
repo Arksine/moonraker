@@ -79,7 +79,8 @@ install_script()
 #Systemd service file for moonraker
 [Unit]
 Description=API Server for Klipper
-After=network.target
+Requires=network-online.target
+After=network-online.target
 
 [Install]
 WantedBy=multi-user.target
