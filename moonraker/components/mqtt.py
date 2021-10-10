@@ -194,9 +194,24 @@ class MQTTClient(APITransport, Subscribable):
         status_cfg = config.get("status_objects", None)
         self.status_objs: Dict[str, Any] = {}
         if status_cfg is not None:
-            status_cfg = status_cfg.strip()
-            self.status_objs = {k.strip(): None for k in status_cfg.split('\n')
-                                if k.strip()}
+            for line in status_cfg.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split('=', 1)
+                fields: Optional[List[str]]
+                if len(parts) == 1:
+                    fields = None
+                if len(parts) == 2:
+                    fields = [f.strip() for f in parts[1].split(',')
+                              if f.strip()]
+                elif len(parts) != 1:
+                    raise config.error(
+                        "Format error in option 'status_object', "
+                        f"section [mqtt]:\n{status_cfg}")
+                self.status_objs[parts[0].strip()] = fields
+            logging.debug(f"MQTT: Status Objects Set: {self.status_objs}")
+
             self.server.register_event_handler("server:klippy_identified",
                                                self._handle_klippy_identified)
 
