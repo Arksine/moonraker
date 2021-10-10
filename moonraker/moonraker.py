@@ -463,12 +463,11 @@ class Server:
             conn_status: Dict[str, Any] = {}
             for name, fields in sub.items():
                 if name in status:
-                    val: Dict[str, Any] = status[name]
-                    if fields is None:
-                        conn_status[name] = dict(val)
-                    else:
-                        conn_status[name] = {
-                            k: v for k, v in val.items() if k in fields}
+                    val: Dict[str, Any] = dict(status[name])
+                    if fields is not None:
+                        val = {k: v for k, v in val.items() if k in fields}
+                    if val:
+                        conn_status[name] = val
             conn.send_status(conn_status, eventtime)
 
     async def make_request(self, web_request: WebRequest) -> Any:
