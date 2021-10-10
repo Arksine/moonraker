@@ -756,8 +756,6 @@ class InotifyNode:
         metadata_events: List[asyncio.Event] = []
         visited_dirs.add((st.st_dev, st.st_ino))
         for fname in os.listdir(dir_path):
-            if fname[0] == ".":
-                continue
             item_path = os.path.join(dir_path, fname)
             if os.path.isdir(item_path):
                 new_child = self.create_child_node(fname, False)
