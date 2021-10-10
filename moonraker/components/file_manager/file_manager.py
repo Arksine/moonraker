@@ -1306,7 +1306,7 @@ class INotifyHandler:
             self.event_loop.register_callback(
                 self._sync_with_request, result,
                 sync_lock.sync(full_path), is_valid)
-        elif is_valid and self._check_need_notify(file_info):
+        elif is_valid:
             self.server.send_event("file_manager:filelist_changed", result)
 
     async def _sync_with_request(self,
@@ -1315,15 +1315,8 @@ class INotifyHandler:
                                  is_valid: bool
                                  ) -> None:
         await sync_fut
-        if is_valid and self._check_need_notify(result['item']):
+        if is_valid:
             self.server.send_event("file_manager:filelist_changed", result)
-
-    def _check_need_notify(self, file_info: Dict[str, Any]) -> bool:
-        if file_info['root'] == "gcodes":
-            ext = os.path.splitext(file_info['path'])[-1]
-            if ext and ext not in VALID_GCODE_EXTS:
-                return False
-        return True
 
     def close(self) -> None:
         self.event_loop.remove_reader(self.inotify.fileno())
