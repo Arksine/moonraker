@@ -530,6 +530,7 @@ class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
+        self.timer = config.get("timer", "")
         self.request_mutex = asyncio.Lock()
         self.addr: List[str] = config.get("address").split('/')
         self.port = config.getint("port", 9999)
@@ -551,6 +552,14 @@ class TPLinkSmartPlug(PowerDevice):
                 }
         elif command == "info":
             out_cmd = {'system': {'get_sysinfo': {}}}
+        elif command == "clear_rules":
+            out_cmd = {'count_down': {'delete_all_rules': None}}
+        elif command == "count_off":
+            out_cmd = {
+                'count_down': {'add_rule':
+                               {'enable': 1, 'delay': int(self.timer),
+                                'act': 0, 'name': 'turn off'}}
+            }
         else:
             raise self.server.error(f"Invalid tplink command: {command}")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -622,8 +631,13 @@ class TPLinkSmartPlug(PowerDevice):
         async with self.request_mutex:
             err: int
             try:
-                res = await self._send_tplink_command(state)
-                err = res['system']['set_relay_state']['err_code']
+                if self.timer != "" and state == "off":
+                    await self._send_tplink_command("clear_rules")
+                    res = await self._send_tplink_command("count_off")
+                    err = res['count_down']['add_rule']['err_code']
+                else:
+                    res = await self._send_tplink_command(state)
+                    err = res['system']['set_relay_state']['err_code']
             except Exception:
                 err = 1
                 logging.exception(f"Power Toggle Error: {self.name}")

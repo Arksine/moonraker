@@ -231,9 +231,12 @@ initial_state: off
 #    state.  Default is off.
 address:
 port:
+timer:
 #   The above options are used for "tplink_smartplug" devices.  The
 #   address should be a valid ip or hostname for the tplink device.
 #   The port should be the port the device is configured to use.
+#   The timer option is used to delay the turn off for x sec when
+#   its already on.
 #   "Power Strips" can be controlled by including the socket index
 #   in the ip address.  For example, to control socket index 1:
 #     192.168.1.127/1
