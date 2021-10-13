@@ -229,22 +229,26 @@ initial_state: off
 #    The initial state for GPIO type devices.  May be on or
 #    off.  When moonraker starts the device will be set to this
 #    state.  Default is off.
+timer:
+#    A time (in seconds) after which the device will power off after being.
+#    switched on. This effectively turns the device into a  momentary switch.
+#    This option is available for gpio, tplink_smartplug, shelly, and tasmota
+#    devices.  The timer may be a floating point value for gpio types, it should
+#    be an integer for all other types.  The default is no timer is set.
+#
 address:
 port:
-timer:
 #   The above options are used for "tplink_smartplug" devices.  The
 #   address should be a valid ip or hostname for the tplink device.
 #   The port should be the port the device is configured to use.
-#   The timer option is used to delay the turn off for x sec when
-#   its already on.
 #   "Power Strips" can be controlled by including the socket index
 #   in the ip address.  For example, to control socket index 1:
 #     192.168.1.127/1
 #    The address must be provided. The port defaults to 9999.
+#
 address:
 password:
 output_id:
-timer:
 #   The above options are used for "tasmota" devices.  The
 #   address should be a valid ip or hostname for the tasmota device.
 #   Provide a password if configured in Tasmota (default is empty).
@@ -253,20 +257,18 @@ timer:
 #   If your single-relay Tasmota device switches on/off successfully,
 #   but fails to report its state, ensure that 'SetOption26' is set in
 #   Tasmota.
+#
 address:
 user:
 password:
 output_id:
-timer:
 #   The above options are used for "shelly" devices.  The
 #   address should be a valid ip or hostname for the Shelly device.
 #   Provide a user and password if configured in Shelly (default is empty).
 #   If password is set but user is empty the default user "admin" will be used
 #   Provided an output_id (relay id) if the Shelly device supports
-#   more than one (default is 0). When timer option is used to delay the turn
-#   off make sure to set the state to "on" in action call_remote_method.
-#   So we send a command to turn it on for x sec when its already on then
-#   it turns off.
+#   more than one (default is 0).
+#
 address:
 device:
 user:
@@ -280,6 +282,7 @@ password:
 #   "ID" in the "advanced information" section.
 #   Provide a user and password with access to "device control"
 #   and at least the specific device you want to control
+#
 address:
 port:
 device:
@@ -289,6 +292,7 @@ domain:
 #   address should be a valid ip or hostname for the homeassistant controller.
 #   "device" should be the ID of the switch to control.
 #   "domain" is the class of device set managed by homeassistant, defaults to "switch".
+#
 address:
 user:
 password:
@@ -300,6 +304,7 @@ output_id:
 #   The output_id is the name of a programmed output, virtual input or virtual
 #   output in the loxone config his output_id (name) may only be used once in
 #   the loxone config
+#
 on_code:
 off_code:
 #   The above options are used for "rf" devices.  The
