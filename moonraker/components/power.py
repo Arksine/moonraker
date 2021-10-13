@@ -407,6 +407,12 @@ class GpioDevice(PowerDevice):
     def __init__(self, config: ConfigHelper):
         super().__init__(config)
         self.initial_state = config.getboolean('initial_state', False)
+        self.timer: Optional[float] = config.getfloat('timer', None)
+        if self.timer is not None and self.timer < 0.000001:
+            raise config.error(
+                f"Option 'timer' in section [{config.get_name()}] must "
+                "be above 0.0")
+        self.timer_handle: Optional[asyncio.TimerHandle] = None
 
     def configure_line(self,
                        config: ConfigHelper,
@@ -460,6 +466,9 @@ class GpioDevice(PowerDevice):
         pass
 
     def set_power(self, state) -> None:
+        if self.timer_handle is not None:
+            self.timer_handle.cancel()
+            self.timer_handle = None
         try:
             self.line.set_value(int(state == "on"))
         except Exception:
@@ -468,9 +477,17 @@ class GpioDevice(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = state
+        if self.state == "on" and self.timer is not None:
+            event_loop = self.server.get_event_loop()
+            power: PrinterPower = self.server.lookup_component("power")
+            self.timer_handle = event_loop.delay_callback(
+                self.timer, power.set_device_power, self.name, "off")
 
     def close(self) -> None:
         self.line.release()
+        if self.timer_handle is not None:
+            self.timer_handle.cancel()
+            self.timer_handle = None
 
 class RFDevice(GpioDevice):
 
