@@ -534,7 +534,7 @@ class KISSlicer(BaseSlicer):
             r"; bed_C = (\d+\.?\d*)", self.header_data)
 
 
-class IdeaMaker(BaseSlicer):
+class IdeaMaker(PrusaSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"\sideaMaker\s(.*),", data)
         if match:
@@ -599,6 +599,37 @@ class IdeaMaker(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
+    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
+        # Attempt to parse thumbnails from file metadata
+        thumbs = super().parse_thumbnails()
+        if thumbs is not None:
+            # Check for extracted single size thumbnail from gcode
+            thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
+            thumb_base = os.path.splitext(os.path.basename(self.path))[0]
+            thumb_full_name = thumbs[0]['relative_path'].split("/")[1]
+            thumb_path = os.path.join(thumb_dir, f"{thumb_full_name}")
+            rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
+            thumb_path_small = os.path.join(
+                thumb_dir, f"{thumb_base}-32x32.png")
+            if not os.path.isfile(thumb_path):
+                return None
+            # read file
+            try:
+                with Image.open(thumb_path) as im:
+                    # Create 32x32 thumbnail
+                    im.thumbnail((32, 32))
+                    im.save(thumb_path_small, format="PNG")
+                    thumbs.insert(0, {
+                        'width': im.width, 'height': im.height,
+                        'size': os.path.getsize(thumb_path_small),
+                        'relative_path': rel_path_small
+                    })
+            except Exception as e:
+                log_to_stderr(str(e))
+                return None
+        return thumbs
+
 
 class IceSL(BaseSlicer):
     def check_identity(self, data) -> Optional[Dict[str, Any]]:
