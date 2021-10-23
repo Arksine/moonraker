@@ -132,11 +132,11 @@ class Strip:
 
                 headers = {"Content-Type": "application/json"}
                 request = HTTPRequest(url=self.url,
-                                     method="POST",
-                                     headers=headers,
-                                     body=json.dumps(state),
-                                     connect_timeout=self.timeout,
-                                     request_timeout=self.timeout)
+                                      method="POST",
+                                      headers=headers,
+                                      body=json.dumps(state),
+                                      connect_timeout=self.timeout,
+                                      request_timeout=self.timeout)
                 response = await self.client.fetch(request)
 
                 logging.debug(
@@ -202,8 +202,8 @@ class Strip:
             else:
                 # Only one pixel has changed so send just that one
                 elem = []
-                for p in self._chain_data[(index-1)*elem_size
-                                         :(index-1)*elem_size+elem_size]:
+                for p in self._chain_data[(index-1)*elem_size:
+                                          (index-1)*elem_size+elem_size]:
                     elem.append(p)
                 await self._send_wled_command({"seg": {"i": [index, elem]}})
         elif index is not None:
@@ -220,7 +220,7 @@ class WLED:
             logging.info(f"WLED component loading strips: {prefix_sections}")
             color_orders = {
                 "RGB": ColorOrder.RGB,
-                "RGBW" : ColorOrder.RGBW
+                "RGBW": ColorOrder.RGBW
             }
             self.strips = {}
             for section in prefix_sections:
@@ -230,7 +230,7 @@ class WLED:
                 if len(name_parts) != 2:
                     raise cfg.error(
                         f"Invalid Section Name: {cfg.get_name()}")
-                name:str = name_parts[1]
+                name: str = name_parts[1]
 
                 logging.info(f"WLED strip: {name}")
 
@@ -277,7 +277,7 @@ class WLED:
 
     async def _initalize_strips(self,
                                 initial_strips: List[Strip]
-                                 ) -> None:
+                                ) -> None:
         try:
             logging.debug("Initializing wled")
             event_loop = self.server.get_event_loop()
@@ -328,7 +328,7 @@ class WLED:
         if index < 0:
             index = None
         await self.strips[strip].set_wled(red, green, blue, white,
-                                        index, transmit)
+                                          index, transmit)
 
     async def _handle_list_strips(self,
                                   web_request: WebRequest
