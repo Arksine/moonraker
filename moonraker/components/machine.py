@@ -259,7 +259,7 @@ class Machine:
     async def _find_active_services(self):
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         scmd = shell_cmd.build_shell_command(
-            "systemctl list-units --type=service")
+            "systemctl list-units --all --type=service")
         try:
             resp = await scmd.run_with_response()
             lines = resp.split('\n')
