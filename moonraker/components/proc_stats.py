@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from . import shell_command
+    from .machine import Machine
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
@@ -53,6 +54,7 @@ class ProcStats:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
+        self.machine: Machine = self.server.load_component(config, 'machine')
         self.watchdog = Watchdog(self)
         self.stat_update_cb = PeriodicCallback(
             self._handle_stat_update, STAT_UPDATE_TIME_MS)  # type: ignore
@@ -161,6 +163,7 @@ class ProcStats:
                     self.server.send_event("proc_stats:cpu_throttled", ts)
                 self.last_throttled = cur_throttled
                 self.total_throttled |= cur_throttled
+        await self.machine.update_service_status()
 
     async def _check_throttled_state(self) -> Dict[str, Any]:
         async with self.throttle_check_lock:
