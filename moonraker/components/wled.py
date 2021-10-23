@@ -77,8 +77,6 @@ class Strip:
 
         self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
 
-        self.error_state: str = None
-
         self.onoff = OnOff.off
         self.preset = self.initial_preset
 
