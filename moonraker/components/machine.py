@@ -14,7 +14,6 @@ import distro
 
 # Annotation imports
 from typing import (
-    List,
     TYPE_CHECKING,
     Any,
     Dict,
@@ -55,7 +54,7 @@ class Machine:
             for key, val in info.items():
                 sys_info_msg += f"\n  {key}: {val}"
         self.server.add_log_rollover_item('system_info', sys_info_msg)
-        self.available_services: List[str] = []
+        self.available_services: Dict[str, Dict[str, str]] = {}
 
         self.server.register_endpoint(
             "/machine/reboot", ['POST'], self._handle_machine_request)
@@ -73,6 +72,8 @@ class Machine:
         self.server.register_endpoint(
             "/machine/system_info", ['GET'],
             self._handle_sysinfo_request)
+
+        self.server.register_notification("machine:service_state_changed")
 
         # Register remote methods
         self.server.register_remote_method(
@@ -262,8 +263,36 @@ class Machine:
             sname = svc.rsplit('.', 1)[0]
             for allowed in ALLOWED_SERVICES:
                 if sname.startswith(allowed):
-                    self.available_services.append(sname)
-        self.system_info['available_services'] = self.available_services
+                    self.available_services[sname] = {
+                        'active_state': "unknown",
+                        'sub_state': "unknown"
+                    }
+        avail_list = list(self.available_services.keys())
+        self.system_info['available_services'] = avail_list
+        self.system_info['service_state'] = self.available_services
+        await self.update_service_status(notify=False)
+
+    async def update_service_status(self, notify: bool = True) -> None:
+        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
+        for svc, state in list(self.available_services.items()):
+            scmd = shell_cmd.build_shell_command(
+                f"systemctl show -p ActiveState,SubState --value {svc}")
+            try:
+                resp = await scmd.run_with_response(log_complete=False)
+                active_state, sub_state = resp.strip().split('\n', 1)
+                new_state: Dict[str, str] = {
+                    'active_state': active_state,
+                    'sub_state': sub_state
+                }
+            except Exception:
+                new_state = {
+                    'active_state': "error",
+                    'sub_state': "error"
+                }
+            if state != new_state and notify:
+                self.server.send_event("machine:service_state_changed",
+                                       {svc: new_state})
+            self.available_services[svc] = new_state
 
 
 def load_component(config: ConfigHelper) -> Machine:
