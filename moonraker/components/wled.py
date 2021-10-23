@@ -1,4 +1,4 @@
-# PanelDue LCD display support
+# WLED neopixel support
 #
 # Copyright (C) 2021  Richard Mitchell <richardjm+moonraker@gmail.com>
 #
