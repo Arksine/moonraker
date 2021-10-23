@@ -48,6 +48,7 @@ for pkg_path in PKG_PATHS:
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
+    from .machine import Machine
     from . import klippy_apis
     APIComp = klippy_apis.KlippyAPI
 
@@ -125,6 +126,9 @@ class PrinterPower:
                                  inital_devs: List[PowerDevice]
                                  ) -> None:
         event_loop = self.server.get_event_loop()
+        # Wait up to 5 seconds for the machine component to init
+        machine_cmp: Machine = self.server.lookup_component("machine")
+        await machine_cmp.wait_for_init(5.)
         cur_time = event_loop.get_loop_time()
         endtime = cur_time + 120.
         query_devs = inital_devs
@@ -224,7 +228,7 @@ class PrinterPower:
                 await ret
             dev_info = device.get_device_info()
             self.server.send_event("power:power_changed", dev_info)
-            device.run_power_changed_action()
+            await device.run_power_changed_action()
         elif req != "status":
             raise self.server.error(f"Unsupported power request: {req}")
         return dev_info['status']
@@ -283,6 +287,25 @@ class PowerDevice:
             self.restart_delay = config.getfloat('restart_delay', 1.)
             if self.restart_delay < .000001:
                 raise config.error("Option 'restart_delay' must be above 0.0")
+        self.bound_service: Optional[str] = config.get('bound_service', None)
+        self.need_scheduled_restart = False
+
+    def _is_bound_to_klipper(self):
+        return (
+            self.bound_service is not None and
+            self.bound_service.startswith("klipper") and
+            not self.bound_service.startswith("klipper_mcu")
+        )
+
+    def _schedule_firmware_restart(self, state: str = "") -> None:
+        if not self.need_scheduled_restart:
+            return
+        self.need_scheduled_restart = False
+        event_loop = self.server.get_event_loop()
+        kapis: APIComp = self.server.lookup_component("klippy_apis")
+        event_loop.delay_callback(
+            self.restart_delay, kapis.do_restart,
+            "FIRMWARE_RESTART")
 
     def get_name(self) -> str:
         return self.name
@@ -301,19 +324,42 @@ class PowerDevice:
     def get_locked_while_printing(self) -> bool:
         return self.locked_while_printing
 
-    def run_power_changed_action(self) -> None:
+    async def run_power_changed_action(self) -> None:
+        if self.bound_service is not None:
+            machine_cmp: Machine = self.server.lookup_component("machine")
+            action = "start" if self.state == "on" else "stop"
+            await machine_cmp.do_service_action(action, self.bound_service)
         if self.state == "on" and self.klipper_restart:
-            event_loop = self.server.get_event_loop()
-            kapis: APIComp = self.server.lookup_component("klippy_apis")
-            event_loop.delay_callback(
-                self.restart_delay, kapis.do_restart,
-                "FIRMWARE_RESTART")
+            self.need_scheduled_restart = True
+            if self._is_bound_to_klipper():
+                return
+            self._schedule_firmware_restart()
 
     def has_off_when_shutdown(self) -> bool:
         return self.off_when_shutdown
 
     def initialize(self) -> Optional[Coroutine]:
-        raise NotImplementedError
+        if self.bound_service is None:
+            return None
+        if self.bound_service.startswith("moonraker"):
+            raise self.server.error(
+                f"Cannot bind to '{self.bound_service}' "
+                "service")
+        machine_cmp: Machine = self.server.lookup_component("machine")
+        sys_info = machine_cmp.get_system_info()
+        avail_svcs: List[str] = sys_info.get('available_services', [])
+        if self.bound_service not in avail_svcs:
+            raise self.server.error(
+                f"Bound Service {self.bound_service} is not available")
+        if self._is_bound_to_klipper() and self.klipper_restart:
+            # Schedule the Firmware Restart after Klipper reconnects
+            logging.info(f"Power Device '{self.name}' bound to "
+                         f"klipper service '{self.bound_service}'")
+            self.server.register_event_handler(
+                "server:klippy_started",
+                self._schedule_firmware_restart
+            )
+        return None
 
     def refresh_status(self) -> Optional[Coroutine]:
         raise NotImplementedError
@@ -342,6 +388,7 @@ class HTTPDevice(PowerDevice):
         self.protocol = config.get("protocol", default_protocol)
 
     async def initialize(self) -> None:
+        super().initialize()
         await self.refresh_status()
 
     async def _send_http_command(self,
@@ -460,6 +507,7 @@ class GpioDevice(PowerDevice):
         return pin_id, chip_id, invert
 
     def initialize(self) -> None:
+        super().initialize()
         self.set_power("on" if self.initial_state else "off")
 
     def refresh_status(self) -> None:
@@ -505,6 +553,7 @@ class RFDevice(GpioDevice):
         self.off = config.get("off_code").zfill(24)
 
     def initialize(self) -> None:
+        super().initialize()
         self.set_power("on" if self.initial_state else "off")
 
     def _transmit_digit(self, waveform) -> None:
@@ -623,6 +672,7 @@ class TPLinkSmartPlug(PowerDevice):
         return res
 
     async def initialize(self) -> None:
+        super().initialize()
         await self.refresh_status()
 
     async def refresh_status(self) -> None:
