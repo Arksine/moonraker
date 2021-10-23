@@ -14,8 +14,8 @@ from enum import Enum
 import logging
 import json
 import asyncio
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-from tornado.escape import json_decode
+from tornado.httpclient import AsyncHTTPClient
+from tornado.httpclient import HTTPRequest
 
 # Annotation imports
 from typing import (
@@ -49,28 +49,27 @@ class Strip:
                 name: str,
                 color_order: ColorOrder,
                 cfg: ConfigHelper):
+        self.server = cfg.get_server()
         self.client = AsyncHTTPClient()
         self.request_mutex = asyncio.Lock()
 
         self.name = name
         self.color_order = color_order
 
-        self.debug: bool = cfg.getboolean('debug', False)
-
         # Read the uri information
         addr: str = cfg.get("address")
         port: int = cfg.getint("port", 80)
-        protocol: str = cfg.get("protocol", 'http')
+        protocol: str = cfg.get("protocol", "http")
         self.url = f"{protocol}://{addr}:{port}/json"
 
-        self.timeout: int = cfg.getfloat('timeout', 2.)
+        self.timeout: int = cfg.getfloat("timeout", 2.)
 
-        self.initial_preset: int = cfg.getint('initial_preset', -1)
-        self.initial_red: float = cfg.getfloat('initial_red', 0.)
-        self.initial_green: float = cfg.getfloat('initial_green', 0.)
-        self.initial_blue: float = cfg.getfloat('initial_blue', 0.)
-        self.initial_white: float = cfg.getfloat('initial_white', 0.)
-        self.chain_count: int = cfg.getint('chain_count', 0)
+        self.initial_preset: int = cfg.getint("initial_preset", -1)
+        self.initial_red: float = cfg.getfloat("initial_red", 0.)
+        self.initial_green: float = cfg.getfloat("initial_green", 0.)
+        self.initial_blue: float = cfg.getfloat("initial_blue", 0.)
+        self.initial_white: float = cfg.getfloat("initial_white", 0.)
+        self.chain_count: int = cfg.getint("chain_count", 0)
 
         self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
 
@@ -84,7 +83,7 @@ class Strip:
                                 self.initial_blue,
                                 self.initial_white)
         if self.initial_preset >= 0:
-            await self.wled_on(self, self.initial_preset,
+            await self.wled_on(self.initial_preset,
                                self.initial_red,
                                self.initial_green,
                                self.initial_blue,
@@ -101,7 +100,7 @@ class Strip:
             led_data = [red, green, blue, white]
 
         if index is None:
-            self._chain_data[:] = led_data * self._chain_count
+            self._chain_data[:] = led_data * self.chain_count
         else:
             elem_size = len(led_data)
             self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
@@ -110,20 +109,18 @@ class Strip:
                                  state: str):
         async with self.request_mutex:
             try:
-                if self.debug:
-                    logging.debug(f'WLED: url:{self.url} json:{state}')
+                logging.debug(f"WLED: url:{self.url} json:{state}")
 
                 request = HTTPRequest(url = self.url,
-                            method = 'POST',
-                            headers = { 'Content-Type': 'application/json'},
+                            method = "POST",
+                            headers = { "Content-Type": "application/json"},
                             body = json.dumps(state),
                             connect_timeout = self.timeout,
                             request_timeout = self.timeout)
                 response = await self.client.fetch(request)
 
-                if self.debug:
-                    logging.debug(
-                        f'WLED: url:{self.url} status:{response.status_code}')
+                logging.debug(
+                        f"WLED: url:{self.url} status:{response.code}")
 
                 self.error_state = None
             except Exception as e:
@@ -137,29 +134,28 @@ class Strip:
         self.send_full_chain_data = True
         desired_preset = preset|self.initial_preset
         if desired_preset >= 0:
-            state = {'on': True, 'ps': desired_preset}
+            state = {"on": True, "ps": desired_preset}
             await self._send_wled_command(state)
         else:
             await self.set_led(red, green, blue, white)
 
     async def wled_off(self):
         self.send_on_color_data = True
-        await self._send_wled_command({'on': False })
+        await self._send_wled_command({"on": False })
 
     async def set_led(self, red = 0., green = 0., blue= 0., white = 0.,
                       index = None, transmit = 1):
-        if self.debug:
-            logging.debug(
-                f'WLED: {self.name} R={red} G={green} B={blue} W={white} '
-                 'INDEX={index} TRANSMIT={transmit}')
+        logging.debug(
+                f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
+                 "INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
             elem_size = len(self.color_order)
             if self.send_on_color_data:
-                # Without a separate On call individual led control doesn't
+                # Without a separate On call individual led control doesn"t
                 # turn the led strip back on
                 self.send_on_color_data = False
-                await self._send_wled_command({'on': True})
+                await self._send_wled_command({"on": True})
             if index is None:
                 # All pixels same color only send range command
                 elem = []
@@ -167,10 +163,10 @@ class Strip:
                     elem.append(p)
                 self.send_full_chain_data = False
                 await self._send_wled_command(
-                    {'seg':{'i':[0,self.chain_count-1, elem]}})
+                    {"seg":{"i":[0,self.chain_count-1, elem]}})
             elif self.send_full_chain_data:
                 # Send a full set of color data (e.g. previous preset)
-                state = {'seg':{'i':[]}}
+                state = {"seg":{"i":[]}}
                 cdata = []
                 for i in range(self.chain_count):
                     idx = i * elem_size
@@ -178,7 +174,7 @@ class Strip:
                     for p in self._chain_data[idx:idx+elem_size]:
                         elem.append(p)
                     cdata.append(elem)
-                state['seg']['i'] = cdata
+                state["seg"]["i"] = cdata
                 self.send_full_chain_data = False
                 await self._send_wled_command(state)
             else:
@@ -187,60 +183,70 @@ class Strip:
                 for p in self._chain_data[(index - 1) * elem_size
                                          :(index - 1) * elem_size + elem_size]:
                     elem.append(p)
-                await self._send_wled_command({'seg':{'i':[index, elem]}})
+                await self._send_wled_command({"seg":{"i":[index, elem]}})
         elif index is not None:
             self.send_full_chain_data = True
 
 class WLED:
     def __init__(self, config: ConfigHelper) -> None:
-        self.server = config.get_server()
-        prefix_sections = config.get_prefix_sections("wled")
-        logging.info(f"WLED component loading devices: {prefix_sections}")
-        color_orders = {
-            'RGB': ColorOrder.RGB,
-            'RGBW' : ColorOrder.RGBW
-        }
-        self.strips = []
-        for section in prefix_sections:
-            cfg = config[section]
-            name: str = cfg.get_name()
+        try:
+            self.server = config.get_server()
+            prefix_sections = config.get_prefix_sections("wled")
+            logging.info(f"WLED component loading strips: {prefix_sections}")
+            color_orders = {
+                "RGB": ColorOrder.RGB,
+                "RGBW" : ColorOrder.RGBW
+            }
+            self.strips = {}
+            for section in prefix_sections:
+                cfg = config[section]
+                name: str = cfg.get_name()
 
-            color_order_cfg: str = cfg.get('color_order', 'RGB')
-            color_order = color_orders.get(color_order_cfg)
-            if color_order is None:
-                raise config.error(
-                    f"Color order not supported: {color_order_cfg}")
+                color_order_cfg: str = cfg.get("color_order", "RGB")
+                color_order = color_orders.get(color_order_cfg)
+                if color_order is None:
+                    raise config.error(
+                        f"Color order not supported: {color_order_cfg}")
 
-            self.strips[name] = Strip(name, color_order, cfg)
+                self.strips[name] = Strip(name, color_order, cfg)
 
-        event_loop = self.server.get_event_loop()
-        event_loop.register_callback(
-            self._initalize_strips, list(self.strips.values()))
+            event_loop = self.server.get_event_loop()
+            event_loop.register_callback(
+                self._initalize_strips, list(self.strips.values()))
+        except Exception as e:
+            logging.exception(e)
 
     async def _initalize_strips(self,
                                 initial_strips: List[Strip]
                                  ) -> None:
-        event_loop = self.server.get_event_loop()
-        cur_time = event_loop.get_loop_time()
-        endtime = cur_time + 120.
-        query_strips = initial_strips
-        failed_strips: List[Strip] = []
-        while cur_time < endtime:
-            for strip in query_strips:
-                ret = strip.initialize()
-                if ret is not None:
-                    await ret
-                if not strip.error_state is None:
-                    failed_strips.append(strip)
-            if not failed_strips:
-                logging.debug("All wled strips initialized")
-                return
-            query_strips = failed_devs
-            failed_devs = []
-            await asyncio.sleep(2.)
+        try:
+            logging.debug("Initializing wled")
+            event_loop = self.server.get_event_loop()
             cur_time = event_loop.get_loop_time()
-        if failed_strips:
-            failed_names = [s.name for s in failed_strips]
-            self.server.add_warning(
-                "The following wled strips failed init:"
-                f" {failed_names}")
+            endtime = cur_time + 120.
+            query_strips = initial_strips
+            failed_strips: List[Strip] = []
+            while cur_time < endtime:
+                for strip in query_strips:
+                    ret = strip.initialize()
+                    if ret is not None:
+                        await ret
+                    if not strip.error_state is None:
+                        failed_strips.append(strip)
+                if not failed_strips:
+                    logging.debug("All wled strips initialized")
+                    return
+                query_strips = failed_devs
+                failed_devs = []
+                await asyncio.sleep(2.)
+                cur_time = event_loop.get_loop_time()
+            if failed_strips:
+                failed_names = [s.name for s in failed_strips]
+                self.server.add_warning(
+                    "The following wled strips failed init:"
+                    f" {failed_names}")
+        except Exception as e:
+            logging.exception(e)
+
+def load_component_multi(config: ConfigHelper) -> WLED:
+    return WLED(config)
