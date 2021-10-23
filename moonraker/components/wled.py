@@ -96,7 +96,7 @@ class Strip:
         self.send_full_chain_data = True
         self.onoff = OnOff.on
         self.preset = self.initial_preset
-        if self.initial_preset >= 0:    
+        if self.initial_preset >= 0:
             self._update_color_data(self.initial_red,
                         self.initial_green,
                         self.initial_blue,
