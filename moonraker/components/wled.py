@@ -65,11 +65,11 @@ class Strip:
         self.timeout: int = cfg.getfloat("timeout", 2.)
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
-        self.initial_red: float = cfg.getfloat("initial_red", 0.)
-        self.initial_green: float = cfg.getfloat("initial_green", 0.)
-        self.initial_blue: float = cfg.getfloat("initial_blue", 0.)
-        self.initial_white: float = cfg.getfloat("initial_white", 0.)
-        self.chain_count: int = cfg.getint("chain_count", 0)
+        self.initial_red: float = cfg.getfloat("initial_red", 0.5)
+        self.initial_green: float = cfg.getfloat("initial_green", 0.5)
+        self.initial_blue: float = cfg.getfloat("initial_blue", 0.5)
+        self.initial_white: float = cfg.getfloat("initial_white", 0.5)
+        self.chain_count: int = cfg.getint("chain_count", 1)
 
         self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
 
