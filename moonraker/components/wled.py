@@ -198,7 +198,14 @@ class WLED:
             self.strips = {}
             for section in prefix_sections:
                 cfg = config[section]
-                name: str = cfg.get_name()
+
+                name_parts = cfg.get_name().split(maxsplit=1)
+                if len(name_parts) != 2:
+                    raise cfg.error(
+                        f"Invalid Section Name: {cfg.get_name()}")
+                name:str = name_parts[1]
+
+                logging.info(f"WLED strip: '{name}'")
 
                 color_order_cfg: str = cfg.get("color_order", "RGB")
                 color_order = color_orders.get(color_order_cfg)
@@ -211,6 +218,12 @@ class WLED:
             event_loop = self.server.get_event_loop()
             event_loop.register_callback(
                 self._initalize_strips, list(self.strips.values()))
+
+            self.server.register_remote_method(
+                "wled_on", self.wled_on)
+            self.server.register_remote_method(
+                "wled_off", self.wled_off)
+
         except Exception as e:
             logging.exception(e)
 
@@ -245,6 +258,16 @@ class WLED:
                     f" {failed_names}")
         except Exception as e:
             logging.exception(e)
+
+    async def wled_on(self, led: str, preset: int) -> None:
+        if led not in self.strips:
+            logging.info(f"Unknown WLED strip: {led}")
+        await self.strips[led].wled_on(preset)
+
+    async def wled_off(self, led: str) -> None:
+        if led not in self.strips:
+            logging.info(f"Unknown WLED strip: {led}")
+        await self.strips[led].wled_off()
 
 def load_component_multi(config: ConfigHelper) -> WLED:
     return WLED(config)
