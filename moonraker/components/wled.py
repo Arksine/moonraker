@@ -66,7 +66,7 @@ class Strip:
         protocol: str = cfg.get("protocol", "http")
         self.url = f"{protocol}://{addr}:{port}/json"
 
-        self.timeout: int = cfg.getfloat("timeout", 2.)
+        self.timeout: float = cfg.getfloat("timeout", 2.)
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -77,7 +77,7 @@ class Strip:
 
         self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
 
-        self.error_state = None
+        self.error_state:str = None
 
         self.onoff = OnOff.off
         self.preset = self.initial_preset
