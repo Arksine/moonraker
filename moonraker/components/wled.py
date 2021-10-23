@@ -85,7 +85,7 @@ class Strip:
                         self.initial_white)
             await self.wled_on(self.initial_preset)
         else:
-            await self.set_led(self.initial_red,
+            await self.set_wled(self.initial_red,
                                self.initial_green,
                                self.initial_blue,
                                self.initial_white)
@@ -131,14 +131,20 @@ class Strip:
                 raise self.server.error(msg)
 
     async def wled_on(self, preset):
-        self.send_full_chain_data = True
-        await self._send_wled_command({"on": True, "ps": preset})
+        logging.debug(f"WLED: on {self.name} PRESET={preset}")
+        if preset < 0:
+            # WLED_ON STRIP=strip (no args) - reset to default
+            await self.initialize()
+        else:
+            self.send_full_chain_data = True
+            await self._send_wled_command({"on": True, "ps": preset})
 
     async def wled_off(self):
+        logging.debug(f"WLED: off {self.name}")
         self.send_on = True
         await self._send_wled_command({"on": False})
 
-    async def set_led(self, red = 0., green = 0., blue= 0., white = 0.,
+    async def set_wled(self, red = 0., green = 0., blue= 0., white = 0.,
                       index = None, transmit = 1):
         logging.debug(
                 f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
@@ -223,6 +229,8 @@ class WLED:
                 "wled_on", self.wled_on)
             self.server.register_remote_method(
                 "wled_off", self.wled_off)
+            self.server.register_remote_method(
+                "set_wled", self.set_wled)
 
         except Exception as e:
             logging.exception(e)
@@ -259,15 +267,28 @@ class WLED:
         except Exception as e:
             logging.exception(e)
 
-    async def wled_on(self, led: str, preset: int) -> None:
-        if led not in self.strips:
-            logging.info(f"Unknown WLED strip: {led}")
-        await self.strips[led].wled_on(preset)
+    async def wled_on(self, strip: str, preset: int) -> None:
+        if strip not in self.strips:
+            logging.info(f"Unknown WLED strip: {strip}")
+            return
+        await self.strips[strip].wled_on(preset)
 
-    async def wled_off(self, led: str) -> None:
-        if led not in self.strips:
-            logging.info(f"Unknown WLED strip: {led}")
-        await self.strips[led].wled_off()
+    async def wled_off(self, strip: str) -> None:
+        if strip not in self.strips:
+            logging.info(f"Unknown WLED strip: {strip}")
+            return
+        await self.strips[strip].wled_off()
+
+    async def set_wled(self, strip: str,
+                      red = 0., green = 0., blue= 0., white = 0.,
+                      index = None, transmit = 1) -> None:
+        if strip not in self.strips:
+            logging.info(f"Unknown WLED strip: {strip}")
+            return
+        if index < 0:
+            index = None
+        await self.strips[strip].set_wled(red, green, blue, white,
+                                        index, transmit)
 
 def load_component_multi(config: ConfigHelper) -> WLED:
     return WLED(config)
