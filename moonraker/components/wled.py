@@ -76,15 +76,16 @@ class Strip:
         self.error_state = None
 
     async def initialize(self):
-        self.send_on_color_data = True
+        self.send_on = True
         self.send_full_chain_data = True
-        self._update_color_data(self.initial_red,
-                                self.initial_green,
-                                self.initial_blue,
-                                self.initial_white)
         if self.initial_preset >= 0:
-            await self.wled_on(self.initial_preset,
-                               self.initial_red,
+            self._update_color_data(self.initial_red,
+                        self.initial_green,
+                        self.initial_blue,
+                        self.initial_white)
+            await self.wled_on(self.initial_preset)
+        else:
+            await self.set_led(self.initial_red,
                                self.initial_green,
                                self.initial_blue,
                                self.initial_white)
@@ -129,37 +130,31 @@ class Strip:
                 logging.exception(msg)
                 raise self.server.error(msg)
 
-    async def wled_on(self, preset = -1, red = 0., green = 0.,
-                      blue = 0., white = 0.):
+    async def wled_on(self, preset):
         self.send_full_chain_data = True
-        desired_preset = preset|self.initial_preset
-        if desired_preset >= 0:
-            state = {"on": True, "ps": desired_preset}
-            await self._send_wled_command(state)
-        else:
-            await self.set_led(red, green, blue, white)
+        await self._send_wled_command({"on": True, "ps": preset})
 
     async def wled_off(self):
-        self.send_on_color_data = True
-        await self._send_wled_command({"on": False })
+        self.send_on = True
+        await self._send_wled_command({"on": False})
 
     async def set_led(self, red = 0., green = 0., blue= 0., white = 0.,
                       index = None, transmit = 1):
         logging.debug(
                 f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
-                 "INDEX={index} TRANSMIT={transmit}")
+                f"INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
-            elem_size = len(self.color_order)
-            if self.send_on_color_data:
+            elem_size = self.color_order.Elem_Size()
+            if self.send_on:
                 # Without a separate On call individual led control doesn"t
                 # turn the led strip back on
-                self.send_on_color_data = False
+                self.send_on = False
                 await self._send_wled_command({"on": True})
             if index is None:
                 # All pixels same color only send range command
                 elem = []
-                for p in self.color_data[0:elem_size]:
+                for p in self._chain_data[0:elem_size]:
                     elem.append(p)
                 self.send_full_chain_data = False
                 await self._send_wled_command(
@@ -190,6 +185,9 @@ class Strip:
 class WLED:
     def __init__(self, config: ConfigHelper) -> None:
         try:
+            # root_logger = logging.getLogger()
+            # root_logger.setLevel(logging.DEBUG)
+
             self.server = config.get_server()
             prefix_sections = config.get_prefix_sections("wled")
             logging.info(f"WLED component loading strips: {prefix_sections}")
@@ -231,7 +229,7 @@ class WLED:
                     ret = strip.initialize()
                     if ret is not None:
                         await ret
-                    if not strip.error_state is None:
+                    if strip.error_state is not None:
                         failed_strips.append(strip)
                 if not failed_strips:
                     logging.debug("All wled strips initialized")
