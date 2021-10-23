@@ -9,6 +9,7 @@ import os
 import re
 import pathlib
 import logging
+import asyncio
 import platform
 import distro
 
@@ -83,7 +84,14 @@ class Machine:
 
         # Retreive list of services
         event_loop = self.server.get_event_loop()
+        self.init_evt = asyncio.Event()
         event_loop.register_callback(self._find_active_services)
+
+    async def wait_for_init(self, timeout: float = None) -> None:
+        try:
+            await asyncio.wait_for(self.init_evt.wait(), timeout)
+        except asyncio.TimeoutError:
+            pass
 
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
@@ -141,7 +149,7 @@ class Machine:
             logging.exception(f"Error running cmd '{cmd}'")
             raise
 
-    def get_system_info(self) -> Dict[str, Dict[str, Any]]:
+    def get_system_info(self) -> Dict[str, Any]:
         return self.system_info
 
     def _get_sdcard_info(self) -> Dict[str, Any]:
@@ -271,6 +279,7 @@ class Machine:
         self.system_info['available_services'] = avail_list
         self.system_info['service_state'] = self.available_services
         await self.update_service_status(notify=False)
+        self.init_evt.set()
 
     async def update_service_status(self, notify: bool = True) -> None:
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
