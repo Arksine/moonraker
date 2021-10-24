@@ -412,8 +412,9 @@ class WLED:
     async def _handle_list_strips(self,
                                   web_request: WebRequest
                                   ) -> Dict[str, Any]:
-        strip_list = [s.get_strip_info() for s in self.strips.values()]
-        output = {"strips": strip_list}
+        strips = {name: strip.get_strip_info()
+                  for name, strip in self.strips.items()}
+        output = {"strips": strips}
         return output
 
     async def _handle_single_wled_request(self,
@@ -435,15 +436,15 @@ class WLED:
             raise self.server.error(f"No valid strip named {strip_name}")
         strip = self.strips[strip_name]
         if req_action == 'GET':
-            action = "status"
+            result = strip.get_strip_info()
         elif req_action == "POST":
             action = web_request.get_str('action').lower()
             if action not in ["on", "off", "toggle", "set"]:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
-        result = await self._process_request(strip, action, preset, bri,
-                                             transition, fx, effect, sx, ix,
-                                             pal, palette)
+            result = await self._process_request(strip, action, preset, bri,
+                                                transition, fx, effect, sx, ix,
+                                                pal, palette)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self,
@@ -475,30 +476,26 @@ class WLED:
                                ix: int = -1,
                                pal: int = -1,
                                palette: str = ''
-                               ) -> Dict[str, Any]:
-        strip_info = strip.get_strip_info()
-        if req == "status":
-            return strip_info
+                               ) -> str:
+        strip_onoff = strip.onoff
 
         if req == "toggle":
-            req = "on" if strip_info["status"] == OnOff.off else "off"
+            req = "on" if strip_onoff == OnOff.off else "off"
         if req in ["on", "off"]:
             # Always do something, could be turning off colors, or changing
             # preset, easier not to have to worry
             if req == "on":
-                strip_info["status"] = OnOff.on
+                strip_onoff = OnOff.on
                 await strip.wled_on(preset)
             else:
-                strip_info["status"] = OnOff.off
+                strip_onoff = OnOff.off
                 await strip.wled_off()
-
-            # Small return for action on/off/toggle
-            return strip_info["status"]
+            return strip_onoff
         elif req == "set":
-            # Is this always going to be on right for all cases?
-            strip_info["status"] = OnOff.on
             await strip.wled(bri, transition, fx, effect, sx, ix, pal, palette)
-            return strip_info["status"]
+            # Is this always going to be on right for all cases?
+            return OnOff.on
+
         raise self.server.error(f"Unsupported wled request: {req}")
 
 def load_component_multi(config: ConfigHelper) -> WLED:
