@@ -443,8 +443,8 @@ class WLED:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
             result = await self._process_request(strip, action, preset, bri,
-                                                transition, fx, effect, sx, ix,
-                                                pal, palette)
+                                                 transition, fx, effect, sx, ix,
+                                                 pal, palette)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self,
