@@ -358,8 +358,10 @@ class Server:
             else:
                 logging.info("GCode Output Subscribed")
                 self.init_list.append("gcode_output_sub")
-        if "klippy_ready" in self.init_list or \
-                not self.klippy_connection.is_connected():
+        if (
+            "startup_complete" in self.init_list or
+            not self.klippy_connection.is_connected()
+        ):
             # Either Klippy is ready or the connection dropped
             # during initialization.  Exit initialization
             self.init_attempts = 0
@@ -395,10 +397,15 @@ class Server:
         if send_id:
             self.init_list.append("identified")
             self.send_event("server:klippy_identified")
-        if self.klippy_state == "ready":
+        if self.klippy_state != "startup":
+            self.init_list.append('startup_complete')
+            self.send_event("server:klippy_started", self.klippy_state)
+            if self.klippy_state != "ready":
+                msg = result.get('state_message', "Klippy Not Ready")
+                logging.info("\n" + msg)
+                return
             await self._verify_klippy_requirements()
             logging.info("Klippy ready")
-            self.init_list.append('klippy_ready')
             # register methods with klippy
             for method in self.klippy_reg_methods:
                 try:
@@ -406,10 +413,6 @@ class Server:
                 except ServerError:
                     logging.exception(f"Unable to register method '{method}'")
             self.send_event("server:klippy_ready")
-        elif self.init_attempts % LOG_ATTEMPT_INTERVAL == 0 and \
-                self.init_attempts <= MAX_LOG_ATTEMPTS:
-            msg = result.get('state_message', "Klippy Not Ready")
-            logging.info("\n" + msg)
 
     async def _verify_klippy_requirements(self) -> None:
         result = await self.klippy_apis.get_object_list(default=None)
