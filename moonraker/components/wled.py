@@ -479,7 +479,7 @@ class WLED:
         strip_info = strip.get_strip_info()
         if req == "status":
             return strip_info
-            
+
         if req == "toggle":
             req = "on" if strip_info["status"] == OnOff.off else "off"
         if req in ["on", "off"]:
@@ -495,7 +495,8 @@ class WLED:
             # Small return for action on/off/toggle
             return strip_info["status"]
         elif req == "set":
-            strip_info["status"] = OnOff.on # Is this right for all cases?
+            # Is this always going to be on right for all cases?
+            strip_info["status"] = OnOff.on
             await strip.wled(bri, transition, fx, effect, sx, ix, pal, palette)
             return strip_info["status"]
         raise self.server.error(f"Unsupported wled request: {req}")
