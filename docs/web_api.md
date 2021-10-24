@@ -833,27 +833,26 @@ Returns: Information about the host system in the following format:
 ```json
 {
     "system_info": {
-        "available_services": ["moonraker", "klipper"],
         "cpu_info": {
-            "cpu_count": 1,
+            "cpu_count": 4,
             "bits": "32bit",
-            "processor": "armv6l",
-            "cpu_desc": "ARMv6-compatible processor rev 7 (v6l)",
+            "processor": "armv7l",
+            "cpu_desc": "ARMv7 Processor rev 4 (v7l)",
             "hardware_desc": "BCM2835",
-            "model": "Raspberry Pi Zero W Rev 1.1",
-            "total_memory": 439276,
+            "model": "Raspberry Pi 3 Model B Rev 1.2",
+            "total_memory": 945364,
             "memory_units": "kB"
         },
         "sd_info": {
             "manufacturer_id": "03",
             "manufacturer": "Sandisk",
             "oem_id": "5344",
-            "product_name": "SS08G",
+            "product_name": "SU32G",
             "product_revision": "8.0",
-            "serial_number": "00112233",
-            "manufacturer_date": "9/2017",
-            "capacity": "7.4 GiB",
-            "total_bytes": 7948206080
+            "serial_number": "46ba46",
+            "manufacturer_date": "4/2018",
+            "capacity": "29.7 GiB",
+            "total_bytes": 31914983424
         },
         "distribution": {
             "name": "Raspbian GNU/Linux 10 (buster)",
@@ -866,6 +865,25 @@ Returns: Information about the host system in the following format:
             },
             "like": "debian",
             "codename": "buster"
+        },
+        "available_services": [
+            "klipper",
+            "klipper_mcu",
+            "moonraker"
+        ],
+        "service_state": {
+            "klipper": {
+                "active_state": "active",
+                "sub_state": "running"
+            },
+            "klipper_mcu": {
+                "active_state": "active",
+                "sub_state": "running"
+            },
+            "moonraker": {
+                "active_state": "active",
+                "sub_state": "running"
+            }
         }
     }
 }
@@ -3348,6 +3366,27 @@ sent when an existing user is deleted.
     ]
 }
 ```
+
+#### Service State Changed
+Moonraker monitors the state of systemd services it is authorized to track.
+When the state of a service changes the following notification is sent:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_service_state_changed",
+    "params": [
+        {
+            "klipper": {
+                "active_state": "inactive",
+                "sub_state": "dead"
+            }
+        }
+    ]
+}
+```
+
+The example above shows that the `klipper` service has changed to `inactive`.
 
 ### Appendix
 

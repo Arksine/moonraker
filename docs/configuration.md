@@ -213,6 +213,13 @@ restart_klipper_when_powered: False
 #   If set to True, Moonraker will issue a "FIRMWARE_RESTART" to Klipper
 #   after the device has been powered on.  The default is False, thus no
 #   attempt to made to restart Klipper after power on.
+bound_service:
+#   Can be set to any service Moonraker is authorized to manage with the
+#   exception of the moonraker service itself. See the tip below this section
+#   for details on what services are authorized.  When a bound service has
+#   been set the service will be started when the device powers on and stopped
+#   when the device powers off.  The default is no service is bound to the
+#   device.
 restart_delay: 1.
 #   If "restart_klipper_when_powered" is set, this option specifies the amount
 #   of time (in seconds) to delay the restart.  Default is 1 second.
@@ -310,8 +317,21 @@ off_code:
 #   The above options are used for "rf" devices.  The
 #   codes should be valid binary codes that are send via the RF transmitter.
 #   For example: 1011.
-
 ```
+
+!!! Tip
+    Moonraker is authorized to manage the `klipper`, `klipper_mcu`,
+    `webcamd`, `MoonCord`, `KlipperScreen`, and `moonraker-telegram-bot`
+    services.  It can also manage multiple instances of a service, ie:
+    `klipper_1`, `klipper_2`.  Keep in mind that service names are case
+    sensitive.
+
+!!! Note
+    If a device has been bound to the `klipper` service and the
+    `restart_klipper_when_powered` option is set to `True`, the restart
+    will be scheduled to execute after Klipper reports that its startup
+    sequence is complete.
+
 Below are some potential examples:
 ```ini
 # moonraker.conf
