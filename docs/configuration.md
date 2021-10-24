@@ -809,6 +809,7 @@ gcode:
                              strip=strip)}
 
 [gcode_macro SET_WLED]
+description: SET_LED like functionlity for WLED
 gcode:
     {% set strip = params.STRIP|string %}
     {% set red = params.RED|default(0)|float %}
@@ -822,4 +823,23 @@ gcode:
                                strip=strip,
                                red=red, green=green, blue=blue, white=white,
                                index=index, transmit=transmit)}
+
+[gcode_macro WLED_CONTROL]
+description: Lower level control of WLED without relying on presets
+gcode:
+    {% set strip = params.STRIP|string %}
+    {% set bri = params.BRI|default(-1)|int %}
+    {% set transition = params.TRANSITION|default(-1)|int %}
+    {% set fx = params.FX|default(-1)|int %}
+    {% set effect = params.EFFECT|default('')|string %}
+    {% set sx = params.SX|default(-1)|int %}
+    {% set ix = params.IX|default(-1)|int %}
+    {% set pal = params.PAL|default(-1)|int %}
+    {% set palette = params.PALETTE|default('')|string %}
+
+    {action_call_remote_method("wled",
+                               strip=strip,
+                               bri=bri, transition=transition, fx=fx,
+                               effect=effect, sx=sx, ix=ix, pal=pal,
+                               palette=palette)}
 ```
