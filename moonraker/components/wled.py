@@ -127,7 +127,7 @@ class Strip:
             self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
 
     async def _send_wled_command(self,
-                                 state: str):
+                                 state: Dict[str, Any]):
         async with self.request_mutex:
             try:
                 if not hasattr(self, "wled_info"):
@@ -193,8 +193,8 @@ class Strip:
             logging.debug(
                 f"WLED: {self.name} bri={bri} transition={transition} fx={fx} "
                 f"sx={sx} ix={ix} pal={pal}")
-            seg = {}
-            command = {"seg": seg}
+            seg: Dict[str, Any] = {}
+            command: Dict[str, Any] = {"seg": seg}
             if bri >= 0:
                 command['bri'] = bri
             if transition >= 0:
