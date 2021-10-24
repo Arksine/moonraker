@@ -475,7 +475,7 @@ class WLED:
                                ix: int = -1,
                                pal: int = -1,
                                palette: str = ''
-                               ) -> str:
+                               ) -> Dict[str, Any]:
         strip_info = strip.get_strip_info()
         if req == "status":
             return strip_info
