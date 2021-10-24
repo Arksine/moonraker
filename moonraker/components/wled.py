@@ -436,7 +436,7 @@ class WLED:
             raise self.server.error(f"No valid strip named {strip_name}")
         strip = self.strips[strip_name]
         if req_action == 'GET':
-            result = strip.get_strip_info()
+            return {strip_name: strip.get_strip_info()}
         elif req_action == "POST":
             action = web_request.get_str('action').lower()
             if action not in ["on", "off", "toggle", "set"]:
