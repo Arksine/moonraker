@@ -480,6 +480,10 @@ class FileManager:
         if unzip_ufp:
             filename = os.path.splitext(filename)[0] + ".gcode"
             dest_path = os.path.splitext(dest_path)[0] + ".gcode"
+        if os.path.islink(dest_path):
+            raise self.server.error(f"Cannot overwrite symlink: {dest_path}")
+        if os.path.isfile(dest_path) and not os.access(dest_path, os.W_OK):
+            raise self.server.error(f"File is read-only: {dest_path}")
         return {
             'root': root,
             'filename': filename,
