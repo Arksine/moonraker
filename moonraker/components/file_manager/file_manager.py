@@ -229,7 +229,7 @@ class FileManager:
         if action == 'GET':
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
-            dir_info = self._list_directory(dir_path, is_extended)
+            dir_info = self._list_directory(dir_path, root, is_extended)
             return dir_info
         async with self.write_mutex:
             result = {
@@ -368,6 +368,7 @@ class FileManager:
 
     def _list_directory(self,
                         path: str,
+                        root: str,
                         is_extended: bool = False
                         ) -> Dict[str, Any]:
         if not os.path.isdir(path):
@@ -378,7 +379,7 @@ class FileManager:
             full_path = os.path.join(path, fname)
             if not os.path.exists(full_path):
                 continue
-            path_info = self.get_path_info(full_path)
+            path_info = self.get_path_info(full_path, root)
             if os.path.isdir(full_path):
                 path_info['dirname'] = fname
                 flist['dirs'].append(path_info)
@@ -398,11 +399,21 @@ class FileManager:
         flist['disk_usage'] = usage._asdict()
         return flist
 
-    def get_path_info(self, path: str) -> Dict[str, Any]:
-        modified = os.path.getmtime(path)
-        size = os.path.getsize(path)
-        path_info = {'modified': modified, 'size': size}
-        return path_info
+    def get_path_info(self, path: str, root: str) -> Dict[str, Any]:
+        fstat = os.stat(path)
+        real_path = os.path.realpath(path)
+        permissions = "rw"
+        if (
+            (os.path.islink(path) and os.path.isfile(real_path)) or
+            not os.access(real_path, os.R_OK | os.W_OK) or
+            root not in FULL_ACCESS_ROOTS
+        ):
+            permissions = "r"
+        return {
+            'modified': fstat.st_mtime,
+            'size': fstat.st_size,
+            'permissions': permissions
+        }
 
     def gen_temp_upload_path(self) -> str:
         loop_time = int(self.event_loop.get_loop_time())
@@ -549,12 +560,13 @@ class FileManager:
                     await asyncio.sleep(.1)
             if upload_info['unzip_ufp']:
                 tmp_path = upload_info['tmp_file_path']
-                finfo = self.get_path_info(tmp_path)
+                finfo = self.get_path_info(tmp_path, upload_info['root'])
                 finfo['ufp_path'] = tmp_path
             else:
                 shutil.move(upload_info['tmp_file_path'],
                             upload_info['dest_path'])
-                finfo = self.get_path_info(upload_info['dest_path'])
+                finfo = self.get_path_info(upload_info['dest_path'],
+                                           upload_info['root'])
         except Exception:
             logging.exception("Upload Write Error")
             raise self.server.error("Unable to save file", 500)
@@ -596,7 +608,7 @@ class FileManager:
                 if not os.path.exists(full_path):
                     continue
                 fname = full_path[len(path) + 1:]
-                finfo = self.get_path_info(full_path)
+                finfo = self.get_path_info(full_path, root)
                 filelist[fname] = finfo
         if list_format:
             flist: List[Dict[str, Any]] = []
@@ -638,7 +650,7 @@ class FileManager:
         if not os.path.isdir(dir_path):
             raise self.server.error(
                 f"Directory does not exist ({dir_path})")
-        flist = self._list_directory(dir_path)
+        flist = self._list_directory(dir_path, root)
         if simple_format:
             simple_list = []
             for dirobj in flist['dirs']:
@@ -1114,7 +1126,7 @@ class INotifyHandler:
     def parse_gcode_metadata(self, file_path: str) -> asyncio.Event:
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
         try:
-            path_info = self.file_manager.get_path_info(file_path)
+            path_info = self.file_manager.get_path_info(file_path, "gcodes")
         except Exception:
             logging.exception(
                 f"Error retreiving path info for file {file_path}")
@@ -1287,7 +1299,7 @@ class INotifyHandler:
         is_valid = True
         if os.path.exists(full_path):
             try:
-                file_info = self.file_manager.get_path_info(full_path)
+                file_info = self.file_manager.get_path_info(full_path, root)
             except Exception:
                 is_valid = False
         elif action not in ["delete_file", "delete_dir"]:
