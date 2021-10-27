@@ -1162,27 +1162,32 @@ A list of objects, where each object contains file data.
     {
         "path": "3DBenchy_0.15mm_PLA_MK3S_2h6m.gcode",
         "modified": 1615077020.2025201,
-        "size": 4926481
+        "size": 4926481,
+        "permissions": "rw"
     },
     {
         "path": "Shape-Box_0.2mm_PLA_Ender2_20m.gcode",
         "modified": 1614910966.946807,
-        "size": 324236
+        "size": 324236,
+        "permissions": "rw"
     },
     {
         "path": "test_dir/A-Wing.gcode",
         "modified": 1605202259,
-        "size": 1687387
+        "size": 1687387,
+        "permissions": "rw"
     },
     {
         "path": "test_dir/CE2_CubeTest.gcode",
         "modified": 1614644445.4025,
-        "size": 1467339
+        "size": 1467339,
+        "permissions": "rw"
     },
     {
         "path": "test_dir/V350_Engine_Block_-_2_-_Scaled.gcode",
         "modified": 1615768477.5133543,
-        "size": 189713016
+        "size": 189713016,
+        "permissions": "rw"
     },
 ]
 ```
@@ -1299,16 +1304,19 @@ following format:
         {
             "modified": 1615768162.0412788,
             "size": 4096,
+            "permissions": "rw",
             "dirname": "test"
         },
         {
             "modified": 1613569827.489749,
             "size": 4096,
+            "permissions": "rw",
             "dirname": "Cura"
         },
         {
             "modified": 1615767459.6265886,
             "size": 4096,
+            "permissions": "rw",
             "dirname": "thumbs"
         }
     ],
@@ -1316,16 +1324,19 @@ following format:
         {
             "modified": 1615578004.9639666,
             "size": 7300692,
+            "permissions": "rw",
             "filename": "Funnel_0.2mm_PLA_Ender2_2h4m.gcode"
         },
         {
             "modified": 1589156863.9726968,
             "size": 4214831,
+            "permissions": "rw",
             "filename": "CE2_Pi3_A+_CaseLID.gcode"
         },
         {
             "modified": 1615030592.7722695,
             "size": 2388774,
+            "permissions": "rw",
             "filename": "CE2_calicat.gcode"
         },
     ],
