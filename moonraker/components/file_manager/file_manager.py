@@ -1249,10 +1249,14 @@ class INotifyHandler:
         ext: str = os.path.splitext(evt.name)[-1].lower()
         root = node.get_root()
         node_path = node.get_path()
+        file_path = os.path.join(node_path, evt.name)
         if evt.mask & iFlags.CREATE:
             logging.debug(f"Inotify file create: {root}, "
                           f"{node_path}, {evt.name}")
             node.schedule_file_event(evt.name, "create_file")
+            if os.path.islink(file_path):
+                logging.debug(f"Inotify symlink create: {file_path}")
+                await node.complete_file_write(evt.name)
         elif evt.mask & iFlags.DELETE:
             logging.debug(f"Inotify file delete: {root}, "
                           f"{node_path}, {evt.name}")
@@ -1267,7 +1271,6 @@ class INotifyHandler:
         elif evt.mask & iFlags.MOVED_TO:
             logging.debug(f"Inotify file move to: {root}, "
                           f"{node_path}, {evt.name}")
-            file_path = os.path.join(node_path, evt.name)
             moved_evt = self.pending_moves.pop(evt.cookie, None)
             if moved_evt is not None:
                 # Moved from a currently watched directory
@@ -1293,7 +1296,6 @@ class INotifyHandler:
         elif evt.mask & iFlags.MODIFY:
             node.schedule_file_event(evt.name, "modify_file")
         elif evt.mask & iFlags.CLOSE_WRITE:
-            file_path = os.path.join(node_path, evt.name)
             logging.debug(f"Inotify writable file closed: {file_path}")
             # Only process files that have been created or modified
             await node.complete_file_write(evt.name)
