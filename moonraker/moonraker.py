@@ -441,7 +441,8 @@ class Server:
                 if vsd_path is not None:
                     file_manager: FileManager = self.lookup_component(
                         'file_manager')
-                    file_manager.register_directory('gcodes', vsd_path)
+                    file_manager.register_directory('gcodes', vsd_path,
+                                                    full_access=True)
                 else:
                     logging.info(
                         "Configuration for [virtual_sdcard] not found,"
