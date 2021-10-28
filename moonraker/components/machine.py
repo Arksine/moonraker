@@ -43,6 +43,8 @@ class Machine:
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
+        self.virt_type = "none"
+        self.virt_id = "none"
         self.system_info: Dict[str, Any] = {
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
@@ -52,8 +54,11 @@ class Machine:
         sys_info_msg = "\nSystem Info:"
         for header, info in self.system_info.items():
             sys_info_msg += f"\n\n***{header}***"
-            for key, val in info.items():
-                sys_info_msg += f"\n  {key}: {val}"
+            if not isinstance(info, dict):
+                sys_info_msg += f"\n {repr(info)}"
+            else:
+                for key, val in info.items():
+                    sys_info_msg += f"\n  {key}: {val}"
         self.server.add_log_rollover_item('system_info', sys_info_msg)
         self.available_services: Dict[str, Dict[str, str]] = {}
 
@@ -85,7 +90,7 @@ class Machine:
         # Retreive list of services
         event_loop = self.server.get_event_loop()
         self.init_evt = asyncio.Event()
-        event_loop.register_callback(self._find_active_services)
+        event_loop.register_callback(self._initialize)
 
     async def wait_for_init(self, timeout: float = None) -> None:
         try:
@@ -93,8 +98,16 @@ class Machine:
         except asyncio.TimeoutError:
             pass
 
+    async def _initialize(self):
+        await self._check_virt_status()
+        await self._find_active_services()
+
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
+        if self.virt_type == "container":
+            raise self.server.error(
+                f"Cannot {ep.split('/')[-1]} from within a "
+                f"{self.virt_id} container")
         if ep == "/machine/shutdown":
             await self.shutdown_machine()
         elif ep == "/machine/reboot":
@@ -280,6 +293,46 @@ class Machine:
         self.system_info['service_state'] = self.available_services
         await self.update_service_status(notify=False)
         self.init_evt.set()
+
+    async def _check_virt_status(self) -> None:
+        self.virt_id = self.virt_type = "none"
+
+        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
+
+        # Check for any form of virtualization.  This will report the innermost
+        # virtualization type in the event that nested virtualization is used
+        scmd = shell_cmd.build_shell_command("systemd-detect-virt")
+        try:
+            resp = await scmd.run_with_response()
+        except shell_cmd.error:
+            pass
+        else:
+            self.virt_id = resp.strip()
+
+        if self.virt_id != "none":
+            # Check explicitly for container virtualization
+            scmd = shell_cmd.build_shell_command(
+                "systemd-detect-virt --container")
+            try:
+                resp = await scmd.run_with_response()
+            except shell_cmd.error:
+                self.virt_type = "vm"
+            else:
+                if self.virt_id == resp.strip():
+                    self.virt_type = "container"
+                else:
+                    # Moonraker is run from within a VM inside a container
+                    self.virt_type = "vm"
+            logging.info(
+                f"Virtualized Environment Detected, Type: {self.virt_type} "
+                f"id: {self.virt_id}")
+        else:
+            logging.info("No Virtualization Detected")
+
+        self.system_info['virtualization'] = {
+            'virt_type': self.virt_type,
+            'virt_identifier': self.virt_id
+        }
 
     async def update_service_status(self, notify: bool = True) -> None:
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
