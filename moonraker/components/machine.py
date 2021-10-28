@@ -29,6 +29,8 @@ ALLOWED_SERVICES = [
     "moonraker", "klipper", "webcamd", "MoonCord",
     "KlipperScreen", "moonraker-telegram-bot"
 ]
+CGROUP_PATH = "/proc/1/cgroup"
+SCHED_PATH = "/proc/1/sched"
 SYSTEMD_PATH = "/etc/systemd/system"
 SD_CID_PATH = "/sys/block/mmcblk0/device/cid"
 SD_CSD_PATH = "/sys/block/mmcblk0/device/csd"
@@ -43,23 +45,15 @@ class Machine:
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
-        self.virt_type = "none"
+        self.inside_container = False
         self.virt_id = "none"
         self.system_info: Dict[str, Any] = {
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
-            'distribution': dist_info
+            'distribution': dist_info,
+            'virtualization': self._check_inside_container()
         }
-        # Add system info to log rollover
-        sys_info_msg = "\nSystem Info:"
-        for header, info in self.system_info.items():
-            sys_info_msg += f"\n\n***{header}***"
-            if not isinstance(info, dict):
-                sys_info_msg += f"\n {repr(info)}"
-            else:
-                for key, val in info.items():
-                    sys_info_msg += f"\n  {key}: {val}"
-        self.server.add_log_rollover_item('system_info', sys_info_msg)
+        self._update_log_rollover(log=True)
         self.available_services: Dict[str, Dict[str, str]] = {}
 
         self.server.register_endpoint(
@@ -92,6 +86,17 @@ class Machine:
         self.init_evt = asyncio.Event()
         event_loop.register_callback(self._initialize)
 
+    def _update_log_rollover(self, log: bool = False) -> None:
+        sys_info_msg = "\nSystem Info:"
+        for header, info in self.system_info.items():
+            sys_info_msg += f"\n\n***{header}***"
+            if not isinstance(info, dict):
+                sys_info_msg += f"\n {repr(info)}"
+            else:
+                for key, val in info.items():
+                    sys_info_msg += f"\n  {key}: {val}"
+        self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
+
     async def wait_for_init(self, timeout: float = None) -> None:
         try:
             await asyncio.wait_for(self.init_evt.wait(), timeout)
@@ -99,12 +104,14 @@ class Machine:
             pass
 
     async def _initialize(self):
-        await self._check_virt_status()
+        if not self.inside_container:
+            await self._check_virt_status()
         await self._find_active_services()
+        self._update_log_rollover()
 
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
-        if self.virt_type == "container":
+        if self.inside_container:
             raise self.server.error(
                 f"Cannot {ep.split('/')[-1]} from within a "
                 f"{self.virt_id} container")
@@ -294,8 +301,50 @@ class Machine:
         await self.update_service_status(notify=False)
         self.init_evt.set()
 
+    def _check_inside_container(self) -> Dict[str, Any]:
+        cgroup_file = pathlib.Path(CGROUP_PATH)
+        virt_type = virt_id = "none"
+        if cgroup_file.exists():
+            try:
+                data = cgroup_file.read_text()
+                container_types = ["docker", "lxc"]
+                for ct in container_types:
+                    if ct in data:
+                        self.inside_container = True
+                        virt_type = "container"
+                        virt_id = ct
+                        break
+            except Exception:
+                logging.exception(f"Error reading {CGROUP_PATH}")
+
+        # Fall back to process schedule check
+        if not self.inside_container:
+            sched_file = pathlib.Path(SCHED_PATH)
+            if sched_file.exists():
+                try:
+                    data = sched_file.read_text().strip()
+                    proc_name = data.split('\n')[0].split()[0]
+                    if proc_name not in ["init", "systemd"]:
+                        self.inside_container = True
+                        virt_type = "container"
+                        virt_id = "lxc"
+                        if (
+                            os.path.exists("/.dockerenv") or
+                            os.path.exists("/.dockerinit")
+                        ):
+                            virt_id = "docker"
+                except Exception:
+                    logging.exception(f"Error reading {SCHED_PATH}")
+
+        self.virt_id = virt_id
+        return {
+            'virt_type': virt_type,
+            'virt_identifier': virt_id
+        }
+
     async def _check_virt_status(self) -> None:
-        self.virt_id = self.virt_type = "none"
+        # Fallback virtualization check
+        virt_id = virt_type = "none"
 
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
 
@@ -307,31 +356,32 @@ class Machine:
         except shell_cmd.error:
             pass
         else:
-            self.virt_id = resp.strip()
+            virt_id = resp.strip()
 
-        if self.virt_id != "none":
+        if virt_id != "none":
             # Check explicitly for container virtualization
             scmd = shell_cmd.build_shell_command(
                 "systemd-detect-virt --container")
             try:
                 resp = await scmd.run_with_response()
             except shell_cmd.error:
-                self.virt_type = "vm"
+                virt_type = "vm"
             else:
-                if self.virt_id == resp.strip():
-                    self.virt_type = "container"
+                if virt_id == resp.strip():
+                    virt_type = "container"
                 else:
                     # Moonraker is run from within a VM inside a container
-                    self.virt_type = "vm"
+                    virt_type = "vm"
             logging.info(
-                f"Virtualized Environment Detected, Type: {self.virt_type} "
-                f"id: {self.virt_id}")
+                f"Virtualized Environment Detected, Type: {virt_type} "
+                f"id: {virt_id}")
         else:
             logging.info("No Virtualization Detected")
 
+        self.virt_id = virt_id
         self.system_info['virtualization'] = {
-            'virt_type': self.virt_type,
-            'virt_identifier': self.virt_id
+            'virt_type': virt_type,
+            'virt_identifier': virt_id
         }
 
     async def update_service_status(self, notify: bool = True) -> None:
