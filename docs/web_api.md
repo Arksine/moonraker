@@ -884,6 +884,10 @@ Returns: Information about the host system in the following format:
                 "active_state": "active",
                 "sub_state": "running"
             }
+        },
+        "virtualization": {
+            "virt_type": "none",
+            "virt_identifier": "none"
         }
     }
 }
