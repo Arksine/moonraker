@@ -405,6 +405,10 @@ class FileManager:
                 flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
+        flist['root_info'] = {
+            'name': root,
+            'permissions': "rw" if root in self.full_access_roots else "r"
+        }
         return flist
 
     def get_path_info(self, path: str, root: str) -> Dict[str, Any]:
