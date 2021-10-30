@@ -305,7 +305,7 @@ class FileManager:
 
     def _convert_request_path(self, request_path: str) -> Tuple[str, str]:
         # Parse the root, relative path, and disk path from a remote request
-        parts = request_path.strip("/").split("/", 1)
+        parts = os.path.normpath(request_path).strip("/").split("/", 1)
         if not parts:
             raise self.server.error(f"Invalid path: {request_path}")
         root = parts[0]
@@ -681,7 +681,7 @@ class FileManager:
 
     async def delete_file(self, path: str) -> Dict[str, Any]:
         async with self.write_mutex:
-            parts = path.lstrip("/").split("/", 1)
+            parts = os.path.normpath(path).lstrip("/").split("/", 1)
             if len(parts) != 2:
                 raise self.server.error(
                     f"Path not available for DELETE: {path}", 405)
