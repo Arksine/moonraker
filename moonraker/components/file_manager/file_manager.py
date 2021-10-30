@@ -403,6 +403,9 @@ class FileManager:
                 flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
+        rootdirinfo = self.get_path_info(path, root)
+        permissions = rootdirinfo['permissions']
+        flist['permissions'] = permissions
         return flist
 
     def get_path_info(self, path: str, root: str) -> Dict[str, Any]:
