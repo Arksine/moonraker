@@ -393,10 +393,12 @@ class FileManager:
                 path_info['filename'] = fname
                 # Check to see if a filelist update is necessary
                 ext = os.path.splitext(fname)[-1].lower()
-                gc_path = self.file_paths.get('gcodes', None)
-                if gc_path is not None and full_path.startswith(gc_path) and \
-                        ext in VALID_GCODE_EXTS and is_extended:
-                    rel_path = os.path.relpath(full_path, start=gc_path)
+                if (
+                    root == "gcodes" and
+                    ext in VALID_GCODE_EXTS and
+                    is_extended
+                ):
+                    rel_path = self.get_relative_path(root, full_path)
                     metadata: Dict[str, Any] = self.gcode_metadata.get(
                         rel_path, {})
                     path_info.update(metadata)
