@@ -248,9 +248,12 @@ class PrusaSlicer(BaseSlicer):
         return round(total_time, 2)
 
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
-        thumb_matches: List[str] = re.findall(
-            r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", self.header_data)
-        if not thumb_matches:
+        for data in [self.header_data, self.footer_data]:
+            thumb_matches: List[str] = re.findall(
+                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
+            if thumb_matches:
+                break
+        else:
             return None
         thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
         if not os.path.exists(thumb_dir):
