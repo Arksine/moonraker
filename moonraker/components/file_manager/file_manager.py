@@ -681,23 +681,11 @@ class FileManager:
 
     async def delete_file(self, path: str) -> Dict[str, Any]:
         async with self.write_mutex:
-            parts = os.path.normpath(path).lstrip("/").split("/", 1)
-            if len(parts) != 2:
+            root, full_path = self._convert_request_path(path)
+            filename = self.get_relative_path(root, full_path)
+            if root not in self.full_access_roots:
                 raise self.server.error(
                     f"Path not available for DELETE: {path}", 405)
-            root = parts[0]
-            filename = parts[1]
-            if (
-                root not in self.file_paths or
-                root not in self.full_access_roots
-            ):
-                raise self.server.error(
-                    f"Path not available for DELETE: {path}", 405)
-            root_path = self.file_paths[root]
-            full_path = os.path.abspath(os.path.join(root_path, filename))
-            if not full_path.startswith(root_path):
-                raise self.server.error(
-                    f"Delete request on file outside of root: {path}")
             if not os.path.isfile(full_path):
                 raise self.server.error(f"Invalid file path: {path}")
             try:
