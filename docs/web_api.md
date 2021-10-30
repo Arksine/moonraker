@@ -1348,6 +1348,10 @@ following format:
         "total": 7522213888,
         "used": 4280369152,
         "free": 2903625728
+    },
+    "root_info": {
+        "name": "gcodes",
+        "permissions": "rw"
     }
 }
 ```
