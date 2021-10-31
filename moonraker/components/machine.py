@@ -36,7 +36,8 @@ SD_CID_PATH = "/sys/block/mmcblk0/device/cid"
 SD_CSD_PATH = "/sys/block/mmcblk0/device/csd"
 SD_MFGRS = {
     '1b': "Samsung",
-    '03': "Sandisk"
+    '03': "Sandisk",
+    '74': "PNY"
 }
 
 class Machine:
