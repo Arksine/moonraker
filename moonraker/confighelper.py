@@ -153,10 +153,10 @@ class ConfigHelper:
             for opt, val in self.config.items(sect):
                 if opt not in parsed_opts:
                     self.server.add_warning(
-                        f"Invalid config option '{opt}: {val}' detected in "
-                        f"section [{sect}]. To solve this issue check your "
-                        "moonraker config. This option is invalid and has to "
-                        "be deleted or fixed. In the future this will result "
+                        f"Unparsed config option '{opt}: {val}' detected in "
+                        f"section [{sect}].  This may be an option no longer "
+                        "available or could be the result of a module that "
+                        "failed to load.  In the future this will result "
                         "in a startup error.")
 
 def get_configuration(server: Server,
