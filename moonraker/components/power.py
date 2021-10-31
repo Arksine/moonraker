@@ -38,7 +38,10 @@ for pkg_path in PKG_PATHS:
     sys.path.insert(0, pkg_path)
     try:
         import gpiod
+    except ModuleNotFoundError:
+        sys.path.pop(0)
     except ImportError:
+        logging.exception("Unable to load gpiod module")
         sys.path.pop(0)
     else:
         HAS_GPIOD = True
@@ -84,6 +87,9 @@ class PrinterPower:
                 dev = dev_class(cfg)
                 if isinstance(dev, GpioDevice) or isinstance(dev, RFDevice):
                     if not HAS_GPIOD:
+                        self.server.add_warning(
+                            f"Unable to load power device [{cfg.get_name()}], "
+                            "gpiod module not loaded")
                         continue
                     dev.configure_line(cfg, self.chip_factory)
                 self.devices[dev.get_name()] = dev
