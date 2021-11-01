@@ -324,7 +324,7 @@ class GitRepo:
                 self.git_owner = owner_match.group(1)
 
             # Parse GitHub Repository Name from URL
-            repo_match = re.match(r".*\/([^\.]*)(?:\..*)?", self.upstream_url)
+            repo_match = re.match(r".*\/([^\.]*).*", self.upstream_url)
             self.git_repo_name = "?"
             if repo_match is not None:
                 self.git_repo_name = repo_match.group(1)
