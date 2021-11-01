@@ -218,6 +218,7 @@ class GitRepo:
         self.moved_origin_url = moved_origin_url
         self.valid_git_repo: bool = False
         self.git_owner: str = "?"
+        self.git_repo_name: str = "?"
         self.git_remote: str = "?"
         self.git_branch: str = "?"
         self.current_version: str = "?"
@@ -321,6 +322,14 @@ class GitRepo:
             self.git_owner = "?"
             if owner_match is not None:
                 self.git_owner = owner_match.group(1)
+
+            # Parse GitHub Repository Name from URL
+            repo_match = re.match(r".*\/([^\.]*).*", self.upstream_url)
+            self.git_repo_name = "?"
+            if repo_match is not None:
+                self.git_repo_name = repo_match.group(1)
+
+            # check if Repository is dirty
             self.dirty = current_version.endswith("dirty")
 
             # Parse Version Info
@@ -430,6 +439,7 @@ class GitRepo:
         logging.info(
             f"Git Repo {self.alias} Detected:\n"
             f"Owner: {self.git_owner}\n"
+            f"Repository Name: {self.git_repo_name}\n"
             f"Path: {self.git_path}\n"
             f"Remote: {self.git_remote}\n"
             f"Branch: {self.git_branch}\n"
@@ -605,6 +615,7 @@ class GitRepo:
             'remote_alias': self.git_remote,
             'branch': self.git_branch,
             'owner': self.git_owner,
+            'repo_name': self.git_repo_name,
             'version': self.current_version,
             'remote_version': self.upstream_version,
             'current_hash': self.current_commit,
