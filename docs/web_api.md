@@ -442,7 +442,8 @@ An object containing various fields that report server state.
         "Invalid config option 'api_key_path' detected in section [authorization]. Remove the option to resolve this issue. In the future this will result in a startup error.",
         "Unparsed config section [fake_section] detected.  This may be the result of a component that failed to load.  In the future this will result in a startup error."
     ],
-    "websocket_count": 2
+    "websocket_count": 2,
+    "moonraker_version": "v0.7.1-105-ge4f103c"
   }
 ```
 !!! warning
