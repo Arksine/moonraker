@@ -618,7 +618,8 @@ class Server:
             'failed_plugins': self.failed_components,
             'registered_directories': reg_dirs,
             'warnings': self.warnings,
-            'websocket_count': self.get_websocket_manager().get_count()
+            'websocket_count': self.get_websocket_manager().get_count(),
+            'moonraker_version': self.app_args['software_version']
         }
 
     async def _handle_config_request(self,
