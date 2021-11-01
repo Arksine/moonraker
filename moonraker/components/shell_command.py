@@ -85,12 +85,14 @@ class SCProcess(asyncio.subprocess.Process):
         sig_idx = min(2, max(0, sig_idx))
         sigs = [signal.SIGINT, signal.SIGTERM, signal.SIGKILL][sig_idx:]
         for sig in sigs:
-            self.send_signal(sig)
             try:
+                self.send_signal(sig)
                 ret = self.wait()
                 await asyncio.wait_for(ret, timeout=2.)
             except asyncio.TimeoutError:
                 continue
+            except ProcessLookupError:
+                pass
             logging.debug(f"Command '{self.program_name}' exited with "
                           f"signal: {sig.name}")
             exit_success = True
