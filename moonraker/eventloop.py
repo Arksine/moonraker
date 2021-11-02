@@ -13,6 +13,7 @@ from typing import (
     TYPE_CHECKING,
     Callable,
     Coroutine,
+    List,
     Optional,
     TypeVar
 )
@@ -32,6 +33,7 @@ class EventLoop:
         self.remove_reader = self.aioloop.remove_reader
         self.remove_writer = self.aioloop.remove_writer
         self.get_loop_time = self.aioloop.time
+        self.create_future = self.aioloop.create_future
 
     def register_callback(self,
                           callback: FlexCallback,
