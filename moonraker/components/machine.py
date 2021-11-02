@@ -82,10 +82,7 @@ class Machine:
         self.server.register_remote_method(
             "reboot_machine", self.reboot_machine)
 
-        # Retreive list of services
-        event_loop = self.server.get_event_loop()
         self.init_evt = asyncio.Event()
-        event_loop.register_callback(self._initialize)
 
     def _update_log_rollover(self, log: bool = False) -> None:
         sys_info_msg = "\nSystem Info:"
@@ -104,7 +101,7 @@ class Machine:
         except asyncio.TimeoutError:
             pass
 
-    async def _initialize(self):
+    async def component_init(self):
         if not self.inside_container:
             await self._check_virt_status()
         await self._find_active_services()
