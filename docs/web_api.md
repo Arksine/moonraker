@@ -2133,7 +2133,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "remote_alias": "origin",
             "branch": "master",
             "owner": "Arksine",
-			"repo_name": "moonraker":
+			"repo_name": "moonraker",
             "version": "v0.4.1-45",
             "remote_version": "v0.4.1-45",
             "full_version_string": "v0.4.1-45-g7e230c1c",
