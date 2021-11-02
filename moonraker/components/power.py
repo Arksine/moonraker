@@ -117,9 +117,6 @@ class PrinterPower:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_klippy_shutdown)
         self.server.register_notification("power:power_changed")
-        event_loop = self.server.get_event_loop()
-        event_loop.register_callback(
-            self._initalize_devices, list(self.devices.values()))
 
     async def _check_klippy_printing(self) -> bool:
         kapis: APIComp = self.server.lookup_component('klippy_apis')
@@ -128,16 +125,14 @@ class PrinterPower:
         pstate = result.get('print_stats', {}).get('state', "").lower()
         return pstate == "printing"
 
-    async def _initalize_devices(self,
-                                 inital_devs: List[PowerDevice]
-                                 ) -> None:
+    async def component_init(self) -> None:
         event_loop = self.server.get_event_loop()
         # Wait up to 5 seconds for the machine component to init
         machine_cmp: Machine = self.server.lookup_component("machine")
         await machine_cmp.wait_for_init(5.)
         cur_time = event_loop.get_loop_time()
         endtime = cur_time + 120.
-        query_devs = inital_devs
+        query_devs = list(self.devices.values())
         failed_devs: List[PowerDevice] = []
         while cur_time < endtime:
             for dev in query_devs:
