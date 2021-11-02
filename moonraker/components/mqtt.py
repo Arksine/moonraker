@@ -229,31 +229,28 @@ class MQTTClient(APITransport, Subscribable):
                 f"Moonraker API topics - Request: {self.api_request_topic}, "
                 f"Response: {self.api_resp_topic}")
 
-        self.event_loop.register_callback(self._initialize)
-
-    async def _initialize(self) -> None:
+    async def component_init(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
         # prior to retreiving it
         self.helper = AIOHelper(self.client)
         if self.user_name is not None:
             self.client.username_pw_set(self.user_name, self.password)
-        retries = 15
-        while retries:
+        retries = 5
+        for _ in range(retries):
             try:
                 self.client.connect(self.address, self.port)
             except ConnectionRefusedError:
-                retries -= 1
-                if retries:
-                    logging.info("Unable to connect to MQTT broker, "
-                                 f"retries remaining: {retries}")
-                    await asyncio.sleep(2.)
-                    continue
-                self.server.set_failed_component("mqtt")
-                self.server.add_warning(
-                    f"MQTT Broker Connection at ({self.address}, {self.port}) "
-                    "refused. Check your client and broker configuration.")
-                return
-            break
+                logging.info("Unable to connect to MQTT broker, "
+                             f"retries remaining: {retries}")
+                await asyncio.sleep(2.)
+            else:
+                break
+        else:
+            self.server.set_failed_component("mqtt")
+            self.server.add_warning(
+                f"MQTT Broker Connection at ({self.address}, {self.port}) "
+                "refused. Check your client and broker configuration.")
+            return
         self.client.socket().setsockopt(
             socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
 
