@@ -146,6 +146,9 @@ class Server:
         self._load_components(config)
         self.klippy_apis: KlippyAPI = self.lookup_component('klippy_apis')
         config.validate_config()
+        self.event_loop.add_signal_handler(
+            signal.SIGTERM, self._handle_term_signal)
+        self.event_loop.register_callback(self._start_server)
 
     def get_app_args(self) -> Dict[str, Any]:
         return dict(self.app_args)
@@ -153,16 +156,30 @@ class Server:
     def get_event_loop(self) -> EventLoop:
         return self.event_loop
 
-    def start(self) -> None:
+    async def _start_server(self):
+        optional_comps: List[Coroutine] = []
+        for name, component in self.components.items():
+            if not hasattr(component, "component_init"):
+                continue
+            if name in CORE_COMPONENTS:
+                # Process core components in order synchronously
+                await self._initialize_component(name, component)
+            else:
+                optional_comps.append(
+                    self._initialize_component(name, component))
+
+        # Asynchronous Optional Component Initialization
+        if optional_comps:
+            await asyncio.gather(*optional_comps)
+
+        # Start HTTP Server
         hostname, hostport = self.get_host_info()
         logging.info(
             f"Starting Moonraker on ({self.host}, {hostport}), "
             f"Hostname: {hostname}")
         self.moonraker_app.listen(self.host, self.port, self.ssl_port)
         self.server_running = True
-        self.event_loop.add_signal_handler(
-            signal.SIGTERM, self._handle_term_signal)
-        self.event_loop.register_callback(self._connect_klippy)
+        await self._connect_klippy()
 
     def add_log_rollover_item(self, name: str, item: str,
                               log: bool = True) -> None:
@@ -177,6 +194,17 @@ class Server:
             logging.warning(warning)
 
     # ***** Component Management *****
+    async def _initialize_component(self, name: str, component: Any) -> None:
+        logging.info(f"Performing Component Post Init: [{name}]")
+        try:
+            ret = component.component_init()
+            if ret is not None:
+                await ret
+        except Exception as e:
+            self.add_warning(f"Component '{name}' failed to load with "
+                             f"error: {e}")
+            self.set_failed_component(name)
+
     def _load_components(self, config: confighelper.ConfigHelper) -> None:
         # load core components
         for component in CORE_COMPONENTS:
@@ -275,8 +303,8 @@ class Server:
         if not ret:
             self.event_loop.delay_callback(.25, self._connect_klippy)
             return
-        # begin server iniialization
-        self.event_loop.register_callback(self._initialize)
+        self.init_handle = self.event_loop.delay_callback(
+            0.01, self._init_klippy_connection)
 
     def process_command(self, cmd: Dict[str, Any]) -> None:
         method = cmd.get('method', None)
@@ -332,7 +360,7 @@ class Server:
         if self.klippy_disconnect_evt is not None:
             self.klippy_disconnect_evt.set()
 
-    async def _initialize(self) -> None:
+    async def _init_klippy_connection(self) -> None:
         if not self.server_running:
             return
         await self._check_ready()
@@ -368,7 +396,7 @@ class Server:
         else:
             self.init_attempts += 1
             self.init_handle = self.event_loop.delay_callback(
-                INIT_TIME, self._initialize)
+                INIT_TIME, self._init_klippy_connection)
 
     async def _request_endpoints(self) -> None:
         result = await self.klippy_apis.list_endpoints(default=None)
@@ -613,8 +641,6 @@ class Server:
             'klippy_state': self.klippy_state,
             'components': list(self.components.keys()),
             'failed_components': self.failed_components,
-            'plugins': list(self.components.keys()),
-            'failed_plugins': self.failed_components,
             'registered_directories': reg_dirs,
             'warnings': self.warnings,
             'websocket_count': self.get_websocket_manager().get_count(),
@@ -779,7 +805,6 @@ def main() -> None:
             estatus = 1
             break
         try:
-            server.start()
             event_loop.start()
         except Exception:
             logging.exception("Server Running Error")
