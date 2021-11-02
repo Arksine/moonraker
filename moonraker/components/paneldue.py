@@ -60,7 +60,6 @@ class SerialConnection:
         self.send_busy: bool = False
         self.send_buffer: bytes = b""
         self.attempting_connect: bool = True
-        self.event_loop.register_callback(self._connect)
 
     def disconnect(self, reconnect: bool = False) -> None:
         if self.connected:
@@ -77,9 +76,10 @@ class SerialConnection:
             logging.info("PanelDue Disconnected")
         if reconnect and not self.attempting_connect:
             self.attempting_connect = True
-            self.event_loop.delay_callback(1., self._connect)
+            self.event_loop.delay_callback(1., self.connect)
 
-    async def _connect(self) -> None:
+    async def connect(self) -> None:
+        self.attempting_connect = True
         start_time = connect_time = time.time()
         while not self.connected:
             if connect_time > start_time + 30.:
@@ -265,6 +265,9 @@ class PanelDue:
             'M292': self._prepare_M292,
             'M999': lambda args: "FIRMWARE_RESTART"
         }
+
+    async def component_init(self) -> None:
+        await self.ser_conn.connect()
 
     async def _process_klippy_ready(self) -> None:
         # Request "info" and "configfile" status
