@@ -108,9 +108,11 @@ class KlippyAPI(Subscribable):
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
+        await self.server.wait_connection_initialized()
         return await self.run_gcode(script)
 
     async def do_restart(self, gc: str) -> str:
+        await self.server.wait_connection_initialized()
         try:
             result = await self.run_gcode(gc)
         except self.server.error as e:
