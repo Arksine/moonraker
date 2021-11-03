@@ -211,14 +211,17 @@ class Server:
             self.set_failed_component(name)
 
     def _load_components(self, config: confighelper.ConfigHelper) -> None:
+        cfg_sections = [s.split()[0] for s in config.sections()]
+        cfg_sections.remove('server')
+
         # load core components
         for component in CORE_COMPONENTS:
             self.load_component(config, component)
+            if component in cfg_sections:
+                cfg_sections.remove(component)
 
-        # check for optional components
-        opt_sections = set([s.split()[0] for s in config.sections()])
-        opt_sections.remove('server')
-        for section in opt_sections:
+        # load remaining optional components
+        for section in cfg_sections:
             self.load_component(config, section, None)
 
     def load_component(self,
