@@ -386,27 +386,29 @@ class Machine:
         }
 
     async def update_service_status(self, notify: bool = True) -> None:
+        if not self.available_services:
+            return
+        svcs = self.system_info['available_services']
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
-        for svc, state in list(self.available_services.items()):
-            scmd = shell_cmd.build_shell_command(
-                f"systemctl show -p ActiveState,SubState --value {svc}")
-            try:
-                resp = await scmd.run_with_response(log_complete=False)
-                active_state, sub_state = resp.strip().split('\n', 1)
+        scmd = shell_cmd.build_shell_command(
+            "systemctl show -p ActiveState,SubState --value "
+            f"{' '.join(svcs)}")
+        try:
+            resp = await scmd.run_with_response(log_complete=False)
+            for svc, state in zip(svcs, resp.strip().split('\n\n')):
+                active_state, sub_state = state.split('\n', 1)
                 new_state: Dict[str, str] = {
                     'active_state': active_state,
                     'sub_state': sub_state
                 }
-            except Exception:
-                new_state = {
-                    'active_state': "error",
-                    'sub_state': "error"
-                }
-            if state != new_state and notify:
-                self.server.send_event("machine:service_state_changed",
-                                       {svc: new_state})
-            self.available_services[svc] = new_state
-
+                if self.available_services[svc] != new_state:
+                    self.available_services[svc] = new_state
+                    if notify:
+                        self.server.send_event(
+                            "machine:service_state_changed",
+                            {svc: new_state})
+        except Exception:
+            logging.exception("Error processing service state update")
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
