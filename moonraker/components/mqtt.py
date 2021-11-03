@@ -611,7 +611,7 @@ class MQTTClient(APITransport, Subscribable):
                     status: Dict[str, Any],
                     eventtime: float
                     ) -> None:
-        if not status:
+        if not status or not self.is_connected():
             return
         payload = {'eventtime': eventtime, 'status': status}
         self.publish_topic(self.klipper_status_topic, payload)
