@@ -132,7 +132,6 @@ class UpdateManager:
                     f"Invalid type '{client_type}' for section [{section}]")
 
         self.cmd_request_lock = asyncio.Lock()
-        self.initialized_lock = asyncio.Event()
         self.init_success: bool = False
         self.klippy_identified_evt: Optional[asyncio.Event] = None
 
@@ -180,7 +179,6 @@ class UpdateManager:
                     "rate limit")
                 self.server.set_failed_component("update_manager")
                 self.init_success = False
-                self.initialized_lock.set()
                 return
             for updater in list(self.updaters.values()):
                 if isinstance(updater, PackageDeploy):
@@ -189,7 +187,6 @@ class UpdateManager:
                     ret = updater.refresh()
                 await ret
         self.init_success = True
-        self.initialized_lock.set()
         if self.refresh_cb is not None:
             self.refresh_cb.start()
 
@@ -219,7 +216,7 @@ class UpdateManager:
             })
         async with self.cmd_request_lock:
             await self.updaters['klipper'].refresh()
-        if need_notification:
+        if need_notification and self.init_success:
             vinfo: Dict[str, Any] = {}
             for name, updater in self.updaters.items():
                 vinfo[name] = updater.get_update_status()
@@ -235,8 +232,7 @@ class UpdateManager:
         pstate: str = result.get('print_stats', {}).get('state', "")
         return pstate.lower() == "printing"
 
-    async def _check_init_success(self):
-        await self.initialized_lock.wait()
+    def _check_init_success(self):
         if not self.init_success:
             raise self.server.error("Update Manger Failed to Initialize", 500)
 
@@ -271,7 +267,7 @@ class UpdateManager:
     async def _handle_update_request(self,
                                      web_request: WebRequest
                                      ) -> str:
-        await self._check_init_success()
+        self._check_init_success()
         if await self._check_klippy_printing():
             raise self.server.error("Update Refused: Klippy is printing")
         app: str = web_request.get_endpoint().split("/")[-1]
@@ -300,7 +296,7 @@ class UpdateManager:
     async def _handle_full_update_request(self,
                                           web_request: WebRequest
                                           ) -> str:
-        await self._check_init_success()
+        self._check_init_success()
         async with self.cmd_request_lock:
             app_name = ""
             self.cmd_helper.set_update_info('full', id(web_request),
@@ -386,7 +382,7 @@ class UpdateManager:
     async def _handle_status_request(self,
                                      web_request: WebRequest
                                      ) -> Dict[str, Any]:
-        await self._check_init_success()
+        self._check_init_success()
         check_refresh = web_request.get_boolean('refresh', False)
         # Don't refresh if a print is currently in progress or
         # if an update is in progress.  Just return the current
@@ -429,7 +425,7 @@ class UpdateManager:
     async def _handle_repo_recovery(self,
                                     web_request: WebRequest
                                     ) -> str:
-        await self._check_init_success()
+        self._check_init_success()
         if await self._check_klippy_printing():
             raise self.server.error(
                 "Recovery Attempt Refused: Klippy is printing")
