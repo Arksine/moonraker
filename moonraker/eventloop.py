@@ -11,16 +11,16 @@ import functools
 from concurrent.futures import ThreadPoolExecutor
 from typing import (
     TYPE_CHECKING,
+    Awaitable,
     Callable,
     Coroutine,
-    List,
     Optional,
     TypeVar
 )
 
 if TYPE_CHECKING:
     _T = TypeVar("_T")
-    FlexCallback = Callable[..., Optional[Coroutine]]
+    FlexCallback = Callable[..., Optional[Awaitable]]
 
 class EventLoop:
     TimeoutError = asyncio.TimeoutError
