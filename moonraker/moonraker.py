@@ -15,6 +15,7 @@ import time
 import socket
 import logging
 import json
+import getpass
 import signal
 import confighelper
 import utils
@@ -639,8 +640,20 @@ class KlippyConnection:
         self.on_recd = on_recd
         self.on_close = on_close
         self.event_loop = event_loop
+        self.log_no_access = True
 
     async def connect(self, address: str) -> bool:
+        if not os.path.exists(address):
+            return False
+        if not os.access(address, os.R_OK | os.W_OK):
+            if self.log_no_access:
+                user = getpass.getuser()
+                logging.info(
+                    f"Cannot connect to Klippy, Linux user '{user}' lacks "
+                    f"permission to open Unix Domain Socket: {address}")
+                self.log_no_access = False
+            return False
+        self.log_no_access = True
         ksock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         kstream = iostream.IOStream(ksock)
         try:
