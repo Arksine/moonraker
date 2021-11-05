@@ -28,6 +28,14 @@ Moonraker is available pre-installed with the following Raspberry Pi images:
 - [FluiddPi](https://github.com/fluidd-core/FluiddPi) by Cadriel
   - Includes Klipper, Moonraker, and Fluidd
 
+### Docker Containers
+
+The following projects deploy Moonraker via Docker:
+
+- [prind](https://github.com/mkuf/prind) by mkuf
+  - A suite of containers which allow you to run Klipper in
+    Docker.  Includes support for Octoprint and Moonraker.
+
 ### Changes
 
 This section contains changelogs that users and developers may reference
