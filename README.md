@@ -9,13 +9,14 @@ is used to provide Moonraker's server functionality.
 Documentation for users and developers can be found on
 [Read the Docs](https://moonraker.readthedocs.io/en/latest/).
 
+### Clients
+
 Note that Moonraker does not come bundled with a client, you will need to
 install one.  The following clients are currently available:
 - [Mainsail](https://github.com/meteyou/mainsail) by Meteyou
-- [Fluidd](https://github.com/cadriel/fluidd) by Cadriel
+- [Fluidd](https://github.com/fluidd-core/fluidd) by Cadriel
 - [KlipperScreen](https://github.com/jordanruthe/KlipperScreen) by jordanruthe
 - [mooncord](https://github.com/eliteSchwein/mooncord) by eliteSchwein
-
 
 ### Changes
 
