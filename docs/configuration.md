@@ -5,10 +5,14 @@ references configuration for both Klipper (`printer.cfg`) and Moonraker
 configuration file is being refrenenced. A basic
 [sample configuration](./moonraker.conf) in the `docs` directory.
 
-## `[server]`
+## Core Components
 
-The `[server]` section provides essential configuration for Moonraker
-and its core components.  This section is requrired.
+Moonraker's core components are always loaded regardless of configuration.
+
+### `[server]`
+
+The `[server]` section provides essential configuration for Moonraker.
+This section is requrired.
 
 ```ini
 
@@ -38,6 +42,16 @@ max_upload_size: 1024
 enable_debug_logging: False
 #   When set to True Moonraker will log in verbose mode.  During this stage
 #   of development the default is False.
+```
+
+### `[file_manager]`
+
+The `file_manager` section provides configuration for Moonraker's file
+management functionality.  If omitted defaults will be used.
+
+```ini
+# moonraker.conf
+
 config_path:
 #   The path to a directory where configuration files are located. This
 #   directory may contain Klipper config files (printer.cfg) or Moonraker
@@ -45,18 +59,42 @@ config_path:
 #   files to this directory.  Note that this may not be the system root
 #   (ie: "/") and moonraker must have read and write access permissions
 #   for this directory.
+log_path:
+#   An optional path to a directory where log files are located.  Users may
+#   configure various applications to store logs here and Moonraker will serve
+#   them at "/server/files/logs/*".  The default is no log paths.
+queue_gcode_uploads: False
+#   When set to True the file manager will add uploads to the job_queue when
+#   the `start_print` flag has been set.  The default if False.
+```
+
+### `[database]`
+
+The `database` section provides configuration for Moonraker's lmdb database.
+If omitted defaults will be used.
+
+```ini
+moonraker.conf
+
 database_path: ~/.moonraker_database
 #   The path to the folder that stores Moonraker's lmdb database files.
 #   It is NOT recommended to place this file in a location that is served by
 #   Moonraker (such as the "config_path" or the location where gcode
 #   files are stored).  If the folder does not exist an attempt will be made
 #   to create it.  The default is ~/.moonraker_database.
-log_path:
-#   An optional path to a directory where log files are located.  Users may
-#   configure various applications to store logs here and Moonraker will serve
-#   them at "/server/files/logs/*".  The default is no log paths.
 enable_database_debug: False
 #   For developer use only.  End users should leave this option set to False.
+```
+### `[data_store]`
+
+The `data_store` section provides configuration for Moonraker's volatile
+data store.  Note that this is different from the `database`, as it stores
+data in memory and does not persist between restarts.  If omitted defaults
+will be used.
+
+```ini
+# moonraker.conf
+
 temperature_store_size: 1200
 #   The maximum number of temperature values to store for each sensor. Note
 #   that this value also applies to the "target", "power", and "fan_speed"
@@ -65,7 +103,35 @@ temperature_store_size: 1200
 gcode_store_size:  1000
 #   The maximum number "gcode lines" to store.  The default is 1000.
 ```
-## `[authorization]`
+
+### `[job_queue]`
+
+The `job_queue` section provides configuration for Moonraker's gcode job
+queuing.  If omitted defaults will be used.
+
+```ini
+# moonraker.conf
+
+load_on_startup: False
+#   When set to true the job queue will attempt to load the next
+#   pending job when Klipper reports as "Ready".  If the queue has
+#   been paused it will automatically resume.  Note that neither
+#   the job_transition_delay nor the job_transition_gcode are
+#   applied in this case.  The default is False.
+job_transition_delay:
+#   The amount of time to delay after completion of a job before
+#   loading the next job on the queue.  The default is no delay.
+job_transition_gcode:
+#   A gcode to execute after the completion of a job before the next
+#   job is loaded.  If a "job_transition_delay" has been configured
+#   this gcode will run after the delay.  The default is no gcode.
+```
+## Optional Components
+
+Optional Components are only loaded if present in `moonraker.conf`.  This
+includes components that may not have any configuration.
+
+### `[authorization]`
 
 The `[authorization]` section provides configuration for Moonraker's
 authorization module.
@@ -115,7 +181,7 @@ force_logins: False
 #   The default is False.
 ```
 
-## `[octoprint_compat]`
+### `[octoprint_compat]`
 Enables partial support of Octoprint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
 Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
@@ -126,7 +192,7 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 [octoprint_compat]
 ```
 
-## `[history]`
+### `[history]`
 Enables print history tracking.
 
 ```ini
@@ -135,7 +201,7 @@ Enables print history tracking.
 [history]
 ```
 
-## `[paneldue]`
+### `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
 host machine, either via the machine's UART GPIOs or through a USB-TTL
 converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
@@ -189,7 +255,7 @@ gcode:
                              duration=DURATION|float)}
 ```
 
-## `[power]`
+### `[power]`
 Enables device power control.  Currently GPIO (relays), RF transmitter, TPLink Smartplug,
 and Tasmota (via http) devices, HomeAssistant switch are supported.
 
@@ -205,14 +271,26 @@ off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
 #   the "shutdown" state.  This option applies to all device types.
 #   The default is False.
+on_when_upload_queued: False
+#   If set to True the device will power on if the file manager
+#   queues an upload while the device is off.  This allows for an automated
+#   "upload, power on, and print" approach directly from the slicer, see
+#   the configuration example below for details. The default is False.
 locked_while_printing: False
 #   If True, locks the device so that the power cannot be changed while the
 #   printer is printing. This is useful to avert an accidental shutdown to
 #   the printer's power.  The default is False.
 restart_klipper_when_powered: False
 #   If set to True, Moonraker will issue a "FIRMWARE_RESTART" to Klipper
-#   after the device has been powered on.  The default is False, thus no
-#   attempt to made to restart Klipper after power on.
+#   after the device has been powered on.  Note: If it isn't possible to
+#   schedule a firmware restart (ie: Klippy is disconnected), the restart
+#   will be postponed until Klippy reconnects and reports that startup is
+#   complete.  In this scenario, if Klippy reports that it is "ready", the
+#   FIRMWARE_RESTART will be aborted as unnecessary.
+#   The default is False.
+restart_delay: 1.
+#   If "restart_klipper_when_powered" is set, this option specifies the amount
+#   of time (in seconds) to delay the restart.  Default is 1 second.
 bound_service:
 #   Can be set to any service Moonraker is authorized to manage with the
 #   exception of the moonraker service itself. See the tip below this section
@@ -220,9 +298,6 @@ bound_service:
 #   been set the service will be started when the device powers on and stopped
 #   when the device powers off.  The default is no service is bound to the
 #   device.
-restart_delay: 1.
-#   If "restart_klipper_when_powered" is set, this option specifies the amount
-#   of time (in seconds) to delay the restart.  Default is 1 second.
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO and RF devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -376,6 +451,8 @@ token: home-assistant-very-long-token
 domain: switch
 ```
 
+#### Toggling device state from Klipper
+
 It is possible to toggle device power from the Klippy host, this can be done
 with a gcode_macro, such as:
 ```ini
@@ -407,7 +484,53 @@ gcode:
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
 
-## `[update_manager]`
+#### Power on G-Code Uploads
+
+The following is an example configuration that would fully automate
+the process of powering on a printer and loading a print from a
+Slicer upload with the "start" flag enabled.
+
+```ini
+# moonraker.conf
+
+# Configure the file manager to queue uploaded files when the "start" flag
+# is set and Klipper cannot immediately start the print.
+[file_manager]
+queue_gcode_uploads: True
+# Set the config_path and log_path options to the correct locations
+config_path:
+log_path:
+
+# Configure the Job Queue to start a queued print when Klipper reports as
+# ready.
+[job_queue]
+load_on_startup: True
+# Configure the job_transition_delay and job_transition_gcode options
+# if desired.  Note that they do no apply to prints loaded on startup.
+
+# Configure the "power" device to turn on when uploads are queued.
+[power printer]
+type: gpio
+pin: gpio26
+initial_state: off
+# Power the printer on when the file manager queues an upload
+on_when_upload_queued: True
+bound_service: klipper
+```
+
+With the above configuration options set, an upload with the "start"
+flag set to true will be queued.  This "printer" device will be
+notified and powered on.  Finally, the job_queue will load and start
+the queued print after Klipper reports itself as "ready".
+
+!!! Note
+    This procedure assumes that the printer is powered off when the
+    gcode file is uploaded.  It also assumes that the `job_queue` is
+    empty, if any jobs exist in the queue then the next job on the
+    queue will be loaded.
+
+
+### `[update_manager]`
 This enables moonraker's update manager.  Note that updates can only be
 performed on pristine git repos.  Repos that have been modified on
 disk or cloned from unofficial sources are not supported.
@@ -446,7 +569,7 @@ channel: dev
 #   removed during this process.  The default is dev.
 ```
 
-### Client Configuration
+#### Client Configuration
 This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
 updated in addition to klipper, moonraker, and the system os. Repos that have
 been modified or cloned from unofficial sources are not supported.
@@ -537,7 +660,7 @@ is_system_service: True
 #   repos that are not installed as a service.  The default is True.
 ```
 
-## `[mqtt]`
+### `[mqtt]`
 
 Enables an MQTT Client.  When configured most of Moonraker's APIs are availble
 by publishing JSON-RPC requests to `{instance_name}/moonraker/api/request`.
