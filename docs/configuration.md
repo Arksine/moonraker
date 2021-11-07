@@ -796,17 +796,18 @@ gcode:
   {% set strip = params.STRIP|string %}
   {% set preset = params.PRESET|default(-1)|int %}
 
-  {action_call_remote_method("wled_on",
+  {action_call_remote_method("set_wled_state",
                              strip=strip,
-                             preset=preset)}
+                             state=preset)}
 
 [gcode_macro WLED_OFF]
 description: Turn WLED strip off
 gcode:
   {% set strip = params.STRIP|string %}
 
-  {action_call_remote_method("wled_off",
-                             strip=strip)}
+  {action_call_remote_method("set_wled_state",
+                             strip=strip,
+                             state=False)}
 
 [gcode_macro SET_WLED]
 description: SET_LED like functionlity for WLED
@@ -823,23 +824,4 @@ gcode:
                                strip=strip,
                                red=red, green=green, blue=blue, white=white,
                                index=index, transmit=transmit)}
-
-[gcode_macro WLED_CONTROL]
-description: Lower level control of WLED without relying on presets
-gcode:
-    {% set strip = params.STRIP|string %}
-    {% set bri = params.BRI|default(-1)|int %}
-    {% set transition = params.TRANSITION|default(-1)|int %}
-    {% set fx = params.FX|default(-1)|int %}
-    {% set effect = params.EFFECT|default('')|string %}
-    {% set sx = params.SX|default(-1)|int %}
-    {% set ix = params.IX|default(-1)|int %}
-    {% set pal = params.PAL|default(-1)|int %}
-    {% set palette = params.PALETTE|default('')|string %}
-
-    {action_call_remote_method("wled",
-                               strip=strip,
-                               bri=bri, transition=transition, fx=fx,
-                               effect=effect, sx=sx, ix=ix, pal=pal,
-                               palette=palette)}
 ```

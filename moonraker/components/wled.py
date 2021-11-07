@@ -155,8 +155,6 @@ class Strip:
                     logging.debug(f"WLED: url:{self.url} data:{data}")
 
                     self.wled_info = data['info']
-                    self.wled_effects = [e.lower() for e in data['effects']]
-                    self.wled_palettes = [p.lower() for p in data['palettes']]
 
                 self.error_state = None
             except Exception as e:
@@ -175,51 +173,6 @@ class Strip:
             self.send_full_chain_data = True
             self.preset = preset
             await self._send_wled_command({"on": True, "ps": preset})
-
-    # Lower level api control - https://kno.wled.ge/interfaces/json-api/
-    async def wled(self,
-                   bri: int = -1,
-                   transition: int = -1,
-                   fx: int = -1,
-                   effect: str = '',
-                   sx: int = -1,
-                   ix: int = -1,
-                   pal: int = -1,
-                   palette: str = ''):
-        try:
-            self.onoff = OnOff.on
-            self.send_full_chain_data = True
-            self.preset = -1
-            logging.debug(
-                f"WLED: {self.name} bri={bri} transition={transition} fx={fx} "
-                f"sx={sx} ix={ix} pal={pal}")
-            seg: Dict[str, Any] = {}
-            command: Dict[str, Any] = {"seg": seg}
-            if bri >= 0:
-                command['bri'] = bri
-            if transition >= 0:
-                command['transition'] = transition
-            if len(effect) > 0:
-                try:
-                    fx = self.wled_effects.index(effect.lower())
-                except ValueError:
-                    logging.info(f'WLED: Effect not found: {effect}')
-            if fx >= 0:
-                seg['fx'] = fx
-            if sx >= 0:
-                seg['sx'] = sx
-            if ix >= 0:
-                seg['ix'] = ix
-            if len(palette) > 0:
-                try:
-                    pal = self.wled_palettes.index(palette.lower())
-                except ValueError:
-                    logging.info(f'WLED: Palette not found: {palette}')
-            if pal >= 0:
-                seg['pal'] = pal
-            await self._send_wled_command(command)
-        except Exception as e:
-            logging.exception(e)
 
     async def wled_off(self):
         logging.debug(f"WLED: off {self.name}")
@@ -268,6 +221,8 @@ class Strip:
                     elem.append(p)
                 await self._send_wled_command({"seg": {"i": [index, elem]}})
         elif index is not None:
+            # If not transmitting this time easiest just to send all data when
+            # next transmitting
             self.send_full_chain_data = True
 
 class WLED:
@@ -307,17 +262,13 @@ class WLED:
             event_loop.register_callback(
                 self._initalize_strips, list(self.strips.values()))
 
-            # Register methods for GCODE remote methods
+            # Register two remote methods for GCODE
             self.server.register_remote_method(
-                "wled_on", self.wled_on)
-            self.server.register_remote_method(
-                "wled", self.wled)
-            self.server.register_remote_method(
-                "wled_off", self.wled_off)
+                "set_wled_state", self.set_wled_state)
             self.server.register_remote_method(
                 "set_wled", self.set_wled)
 
-            # As moonraker is about making things a web api, let"s try it
+            # As moonraker is about making things a web api, let's try it
             # Yes, this is largely a cut-n-paste from power.py
             self.server.register_endpoint(
                 "/machine/wled/strips", ["GET"],
@@ -376,28 +327,46 @@ class WLED:
             return
         await self.strips[strip].wled_on(preset)
 
-    async def wled(self,
+    # Full control of wled, True, False, "on", "off", preset 42 as int or
+    # preset "42" as string
+    async def set_wled_state(self,
                    strip: str,
-                   bri: int = -1,
-                   transition: int = -1,
-                   fx: int = -1,
-                   effect: str = '',
-                   sx: int = -1,
-                   ix: int = -1,
-                   pal: int = -1,
-                   palette: str = '') -> None:
+                   state: str
+                   ) -> None:
+        status = None
+        preset = -1
+        if isinstance(state, bool):
+            status = OnOff.on if state else OnOff.off
+        elif isinstance(state, int):
+            status = OnOff.on
+            preset = state
+        elif isinstance(state, str):
+            status = state.lower()
+            if status in ["true", "false"]:
+                status = OnOff.on if status == "true" else OnOff.off
+            else:
+                try:
+                    preset = int(state)
+                    status = OnOff.on
+                except ValueError:
+                    status = None
+
+        if status is None:
+            logging.info(f"Invalid state received: {state}")
+            return
+
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
-        await self.strips[strip].wled(bri, transition, fx, effect, sx, ix,
-                                      pal, palette)
 
-    async def wled_off(self, strip: str) -> None:
-        if strip not in self.strips:
-            logging.info(f"Unknown WLED strip: {strip}")
-            return
-        await self.strips[strip].wled_off()
+        if status == OnOff.off:
+            # All other arguments are ignored
+            await self.strips[strip].wled_off()
+        else:
+            await self.strips[strip].wled_on(preset)   
 
+    # Individual pixel control, due to non-transmission this is kept as a
+    # separate call
     async def set_wled(self, strip: str,
                        red=0., green=0., blue=0., white=0.,
                        index=None, transmit=1) -> None:
@@ -422,14 +391,6 @@ class WLED:
                                           ) -> Dict[str, Any]:
         strip_name: str = web_request.get_str('strip')
         preset: int = web_request.get_int('preset', -1)
-        bri: int = web_request.get_int('bri', -1)
-        transition: int = web_request.get_int('transition', -1)
-        fx: int = web_request.get_int('fx', -1)
-        effect: str = web_request.get_str('effect', '')
-        sx: int = web_request.get_int('sx', -1)
-        ix: int = web_request.get_int('ix', -1)
-        pal: int = web_request.get_int('pal', -1)
-        palette: str = web_request.get_str('palette', '')
 
         req_action = web_request.get_action()
         if strip_name not in self.strips:
@@ -439,12 +400,10 @@ class WLED:
             return {strip_name: strip.get_strip_info()}
         elif req_action == "POST":
             action = web_request.get_str('action').lower()
-            if action not in ["on", "off", "toggle", "set"]:
+            if action not in ["on", "off", "toggle"]:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
-            result = await self._process_request(strip, action, preset, bri,
-                                                 transition, fx, effect, sx, ix,
-                                                 pal, palette)
+            result = await self._process_request(strip, action, preset)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self,
@@ -467,15 +426,7 @@ class WLED:
     async def _process_request(self,
                                strip: Strip,
                                req: str,
-                               preset: int,
-                               bri: int = -1,
-                               transition: int = -1,
-                               fx: int = -1,
-                               effect: str = '',
-                               sx: int = -1,
-                               ix: int = -1,
-                               pal: int = -1,
-                               palette: str = ''
+                               preset: int
                                ) -> str:
         strip_onoff = strip.onoff
 
@@ -491,10 +442,6 @@ class WLED:
                 strip_onoff = OnOff.off
                 await strip.wled_off()
             return strip_onoff
-        elif req == "set":
-            await strip.wled(bri, transition, fx, effect, sx, ix, pal, palette)
-            # Is this always going to be on right for all cases?
-            return OnOff.on
 
         raise self.server.error(f"Unsupported wled request: {req}")
 
