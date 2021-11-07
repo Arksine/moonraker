@@ -1,4 +1,4 @@
-# MQTT client implemenation for Moonraker
+# MQTT client implementation for Moonraker
 #
 # Copyright (C) 2021  Eric Callahan <arksine.code@gmail.com>
 #
@@ -191,6 +191,7 @@ class MQTTClient(APITransport, Subscribable):
         self.api_request_topic = f"{self.instance_name}/moonraker/api/request"
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
+        self.moonraker_status_topic = f"{self.instance_name}/moonraker/status"
         status_cfg = config.get("status_objects", None)
         self.status_objs: Dict[str, Any] = {}
         if status_cfg is not None:
@@ -235,6 +236,9 @@ class MQTTClient(APITransport, Subscribable):
         self.helper = AIOHelper(self.client)
         if self.user_name is not None:
             self.client.username_pw_set(self.user_name, self.password)
+        self.client.will_set(self.moonraker_status_topic,
+                             payload=json.dumps({'server': 'offline'}),
+                             qos=self.qos, retain=True)
         retries = 5
         for _ in range(retries):
             try:
@@ -288,6 +292,8 @@ class MQTTClient(APITransport, Subscribable):
                     ) -> None:
         logging.info("MQTT Client Connected")
         if reason_code == 0:
+            self.publish_topic(self.moonraker_status_topic,
+                               {'server': 'online'}, retain=True)
             subs = [(k, v[0]) for k, v in self.subscribed_topics.items()]
             if subs:
                 res, msg_id = client.subscribe(subs)
@@ -619,6 +625,9 @@ class MQTTClient(APITransport, Subscribable):
             self.reconnect_task = None
         if not self.is_connected():
             return
+        await self.publish_topic(self.moonraker_status_topic,
+                                 {'server': 'offline'},
+                                 retain=True)
         self.disconnect_evt = asyncio.Event()
         self.client.disconnect()
         try:
