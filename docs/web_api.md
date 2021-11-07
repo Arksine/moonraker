@@ -2076,6 +2076,320 @@ deleted item.
 }
 ```
 
+### Job Queue APIs
+
+The following enpoints may be used to manage Moonraker's job queue.
+Note that Moonraker's Job Queue is impelemented as a FIFO queue and it may
+contain multiple references to the same job.
+
+!!! Note
+    All filenames provided to and returned by these endpoints are relative to
+    the `gcodes` root.
+
+#### Retrieve the job queue status
+
+Retreives the current state of the job queue
+
+HTTP request:
+```http
+GET /server/job_queue/status
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.status",
+    "id": 4654
+}
+```
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        },
+        {
+            "filename": "job2.gcode",
+            "job_id": "0000000066D991F0",
+            "time_added": 1636151050.7766452,
+            "time_in_queue": 21.88680004119873
+        },
+        {
+            "filename": "subdir/job3.gcode",
+            "job_id": "0000000066D99D80",
+            "time_added": 1636151050.7866452,
+            "time_in_queue": 21.90680004119873
+        }
+    ],
+    "queue_state": "ready"
+}
+```
+
+Below is a description of the returned fields:
+
+- `queued_jobs`: an array of objects representing each queued job.  Each
+  object contains the `filename` of the enqueued job and a unique `job_id`
+  generated for each job.  The `job_id` is a 64-bit Hexadecimal string value.
+  On 32-bit systems the most significant bits will always contain zeros.  Items
+  are ordered by the time they were queued, the first item will be the next job
+  loaded.
+- `queue_state`: The current state of the queue.  Can be one of the following:
+    - `ready`: The queue is active and will load the next job upon completion
+      of the current job
+    - `loading`: The queue is currently loading the next job. If the user
+      specified a `job_transition_delay` and/or `job_transition_gcode`, the
+      queue will remain in the `loading` state until both are completed or
+      an error is encountered.
+    - `starting`: The queue enters this state after the `loading` phase is
+      complete before attempting to start the job.
+    - `paused`:  The queue is currently paused and will not load the next job
+      upon completion of the current job.  The queue will enter the `paused`
+      state if an error is encountered during the `loading` or `starting` phases,
+      or if the user pauses the queue through the provided endpoint.
+- `time_added`: The time (in Unix Time) the job was added to the queue
+- `time_in_queue`: The cumulative amount of time (in seconds) the job has been
+  pending in the queue
+
+#### Enqueue a job
+
+Adds a job, or an array of jobs, to the end of the job queue.  The same
+filename may be specified multiple times to queue a job that repeats.
+When multiple jobs are specfied they will be enqued in the order they
+are received.  If the queue is empty and in the `ready` state, the first
+job supplied will be started.
+
+!!! Note
+    The request will be aborted and return an error if any of the supplied
+    files do not exist.
+
+HTTP request:
+```http
+POST /server/job_queue/job?filenames=job1.gcode,job2.gcode,subdir/job3.gocde
+```
+
+!!! Note
+    Multiple jobs are should be comma separated as shown above.
+    Alternatively `filenames` maybe be specified as a json object
+    in the body of the request.
+
+```http
+POST /server/job_queue/job
+Content-Type: applicaton/json
+
+{
+    "filenames": [
+        "job1.gcode",
+        "job2.gcode",
+        "subdir/job3.gocde",
+    ]
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.post_job",
+    "params": {
+        "filenames": [
+            "job1.gcode",
+            "job2.gcode",
+            "subir/job3.gocde",
+        ]
+    },
+    "id": 4654
+}
+```
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        },
+        {
+            "filename": "job2.gcode",
+            "job_id": "0000000066D991F0",
+            "time_added": 1636151050.7766452,
+            "time_in_queue": 21.88680004119873
+        },
+        {
+            "filename": "subdir/job3.gcode",
+            "job_id": "0000000066D99D80",
+            "time_added": 1636151050.7866452,
+            "time_in_queue": 21.90680004119873
+        }
+    ],
+    "queue_state": "ready"
+}
+```
+
+#### Remove a Job
+
+Removes one or more jobs from the queue.
+
+!!! Note
+    Unlike the POST version of this method, it is not necessary that
+    all job ids exist.  If any supplied job id does not exist in the
+    queue it will be silently ignored.  Clients can verify the contents
+    of the queue via the return value.
+
+HTTP request:
+```http
+DELETE /server/job_queue/job?job_ids=0000000066D991F0,0000000066D99D80
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.delete_job",
+    "params": {
+        "job_ids": [
+            "0000000066D991F0".
+            "0000000066D99D80"
+        ]
+    },
+    "id": 4654
+}
+```
+!!! Tip
+    Alternatively `all=true` (`"all": true` for JSON-RPC) may specified
+    to clear the job queue.
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        }
+    ],
+    "queue_state": "ready"
+}
+```
+#### Pause the job queue
+
+Sets the job queue state to "pause", which prevents the next job
+in the queue from loading after an job in progress is complete.
+
+!!! Note
+    If the queue is paused while the queue is in the `loading` state
+    the load will be aborted.
+
+HTTP request:
+```http
+POST /server/job_queue/pause
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.pause",
+    "id": 4654
+}
+```
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        },
+        {
+            "filename": "job2.gcode",
+            "job_id": "0000000066D991F0",
+            "time_added": 1636151050.7766452,
+            "time_in_queue": 21.88680004119873
+        },
+        {
+            "filename": "subdir/job3.gcode",
+            "job_id": "0000000066D99D80",
+            "time_added": 1636151050.7866452,
+            "time_in_queue": 21.90680004119873
+        }
+    ],
+    "queue_state": "paused"
+}
+```
+
+#### Resume the job queue
+
+Sets the job queue state to "resume".  This will set the job
+queue to state to "idle".  If the queue is not empty the next job
+in the queue will be loaded.
+
+HTTP request:
+```http
+POST /server/job_queue/resume
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.resume",
+    "id": 4654
+}
+```
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        },
+        {
+            "filename": "job2.gcode",
+            "job_id": "0000000066D991F0",
+            "time_added": 1636151050.7766452,
+            "time_in_queue": 21.88680004119873
+        },
+        {
+            "filename": "subdir/job3.gcode",
+            "job_id": "0000000066D99D80",
+            "time_added": 1636151050.7866452,
+            "time_in_queue": 21.90680004119873
+        }
+    ],
+    "queue_state": "loading"
+}
+```
+
+
 ### Update Manager APIs
 The following endpoints are available when the `[update_manager]` component has
 been configured:
@@ -2918,6 +3232,38 @@ An object containing the following total job statistics:
 ```json
 {
     "job_totals": {
+        "total_jobs": 3,
+        "total_time": 11748.077333278954,
+        "total_print_time": 11348.794790096988,
+        "total_filament_used": 11615.718840001999,
+        "longest_job": 11665.191012736992,
+        "longest_print": 11348.794790096988
+    }
+}
+```
+
+#### Reset totals
+Resets the persistent "job totals" to zero.
+
+HTTP request:
+```http
+POST /server/history/reset_totals
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.history.reset_totals",
+    "id": 5534
+}
+
+Returns:
+
+The totals prior to the reset:
+
+```json
+{
+    "last_totals": {
         "total_jobs": 3,
         "total_time": 11748.077333278954,
         "total_print_time": 11348.794790096988,
