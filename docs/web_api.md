@@ -520,7 +520,7 @@ included.
         },
         "update_manager client fluidd": {
             "type": "web",
-            "repo": "cadriel/fluidd",
+            "repo": "fluidd-core/fluidd",
             "path": "~/fluidd",
             "persistent_files": null
         },
