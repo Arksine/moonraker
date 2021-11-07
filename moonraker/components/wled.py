@@ -99,17 +99,20 @@ class Strip:
             self._update_color_data(self.initial_red,
                                     self.initial_green,
                                     self.initial_blue,
-                                    self.initial_white)
+                                    self.initial_white,
+                                    None)
             await self.wled_on(self.initial_preset)
         else:
             await self.set_wled(self.initial_red,
                                 self.initial_green,
                                 self.initial_blue,
-                                self.initial_white)
+                                self.initial_white,
+                                None,
+                                True)
 
     def _update_color_data(self: Strip,
                            red: float, green: float, blue: float, white: float,
-                           index=None) -> None:
+                           index: Optional[int]) -> None:
         red = int(red * 255. + .5)
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
@@ -169,7 +172,7 @@ class Strip:
 
     async def set_wled(self: Strip,
                        red: float, green: float, blue: float, white: float,
-                       index: int = None, transmit: int = 1) -> None:
+                       index: Optional[int], transmit: bool) -> None:
         logging.debug(
             f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
             f"INDEX={index} TRANSMIT={transmit}")
@@ -209,7 +212,7 @@ class Strip:
                                           (index-1)*elem_size+elem_size]:
                     elem.append(p)
                 await self._send_wled_command({"seg": {"i": [index, elem]}})
-        elif index is not None:
+        else:
             # If not transmitting this time easiest just to send all data when
             # next transmitting
             self.send_full_chain_data = True
@@ -358,15 +361,16 @@ class WLED:
                        green: float = 0.,
                        blue: float = 0.,
                        white: float = 0.,
-                       index: int = -1,
+                       index: Optional[int] = None,
                        transmit: int = 1) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
-        if index < 0:
+        if isinstance(index, int) and index < 0:
             index = None
         await self.strips[strip].set_wled(red, green, blue, white,
-                                          index, transmit)
+                                          index,
+                                          True if transmit == 1 else False)
 
     async def _handle_list_strips(self,
                                   web_request: WebRequest
