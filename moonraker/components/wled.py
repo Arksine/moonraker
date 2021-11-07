@@ -151,7 +151,7 @@ class Strip:
                 logging.exception(msg)
                 raise self.server.error(msg)
 
-    async def wled_on(self: Strip, preset: int)  -> None:
+    async def wled_on(self: Strip, preset: int) -> None:
         self.onoff = OnOff.on
         logging.debug(f"WLED: on {self.name} PRESET={preset}")
         if preset < 0:
@@ -349,18 +349,18 @@ class WLED:
             # All other arguments are ignored
             await self.strips[strip].wled_off()
         else:
-            await self.strips[strip].wled_on(preset)   
+            await self.strips[strip].wled_on(preset)
 
     # Individual pixel control, due to non-transmission this is kept as a
     # separate call
     async def set_wled(self: WLED,
                        strip: str,
-                       red: float=0.,
-                       green: float=0.,
-                       blue: float=0.,
-                       white: float=0.,
-                       index: int=None,
-                       transmit: int=1) -> None:
+                       red: float = 0.,
+                       green: float = 0.,
+                       blue: float = 0.,
+                       white: float = 0.,
+                       index: int = None,
+                       transmit: int = 1) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
@@ -414,7 +414,7 @@ class WLED:
                 result[name] = "strip_not_found"
         return result
 
-    async def _process_request(self : WLED,
+    async def _process_request(self: WLED,
                                strip: Strip,
                                req: str,
                                preset: int
