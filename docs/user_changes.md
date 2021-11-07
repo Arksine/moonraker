@@ -2,6 +2,18 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### November 7th 2021
+- Previously all core components received configuration through
+  the `[server]` config section.  As Moonraker's core functionality
+  has expanded this is becoming unsustainable, thus core components
+  should now be configured in their own section. For example, the
+  `config_path` and `log_path` should now be configured in the
+  `[file_manager]` section of `moonraker.conf`.  See the
+  [configuration documentation](https://moonraker.readthedocs.io/en/latest/configuration/)
+  for details.  This is not a breaking change, core components
+  will still fall back to checking the `[server]` section for
+  configuration.
+
 ### April 19th 2021
 - The `[authorization]` module is now a component, thus is only
   loaded if the user has it configured in `moonraker.conf`.  This
