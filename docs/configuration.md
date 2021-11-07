@@ -464,7 +464,7 @@ type: web
 #   "prerelease" on GitHub.  This parameter must be provided.
 repo:
 #   This is the GitHub repo of the client, in the format of user/client.
-#   For example, this could be set to cadriel/fluidd to update Fluidd or
+#   For example, this could be set to fluidd-core/fluidd to update Fluidd or
 #   meteyou/mainsail to update Mainsail.  This parameter must be provided.
 path:
 #   The path to the client's files on disk.  This parameter must be provided.
