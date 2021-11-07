@@ -88,10 +88,7 @@ class Strip:
             "chain_count": self.chain_count,
             "preset": self.preset,
             "color_order": self.color_order,
-            "error": self.error_state,
-            "info": self.wled_info,
-            "effects": self.wled_effects,
-            "palettes": self.wled_palettes
+            "error": self.error_state
         }
 
     async def initialize(self: Strip) -> None:
@@ -132,9 +129,6 @@ class Strip:
                                  state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             try:
-                if not hasattr(self, "wled_info"):
-                    state['v'] = True
-
                 logging.debug(f"WLED: url:{self.url} json:{state}")
 
                 headers = {"Content-Type": "application/json"}
@@ -149,14 +143,6 @@ class Strip:
                 logging.debug(
                     f"WLED: url:{self.url} status:{response.code} "
                     f"response:{response.body}")
-
-                # Generally ignore response unless fetching information
-                if not hasattr(self, "wled_info"):
-                    data = json_decode(response.body)
-
-                    logging.debug(f"WLED: url:{self.url} data:{data}")
-
-                    self.wled_info = data['info']
 
                 self.error_state = None
             except Exception as e:
@@ -435,6 +421,8 @@ class WLED:
                                ) -> str:
         strip_onoff = strip.onoff
 
+        if req == "status":
+            return strip.get_strip_info()
         if req == "toggle":
             req = "on" if strip_onoff == OnOff.off else "off"
         if req in ["on", "off"]:
