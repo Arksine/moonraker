@@ -43,7 +43,7 @@ to see if any action is necessary on their part.  The date of the most
 recent change is included.
 
 Users:\
-[user_changes.md](https://moonraker.readthedocs.io/en/latest/user_changes/) - April 19th 2021
+[user_changes.md](https://moonraker.readthedocs.io/en/latest/user_changes/) - November 7th 2021
 
 Developers:\
 [api_changes.md](https://moonraker.readthedocs.io/en/latest/api_changes/) - March 15th 2021
