@@ -50,7 +50,7 @@ class OnOff(str, Enum):
     off: str = "off"
 
 class Strip:
-    def __init__(self,
+    def __init__(self: Strip,
                  name: str,
                  color_order: ColorOrder,
                  cfg: ConfigHelper):
@@ -81,7 +81,7 @@ class Strip:
         self.onoff = OnOff.off
         self.preset = self.initial_preset
 
-    def get_strip_info(self) -> Dict[str, Any]:
+    def get_strip_info(self: Strip) -> Dict[str, Any]:
         return {
             "strip": self.name,
             "status": self.onoff,
@@ -94,7 +94,7 @@ class Strip:
             "palettes": self.wled_palettes
         }
 
-    async def initialize(self):
+    async def initialize(self: Strip) -> None:
         self.send_full_chain_data = True
         self.onoff = OnOff.on
         self.preset = self.initial_preset
@@ -110,7 +110,9 @@ class Strip:
                                 self.initial_blue,
                                 self.initial_white)
 
-    def _update_color_data(self, red, green, blue, white, index=None):
+    def _update_color_data(self: Strip,
+                           red: float, green: float, blue: float, white: float,
+                           index=None) -> None:
         red = int(red * 255. + .5)
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
@@ -126,8 +128,8 @@ class Strip:
             elem_size = len(led_data)
             self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
 
-    async def _send_wled_command(self,
-                                 state: Dict[str, Any]):
+    async def _send_wled_command(self: Strip,
+                                 state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             try:
                 if not hasattr(self, "wled_info"):
@@ -163,7 +165,7 @@ class Strip:
                 logging.exception(msg)
                 raise self.server.error(msg)
 
-    async def wled_on(self, preset):
+    async def wled_on(self: Strip, preset: int)  -> None:
         self.onoff = OnOff.on
         logging.debug(f"WLED: on {self.name} PRESET={preset}")
         if preset < 0:
@@ -174,13 +176,14 @@ class Strip:
             self.preset = preset
             await self._send_wled_command({"on": True, "ps": preset})
 
-    async def wled_off(self):
+    async def wled_off(self: Strip) -> None:
         logging.debug(f"WLED: off {self.name}")
         self.onoff = OnOff.off
         await self._send_wled_command({"on": False})
 
-    async def set_wled(self, red, green, blue, white,
-                       index=None, transmit=1):
+    async def set_wled(self: Strip,
+                       red: float, green: float, blue: float, white: float,
+                       index: int = None, transmit: int = 1) -> None:
         logging.debug(
             f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
             f"INDEX={index} TRANSMIT={transmit}")
@@ -226,7 +229,7 @@ class Strip:
             self.send_full_chain_data = True
 
 class WLED:
-    def __init__(self, config: ConfigHelper) -> None:
+    def __init__(self: WLED, config: ConfigHelper) -> None:
         try:
             # root_logger = logging.getLogger()
             # root_logger.setLevel(logging.DEBUG)
@@ -289,7 +292,7 @@ class WLED:
         except Exception as e:
             logging.exception(e)
 
-    async def _initalize_strips(self,
+    async def _initalize_strips(self: WLED,
                                 initial_strips: List[Strip]
                                 ) -> None:
         try:
@@ -321,7 +324,7 @@ class WLED:
         except Exception as e:
             logging.exception(e)
 
-    async def wled_on(self, strip: str, preset: int) -> None:
+    async def wled_on(self: WLED, strip: str, preset: int) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
@@ -329,10 +332,7 @@ class WLED:
 
     # Full control of wled, True, False, "on", "off", preset 42 as int or
     # preset "42" as string
-    async def set_wled_state(self,
-                   strip: str,
-                   state: str
-                   ) -> None:
+    async def set_wled_state(self: WLED, strip: str, state: str) -> None:
         status = None
         preset = -1
         if isinstance(state, bool):
@@ -367,9 +367,14 @@ class WLED:
 
     # Individual pixel control, due to non-transmission this is kept as a
     # separate call
-    async def set_wled(self, strip: str,
-                       red=0., green=0., blue=0., white=0.,
-                       index=None, transmit=1) -> None:
+    async def set_wled(self: WLED,
+                       strip: str,
+                       red: float=0.,
+                       green: float=0.,
+                       blue: float=0.,
+                       white: float=0.,
+                       index: int=None,
+                       transmit: int=1) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
@@ -386,7 +391,7 @@ class WLED:
         output = {"strips": strips}
         return output
 
-    async def _handle_single_wled_request(self,
+    async def _handle_single_wled_request(self: WLED,
                                           web_request: WebRequest
                                           ) -> Dict[str, Any]:
         strip_name: str = web_request.get_str('strip')
@@ -406,7 +411,7 @@ class WLED:
             result = await self._process_request(strip, action, preset)
         return {strip_name: result}
 
-    async def _handle_batch_wled_request(self,
+    async def _handle_batch_wled_request(self: WLED,
                                          web_request: WebRequest
                                          ) -> Dict[str, Any]:
         args = web_request.get_args()
@@ -423,7 +428,7 @@ class WLED:
                 result[name] = "strip_not_found"
         return result
 
-    async def _process_request(self,
+    async def _process_request(self : WLED,
                                strip: Strip,
                                req: str,
                                preset: int
