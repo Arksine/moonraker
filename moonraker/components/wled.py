@@ -191,7 +191,7 @@ class Strip:
                     {"seg": {"i": [0, self.chain_count-1, elem]}})
             elif self.send_full_chain_data:
                 # Send a full set of color data (e.g. previous preset)
-                state = {"seg": {"i": []}}
+                state: Dict[str, Any] = {"seg": {"i": []}}
                 cdata = []
                 for i in range(self.chain_count):
                     idx = i * elem_size
@@ -351,15 +351,14 @@ class WLED:
         else:
             await self.strips[strip].wled_on(preset)
 
-    # Individual pixel control, due to non-transmission this is kept as a
-    # separate call
+    # Individual pixel control, for compatibility with SET_LED
     async def set_wled(self: WLED,
                        strip: str,
                        red: float = 0.,
                        green: float = 0.,
                        blue: float = 0.,
                        white: float = 0.,
-                       index: int = None,
+                       index: int = -1,
                        transmit: int = 1) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
@@ -411,14 +410,14 @@ class WLED:
             if strip is not None:
                 result[name] = await self._process_request(strip, req, -1)
             else:
-                result[name] = "strip_not_found"
+                result[name] = {"error": "strip_not_found"}
         return result
 
     async def _process_request(self: WLED,
                                strip: Strip,
                                req: str,
                                preset: int
-                               ) -> str:
+                               ) -> Dict[str, Any]:
         strip_onoff = strip.onoff
 
         if req == "status":
@@ -434,7 +433,7 @@ class WLED:
             else:
                 strip_onoff = OnOff.off
                 await strip.wled_off()
-            return strip_onoff
+            return strip.get_strip_info()
 
         raise self.server.error(f"Unsupported wled request: {req}")
 
