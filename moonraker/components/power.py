@@ -316,7 +316,7 @@ class PowerDevice:
             return
         self.need_scheduled_restart = False
         if state == "ready":
-            logging.info("Klipper reports 'ready', aborting firmware restart")
+            logging.info("Klipper reports 'ready', aborting FIRMWARE_RESTART")
             return
         event_loop = self.server.get_event_loop()
         kapis: APIComp = self.server.lookup_component("klippy_apis")
@@ -348,7 +348,11 @@ class PowerDevice:
             await machine_cmp.do_service_action(action, self.bound_service)
         if self.state == "on" and self.klipper_restart:
             self.need_scheduled_restart = True
-            if self._is_bound_to_klipper():
+            klippy_state = self.server.get_klippy_state()
+            if klippy_state in ["disconnected", "startup"]:
+                # If klippy is currently disconnected or hasn't proceeded past
+                # the startup state, schedule the restart in the
+                # "klippy_started" event callback.
                 return
             self._schedule_firmware_restart()
 
