@@ -315,6 +315,9 @@ class PowerDevice:
         if not self.need_scheduled_restart:
             return
         self.need_scheduled_restart = False
+        if state == "ready":
+            logging.info("Klipper reports 'ready', aborting firmware restart")
+            return
         event_loop = self.server.get_event_loop()
         kapis: APIComp = self.server.lookup_component("klippy_apis")
         event_loop.delay_callback(
