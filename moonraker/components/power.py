@@ -462,6 +462,8 @@ class HTTPDevice(PowerDevice):
 class GpioChipFactory:
     def __init__(self) -> None:
         self.chips: Dict[str, gpiod.Chip] = {}
+        version: str = gpiod.version_string()
+        self.gpiod_version = tuple(int(v) for v in version.split('.'))
 
     def get_gpio_chip(self, chip_name) -> gpiod.Chip:
         if chip_name in self.chips:
@@ -469,6 +471,9 @@ class GpioChipFactory:
         chip = gpiod.Chip(chip_name, gpiod.Chip.OPEN_BY_NAME)
         self.chips[chip_name] = chip
         return chip
+
+    def get_gpiod_version(self):
+        return self.gpiod_version
 
     def close(self) -> None:
         for chip in self.chips.values():
@@ -493,22 +498,23 @@ class GpioDevice(PowerDevice):
         try:
             chip = chip_factory.get_gpio_chip(chip_id)
             self.line = chip.get_line(pin)
+            args: Dict[str, Any] = {
+                'consumer': "moonraker",
+                'type': gpiod.LINE_REQ_DIR_OUT
+            }
             if invert:
-                self.line.request(
-                    consumer="moonraker", type=gpiod.LINE_REQ_DIR_OUT,
-                    flags=gpiod.LINE_REQ_FLAG_ACTIVE_LOW,
-                    default_vals=[int(self.initial_state)])
+                args['flags'] = gpiod.LINE_REQ_FLAG_ACTIVE_LOW
+            if chip_factory.get_gpiod_version() < (1, 3):
+                args['default_vals'] = [int(self.initial_state)]
             else:
-                self.line.request(
-                    consumer="moonraker", type=gpiod.LINE_REQ_DIR_OUT,
-                    default_vals=[int(self.initial_state)])
+                args['default_val'] = int(self.initial_state)
+            self.line.request(**args)
         except Exception:
             self.state = "error"
             logging.exception(
                 f"Unable to init {pin}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise config.error("Power GPIO Config Error")
-
 
     def _parse_pin(self, config: ConfigHelper) -> Tuple[int, str, bool]:
         pin = cfg_pin = config.get("pin")
@@ -577,10 +583,6 @@ class RFDevice(GpioDevice):
         super().__init__(config)
         self.on = config.get("on_code").zfill(24)
         self.off = config.get("off_code").zfill(24)
-
-    def initialize(self) -> None:
-        super().initialize()
-        self.set_power("on" if self.initial_state else "off")
 
     def _transmit_digit(self, waveform) -> None:
         self.line.set_value(1)
