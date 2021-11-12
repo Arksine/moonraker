@@ -478,10 +478,12 @@ class GpioDevice(PowerDevice):
             if invert:
                 self.line.request(
                     consumer="moonraker", type=gpiod.LINE_REQ_DIR_OUT,
-                    flags=gpiod.LINE_REQ_FLAG_ACTIVE_LOW)
+                    flags=gpiod.LINE_REQ_FLAG_ACTIVE_LOW,
+                    default_val=int(self.initial_state))
             else:
                 self.line.request(
-                    consumer="moonraker", type=gpiod.LINE_REQ_DIR_OUT)
+                    consumer="moonraker", type=gpiod.LINE_REQ_DIR_OUT,
+                    default_val=int(self.initial_state))
         except Exception:
             self.state = "error"
             logging.exception(
