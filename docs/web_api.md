@@ -514,7 +514,7 @@ included.
         "update_manager static debian moonraker": {},
         "update_manager client mainsail": {
             "type": "web",
-            "repo": "meteyou/mainsail",
+            "repo": "mainsail-crew/mainsail",
             "path": "~/mainsail",
             "persistent_files": null
         },
