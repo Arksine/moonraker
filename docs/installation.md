@@ -138,7 +138,7 @@ When the script completes it should start both Moonraker and Klipper. In
 `webhooks client <uid>: Client info {'program': 'Moonraker', 'version': '<version>'}`
 
 Now you may install a client, such as
-[Mainsail](https://github.com/meteyou/mainsail) or
+[Mainsail](https://github.com/mainsail-crew/mainsail) or
 [Fluidd](https://github.com/cadriel/fluidd).
 
 !!! Note
