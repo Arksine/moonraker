@@ -250,10 +250,6 @@ class WLED:
 
                 self.strips[name] = Strip(name, color_order, cfg)
 
-            event_loop = self.server.get_event_loop()
-            event_loop.register_callback(
-                self._initalize_strips, list(self.strips.values()))
-
             # Register two remote methods for GCODE
             self.server.register_remote_method(
                 "set_wled_state", self.set_wled_state)
@@ -281,15 +277,13 @@ class WLED:
         except Exception as e:
             logging.exception(e)
 
-    async def _initalize_strips(self: WLED,
-                                initial_strips: List[Strip]
-                                ) -> None:
+    async def component_init(self) -> None:
         try:
             logging.debug("Initializing wled")
             event_loop = self.server.get_event_loop()
             cur_time = event_loop.get_loop_time()
             endtime = cur_time + 120.
-            query_strips = initial_strips
+            query_strips = list(self.strips.values())
             failed_strips: List[Strip] = []
             while cur_time < endtime:
                 for strip in query_strips:
@@ -441,5 +435,5 @@ class WLED:
 
         raise self.server.error(f"Unsupported wled request: {req}")
 
-def load_component_multi(config: ConfigHelper) -> WLED:
+def load_component(config: ConfigHelper) -> WLED:
     return WLED(config)
