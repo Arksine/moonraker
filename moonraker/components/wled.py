@@ -316,7 +316,8 @@ class WLED:
     # Full control of wled
     # state: True, False, "on", "off"
     # preset: wled preset (int) to use (ignored if state False or "Off")
-    async def set_wled_state(self: WLED, strip: str, state: str, preset: int = -1) -> None:
+    async def set_wled_state(self: WLED, strip: str, state: str,
+                             preset: int = -1) -> None:
         status = None
 
         if isinstance(state, bool):
@@ -327,7 +328,8 @@ class WLED:
                 status = OnOff.on if status == "true" else OnOff.off
 
         if status is None and preset == -1:
-            logging.info(f"Invalid state received but no preset passed: {state}")
+            logging.info(
+                f"Invalid state received but no preset passed: {state}")
             return
 
         if strip not in self.strips:
