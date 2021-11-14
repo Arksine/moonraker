@@ -798,7 +798,8 @@ gcode:
 
   {action_call_remote_method("set_wled_state",
                              strip=strip,
-                             state=preset)}
+                             state=True,
+                             preset=preset)}
 
 [gcode_macro WLED_OFF]
 description: Turn WLED strip off

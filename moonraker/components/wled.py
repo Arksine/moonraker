@@ -313,29 +313,21 @@ class WLED:
             return
         await self.strips[strip].wled_on(preset)
 
-    # Full control of wled, True, False, "on", "off", preset 42 as int or
-    # preset "42" as string
-    async def set_wled_state(self: WLED, strip: str, state: str) -> None:
+    # Full control of wled
+    # state: True, False, "on", "off"
+    # preset: wled preset (int) to use (ignored if state False or "Off")
+    async def set_wled_state(self: WLED, strip: str, state: str, preset: int = -1) -> None:
         status = None
-        preset = -1
+
         if isinstance(state, bool):
             status = OnOff.on if state else OnOff.off
-        elif isinstance(state, int):
-            status = OnOff.on
-            preset = state
         elif isinstance(state, str):
             status = state.lower()
             if status in ["true", "false"]:
                 status = OnOff.on if status == "true" else OnOff.off
-            else:
-                try:
-                    preset = int(state)
-                    status = OnOff.on
-                except ValueError:
-                    status = None
 
-        if status is None:
-            logging.info(f"Invalid state received: {state}")
+        if status is None and preset == -1:
+            logging.info(f"Invalid state received but no preset passed: {state}")
             return
 
         if strip not in self.strips:
