@@ -741,3 +741,88 @@ api_qos:
 #   The QOS level to use for the API topics. If not provided, the
 #   value specified by "default_qos" will be used.
 ```
+
+# `[wled]`
+Enables control of an WLED strip.
+
+```ini
+# moonraker.conf
+
+[wled strip_name]
+address:
+#   The address should be a valid ip or hostname for the wled webserver and
+#   must be specified
+initial_preset:
+#   Initial preset ID (favourite) to use. If not specified initial_colors
+#   will be used instead.
+initial_red:
+initial_green:
+initial_blue:
+initial_white:
+#   Initial colors to use for all neopixels should initial_preset not be set,
+#   initial_white will only be used for RGBW wled strips (defaults: 0.5)
+chain_count:
+#   Number of addressable neopixels for use (default: 1)
+color_order:
+#   Color order for WLED strip, RGB or RGBW (default: RGB)
+
+```
+Below are some potential examples:
+```ini
+# moonraker.conf
+
+[wled case]
+address: led1.lan
+initial_preset: 45
+chain_count: 76
+
+[wled lounge]
+address: 192.168.0.45
+initial_red: 0.5
+initial_green: 0.4
+initial_blue: 0.3
+chain_count: 42
+```
+
+It is possible to control wled from the klippy host, this can be done using
+one or more macros, such as:
+
+```ini
+# printer.cfg
+
+[gcode_macro WLED_ON]
+description: Turn WLED strip on using optional preset
+gcode:
+  {% set strip = params.STRIP|string %}
+  {% set preset = params.PRESET|default(-1)|int %}
+
+  {action_call_remote_method("set_wled_state",
+                             strip=strip,
+                             state=True,
+                             preset=preset)}
+
+[gcode_macro WLED_OFF]
+description: Turn WLED strip off
+gcode:
+  {% set strip = params.STRIP|string %}
+
+  {action_call_remote_method("set_wled_state",
+                             strip=strip,
+                             state=False)}
+
+[gcode_macro SET_WLED]
+description: SET_LED like functionlity for WLED
+gcode:
+    {% set strip = params.STRIP|string %}
+    {% set red = params.RED|default(0)|float %}
+    {% set green = params.GREEN|default(0)|float %}
+    {% set blue = params.BLUE|default(0)|float %}
+    {% set white = params.WHITE|default(0)|float %}
+    {% set index = params.INDEX|default(-1)|int %}
+    {% set transmit = params.TRANSMIT|default(1)|int %}
+
+    {action_call_remote_method("set_wled",
+                               strip=strip,
+                               red=red, green=green, blue=blue, white=white,
+                               index=index, transmit=transmit)}
+```
