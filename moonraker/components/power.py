@@ -467,6 +467,9 @@ class GpioDevice(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = state
+        self._check_timer()
+
+    def _check_timer(self):
         if self.state == "on" and self.timer is not None:
             event_loop = self.server.get_event_loop()
             power: PrinterPower = self.server.lookup_component("power")
@@ -521,6 +524,7 @@ class RFDevice(GpioDevice):
             logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = state
+        self._check_timer()
 
 
 #  This implementation based off the work tplink_smartplug
