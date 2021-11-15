@@ -92,7 +92,30 @@ class Authorization:
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
         for username, user_info in list(self.users.items()):
             if username == API_USER:
+                # Validate the API User
+                for item in ["username", "api_key", "created_on"]:
+                    if item not in user_info:
+                        self.users[API_USER] = {
+                            'username': API_USER,
+                            'api_key': self.api_key,
+                            'created_on': time.time()
+                        }
+                        break
                 continue
+            else:
+                # validate created users
+                valid = True
+                for item in ["username", "password", "salt", "created_on"]:
+                    if item not in user_info:
+                        logging.info(
+                            f"Authorization: User {username} does not "
+                            f"contain field {item}, removing")
+                        del self.users[username]
+                        valid = False
+                        break
+                if not valid:
+                    continue
+            # generate jwks for valid users
             if 'jwt_secret' in user_info:
                 try:
                     priv_key = self._load_private_key(user_info['jwt_secret'])
