@@ -298,6 +298,8 @@ bound_service:
 #   been set the service will be started when the device powers on and stopped
 #   when the device powers off.  The default is no service is bound to the
 #   device.
+#
+# *** The following options apply to "gpio" and "rf" types ***
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO and RF devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -318,80 +320,95 @@ timer:
 #    devices.  The timer may be a floating point value for gpio types, it should
 #    be an integer for all other types.  The default is no timer is set.
 #
-address:
-port:
-#   The above options are used for "tplink_smartplug" devices.  The
-#   address should be a valid ip or hostname for the tplink device.
-#   The port should be the port the device is configured to use.
-#   "Power Strips" can be controlled by including the socket index
-#   in the ip address.  For example, to control socket index 1:
-#     192.168.1.127/1
-#    The address must be provided. The port defaults to 9999.
+# *** The following options apply to "rf" devices ***
+on_code:
+off_code:
+#   Valid binary codes that are sent via the RF transmitter.
+#   For example: 1011.
 #
+# *** The following options apply to "tplink_smartplug" devices ***
 address:
-password:
-output_id:
-#   The above options are used for "tasmota" devices.  The
-#   address should be a valid ip or hostname for the tasmota device.
-#   Provide a password if configured in Tasmota (default is empty).
-#   Provided an output_id (relay id) if the Tasmota device supports
-#   more than one (default is 1).
+#   A valid ip address or hostname for the tplink device.  "Power Strips" can
+#   be controlled by including the socket index  in the ip address.  For example,
+#   to control socket index 1:
+#     192.168.1.127/1
+#   This parameter must be provided.
+port:
+#   The port to connect to.  Default is 9999.
+#
+# *** The following options apply to "tasmota" devices ***
+#   Note:
 #   If your single-relay Tasmota device switches on/off successfully,
 #   but fails to report its state, ensure that 'SetOption26' is set in
 #   Tasmota.
-#
 address:
-user:
+#   A valid ip address or hostname for the tasmota device.  This parameter
+#   must be provided.
 password:
+#   A password used to authenticate requests.  Default is no password.
 output_id:
-#   The above options are used for "shelly" devices.  The
-#   address should be a valid ip or hostname for the Shelly device.
-#   Provide a user and password if configured in Shelly (default is empty).
-#   If password is set but user is empty the default user "admin" will be used
-#   Provided an output_id (relay id) if the Shelly device supports
-#   more than one (default is 0).
+#   The output_id (or relay id) to use if the Tasmota device supports
+#   more than one output.  Default is 1.
 #
+#  *** The following options apply to "shelly" devices ***
 address:
-device:
+#   A valid ip address or hostname for the shelly device.  This parameter
+#   must be provided.
 user:
+#   A user name to use for request authentication.  If no password is set
+#   the the default is no user, otherwise the default is "admin".
 password:
-#   The above options are used for "homeseer" devices.  The
-#   address should be a valid ip or hostname for the homeseer controller.
-#   "device" should be the ID of the device to control.
-#   To find out the ID, in the HomeSeer UI, click on the device you want to
+#   The password to use for request authentication.  The default is no
+#   password.
+output_id:
+#   The output_id (or relay id) to use if the Shelly device supports
+#   more than one output.  Default is 1.
+#
+# *** The following options apply to "homeseer" devices ***
+address:
+#   A valid ip address or hostname for the homeseer device.  This parameter
+#   must be provided.
+device:
+#   The ID of the device to control.
+#   To find out the ID in the HomeSeer UI, click on the device you want to
 #   control (Make sure to click the sub-device that actually has On/Off
 #   buttons).  And then go to the "status/graphics" tab and it should list
-#   "ID" in the "advanced information" section.
-#   Provide a user and password with access to "device control"
-#   and at least the specific device you want to control
-#
-address:
-port:
-device:
-token:
-domain:
-#   The above options are used for "homeassistant" devices.  The
-#   address should be a valid ip or hostname for the homeassistant controller.
-#   "device" should be the ID of the switch to control.
-#   "domain" is the class of device set managed by homeassistant, defaults to "switch".
-#
-address:
+#   "ID" in the "advanced information" section.  This parameter must be
+#   provided.
 user:
+#   The user name for request authentication.  This default is "admin".
 password:
-output_id:
-#   The above options are used for "loxone smart home miniserver v1 " devices.
-#   The address should be a valid ip or hostname for the loxone miniserver v1
-#   device. All entries must be configured in advance in the loxone config.
-#   Provide a user and password configured in loxone config.
-#   The output_id is the name of a programmed output, virtual input or virtual
-#   output in the loxone config his output_id (name) may only be used once in
-#   the loxone config
+#   The password for request authentication.  The default is no password.
 #
-on_code:
-off_code:
-#   The above options are used for "rf" devices.  The
-#   codes should be valid binary codes that are send via the RF transmitter.
-#   For example: 1011.
+#  *** The following  options apply to "homeassistant" devices ***
+address:
+#   A valid ip address or hostname for the Home Assistant server.  This
+#   parameter must be provided.
+port:
+#   The port the Home Assistant server is listening on.  Default is 8123.
+device:
+#   The device ID of the switch to control. This parameter must be provided.
+token:
+#   A token used for request authorization.  This paramter must be provided.
+domain:
+#   The class of device managed by Home Assistant. Default is "switch".
+status_delay: 1.0
+#   The time (in seconds) to delay between requesting a device to turn
+#   on/off and requesting its current status.  This is a workaround used
+#   to validate that Home Assistant has successfully toggled the device,
+#   as the API is currently broken on their end.  Default is 1 second.
+#
+#  *** The following options apply to "loxone" devices ***
+address:
+#   A valid ip address or hostname for the Loxone server.  This
+#   parameter must be provided.
+user:
+#  The user name used for request authorization.  The default is "admin".
+password:
+#  The password used for request authorization.  The default is "admin".
+output_id:
+#   The name of a programmed output, virtual input or virtual
+#   output in the loxone configuration.  The default is no output id.
 ```
 
 !!! Tip
