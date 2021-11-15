@@ -775,6 +775,7 @@ class HomeAssistant(HTTPDevice):
         self.device: str = config.get("device")
         self.token: str = config.get("token")
         self.domain: str = config.get("domain", "switch")
+        self.status_delay: float = config.getfloat("status_delay", 1.)
 
     async def _send_homeassistant_command(self,
                                           command: str
@@ -818,6 +819,7 @@ class HomeAssistant(HTTPDevice):
 
     async def _send_power_request(self, state: str) -> str:
         await self._send_homeassistant_command(state)
+        await asyncio.sleep(self.status_delay)
         res = await self._send_status_request()
         return res
 
