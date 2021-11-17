@@ -243,8 +243,8 @@ class MQTTClient(APITransport, Subscribable):
         for _ in range(retries):
             try:
                 self.client.connect(self.address, self.port)
-            except ConnectionRefusedError:
-                logging.info("Unable to connect to MQTT broker, "
+            except (ConnectionRefusedError, socket.gaierror) as e:
+                logging.info(f"MQTT connection error, {e}, "
                              f"retries remaining: {retries}")
                 await asyncio.sleep(2.)
             else:
@@ -368,7 +368,7 @@ class MQTTClient(APITransport, Subscribable):
                 break
             try:
                 self.client.reconnect()
-            except ConnectionRefusedError:
+            except (ConnectionRefusedError, socket.gaierror):
                 continue
             self.client.socket().setsockopt(
                 socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
