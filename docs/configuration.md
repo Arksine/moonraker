@@ -759,7 +759,7 @@ api_qos:
 #   value specified by "default_qos" will be used.
 ```
 
-# `[wled]`
+### `[wled]`
 Enables control of an WLED strip.
 
 ```ini
