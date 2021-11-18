@@ -11,3 +11,4 @@ paho-mqtt==1.5.1
 pycurl==7.44.1
 zeroconf==0.37.0
 preprocess-cancellation==0.1.6
+jinja2==3.0.3
