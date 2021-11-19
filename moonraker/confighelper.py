@@ -15,6 +15,7 @@ from typing import (
     Any,
     Callable,
     IO,
+    Optional,
     TypeVar,
     Union,
     Dict,
@@ -77,49 +78,92 @@ class ConfigHelper:
     def _get_option(self,
                     func: Callable[..., Any],
                     option: str,
-                    default: Union[SentinelClass, _T]
+                    default: Union[SentinelClass, _T],
+                    above: Optional[Union[int, float]] = None,
+                    below: Optional[Union[int, float]] = None,
+                    minval: Optional[Union[int, float]] = None,
+                    maxval: Optional[Union[int, float]] = None
                     ) -> _T:
         try:
-            val = func(option, default)
+            val = func(self.section, option)
+        except configparser.NoOptionError:
+            if isinstance(default, SentinelClass):
+                raise ConfigError(
+                    f"No option found ({option}) in section [{self.section}]"
+                ) from None
+            return default
         except Exception:
             raise ConfigError(
                 f"Error parsing option ({option}) from "
                 f"section [{self.section}]")
-        if isinstance(val, SentinelClass):
-            raise ConfigError(
-                f"No option found ({option}) in section [{self.section}]")
+        self._check_option(option, val, above, below, minval, maxval)
         if self.section in self.orig_sections:
             # Only track sections included in the original config
             self.parsed[self.section][option] = val
         return val
+
+    def _check_option(self,
+                      option: str,
+                      value: Union[int, float],
+                      above: Optional[Union[int, float]],
+                      below: Optional[Union[int, float]],
+                      minval: Optional[Union[int, float]],
+                      maxval: Optional[Union[int, float]]
+                      ) -> None:
+        if above is not None and value <= above:
+            raise self.error(
+                f"Config Error: Section [{self.section}], Option "
+                f"'{option}: {value}': value is not above {above}")
+        if below is not None and value >= below:
+            raise self.error(
+                f"Config Error: Section [{self.section}], Option "
+                f"'{option}: {value}': value is not below {below}")
+        if minval is not None and value < minval:
+            raise self.error(
+                f"Config Error: Section [{self.section}], Option "
+                f"'{option}: {value}': value is below minimum value {minval}")
+        if maxval is not None and value > maxval:
+            raise self.error(
+                f"Config Error: Section [{self.section}], Option "
+                f"'{option}: {value}': value is above maximum value {minval}")
 
     def get(self,
             option: str,
             default: Union[SentinelClass, _T] = SENTINEL
             ) -> Union[str, _T]:
         return self._get_option(
-            self.config[self.section].get, option, default)
+            self.config.get, option, default)
 
     def getint(self,
                option: str,
-               default: Union[SentinelClass, _T] = SENTINEL
+               default: Union[SentinelClass, _T] = SENTINEL,
+               above: Optional[int] = None,
+               below: Optional[int] = None,
+               minval: Optional[int] = None,
+               maxval: Optional[int] = None
                ) -> Union[int, _T]:
         return self._get_option(
-            self.config[self.section].getint, option, default)
+            self.config.getint, option, default,
+            above, below, minval, maxval)
 
     def getboolean(self,
                    option: str,
                    default: Union[SentinelClass, _T] = SENTINEL
                    ) -> Union[bool, _T]:
         return self._get_option(
-            self.config[self.section].getboolean, option, default)
+            self.config.getboolean, option, default)
 
     def getfloat(self,
                  option: str,
-                 default: Union[SentinelClass, _T] = SENTINEL
+                 default: Union[SentinelClass, _T] = SENTINEL,
+                 above: Optional[float] = None,
+                 below: Optional[float] = None,
+                 minval: Optional[float] = None,
+                 maxval: Optional[float] = None
                  ) -> Union[float, _T]:
         return self._get_option(
-            self.config[self.section].getfloat, option, default)
+            self.config.getfloat, option, default,
+            above, below, minval, maxval)
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
