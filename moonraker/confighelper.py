@@ -60,6 +60,9 @@ class ConfigHelper:
     def __contains__(self, key: str) -> bool:
         return key in self.config
 
+    def has_option(self, option: str) -> bool:
+        return self.config.has_option(self.section, option)
+
     def get_name(self) -> str:
         return self.section
 
