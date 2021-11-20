@@ -192,27 +192,17 @@ class MQTTClient(APITransport, Subscribable):
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
         self.moonraker_status_topic = f"{self.instance_name}/moonraker/status"
-        status_cfg = config.get("status_objects", None)
+        status_cfg: Dict[str, Any] = config.getdict("status_objects", {},
+                                                    allow_empty_fields=True)
         self.status_objs: Dict[str, Any] = {}
-        if status_cfg is not None:
-            for line in status_cfg.strip().split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split('=', 1)
-                fields: Optional[List[str]]
-                if len(parts) == 1:
-                    fields = None
-                if len(parts) == 2:
-                    fields = [f.strip() for f in parts[1].split(',')
-                              if f.strip()]
-                elif len(parts) != 1:
-                    raise config.error(
-                        "Format error in option 'status_object', "
-                        f"section [mqtt]:\n{status_cfg}")
-                self.status_objs[parts[0].strip()] = fields
+        for key, val in status_cfg.items():
+            if val is not None:
+                self.status_objs[key] = [v.strip() for v in val.split(',')
+                                         if v.strip()]
+            else:
+                self.status_objs[key] = None
+        if status_cfg:
             logging.debug(f"MQTT: Status Objects Set: {self.status_objs}")
-
             self.server.register_event_handler("server:klippy_identified",
                                                self._handle_klippy_identified)
 
