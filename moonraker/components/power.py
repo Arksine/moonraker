@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from .machine import Machine
-    from .gpio import GpioFactory
     from . import klippy_apis
     APIComp = klippy_apis.KlippyAPI
 
@@ -442,11 +441,9 @@ class GpioDevice(PowerDevice):
                 f"Option 'timer' in section [{config.get_name()}] must "
                 "be above 0.0")
         self.timer_handle: Optional[asyncio.TimerHandle] = None
-        gpio: GpioFactory = self.server.lookup_component('gpio')
         if initial_val is None:
             initial_val = int(self.initial_state)
-        self.gpio_out = gpio.get_gpio_out_from_config(
-            config, initial_value=initial_val)
+        self.gpio_out = config.getgpioout('pin', initial_value=initial_val)
 
     def initialize(self) -> None:
         super().initialize()
