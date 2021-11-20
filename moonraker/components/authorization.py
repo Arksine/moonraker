@@ -134,9 +134,7 @@ class Authorization:
 
         # Get allowed cors domains
         self.cors_domains: List[str] = []
-        cors_cfg = config.get('cors_domains', "").strip()
-        cds = [d.strip() for d in cors_cfg.split('\n') if d.strip()]
-        for domain in cds:
+        for domain in config.getlist('cors_domains', []):
             bad_match = re.search(r"^.+\.[^:]*\*", domain)
             if bad_match is not None:
                 raise config.error(
@@ -155,9 +153,7 @@ class Authorization:
         self.trusted_ips: List[IPAddr] = []
         self.trusted_ranges: List[IPNetwork] = []
         self.trusted_domains: List[str] = []
-        tcs = config.get('trusted_clients', "")
-        trusted_clients = [c.strip() for c in tcs.split('\n') if c.strip()]
-        for val in trusted_clients:
+        for val in config.getlist('trusted_clients', []):
             # Check IP address
             try:
                 tc = ipaddress.ip_address(val)
