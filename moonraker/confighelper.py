@@ -25,6 +25,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from moonraker import Server
+    from .components.gpio import GpioFactory, GpioOutputPin
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str]
 
@@ -273,6 +274,24 @@ class ConfigHelper:
             return ret
 
         return self._get_option(getdict_wrapper, option, default)
+
+    def getgpioout(self,
+                   option: str,
+                   default: Union[SentinelClass, _T] = SENTINEL,
+                   initial_value: int = 0
+                   ) -> Union[GpioOutputPin, _T]:
+        gpio: Optional[GpioFactory]
+        gpio = self.server.load_component(self, 'gpio', None)
+        if gpio is None:
+            raise ConfigError(
+                f"Section [{self.section}], option '{option}', "
+                "GPIO Component not available")
+
+        def getgpio_wrapper(sec: str, opt: str) -> GpioOutputPin:
+            val = self.config.get(sec, opt)
+            assert gpio is not None
+            return gpio.setup_gpio_out(val, initial_value)
+        return self._get_option(getgpio_wrapper, option, default)
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
