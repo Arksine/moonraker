@@ -10,6 +10,7 @@ import os
 import hashlib
 from utils import SentinelClass
 from components.gpio import GpioOutputPin
+from components.template import JinjaTemplate
 
 # Annotation imports
 from typing import (
@@ -28,6 +29,7 @@ from typing import (
 if TYPE_CHECKING:
     from moonraker import Server
     from components.gpio import GpioFactory
+    from components.template import TemplateFactory
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str]
 
@@ -114,7 +116,7 @@ class ConfigHelper:
             self._check_option(option, val, above, below, minval, maxval)
         if self.section in self.orig_sections:
             # Only track sections included in the original config
-            if isinstance(val, GpioOutputPin):
+            if isinstance(val, (GpioOutputPin, JinjaTemplate)):
                 self.parsed[self.section][option] = str(val)
             else:
                 self.parsed[self.section][option] = val
@@ -292,18 +294,35 @@ class ConfigHelper:
                    default: Union[SentinelClass, _T] = SENTINEL,
                    initial_value: int = 0
                    ) -> Union[GpioOutputPin, _T]:
-        gpio: Optional[GpioFactory]
-        gpio = self.server.load_component(self, 'gpio', None)
-        if gpio is None:
+        try:
+            gpio: GpioFactory = self.server.load_component(self, 'gpio')
+        except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}', "
                 "GPIO Component not available")
 
         def getgpio_wrapper(sec: str, opt: str) -> GpioOutputPin:
             val = self.config.get(sec, opt)
-            assert gpio is not None
             return gpio.setup_gpio_out(val, initial_value)
         return self._get_option(getgpio_wrapper, option, default)
+
+    def gettemplate(self,
+                    option: str,
+                    default: Union[SentinelClass, _T] = SENTINEL
+                    ) -> Union[JinjaTemplate, _T]:
+        try:
+            template: TemplateFactory
+            template = self.server.load_component(self, 'template')
+        except Exception:
+            raise ConfigError(
+                f"Section [{self.section}], option '{option}', "
+                "Template Component not available")
+
+        def gettemplate_wrapper(sec: str, opt: str) -> JinjaTemplate:
+            val = self.config.get(sec, opt)
+            return template.create_template(val)
+
+        return self._get_option(gettemplate_wrapper, option, default)
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
