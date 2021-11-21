@@ -34,17 +34,6 @@ class GpioFactory:
         self.chips[chip_name] = chip
         return chip
 
-    def get_gpio_out_from_config(self,
-                                 config: ConfigHelper,
-                                 option: str = "pin",
-                                 initial_value: int = 0
-                                 ) -> GpioOutputPin:
-        pin_name = config.get(option)
-        try:
-            return self.setup_gpio_out(pin_name, initial_value)
-        except Exception as e:
-            raise config.error(str(e)) from None
-
     def setup_gpio_out(self,
                        pin_name: str,
                        initial_value: int = 0
