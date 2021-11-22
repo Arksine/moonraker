@@ -617,6 +617,9 @@ class MQTTClient(APITransport, Subscribable):
         payload = {'eventtime': eventtime, 'status': status}
         self.publish_topic(self.klipper_status_topic, payload)
 
+    def get_instance_name(self) -> str:
+        return self.instance_name
+
     async def close(self) -> None:
         if self.reconnect_task is not None:
             self.reconnect_task.cancel()
