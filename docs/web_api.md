@@ -839,6 +839,7 @@ Returns: Information about the host system in the following format:
             "bits": "32bit",
             "processor": "armv7l",
             "cpu_desc": "ARMv7 Processor rev 4 (v7l)",
+            "serial_number": "b898bdb4",
             "hardware_desc": "BCM2835",
             "model": "Raspberry Pi 3 Model B Rev 1.2",
             "total_memory": 945364,

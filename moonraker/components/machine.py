@@ -237,6 +237,7 @@ class Machine:
             'bits': platform.architecture()[0],
             'processor': platform.processor() or platform.machine(),
             'cpu_desc': "",
+            'serial_number': "",
             'hardware_desc': "",
             'model': "",
             'total_memory': None,
@@ -255,6 +256,9 @@ class Machine:
                 hw_match = re.search(r"Hardware\s+:\s+(.+)", cpu_items[-1])
                 if hw_match is not None:
                     cpu_info['hardware_desc'] = hw_match.group(1).strip()
+                sn_match = re.search(r"Serial\s+:\s+0*(.+)", cpu_items[-1])
+                if sn_match is not None:
+                    cpu_info['serial_number'] = sn_match.group(1).strip()
                 model_match = re.search(r"Model\s+:\s+(.+)", cpu_items[-1])
                 if model_match is not None:
                     cpu_info['model'] = model_match.group(1).strip()

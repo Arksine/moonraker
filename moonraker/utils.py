@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 import logging.handlers
 import os
+import glob
+import importlib
 import pathlib
 import sys
 import subprocess
@@ -18,6 +20,7 @@ from queue import SimpleQueue as Queue
 
 # Annotation imports
 from typing import (
+    TYPE_CHECKING,
     List,
     Optional,
     ClassVar,
@@ -26,7 +29,12 @@ from typing import (
     Any,
 )
 
+if TYPE_CHECKING:
+    from types import ModuleType
+
 MOONRAKER_PATH = os.path.join(os.path.dirname(__file__), '..')
+SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
+SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
 
 class ServerError(Exception):
     def __init__(self, message: str, status_code: int = 400) -> None:
@@ -174,3 +182,19 @@ def verify_source(path: str = MOONRAKER_PATH) -> Optional[Tuple[str, bool]]:
     ign_exts = rinfo['ignored_exts']
     checksum = hash_directory(path, ign_exts, ign_dirs)
     return checksum, checksum == orig_chksum
+
+def load_system_module(name: str) -> ModuleType:
+    for module_path in SYS_MOD_PATHS:
+        sys.path.insert(0, module_path)
+        try:
+            module = importlib.import_module(name)
+        except ImportError as e:
+            if not isinstance(e, ModuleNotFoundError):
+                logging.exception(f"Failed to load {name} module")
+            sys.path.pop(0)
+        else:
+            sys.path.pop(0)
+            break
+    else:
+        raise ServerError(f"Unable to import module {name}")
+    return module

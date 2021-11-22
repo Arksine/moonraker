@@ -207,22 +207,20 @@ class PanelDue:
         self.confirmed_macros = {
             "RESTART": "RESTART",
             "FIRMWARE_RESTART": "FIRMWARE_RESTART"}
-        macros = config.get('macros', None)
+        macros = config.getlist('macros', None)
         if macros is not None:
             # The macro's configuration name is the key, whereas the full
             # command is the value
-            macro_list = [m for m in macros.split('\n') if m.strip()]
-            self.available_macros = {m.split()[0]: m for m in macro_list}
-        conf_macros = config.get('confirmed_macros', None)
+            self.available_macros = {m.split()[0]: m for m in macros}
+        conf_macros = config.getlist('confirmed_macros', None)
         if conf_macros is not None:
             # The macro's configuration name is the key, whereas the full
             # command is the value
-            macro_list = [m for m in conf_macros.split('\n') if m.strip()]
-            self.confirmed_macros = {m.split()[0]: m for m in macro_list}
+            self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
 
-        ntkeys = config.get('non_trivial_keys', "Klipper state")
-        self.non_trivial_keys = [k for k in ntkeys.split('\n') if k.strip()]
+        self.non_trivial_keys = config.getlist('non_trivial_keys',
+                                               ["Klipper state"])
         self.ser_conn = SerialConnection(config, self)
         logging.info("PanelDue Configured")
 

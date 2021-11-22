@@ -883,10 +883,9 @@ class WebClientDeploy(BaseDeploy):
         self.type = config.get('type')
         self.channel = "stable" if self.type == "web" else "beta"
         self.persistent_files: List[str] = []
-        pfiles = config.get('persistent_files', None)
+        pfiles = config.getlist('persistent_files', None)
         if pfiles is not None:
-            self.persistent_files = [pf.strip().strip("/") for pf in
-                                     pfiles.split("\n") if pf.strip()]
+            self.persistent_files = [pf.strip("/") for pf in pfiles]
             if ".version" in self.persistent_files:
                 raise config.error(
                     "Invalid value for option 'persistent_files': "

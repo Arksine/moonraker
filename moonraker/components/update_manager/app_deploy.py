@@ -80,7 +80,7 @@ class AppDeploy(BaseDeploy):
         self.origin: str = config.get('origin')
         self.primary_branch = config.get("primary_branch", "master")
         self.npm_pkg_json: Optional[pathlib.Path] = None
-        if config.get("enable_node_updates", False):
+        if config.getboolean("enable_node_updates", False):
             self.npm_pkg_json = self.path.joinpath("package-lock.json")
             self._verify_path(config, 'enable_node_updates', self.npm_pkg_json)
         self.python_reqs: Optional[pathlib.Path] = None

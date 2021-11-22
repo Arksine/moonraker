@@ -92,7 +92,30 @@ class Authorization:
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
         for username, user_info in list(self.users.items()):
             if username == API_USER:
+                # Validate the API User
+                for item in ["username", "api_key", "created_on"]:
+                    if item not in user_info:
+                        self.users[API_USER] = {
+                            'username': API_USER,
+                            'api_key': self.api_key,
+                            'created_on': time.time()
+                        }
+                        break
                 continue
+            else:
+                # validate created users
+                valid = True
+                for item in ["username", "password", "salt", "created_on"]:
+                    if item not in user_info:
+                        logging.info(
+                            f"Authorization: User {username} does not "
+                            f"contain field {item}, removing")
+                        del self.users[username]
+                        valid = False
+                        break
+                if not valid:
+                    continue
+            # generate jwks for valid users
             if 'jwt_secret' in user_info:
                 try:
                     priv_key = self._load_private_key(user_info['jwt_secret'])
@@ -111,9 +134,7 @@ class Authorization:
 
         # Get allowed cors domains
         self.cors_domains: List[str] = []
-        cors_cfg = config.get('cors_domains', "").strip()
-        cds = [d.strip() for d in cors_cfg.split('\n') if d.strip()]
-        for domain in cds:
+        for domain in config.getlist('cors_domains', []):
             bad_match = re.search(r"^.+\.[^:]*\*", domain)
             if bad_match is not None:
                 raise config.error(
@@ -132,9 +153,7 @@ class Authorization:
         self.trusted_ips: List[IPAddr] = []
         self.trusted_ranges: List[IPNetwork] = []
         self.trusted_domains: List[str] = []
-        tcs = config.get('trusted_clients', "")
-        trusted_clients = [c.strip() for c in tcs.split('\n') if c.strip()]
-        for val in trusted_clients:
+        for val in config.getlist('trusted_clients', []):
             # Check IP address
             try:
                 tc = ipaddress.ip_address(val)
