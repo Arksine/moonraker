@@ -1549,6 +1549,22 @@ class MetadataStorage:
             timeout = 300.
             ufp_path.replace("\"", "\\\"")
             cmd += f" -u \"{ufp_path}\""
+
+        exclude_object_enabled = False
+        try:
+            kapis: APIComp = self.server.lookup_component('klippy_apis')
+            kobjects = await kapis.get_object_list(default=None)
+            if kobjects is not None:
+                exclude_object_enabled = "exclude_object" in kobjects
+        except Exception:
+            # After logging, continue processing with the assumption that exclude_object
+            # is not enabled.
+            logging.exception("Error querering klipper for exclude_object status")
+
+        if exclude_object_enabled:
+            timeout = 300.
+            cmd += " --exclude-object"
+
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         scmd = shell_cmd.build_shell_command(cmd, log_stderr=True)
         result = await scmd.run_with_response(timeout=timeout)

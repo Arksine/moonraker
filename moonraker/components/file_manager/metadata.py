@@ -37,6 +37,13 @@ def log_to_stderr(msg: str) -> None:
     sys.stderr.write(f"{msg}\n")
     sys.stderr.flush()
 
+has_preprocess_cancellation = False
+try:
+    from preprocess_cancellation import preprocessor
+    has_preprocess_cancellation = True
+except ImportError:
+    log_to_stderr("Unable to load the preprocess_cancellation module.")
+
 # regex helpers
 def _regex_find_floats(pattern: str,
                        data: str,
@@ -713,7 +720,7 @@ def extract_metadata(file_path: str) -> Dict[str, Any]:
                 metadata[key] = result
     return metadata
 
-def extract_ufp(ufp_path: str, dest_path: str) -> None:
+def extract_ufp(ufp_path: str, dest_path: str, gc_temp: str) -> None:
     if not os.path.isfile(ufp_path):
         log_to_stderr(f"UFP file Not Found: {ufp_path}")
         sys.exit(-1)
@@ -730,7 +737,7 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
                 if UFP_THUMB_PATH in zf.namelist():
                     tmp_thumb_path = zf.extract(
                         UFP_THUMB_PATH, path=tmp_dir_name)
-            shutil.move(tmp_model_path, dest_path)
+            shutil.move(tmp_model_path, gc_temp)
             if tmp_thumb_path:
                 if not os.path.exists(dest_thumb_dir):
                     os.mkdir(dest_thumb_dir)
@@ -743,14 +750,35 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
     except Exception:
         log_to_stderr(f"Error removing ufp file: {ufp_path}")
 
-def main(path: str, filename: str, ufp: Optional[str]) -> None:
+def process_for_cancellation (path_src: str, path_dest: str) -> None:
+    log_to_stderr(f"path_dest: { path_dest }")
+    try:
+        with open(path_src, "r") as fin:
+            with open( path_dest, "w") as fout:
+                preprocessor(fin, fout)
+    except Exception:
+        log_to_stderr(traceback.format_exc())
+        sys.exit(-1)
+
+def main(path: str, filename: str, ufp: Optional[str], do_exclude_object: bool) -> None:
     file_path = os.path.join(path, filename)
+    gc_temp = os.path.join(
+            tempfile.gettempdir(),
+            os.path.basename(filename))
     if ufp is not None:
-        extract_ufp(ufp, file_path)
+        extract_ufp(ufp, file_path, gc_temp)
     metadata: Dict[str, Any] = {}
-    if not os.path.isfile(file_path):
+    if not os.path.isfile(gc_temp):
         log_to_stderr(f"File Not Found: {file_path}")
         sys.exit(-1)
+
+    intermediate_file = gc_temp
+    if do_exclude_object:
+        intermediate_file = gc_temp + ".pp"
+        process_for_cancellation(gc_temp, intermediate_file)
+
+    shutil.move(intermediate_file, file_path)
+
     try:
         metadata = extract_metadata(file_path)
     except Exception:
@@ -780,8 +808,11 @@ if __name__ == "__main__":
         help="optional absolute path for file"
     )
     parser.add_argument(
+        "-x", "--exclude-object", dest='do_exclude_object', action='store_true',
+        help="process gcode file for exclude opbject functionality")
+    parser.add_argument(
         "-u", "--ufp", metavar="<ufp file>", default=None,
         help="optional path of ufp file to extract"
     )
     args = parser.parse_args()
-    main(args.path, args.filename, args.ufp)
+    main(args.path, args.filename, args.ufp, args.do_exclude_object)
