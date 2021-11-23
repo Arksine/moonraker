@@ -520,11 +520,12 @@ class FileManager:
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
         # finfo = await self._process_uploaded_file(upload_info)
 
-        finfo = self.get_path_info(upload_info['tmp_file_path'], upload_info['root'])
+        finfo = self.get_path_info(
+            upload_info['tmp_file_path'], upload_info['root'])
         if upload_info['unzip_ufp']:
-            finfo['ufp_path'] =  upload_info['tmp_file_path']
+            finfo['ufp_path'] = upload_info['tmp_file_path']
         else:
-            finfo['gcode_path'] =  upload_info['tmp_file_path']
+            finfo['gcode_path'] = upload_info['tmp_file_path']
         await self.gcode_metadata.parse_metadata(
             upload_info['filename'], finfo).wait()
         started: bool = False
@@ -1523,7 +1524,8 @@ class MetadataStorage:
             retries = 3
             while retries:
                 try:
-                    await self._run_extract_metadata(fname, ufp_path, gcode_path)
+                    await self._run_extract_metadata(
+                        fname, ufp_path, gcode_path)
                 except Exception:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
