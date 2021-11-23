@@ -98,12 +98,13 @@ class ConfigHelper:
                 raise ConfigError(
                     f"No option found ({option}) in section [{self.section}]"
                 ) from None
-            return default
+            val = default
         except Exception:
             raise ConfigError(
                 f"Error parsing option ({option}) from "
                 f"section [{self.section}]")
-        self._check_option(option, val, above, below, minval, maxval)
+        else:
+            self._check_option(option, val, above, below, minval, maxval)
         if self.section in self.orig_sections:
             # Only track sections included in the original config
             if isinstance(val, GpioOutputPin):
