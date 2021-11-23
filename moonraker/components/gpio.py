@@ -62,7 +62,8 @@ class GpioFactory:
                 f"Unable to init {pin_id}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise
-        gpio_out = GpioOutputPin(full_name, line, invert, initial_value)
+        gpio_out = GpioOutputPin(pin_name, full_name, line, invert,
+                                 initial_value)
         self.reserved_gpios[full_name] = gpio_out
         return gpio_out
 
@@ -96,11 +97,13 @@ class GpioFactory:
 
 class GpioOutputPin:
     def __init__(self,
+                 orig_name: str,
                  name: str,
                  line: Any,
                  inverted: bool,
                  initial_val: int
                  ) -> None:
+        self.orig = orig_name
         self.name = name
         self.line = line
         self.inverted = inverted
@@ -119,6 +122,9 @@ class GpioOutputPin:
 
     def get_name(self) -> str:
         return self.name
+
+    def __str__(self) -> str:
+        return self.orig
 
 def load_component(config: ConfigHelper) -> GpioFactory:
     return GpioFactory(config)
