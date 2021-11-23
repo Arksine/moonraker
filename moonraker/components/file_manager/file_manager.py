@@ -518,6 +518,9 @@ class FileManager:
                 raise self.server.error(
                     "File is loaded, upload not permitted", 403)
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
+        # If moving forward with the WIP idea, some of the functionality
+        # of this method will need to be reimplemented.  Also some
+        # additional error handling throughout this process
         # finfo = await self._process_uploaded_file(upload_info)
 
         finfo = self.get_path_info(
