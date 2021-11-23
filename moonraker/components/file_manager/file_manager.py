@@ -1557,9 +1557,10 @@ class MetadataStorage:
             if kobjects is not None:
                 exclude_object_enabled = "exclude_object" in kobjects
         except Exception:
-            # After logging, continue processing with the assumption that exclude_object
-            # is not enabled.
-            logging.exception("Error querering klipper for exclude_object status")
+            # After logging, continue processing with the assumption that
+            # exclude_object is not enabled.
+            logging.exception(
+                "Error querering klipper for exclude_object status")
 
         if exclude_object_enabled:
             timeout = 300.

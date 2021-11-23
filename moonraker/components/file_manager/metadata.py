@@ -38,6 +38,7 @@ def log_to_stderr(msg: str) -> None:
     sys.stderr.flush()
 
 has_preprocess_cancellation = False
+
 try:
     from preprocess_cancellation import preprocessor
     has_preprocess_cancellation = True
@@ -750,21 +751,25 @@ def extract_ufp(ufp_path: str, dest_path: str, gc_temp: str) -> None:
     except Exception:
         log_to_stderr(f"Error removing ufp file: {ufp_path}")
 
-def process_for_cancellation (path_src: str, path_dest: str) -> None:
+def process_for_cancellation(path_src: str, path_dest: str) -> None:
     log_to_stderr(f"path_dest: { path_dest }")
     try:
         with open(path_src, "r") as fin:
-            with open( path_dest, "w") as fout:
+            with open(path_dest, "w") as fout:
                 preprocessor(fin, fout)
     except Exception:
         log_to_stderr(traceback.format_exc())
         sys.exit(-1)
 
-def main(path: str, filename: str, ufp: Optional[str], do_exclude_object: bool) -> None:
+def main(path: str,
+         filename: str,
+         ufp: Optional[str],
+         do_exclude_object: bool
+         ) -> None:
     file_path = os.path.join(path, filename)
     gc_temp = os.path.join(
-            tempfile.gettempdir(),
-            os.path.basename(filename))
+        tempfile.gettempdir(),
+        os.path.basename(filename))
     if ufp is not None:
         extract_ufp(ufp, file_path, gc_temp)
     metadata: Dict[str, Any] = {}
