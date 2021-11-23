@@ -518,7 +518,13 @@ class FileManager:
                 raise self.server.error(
                     "File is loaded, upload not permitted", 403)
         self.notify_sync_lock = NotifySyncLock(upload_info['dest_path'])
-        finfo = await self._process_uploaded_file(upload_info)
+        # finfo = await self._process_uploaded_file(upload_info)
+
+        finfo = self.get_path_info(upload_info['tmp_file_path'], upload_info['root'])
+        if upload_info['unzip_ufp']:
+            finfo['ufp_path'] =  upload_info['tmp_file_path']
+        else:
+            finfo['gcode_path'] =  upload_info['tmp_file_path']
         await self.gcode_metadata.parse_metadata(
             upload_info['filename'], finfo).wait()
         started: bool = False
@@ -1513,10 +1519,11 @@ class MetadataStorage:
                 mevt.set()
                 continue
             ufp_path: Optional[str] = path_info.get('ufp_path', None)
+            gcode_path: Optional[str] = path_info.get('gcode_path', None)
             retries = 3
             while retries:
                 try:
-                    await self._run_extract_metadata(fname, ufp_path)
+                    await self._run_extract_metadata(fname, ufp_path, gcode_path)
                 except Exception:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
@@ -1537,7 +1544,8 @@ class MetadataStorage:
 
     async def _run_extract_metadata(self,
                                     filename: str,
-                                    ufp_path: Optional[str]
+                                    ufp_path: Optional[str],
+                                    gcode_path: Optional[str]
                                     ) -> None:
         # Escape single quotes in the file name so that it may be
         # properly loaded
@@ -1545,6 +1553,10 @@ class MetadataStorage:
         cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
                         self.gc_path, "-f", f"\"{filename}\""])
         timeout = 10.
+        if gcode_path is not None and os.path.isfile(gcode_path):
+            gcode_path.replace("\"", "\\\"")
+            cmd += f" -g \"{gcode_path}\""
+
         if ufp_path is not None and os.path.isfile(ufp_path):
             timeout = 300.
             ufp_path.replace("\"", "\\\"")

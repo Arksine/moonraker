@@ -37,8 +37,8 @@ def log_to_stderr(msg: str) -> None:
     sys.stderr.write(f"{msg}\n")
     sys.stderr.flush()
 
-has_preprocess_cancellation = False
 
+has_preprocess_cancellation = False
 try:
     from preprocess_cancellation import preprocessor
     has_preprocess_cancellation = True
@@ -764,17 +764,20 @@ def process_for_cancellation(path_src: str, path_dest: str) -> None:
 def main(path: str,
          filename: str,
          ufp: Optional[str],
+         gcode: Optional[str],
          do_exclude_object: bool
          ) -> None:
     file_path = os.path.join(path, filename)
     gc_temp = os.path.join(
         tempfile.gettempdir(),
         os.path.basename(filename))
+    if gcode is not None:
+        gc_temp = gcode
     if ufp is not None:
         extract_ufp(ufp, file_path, gc_temp)
     metadata: Dict[str, Any] = {}
     if not os.path.isfile(gc_temp):
-        log_to_stderr(f"File Not Found: {file_path}")
+        log_to_stderr(f"File Not Found: {gc_temp}")
         sys.exit(-1)
 
     intermediate_file = gc_temp
@@ -816,8 +819,12 @@ if __name__ == "__main__":
         "-x", "--exclude-object", dest='do_exclude_object', action='store_true',
         help="process gcode file for exclude opbject functionality")
     parser.add_argument(
+        "-g", "--gcode", metavar="<gcode file>", default=None,
+        help="optional path of gcode file to process"
+    )
+    parser.add_argument(
         "-u", "--ufp", metavar="<ufp file>", default=None,
         help="optional path of ufp file to extract"
     )
     args = parser.parse_args()
-    main(args.path, args.filename, args.ufp, args.do_exclude_object)
+    main(args.path, args.filename, args.ufp, args.gcode, args.do_exclude_object)
