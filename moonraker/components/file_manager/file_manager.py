@@ -58,10 +58,14 @@ class FileManager:
         self.event_loop = self.server.get_event_loop()
         self.full_access_roots: Set[str] = set()
         self.file_paths: Dict[str, str] = {}
+        self.enable_object_processing: bool = config.getboolean(
+                                                'enable_object_processing',
+                                                False)
         db: DBComp = self.server.load_component(config, "database")
         gc_path: str = db.get_item(
             "moonraker", "file_manager.gcode_path", "")
-        self.gcode_metadata = MetadataStorage(self.server, gc_path, db)
+        self.gcode_metadata = MetadataStorage(
+            self.server, gc_path, self.enable_object_processing, db)
         self.inotify_handler = INotifyHandler(config, self,
                                               self.gcode_metadata)
         self.write_mutex = asyncio.Lock()
@@ -1372,10 +1376,12 @@ class MetadataStorage:
     def __init__(self,
                  server: Server,
                  gc_path: str,
+                 enable_object_processing: bool,
                  db: DBComp
                  ) -> None:
         self.server = server
         self.gc_path = gc_path
+        self.enable_object_processing = enable_object_processing
         db.register_local_namespace(METADATA_NAMESPACE)
         self.mddb = db.wrap_namespace(
             METADATA_NAMESPACE, parse_keys=False)
@@ -1567,19 +1573,7 @@ class MetadataStorage:
             ufp_path.replace("\"", "\\\"")
             cmd += f" -u \"{ufp_path}\""
 
-        exclude_object_enabled = False
-        try:
-            kapis: APIComp = self.server.lookup_component('klippy_apis')
-            kobjects = await kapis.get_object_list(default=None)
-            if kobjects is not None:
-                exclude_object_enabled = "exclude_object" in kobjects
-        except Exception:
-            # After logging, continue processing with the assumption that
-            # exclude_object is not enabled.
-            logging.exception(
-                "Error querering klipper for exclude_object status")
-
-        if exclude_object_enabled:
+        if self.enable_object_processing:
             timeout = 300.
             cmd += " --exclude-object"
 

@@ -65,7 +65,11 @@ log_path:
 #   them at "/server/files/logs/*".  The default is no log paths.
 queue_gcode_uploads: False
 #   When set to True the file manager will add uploads to the job_queue when
-#   the `start_print` flag has been set.  The default if False.
+#   the `start_print` flag has been set.  The default is False.
+enable_object_processing: False
+#   When set to True, the file manager will process uploaded gcode files
+#   to annotate them for use with Klipper's `exclude_object` feature.
+#   The default is false
 ```
 
 ### `[database]`
