@@ -59,8 +59,8 @@ class FileManager:
         self.full_access_roots: Set[str] = set()
         self.file_paths: Dict[str, str] = {}
         self.enable_object_processing: bool = config.getboolean(
-                                                'enable_object_processing',
-                                                False)
+            'enable_object_processing',
+            False)
         db: DBComp = self.server.load_component(config, "database")
         gc_path: str = db.get_item(
             "moonraker", "file_manager.gcode_path", "")
@@ -1567,15 +1567,16 @@ class MetadataStorage:
         if gcode_path is not None and os.path.isfile(gcode_path):
             gcode_path.replace("\"", "\\\"")
             cmd += f" -g \"{gcode_path}\""
+            if self.enable_object_processing:
+                timeout = 300.
+                cmd += " --exclude-object"
 
         if ufp_path is not None and os.path.isfile(ufp_path):
             timeout = 300.
             ufp_path.replace("\"", "\\\"")
             cmd += f" -u \"{ufp_path}\""
-
-        if self.enable_object_processing:
-            timeout = 300.
-            cmd += " --exclude-object"
+            if self.enable_object_processing:
+                cmd += " --exclude-object"
 
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         scmd = shell_cmd.build_shell_command(cmd, log_stderr=True)
