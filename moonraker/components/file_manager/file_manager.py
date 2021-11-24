@@ -61,7 +61,7 @@ class FileManager:
         db: DBComp = self.server.load_component(config, "database")
         gc_path: str = db.get_item(
             "moonraker", "file_manager.gcode_path", "")
-        self.gcode_metadata = MetadataStorage(self.server, gc_path, db)
+        self.gcode_metadata = MetadataStorage(config, gc_path, db)
         self.inotify_handler = INotifyHandler(config, self,
                                               self.gcode_metadata)
         self.write_mutex = asyncio.Lock()
@@ -1361,11 +1361,13 @@ METADATA_VERSION = 3
 
 class MetadataStorage:
     def __init__(self,
-                 server: Server,
+                 config: ConfigHelper,
                  gc_path: str,
                  db: DBComp
                  ) -> None:
-        self.server = server
+        self.server = config.get_server()
+        self.enable_object_proc = config.getboolean(
+            'enable_object_postprocessing', False)
         self.gc_path = gc_path
         db.register_local_namespace(METADATA_NAMESPACE)
         self.mddb = db.wrap_namespace(
@@ -1550,6 +1552,9 @@ class MetadataStorage:
             timeout = 300.
             ufp_path.replace("\"", "\\\"")
             cmd += f" -u \"{ufp_path}\""
+        if self.enable_object_proc:
+            timeout = 300.
+            cmd += " --check-objects"
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         scmd = shell_cmd.build_shell_command(cmd, log_stderr=True)
         result = await scmd.run_with_response(timeout=timeout)
