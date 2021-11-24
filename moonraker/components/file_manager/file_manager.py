@@ -736,6 +736,7 @@ class InotifyNode:
         self.pending_node_events: Dict[str, asyncio.Handle] = {}
         self.pending_deleted_children: Set[Tuple[str, bool]] = set()
         self.pending_file_events: Dict[str, str] = {}
+        self.is_processing_metadata = False
 
     async def _finish_create_node(self) -> None:
         # Finish a node's creation.  All children that were created
@@ -748,10 +749,12 @@ class InotifyNode:
         node_path = self.get_path()
         root = self.get_root()
         # Scan child nodes for unwatched directories and metadata
+        self.is_processing_metadata = True
         mevts: List[asyncio.Event] = self.scan_node()
         if mevts:
             mfuts = [e.wait() for e in mevts]
             await asyncio.gather(*mfuts)
+        self.is_processing_metadata = False
         self.ihdlr.log_nodes()
         self.ihdlr.notify_filelist_changed(
             "create_dir", root, node_path)
@@ -836,6 +839,10 @@ class InotifyNode:
         if evt_name is None:
             logging.info(f"Invalid file write event: {file_name}")
             return
+        if self.is_processing():
+            logging.debug("Metadata is processing, suppressing write "
+                          f"event: {file_name}")
+            return
         pending_node = self.search_pending_event("create_node")
         if pending_node is not None:
             # if this event was generated as a result of a created parent
@@ -902,6 +909,11 @@ class InotifyNode:
     def get_root(self) -> str:
         return self.parent_node.get_root()
 
+    def is_processing(self) -> bool:
+        if self.is_processing_metadata:
+            return True
+        return self.parent_node.is_processing()
+
     def add_event(self, evt_name: str, timeout: float) -> None:
         if evt_name in self.pending_node_events:
             self.reset_event(evt_name, timeout)
@@ -962,6 +974,9 @@ class InotifyRootNode(InotifyNode):
         if name in self.pending_node_events:
             return self
         return None
+
+    def is_processing(self) -> bool:
+        return self.is_processing_metadata
 
 class NotifySyncLock:
     def __init__(self, dest_path: str) -> None:
@@ -1281,6 +1296,8 @@ class INotifyHandler:
             logging.debug(f"Inotify file move to: {root}, "
                           f"{node_path}, {evt.name}")
             moved_evt = self.pending_moves.pop(evt.cookie, None)
+            # Don't emit file events if the node is processing metadata
+            can_notify = not node.is_processing()
             if moved_evt is not None:
                 # Moved from a currently watched directory
                 prev_parent, prev_name, hdl = moved_evt
@@ -1293,15 +1310,20 @@ class INotifyHandler:
                     # Unable to move, metadata needs parsing
                     mevt = self.parse_gcode_metadata(file_path)
                     await mevt.wait()
-                self.notify_filelist_changed(
-                    "move_file", root, file_path,
-                    prev_root, prev_path)
+                if can_notify:
+                    self.notify_filelist_changed(
+                        "move_file", root, file_path,
+                        prev_root, prev_path)
             else:
                 if root == "gcodes":
                     mevt = self.parse_gcode_metadata(file_path)
                     await mevt.wait()
-                self.notify_filelist_changed(
-                    "create_file", root, file_path)
+                if can_notify:
+                    self.notify_filelist_changed(
+                        "create_file", root, file_path)
+            if not can_notify:
+                logging.debug("Metadata is processing, suppressing move "
+                              f"notification: {file_path}")
         elif evt.mask & iFlags.MODIFY:
             node.schedule_file_event(evt.name, "modify_file")
         elif evt.mask & iFlags.CLOSE_WRITE:
