@@ -66,7 +66,19 @@ log_path:
 queue_gcode_uploads: False
 #   When set to True the file manager will add uploads to the job_queue when
 #   the `start_print` flag has been set.  The default if False.
+enable_object_processing: False
+#   When set to True gcode files will be run through a "preprocessor"
+#   during metdata extraction if object tags are detected.  This preprocessor
+#   replaces object tags with G-Code commands compatible with Klipper's
+#   "cancel object" functionality.  Note that this process is file I/O intensive,
+#   it is not recommended for usage on low resource SBCs such as a Pi Zero.
+#   The default is False.
 ```
+
+!!! Note
+    It is also possible to enable object processing directly in the slicer.
+    See the [preprocess-cancellation](https://github.com/kageurufu/cancelobject-preprocessor)
+    documentation for details.
 
 ### `[database]`
 
