@@ -1492,11 +1492,14 @@ class MetadataStorage:
                        fname: str,
                        path_info: Dict[str, Any]
                        ) -> asyncio.Event:
+        if fname in self.pending_requests:
+            return self.pending_requests[fname][1]
         mevt = asyncio.Event()
         ext = os.path.splitext(fname)[1]
-        if fname in self.pending_requests or \
-                ext not in VALID_GCODE_EXTS or \
-                self._has_valid_data(fname, path_info):
+        if (
+            ext not in VALID_GCODE_EXTS or
+            self._has_valid_data(fname, path_info)
+        ):
             # request already pending or not necessary
             mevt.set()
             return mevt
@@ -1511,7 +1514,7 @@ class MetadataStorage:
     async def _process_metadata_update(self) -> None:
         while self.pending_requests:
             fname, (path_info, mevt) = \
-                self.pending_requests.popitem()
+                list(self.pending_requests.items())[0]
             if self._has_valid_data(fname, path_info):
                 mevt.set()
                 continue
@@ -1535,6 +1538,7 @@ class MetadataStorage:
                     }
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
+            self.pending_requests.pop(fname, None)
             mevt.set()
         self.busy = False
 
