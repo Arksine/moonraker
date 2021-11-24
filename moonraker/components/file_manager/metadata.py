@@ -30,6 +30,13 @@ from typing import (
 if TYPE_CHECKING:
     pass
 
+HAS_OBJECT_PROCESSING = True
+try:
+    from preprocess_cancellation import preprocessor
+except ImportError:
+    HAS_OBJECT_PROCESSING = False
+
+
 UFP_MODEL_PATH = "/3D/model.gcode"
 UFP_THUMB_PATH = "/Metadata/thumbnail.png"
 
@@ -114,8 +121,28 @@ class BaseSlicer(object):
         else:
             return None
 
+    def _check_has_objects(self,
+                           data: str,
+                           pattern: Optional[str] = None
+                           ) -> bool:
+        match = re.search(r"\nDEFINE_OBJECT NAME=", data)
+        if match is not None:
+            # Objects alread processed
+            return False
+        # Always check M486
+        patterns = [r"\nM486"]
+        if pattern is not None:
+            patterns.append(pattern)
+        for regex in patterns:
+            if re.search(regex, data) is not None:
+                return True
+        return False
+
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         return None
+
+    def has_objects(self) -> bool:
+        return self._check_has_objects(self.header_data)
 
     def parse_gcode_start_byte(self) -> Optional[int]:
         m = re.search(r"\n[MG]\d+\s.*\n", self.header_data)
@@ -190,6 +217,10 @@ class PrusaSlicer(BaseSlicer):
                     'slicer_version': match.group(1)
                 }
         return None
+
+    def has_objects(self) -> bool:
+        return self._check_has_objects(
+            self.header_data, r"\n; printing object")
 
     def parse_first_layer_height(self) -> Optional[float]:
         # Check percentage
@@ -347,6 +378,10 @@ class Cura(PrusaSlicer):
                 'slicer_version': match.group(1)
             }
         return None
+
+    def has_objects(self) -> bool:
+        return self._check_has_objects(
+            self.header_data, r"\n;MESH:")
 
     def parse_first_layer_height(self) -> Optional[float]:
         return _regex_find_first(r";MINZ:(\d+\.?\d*)", self.header_data)
@@ -547,6 +582,10 @@ class IdeaMaker(PrusaSlicer):
             }
         return None
 
+    def has_objects(self) -> bool:
+        return self._check_has_objects(
+            self.header_data, r"\n;PRINTING:")
+
     def parse_first_layer_height(self) -> Optional[float]:
         layer_info = _regex_find_floats(
             r";LAYER:0\s*.*\s*;HEIGHT.*", self.header_data)
@@ -676,7 +715,20 @@ SUPPORTED_DATA = [
     'thumbnails', 'first_layer_bed_temp', 'first_layer_extr_temp',
     'gcode_start_byte', 'gcode_end_byte']
 
-def extract_metadata(file_path: str) -> Dict[str, Any]:
+def process_objects(file_path: str) -> None:
+    fname = os.path.basename(file_path)
+    log_to_stderr(f"Performing Object Processing on file: {fname}")
+    with tempfile.TemporaryDirectory() as tmp_dir_name:
+        tmp_file = os.path.join(tmp_dir_name, fname)
+        with open(file_path, 'r') as in_file:
+            with open(tmp_file, 'w') as out_file:
+                preprocessor(in_file, out_file)
+        shutil.move(tmp_file, file_path)
+
+
+def extract_metadata(file_path: str,
+                     check_objects: bool
+                     ) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {}
     slicers = [s(file_path) for s in SUPPORTED_SLICERS]
     header_data = footer_data = ""
@@ -706,11 +758,18 @@ def extract_metadata(file_path: str) -> Dict[str, Any]:
         else:
             footer_data = header_data
         slicer.set_data(header_data, footer_data, size)
+        need_proc = check_objects and slicer.has_objects()
         for key in SUPPORTED_DATA:
             func = getattr(slicer, "parse_" + key)
             result = func()
             if result is not None:
                 metadata[key] = result
+    if need_proc:
+        process_objects(file_path)
+        # After processing the file has changed, update size and
+        # modified fields
+        metadata['size'] = os.path.getsize(file_path)
+        metadata['modified'] = os.path.getmtime(file_path)
     return metadata
 
 def extract_ufp(ufp_path: str, dest_path: str) -> None:
@@ -743,7 +802,11 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
     except Exception:
         log_to_stderr(f"Error removing ufp file: {ufp_path}")
 
-def main(path: str, filename: str, ufp: Optional[str]) -> None:
+def main(path: str,
+         filename: str,
+         ufp: Optional[str],
+         check_objects: bool
+         ) -> None:
     file_path = os.path.join(path, filename)
     if ufp is not None:
         extract_ufp(ufp, file_path)
@@ -752,7 +815,7 @@ def main(path: str, filename: str, ufp: Optional[str]) -> None:
         log_to_stderr(f"File Not Found: {file_path}")
         sys.exit(-1)
     try:
-        metadata = extract_metadata(file_path)
+        metadata = extract_metadata(file_path, check_objects)
     except Exception:
         log_to_stderr(traceback.format_exc())
         sys.exit(-1)
@@ -783,5 +846,13 @@ if __name__ == "__main__":
         "-u", "--ufp", metavar="<ufp file>", default=None,
         help="optional path of ufp file to extract"
     )
+    parser.add_argument(
+        "-o", "--check-objects", dest='check_objects', action='store_true',
+        help="process gcode file for exclude opbject functionality")
     args = parser.parse_args()
-    main(args.path, args.filename, args.ufp)
+    if not HAS_OBJECT_PROCESSING:
+        log_to_stderr("Module 'preprocess-cancellation' failed to load")
+    check_objects = args.check_objects and HAS_OBJECT_PROCESSING
+    enabled_msg = "enabled" if check_objects else "disabled"
+    log_to_stderr(f"Object Processing is {enabled_msg}")
+    main(args.path, args.filename, args.ufp, check_objects)
