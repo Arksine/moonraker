@@ -25,7 +25,7 @@ host: 0.0.0.0
 port: 7125
 #   The port the HTTP server will listen on.  Default is 7125
 ssl_port: 7130
-#   The port to listen on for SSS (HTTPS) connections.  Note that the HTTPS
+#   The port to listen on for SSL (HTTPS) connections.  Note that the HTTPS
 #   server will only be started of the certificate and key options outlined
 #   below are provied.  The default is 7130.
 ssl_certificate_path:
@@ -658,7 +658,7 @@ install_script:
 #  The update manager parses this file for "system" packages that need updating.
 #  The default is no install script, which disables system package updates
 enable_node_updates:
-#   When set to True, Moonraker will asssume that this repo relies upon node
+#   When set to True, Moonraker will assume that this repo relies upon node
 #   and will attempt to execute "npm ci --only=prod" when it detects a change
 #   to package-lock.json.  Note that if your project does not have a
 #   package-lock.json in its root directory then the plugin will fail to load.
