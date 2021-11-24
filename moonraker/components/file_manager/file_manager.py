@@ -998,7 +998,11 @@ class NotifySyncLock:
         if not self.check_need_sync(path):
             return
         self.notified_paths.add(path)
-        if self.wait_fut is not None and self.dest_path == path:
+        if (
+            self.wait_fut is not None and
+            not self.wait_fut.done() and
+            self.dest_path == path
+        ):
             self.wait_fut.set_result(None)
         # Transfer control to waiter
         try:
@@ -1041,6 +1045,7 @@ class INotifyHandler:
         self.watched_nodes: Dict[int, InotifyNode] = {}
         self.pending_moves: Dict[
             int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
+        self.create_gcode_notifications: Dict[str, Any] = {}
 
 
     def add_root_watch(self, root: str, root_path: str) -> None:
@@ -1321,6 +1326,22 @@ class INotifyHandler:
                 is_valid = False
         elif action not in ["delete_file", "delete_dir"]:
             is_valid = False
+        ext = os.path.splitext(rel_path)[-1].lower()
+        if (
+            is_valid and
+            root == "gcodes" and
+            ext in VALID_GCODE_EXTS and
+            action == "create_file"
+        ):
+            prev_info = self.create_gcode_notifications.get(rel_path, {})
+            if file_info == prev_info:
+                logging.debug("Ignoring duplicate 'create_file' "
+                              f"notification: {rel_path}")
+                is_valid = False
+            else:
+                self.create_gcode_notifications[rel_path] = dict(file_info)
+        elif rel_path in self.create_gcode_notifications:
+            del self.create_gcode_notifications[rel_path]
         file_info['path'] = rel_path
         file_info['root'] = root
         result = {'action': action, 'item': file_info}
