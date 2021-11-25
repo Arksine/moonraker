@@ -239,7 +239,8 @@ class Server:
         except Exception:
             msg = f"Unable to load component: ({component_name})"
             logging.exception(msg)
-            self.failed_components.append(component_name)
+            if component_name not in self.failed_components:
+                self.failed_components.append(component_name)
             if isinstance(default, SentinelClass):
                 raise ServerError(msg)
             return default
