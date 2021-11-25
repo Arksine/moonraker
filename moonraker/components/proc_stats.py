@@ -163,6 +163,7 @@ class ProcStats:
                     self.server.send_event("proc_stats:cpu_throttled", ts)
                 self.last_throttled = cur_throttled
                 self.total_throttled |= cur_throttled
+            await self.machine.parse_network_interfaces()
         await self.machine.update_service_status()
 
     async def _check_throttled_state(self) -> Dict[str, Any]:

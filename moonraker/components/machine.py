@@ -430,7 +430,8 @@ class Machine:
                 addresses: List[Dict[str, Any]] = [
                     {
                         'family': IP_FAMILIES[addr['family']],
-                        'address': addr['local']
+                        'address': addr['local'],
+                        'is_link_local': addr.get('scope', "") == "link"
                     }
                     for addr in interface.get('addr_info', [])
                     if 'family' in addr and 'local' in addr
@@ -441,6 +442,7 @@ class Machine:
                 }
         except Exception:
             logging.exception("Error processing network update")
+            return
         prev_network = self.system_info.get('network', {})
         if notify and network != prev_network:
             self.server.send_event("machine:net_state_changed", network)
