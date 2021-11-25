@@ -37,7 +37,6 @@ if TYPE_CHECKING:
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        has_gpio = self.server.load_component(config, 'gpio', None) is not None
         self.devices: Dict[str, PowerDevice] = {}
         prefix_sections = config.get_prefix_sections("power")
         logging.info(f"Power component loading devices: {prefix_sections}")
@@ -59,12 +58,12 @@ class PrinterPower:
             dev_class = dev_types.get(dev_type)
             if dev_class is None:
                 raise config.error(f"Unsupported Device Type: {dev_type}")
-            if issubclass(dev_class, GpioDevice) and not has_gpio:
-                self.server.add_warning(
-                    f"Unable to load power device [{cfg.get_name()}], "
-                    "gpio component not available")
+            try:
+                dev = dev_class(cfg)
+            except Exception as e:
+                msg = f"Failed to load power device [{cfg.get_name()}]\n{e}"
+                self.server.add_warning(msg)
                 continue
-            dev = dev_class(cfg)
             self.devices[dev.get_name()] = dev
 
         self.server.register_endpoint(
