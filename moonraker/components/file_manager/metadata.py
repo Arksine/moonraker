@@ -184,6 +184,9 @@ class BaseSlicer(object):
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         return None
 
+    def parse_layer_count(self) -> Optional[int]:
+        return None
+
 class UnknownSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         return {'slicer': "Unknown"}
@@ -327,6 +330,16 @@ class PrusaSlicer(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"; first_layer_bed_temperature = (\d+\.?\d*)", self.footer_data)
+
+    def parse_layer_count(self) -> Optional[int]:
+        match = re.search(r"; total layers count = (\d+)", self.footer_data)
+        val: Optional[int] = None
+        if match:
+            try:
+                val = int(match.group(1))
+            except Exception:
+                return None
+        return val
 
 class Slic3rPE(PrusaSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
@@ -713,7 +726,7 @@ SUPPORTED_DATA = [
     'layer_height', 'first_layer_height', 'object_height',
     'filament_total', 'filament_weight_total', 'estimated_time',
     'thumbnails', 'first_layer_bed_temp', 'first_layer_extr_temp',
-    'gcode_start_byte', 'gcode_end_byte']
+    'gcode_start_byte', 'gcode_end_byte', 'layer_count']
 
 def process_objects(file_path: str) -> None:
     fname = os.path.basename(file_path)
