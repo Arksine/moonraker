@@ -384,6 +384,8 @@ password:
 address:
 #   A valid ip address or hostname for the Home Assistant server.  This
 #   parameter must be provided.
+protocol:
+#   The protocol for the URL to the Home Assistant server. Default is http.
 port:
 #   The port the Home Assistant server is listening on.  Default is 8123.
 device:
