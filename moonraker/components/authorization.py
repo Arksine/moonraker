@@ -87,8 +87,8 @@ class Authorization:
             }
         else:
             self.api_key = api_user['api_key']
-        host_name, port = self.server.get_host_info()
-        self.issuer = f"http://{host_name}:{port}"
+        hi = self.server.get_host_info()
+        self.issuer = f"http://{hi['hostname']}:{hi['port']}"
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
         for username, user_info in list(self.users.items()):
             if username == API_USER:

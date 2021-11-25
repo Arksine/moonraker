@@ -174,10 +174,9 @@ class Server:
             await asyncio.gather(*optional_comps)
 
         # Start HTTP Server
-        hostname, hostport = self.get_host_info()
         logging.info(
-            f"Starting Moonraker on ({self.host}, {hostport}), "
-            f"Hostname: {hostname}")
+            f"Starting Moonraker on ({self.host}, {self.port}), "
+            f"Hostname: {socket.gethostname()}")
         self.moonraker_app.listen(self.host, self.port, self.ssl_port)
         self.server_running = True
         await self._connect_klippy()
@@ -309,9 +308,13 @@ class Server:
             # These methods need to be registered with Klippy
             self.klippy_reg_methods.append(method_name)
 
-    def get_host_info(self) -> Tuple[str, int]:
-        hostname = socket.gethostname()
-        return hostname, self.port
+    def get_host_info(self) -> Dict[str, Any]:
+        return {
+            'hostname': socket.gethostname(),
+            'address': self.host,
+            'port': self.port,
+            'ssl_port': self.ssl_port
+        }
 
     def get_klippy_info(self) -> Dict[str, Any]:
         return dict(self.klippy_info)

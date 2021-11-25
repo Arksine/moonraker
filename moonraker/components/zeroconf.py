@@ -37,13 +37,14 @@ class ZeroconfRegistrar():
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
 
-        host_name, port = self.server.get_host_info()
+        hi = self.server.get_host_info()
+        host_name = hi['hostname']
         addresses = [socket.gethostbyname(host_name)]
         self.service_info = AsyncServiceInfo(
             "_moonraker._tcp.local.",
             f"{host_name}._moonraker._tcp.local.",
             addresses=addresses,
-            port=port,
+            port=hi['port'],
             properties={'path': '/'},
             server=f"{host_name}.local."
         )
