@@ -1,15 +1,12 @@
 # Zeroconf registration implementation for Moonraker
 #
-# Copyright (C) 2021  Eric Callahan <arksine.code@gmail.com>
+# Copyright (C) 2021  Clifford Roche <clifford.roche@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 import socket
 import asyncio
 import logging
-
-from .machine import Machine
-
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
@@ -17,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
+    from .machine import Machine
 
 
 class AsyncRunner:
