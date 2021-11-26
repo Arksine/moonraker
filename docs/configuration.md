@@ -118,6 +118,14 @@ load_on_startup: False
 #   been paused it will automatically resume.  Note that neither
 #   the job_transition_delay nor the job_transition_gcode are
 #   applied in this case.  The default is False.
+automatic_transition: False
+#   When set to True the queue will automatically transition to
+#   the next job in the queue after the current job is complete.
+#   This is useful for belt printers and other machines with the
+#   ability to automate clearing of the build area.  When False
+#   the queue will be paused after each job is loaded, requiring
+#   that users manually resume to load the next print.  The default
+#   is False.
 job_transition_delay:
 #   The amount of time to delay after completion of a job before
 #   loading the next job on the queue.  The default is no delay.
