@@ -170,6 +170,8 @@ class JobQueue:
                     pass
                 else:
                     return True
+            if not self.automatic and self.queue_state == "ready":
+                self.queue_state == "paused"
             queued_job = QueuedJob(filename)
             self.queued_jobs[queued_job.job_id] = queued_job
             return False
