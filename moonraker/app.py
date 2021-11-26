@@ -17,7 +17,7 @@ import tornado.iostream
 import tornado.httputil
 import tornado.web
 from inspect import isclass
-from tornado.escape import url_unescape
+from tornado.escape import json_encode, url_unescape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
@@ -578,6 +578,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             raise tornado.web.HTTPError(405)
         conn = self.get_associated_websocket()
         args = self.parse_args()
+        req = f"{self.request.method} {self.request.path}"
+        logging.debug(f"HTTP Request::{req}::{args}")
         try:
             result = await self._do_request(args, conn)
         except ServerError as e:
@@ -585,6 +587,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 e.status_code, str(e)) from e
         if self.wrap_result:
             result = {'result': result}
+        logging.debug(f"HTTP Response::{req}::{result}")
         self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):
