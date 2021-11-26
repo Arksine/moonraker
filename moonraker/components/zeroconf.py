@@ -48,16 +48,38 @@ class AsyncRunner:
 class ZeroconfRegistrar:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.service_info: AsyncServiceInfo | None = None
         self.runner = AsyncRunner(IPVersion.All)
+        hi = self.server.get_host_info()
+        addresses: Optional[List[bytes]] = [socket.inet_aton(hi["address"])]
+        self.bound_all = hi["address"] == "0.0.0.0"
+        self.service_info = self._build_service_info(addresses)
+        if self.bound_all:
+            self.server.register_event_handler(
+                "machine:net_state_changed", self._update_service)
 
     async def component_init(self) -> None:
         logging.info("Starting Zeroconf services")
+        if self.bound_all:
+            machine: Machine = self.server.lookup_component("machine")
+            network = machine.get_system_info()["network"]
+            addresses = [x for x in self._extract_ip_addresses(network)]
+            self.service_info = self._build_service_info(addresses)
+        await self.runner.register_services([self.service_info])
+
+    async def close(self) -> None:
+        await self.runner.unregister_services([self.service_info])
+
+    async def _update_service(self, network: Dict[str, Any]) -> None:
+        if self.bound_all:
+            addresses = [x for x in self._extract_ip_addresses(network)]
+            self.service_info = self._build_service_info(addresses)
+            await self.runner.update_services([self.service_info])
+
+    def _build_service_info(self,
+                            addresses: Optional[List[bytes]] = None
+                            ) -> AsyncServiceInfo:
         hi = self.server.get_host_info()
-        addresses = [socket.inet_aton(hi["address"])]
-        if hi["address"] == "0.0.0.0":
-            addresses = self._get_ip_addresses()
-        self.service_info = AsyncServiceInfo(
+        return AsyncServiceInfo(
             "_moonraker._tcp.local.",
             f"Moonraker Instance on {hi['hostname']}._moonraker._tcp.local.",
             addresses=addresses,
@@ -65,36 +87,15 @@ class ZeroconfRegistrar:
             properties={"path": "/"},
             server=f"{hi['hostname']}.local.",
         )
-        self.server.register_event_handler(
-            "machine:net_state_changed", self._update_service
-        )
-        assert self.service_info
-        await self.runner.register_services([self.service_info])
 
-    async def close(self) -> None:
-        if self.service_info:
-            await self.runner.unregister_services([self.service_info])
-
-    async def _update_service(self) -> None:
-        hi = self.server.get_host_info()
-        if hi["address"] == "0.0.0.0":
-            assert self.service_info
-            self.service_info.addresses = self._get_ip_addresses()
-            await self.runner.update_services([self.service_info])
-
-    def _get_ip_addresses(self) -> List[bytes]:
-        machine: Machine = self.server.lookup_component("machine")
-        network = machine.get_system_info()["network"]
-        return [
-            socket.inet_aton(x) for x in self._extract_ip_addresses(network)
-        ]
-
-    def _extract_ip_addresses(self, network: Dict[str, Any]) -> Iterator[str]:
+    def _extract_ip_addresses(self, network: Dict[str, Any]) -> Iterator[bytes]:
         for ifname, ifinfo in network.items():
             for addr_info in ifinfo["ip_addresses"]:
                 if addr_info["is_link_local"]:
                     continue
-                yield addr_info["address"]
+                is_ipv6 = addr_info['family'] == "ipv6"
+                family = socket.AF_INET6 if is_ipv6 else socket.AF_INET
+                yield socket.inet_pton(family, addr_info["address"])
 
 
 def load_component(config: ConfigHelper) -> ZeroconfRegistrar:
