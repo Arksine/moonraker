@@ -45,7 +45,6 @@ class AsyncRunner:
         tasks = [self.aiozc.async_update_service(info) for info in infos]
         background_tasks = await asyncio.gather(*tasks)
         await asyncio.gather(*background_tasks)
-        await self.aiozc.async_close()
 
 
 class ZeroconfRegistrar:
