@@ -31,6 +31,7 @@ class JobQueue:
         self.queue_state: str = "ready"
         self.lock = asyncio.Lock()
         self.load_on_start = config.getboolean("load_on_startup", False)
+        self.automatic = config.getboolean("automatic_transition", False)
         self.job_delay = config.getfloat("job_transition_delay", 0.01)
         if self.job_delay <= 0.:
             raise config.error(
@@ -129,8 +130,8 @@ class JobQueue:
                 self.queued_jobs.pop(uid, None)
                 if self.queue_state == "starting":
                     # If the queue was not paused while starting the print,
-                    # reset state to "ready"
-                    self.queue_state = "ready"
+                    set_ready = not self.queued_jobs or self.automatic
+                    self.queue_state = "ready" if set_ready else "paused"
 
     async def _check_can_print(self) -> bool:
         # Query the latest stats
