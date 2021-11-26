@@ -205,6 +205,7 @@ class Server:
             if ret is not None:
                 await ret
         except Exception as e:
+            logging.exception(f"Component [{name}] failed post init")
             self.add_warning(f"Component '{name}' failed to load with "
                              f"error: {e}")
             self.set_failed_component(name)
