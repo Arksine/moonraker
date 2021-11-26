@@ -242,13 +242,14 @@ class JobQueue:
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
         async with self.lock:
-            if self.queue_state == "paused":
-                self.queue_state = "ready"
-                if self.queued_jobs and self.pop_queue_handle is None:
+            if self.queue_state != "loading":
+                if self.queued_jobs and await self._check_can_print():
                     self.queue_state = "loading"
                     event_loop = self.server.get_event_loop()
                     self.pop_queue_handle = event_loop.delay_callback(
                         0.01, self._pop_job)
+                else:
+                    self.queue_state = "ready"
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state
