@@ -52,6 +52,10 @@ class JobQueue:
         self.server.register_event_handler(
             "job_state:cancelled", self._on_job_abort)
 
+        self.server.register_remote_method("pause_job_queue", self.pause_queue)
+        self.server.register_remote_method("resume_job_queue",
+                                           self.resume_queue)
+
         self.server.register_endpoint(
             "/server/job_queue/job", ['POST', 'DELETE'],
             self._handle_job_request)
@@ -168,6 +172,17 @@ class JobQueue:
         await self.lock.acquire()
         self.lock.release()
 
+    async def resume_queue(self) -> None:
+        async with self.lock:
+            if self.queue_state != "loading":
+                if self.queued_jobs and await self._check_can_print():
+                    self.queue_state = "loading"
+                    event_loop = self.server.get_event_loop()
+                    self.pop_queue_handle = event_loop.delay_callback(
+                        0.01, self._pop_job)
+                else:
+                    self.queue_state = "ready"
+
     def _job_map_to_list(self) -> List[Dict[str, Any]]:
         cur_time = time.time()
         return [job.as_dict(cur_time) for
@@ -223,15 +238,7 @@ class JobQueue:
     async def _handle_resume_queue(self,
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
-        async with self.lock:
-            if self.queue_state != "loading":
-                if self.queued_jobs and await self._check_can_print():
-                    self.queue_state = "loading"
-                    event_loop = self.server.get_event_loop()
-                    self.pop_queue_handle = event_loop.delay_callback(
-                        0.01, self._pop_job)
-                else:
-                    self.queue_state = "ready"
+        await self.resume_queue()
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state
