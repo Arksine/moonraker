@@ -535,9 +535,9 @@ class FileManager:
                     started = True
             if self.queue_gcodes and not started:
                 job_queue: JobQueue = self.server.lookup_component('job_queue')
-                started = await job_queue.queue_job(
+                await job_queue.queue_job(
                     upload_info['filename'], check_exists=False)
-                queued = not started
+                queued = True
 
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
