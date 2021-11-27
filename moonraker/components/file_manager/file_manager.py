@@ -524,12 +524,7 @@ class FileManager:
         started: bool = False
         queued: bool = False
         if upload_info['start_print']:
-            if self.queue_gcodes:
-                job_queue: JobQueue = self.server.lookup_component('job_queue')
-                started = await job_queue.queue_job(
-                    upload_info['filename'], check_exists=False)
-                queued = not started
-            elif can_start:
+            if can_start:
                 kapis: APIComp = self.server.lookup_component('klippy_apis')
                 try:
                     await kapis.start_print(upload_info['filename'])
@@ -538,6 +533,12 @@ class FileManager:
                     pass
                 else:
                     started = True
+            if self.queue_gcodes and not started:
+                job_queue: JobQueue = self.server.lookup_component('job_queue')
+                started = await job_queue.queue_job(
+                    upload_info['filename'], check_exists=False)
+                queued = not started
+
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
         if queued:
