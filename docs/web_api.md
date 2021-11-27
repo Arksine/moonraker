@@ -2164,8 +2164,7 @@ Below is a description of the returned fields:
 Adds a job, or an array of jobs, to the end of the job queue.  The same
 filename may be specified multiple times to queue a job that repeats.
 When multiple jobs are specfied they will be enqued in the order they
-are received.  If the queue is empty and in the `ready` state, the first
-job supplied will be started.
+are received.
 
 !!! Note
     The request will be aborted and return an error if any of the supplied
@@ -2177,7 +2176,7 @@ POST /server/job_queue/job?filenames=job1.gcode,job2.gcode,subdir/job3.gocde
 ```
 
 !!! Note
-    Multiple jobs are should be comma separated as shown above.
+    Multiple jobs should be comma separated as shown above.
     Alternatively `filenames` maybe be specified as a json object
     in the body of the request.
 
