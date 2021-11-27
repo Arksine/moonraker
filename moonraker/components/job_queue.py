@@ -53,8 +53,8 @@ class JobQueue:
             "job_state:cancelled", self._on_job_abort)
 
         self.server.register_remote_method("pause_job_queue", self.pause_queue)
-        self.server.register_remote_method("resume_job_queue",
-                                           self.resume_queue)
+        self.server.register_remote_method("start_job_queue",
+                                           self.start_queue)
 
         self.server.register_endpoint(
             "/server/job_queue/job", ['POST', 'DELETE'],
@@ -62,7 +62,7 @@ class JobQueue:
         self.server.register_endpoint(
             "/server/job_queue/pause", ['POST'], self._handle_pause_queue)
         self.server.register_endpoint(
-            "/server/job_queue/resume", ['POST'], self._handle_resume_queue)
+            "/server/job_queue/start", ['POST'], self._handle_start_queue)
         self.server.register_endpoint(
             "/server/job_queue/status", ['GET'], self._handle_queue_status)
 
@@ -172,7 +172,7 @@ class JobQueue:
         await self.lock.acquire()
         self.lock.release()
 
-    async def resume_queue(self) -> None:
+    async def start_queue(self) -> None:
         async with self.lock:
             if self.queue_state != "loading":
                 if self.queued_jobs and await self._check_can_print():
@@ -235,10 +235,10 @@ class JobQueue:
             'queue_state': self.queue_state
         }
 
-    async def _handle_resume_queue(self,
-                                   web_request: WebRequest
-                                   ) -> Dict[str, Any]:
-        await self.resume_queue()
+    async def _handle_start_queue(self,
+                                  web_request: WebRequest
+                                  ) -> Dict[str, Any]:
+        await self.start_queue()
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state

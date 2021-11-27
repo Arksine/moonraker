@@ -2340,21 +2340,22 @@ The current state of the job queue:
 }
 ```
 
-#### Resume the job queue
+#### Start the job queue
 
-Sets the job queue state to "resume".  This will set the job
-queue to state to "idle".  If the queue is not empty the next job
-in the queue will be loaded.
+Starts the job queue.  If Klipper is ready to start a print the next
+job in the queue will be loaded.  Otherwise the queue will be put
+into the "ready" state, enabling automatic transition after the next
+completed print.
 
 HTTP request:
 ```http
-POST /server/job_queue/resume
+POST /server/job_queue/start
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "server.job_queue.resume",
+    "method": "server.job_queue.start",
     "id": 4654
 }
 ```
