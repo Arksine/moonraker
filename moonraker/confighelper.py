@@ -7,6 +7,7 @@
 from __future__ import annotations
 import configparser
 import os
+import hashlib
 from utils import SentinelClass
 from components.gpio import GpioOutputPin
 
@@ -72,6 +73,12 @@ class ConfigHelper:
 
     def get_options(self) -> Dict[str, str]:
         return dict(self.config[self.section])
+
+    def get_hash(self) -> hashlib._Hash:
+        hash = hashlib.sha256()
+        for option in self.config[self.section]:
+            hash.update(option.encode())
+        return hash
 
     def get_prefix_sections(self, prefix: str) -> List[str]:
         return [s for s in self.sections() if s.startswith(prefix)]
