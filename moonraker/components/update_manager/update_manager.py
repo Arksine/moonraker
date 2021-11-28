@@ -173,13 +173,6 @@ class UpdateManager:
 
     async def component_init(self) -> None:
         async with self.cmd_request_lock:
-            if not await self.cmd_helper.init_api_rate_limit():
-                self.server.add_warning(
-                    "update_manager: failed to initalize GitHub API "
-                    "rate limit")
-                self.server.set_failed_component("update_manager")
-                self.init_success = False
-                return
             for updater in list(self.updaters.values()):
                 if isinstance(updater, PackageDeploy):
                     ret = updater.refresh(False)
@@ -517,31 +510,6 @@ class CommandHelper:
             'github_limit_reset_time': self.gh_limit_reset_time,
         }
 
-    async def init_api_rate_limit(self, retries: int = 5) -> bool:
-        url = "https://api.github.com/rate_limit"
-        for i in range(retries):
-            try:
-                resp = await self.github_api_request(url, is_init=True)
-                assert isinstance(resp, dict)
-                core = resp['resources']['core']
-                self.gh_rate_limit = core['limit']
-                self.gh_limit_remaining = core['remaining']
-                self.gh_limit_reset_time = core['reset']
-            except Exception:
-                logging.exception("Error Initializing GitHub API Rate Limit")
-                if i + 1 < retries:
-                    await asyncio.sleep(2.)
-            else:
-                reset_time = time.ctime(self.gh_limit_reset_time)
-                logging.info(
-                    "GitHub API Rate Limit Initialized\n"
-                    f"Rate Limit: {self.gh_rate_limit}\n"
-                    f"Rate Limit Remaining: {self.gh_limit_remaining}\n"
-                    f"Rate Limit Reset Time: {reset_time}, "
-                    f"Seconds Since Epoch: {self.gh_limit_reset_time}")
-                return True
-        return False
-
     async def run_cmd(self,
                       cmd: str,
                       timeout: float = 20.,
@@ -574,12 +542,13 @@ class CommandHelper:
 
     async def github_api_request(self,
                                  url: str,
-                                 is_init: Optional[bool] = False,
                                  retries: int = 5
                                  ) -> JsonType:
-        if self.gh_limit_remaining == 0:
+        if (
+            self.gh_limit_reset_time is not None and
+            self.gh_limit_remaining == 0
+        ):
             curtime = time.time()
-            assert self.gh_limit_reset_time is not None
             if curtime < self.gh_limit_reset_time:
                 raise self.server.error(
                     f"GitHub Rate Limit Reached\nRequest: {url}\n"
@@ -595,6 +564,7 @@ class CommandHelper:
         if etag is not None:
             headers['If-None-Match'] = etag
         for i in range(retries):
+            error: Optional[Exception] = None
             try:
                 fut = self.http_client.fetch(
                     url, headers=headers, connect_timeout=5.,
@@ -618,7 +588,7 @@ class CommandHelper:
                 f"Response Reason: {resp.reason}\n"
                 f"ETag: {etag}")
             if resp.code == 403:
-                raise self.server.error(
+                error = self.server.error(
                     f"Forbidden GitHub Request: {resp.reason}")
             elif resp.code == 304:
                 logging.info(f"Github Request not Modified: {url}")
@@ -630,12 +600,14 @@ class CommandHelper:
                     await asyncio.sleep(1.)
                 continue
             # Update rate limit on return success
-            if 'X-Ratelimit-Limit' in resp.headers and not is_init:
+            if 'X-Ratelimit-Limit' in resp.headers:
                 self.gh_rate_limit = int(resp.headers['X-Ratelimit-Limit'])
                 self.gh_limit_remaining = int(
                     resp.headers['X-Ratelimit-Remaining'])
                 self.gh_limit_reset_time = float(
                     resp.headers['X-Ratelimit-Reset'])
+            if error is not None:
+                raise error
             decoded = json.loads(resp.body)
             if etag is not None:
                 cached_request.update_result(etag, decoded)
