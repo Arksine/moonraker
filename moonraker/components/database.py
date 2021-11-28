@@ -329,20 +329,26 @@ class MoonrakerDatabase:
         db = self.namespaces[namespace]
         result = {}
         invalid_key_result = None
-        with self.lmdb_env.begin(buffers=True, db=db) as txn:
+        with self.lmdb_env.begin(write=True, buffers=True, db=db) as txn:
             cursor = txn.cursor()
-            cursor.first()
-            for db_key, value in cursor:
+            has_remaining = cursor.first()
+            while has_remaining:
+                db_key, value = cursor.item()
                 k = bytes(db_key).decode()
                 if not k:
                     invalid_key_result = self._decode_value(value)
-                    continue
-                result[k] = self._decode_value(value)
-        if invalid_key_result:
-            logging.info(f"Invalid Key found in namespace '{namespace}', "
-                         f"dropping value: {repr(invalid_key_result)}")
-            with self.lmdb_env.begin(write=True, buffers=True, db=db) as txn:
-                txn.delete(b"")
+                    logging.info(
+                        f"Invalid Key '{db_key}' found in namespace "
+                        f"'{namespace}', dropping value: "
+                        f"{repr(invalid_key_result)}")
+                    try:
+                        has_remaining = cursor.delete()
+                    except Exception:
+                        logging.exception("Error Deleting LMDB Key")
+                        has_remaining = cursor.next()
+                else:
+                    result[k] = self._decode_value(value)
+                    has_remaining = cursor.next()
         return result
 
     def _encode_value(self, value: DBRecord) -> bytes:
