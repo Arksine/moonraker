@@ -38,12 +38,9 @@ if TYPE_CHECKING:
     from moonraker import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
-    from components import klippy_apis
-    from components import shell_command
-    from components import database
-    APIComp = klippy_apis.KlippyAPI
-    SCMDComp = shell_command.ShellCommandFactory
-    DBComp = database.MoonrakerDatabase
+    from components.klippy_apis import KlippyAPI as APIComp
+    from components.shell_command import ShellCommandFactory as SCMDComp
+    from components.database import MoonrakerDatabase as DBComp
     JsonType = Union[List[Any], Dict[str, Any]]
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
@@ -55,10 +52,8 @@ KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
 
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL_MS = 3600000
-# Perform auto refresh no sooner than 12 hours apart
-MIN_REFRESH_TIME = 43200
 # Perform auto refresh no later than 4am
-MAX_PKG_UPDATE_HOUR = 4
+MAX_UPDATE_HOUR = 4
 
 def get_deploy_class(app_path: str) -> Type:
     if AppDeploy._is_git_repo(app_path):
@@ -135,7 +130,6 @@ class UpdateManager:
         self.klippy_identified_evt: Optional[asyncio.Event] = None
 
         # Auto Status Refresh
-        self.last_refresh_time: float = 0
         self.refresh_cb: Optional[PeriodicCallback] = None
         if auto_refresh_enabled:
             self.refresh_cb = PeriodicCallback(
@@ -223,6 +217,7 @@ class UpdateManager:
         pstate: str = result.get('print_stats', {}).get('state', "")
         return pstate.lower() == "printing"
 
+
     async def _handle_auto_refresh(self) -> None:
         if await self._check_klippy_printing():
             # Don't Refresh during a print
@@ -230,11 +225,8 @@ class UpdateManager:
             return
         cur_time = time.time()
         cur_hour = time.localtime(cur_time).tm_hour
-        time_diff = cur_time - self.last_refresh_time
-        # Update packages if it has been more than 12 hours
-        # and the local time is between 12AM and 5AM
-        if time_diff < MIN_REFRESH_TIME or cur_hour >= MAX_PKG_UPDATE_HOUR:
-            # Not within the update time window
+        # Update when the local time is between 12AM and 5AM
+        if cur_hour >= MAX_UPDATE_HOUR:
             return
         vinfo: Dict[str, Any] = {}
         async with self.cmd_request_lock:
@@ -245,7 +237,6 @@ class UpdateManager:
             except Exception:
                 logging.exception("Unable to Refresh Status")
                 return
-        self.last_refresh_time = time.time()
         uinfo = self.cmd_helper.get_rate_limit_stats()
         uinfo['version_info'] = vinfo
         uinfo['busy'] = self.cmd_helper.is_update_busy()
@@ -374,23 +365,16 @@ class UpdateManager:
         if self.cmd_helper.is_update_busy() or \
                 await self._check_klippy_printing():
             check_refresh = False
-        need_refresh = False
+
         if check_refresh:
             # Acquire the command request lock if we want force a refresh
             await self.cmd_request_lock.acquire()
-            # If a request to refresh is received within 1 minute of
-            # a previous refresh, don't force a new refresh.  This gives
-            # clients a fresh state by acquiring the lock and waiting
-            # without unnecessary processing.
-            need_refresh = time.time() > (self.last_refresh_time + 60.)
         vinfo: Dict[str, Any] = {}
         try:
             for name, updater in list(self.updaters.items()):
-                if need_refresh:
+                if check_refresh:
                     await updater.refresh()
                 vinfo[name] = updater.get_update_status()
-            if need_refresh:
-                self.last_refresh_time = time.time()
         except Exception:
             raise
         finally:
@@ -399,7 +383,7 @@ class UpdateManager:
         ret = self.cmd_helper.get_rate_limit_stats()
         ret['version_info'] = vinfo
         ret['busy'] = self.cmd_helper.is_update_busy()
-        if need_refresh:
+        if check_refresh:
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
                 .2, self.server.send_event,
@@ -452,6 +436,11 @@ class CommandHelper:
         self.http_client = AsyncHTTPClient()
         self.github_request_cache: Dict[str, CachedGithubResponse] = {}
 
+        # Refresh Time Tracking (default is to refresh every 28 days)
+        reresh_interval = config.getint('refresh_interval', 672)
+        # Convert to seconds
+        self.refresh_interval = reresh_interval * 60 * 60
+
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit: Optional[int] = None
         self.gh_limit_remaining: Optional[int] = None
@@ -464,6 +453,9 @@ class CommandHelper:
 
     def get_server(self) -> Server:
         return self.server
+
+    def get_refresh_interval(self) -> float:
+        return self.refresh_interval
 
     def is_debug_enabled(self) -> bool:
         return self.debug_enabled
