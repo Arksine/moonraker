@@ -24,11 +24,8 @@ from typing import (
 )
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
-    from components import database
     from components import shell_command
     from .update_manager import CommandHelper
-    DBComp = database.MoonrakerDatabase
-
 
 class GitDeploy(AppDeploy):
     def __init__(self,
@@ -37,8 +34,10 @@ class GitDeploy(AppDeploy):
                  app_params: Optional[Dict[str, Any]] = None
                  ) -> None:
         super().__init__(config, cmd_helper, app_params)
+        storage = self._load_storage()
         self.repo = GitRepo(cmd_helper, self.path, self.name,
-                            self.origin, self.moved_origin)
+                            self.origin, self.moved_origin,
+                            storage)
         if self.type != 'git_repo':
             self.need_channel_update = True
 
@@ -75,6 +74,7 @@ class GitDeploy(AppDeploy):
         else:
             self._is_valid = True
             self.log_info("Validity check for git repo passed")
+        self._save_state()
 
     async def update(self) -> bool:
         await self.repo.wait_for_init()
@@ -132,6 +132,11 @@ class GitDeploy(AppDeploy):
         status = super().get_update_status()
         status.update(self.repo.get_repo_status())
         return status
+
+    def get_persistent_data(self) -> Dict[str, Any]:
+        storage = super().get_persistent_data()
+        storage.update(self.repo.get_persisent_data())
+        return storage
 
     async def _pull_repo(self) -> None:
         self.notify_status("Updating Repo...")
@@ -205,7 +210,8 @@ class GitRepo:
                  git_path: pathlib.Path,
                  alias: str,
                  origin_url: str,
-                 moved_origin_url: Optional[str]
+                 moved_origin_url: Optional[str],
+                 storage: Dict[str, Any]
                  ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -216,22 +222,23 @@ class GitRepo:
         self.backup_path = git_dir.joinpath(f".{git_base}_repo_backup")
         self.origin_url = origin_url
         self.moved_origin_url = moved_origin_url
-        self.valid_git_repo: bool = False
-        self.git_owner: str = "?"
-        self.git_repo_name: str = "?"
-        self.git_remote: str = "?"
-        self.git_branch: str = "?"
-        self.current_version: str = "?"
-        self.upstream_version: str = "?"
-        self.current_commit: str = "?"
-        self.upstream_commit: str = "?"
-        self.upstream_url: str = "?"
-        self.full_version_string: str = "?"
-        self.branches: List[str] = []
-        self.dirty: bool = False
-        self.head_detached: bool = False
-        self.git_messages: List[str] = []
-        self.commits_behind: List[Dict[str, Any]] = []
+        self.valid_git_repo: bool = storage.get('repo_valid', False)
+        self.git_owner: str = storage.get('git_owner', "?")
+        self.git_repo_name: str = storage.get('git_repo_name', "?")
+        self.git_remote: str = storage.get('git_remote', "?")
+        self.git_branch: str = storage.get('git_branch', "?")
+        self.current_version: str = storage.get('current_version', "?")
+        self.upstream_version: str = storage.get('upstream_version', "?")
+        self.current_commit: str = storage.get('current_commit', "?")
+        self.upstream_commit: str = storage.get('upstream_commit', "?")
+        self.upstream_url: str = storage.get('upstream_url', "?")
+        self.full_version_string: str = storage.get('full_version_string', "?")
+        self.branches: List[str] = storage.get('branches', [])
+        self.dirty: bool = storage.get('dirty', False)
+        self.head_detached: bool = storage.get('head_detached', False)
+        self.git_messages: List[str] = storage.get('git_messages', [])
+        self.commits_behind: List[Dict[str, Any]] = storage.get(
+            'commits_behind', [])
         self.recovery_message = \
             f"""
             Manually restore via SSH with the following commands:
@@ -247,6 +254,26 @@ class GitRepo:
         self.git_operation_lock = asyncio.Lock()
         self.fetch_timeout_handle: Optional[asyncio.Handle] = None
         self.fetch_input_recd: bool = False
+
+    def get_persisent_data(self) -> Dict[str, Any]:
+        return {
+            'repo_valid': self.valid_git_repo,
+            'git_owner': self.git_owner,
+            'git_repo_name': self.git_repo_name,
+            'git_remote': self.git_remote,
+            'git_branch': self.git_branch,
+            'current_version': self.current_version,
+            'upstream_version': self.upstream_version,
+            'current_commit': self.current_commit,
+            'upstream_commit': self.upstream_commit,
+            'upstream_url': self.upstream_url,
+            'full_version_string': self.full_version_string,
+            'branches': self.branches,
+            'dirty': self.dirty,
+            'head_detached': self.head_detached,
+            'git_messages': self.git_messages,
+            'commits_behind': self.commits_behind
+        }
 
     async def initialize(self, need_fetch: bool = True) -> None:
         if self.init_evt is not None:
@@ -307,15 +334,6 @@ class GitRepo:
             upstream_version = await self.describe(
                 f"{self.git_remote}/{self.git_branch} "
                 "--always --tags --long")
-
-            # Store current remote in the database if in a detached state
-            if self.head_detached:
-                mrdb: DBComp = self.server.lookup_component("database")
-                db_key = f"update_manager.git_repo_{self.alias}" \
-                    ".detached_remote"
-                mrdb.insert_item(
-                    "moonraker", db_key,
-                    [self.current_commit, self.git_remote, self.git_branch])
 
             # Parse GitHub Owner from URL
             owner_match = re.match(r"https?://[^/]+/([^/]+)", self.upstream_url)
@@ -411,17 +429,7 @@ class GitRepo:
                 if len(bparts) == 2:
                     self.git_remote, self.git_branch = bparts
                 else:
-                    mrdb: DBComp = self.server.lookup_component("database")
-                    db_key = f"update_manager.git_repo_{self.alias}" \
-                        ".detached_remote"
-                    detached_remote: List[str] = mrdb.get_item(
-                        "moonraker", db_key, ["", "?", "?"])
-                    if detached_remote[0].startswith(branch_info):
-                        self.git_remote = detached_remote[1]
-                        self.git_branch = detached_remote[2]
-                        msg = "Using remote stored in database:"\
-                            f" {self.git_remote}/{self.git_branch}"
-                    elif self.git_remote == "?":
+                    if self.git_remote == "?":
                         msg = "Resolve by manually checking out" \
                             " a branch via SSH."
                     else:
