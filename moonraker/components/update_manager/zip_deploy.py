@@ -56,23 +56,24 @@ class ZipDeploy(AppDeploy):
                 "Invalid url set for 'origin' option in section "
                 f"[{config.get_name()}].  Unable to extract owner/repo.")
         self.host_repo: str = config.get('host_repo', self.official_repo)
-        self.detected_type: str = "?"
-        self.source_checksum: str = ""
-        self.pristine = False
-        self.verified = False
-        self.build_date: int = 0
-        self.full_version: str = "?"
-        self.short_version: str = "?"
-        self.commit_hash: str = "?"
-        self.lastest_hash: str = "?"
-        self.latest_version: str = "?"
-        self.latest_checksum: str = "?"
-        self.latest_build_date: int = 0
-        self.commit_log: List[Dict[str, Any]] = []
+        storage = self._load_storage()
+        self.detected_type: str = storage.get('detected_type', "?")
+        self.source_checksum: str = storage.get("source_checksum", "?")
+        self.pristine = storage.get('pristine', False)
+        self.verified = storage.get('verified', False)
+        self.build_date: int = storage.get('build_date', 0)
+        self.full_version: str = storage.get('full_version', "?")
+        self.short_version: str = storage.get('short_version', "?")
+        self.commit_hash: str = storage.get('commit_hash', "?")
+        self.lastest_hash: str = storage.get('latest_hash', "?")
+        self.latest_version: str = storage.get('latest_version', "?")
+        self.latest_checksum: str = storage.get('latest_checksum', "?")
+        self.latest_build_date: int = storage.get('latest_build_date', 0)
+        self.errors: List[str] = storage.get('errors', [])
+        self.commit_log: List[Dict[str, Any]] = storage.get('commit_log', [])
         self.package_list: List[str] = []
         self.python_pkg_list: List[str] = []
         self.release_download_info: Tuple[str, str, int] = ("?", "?", 0)
-        self.errors: List[str] = []
         self.mutex: asyncio.Lock = asyncio.Lock()
         self.refresh_event: Optional[asyncio.Event] = None
 
@@ -81,6 +82,26 @@ class ZipDeploy(AppDeploy):
         new_app = ZipDeploy(app.config, app.cmd_helper, app.app_params)
         await new_app.reinstall()
         return new_app
+
+    def get_persistent_data(self) -> Dict[str, Any]:
+        storage = super().get_persistent_data()
+        storage.update({
+            'detected_type': self.detected_type,
+            'source_checksum': self.source_checksum,
+            'pristine': self.pristine,
+            'verified': self.verified,
+            'build_date': self.build_date,
+            'full_version': self.full_version,
+            'short_version': self.short_version,
+            'commit_hash': self.commit_hash,
+            'latest_hash': self.lastest_hash,
+            'latest_version': self.latest_version,
+            'latest_checksum': self.latest_checksum,
+            'latest_build_date': self.latest_build_date,
+            'commit_log': self.commit_log,
+            'errors': self.errors
+        })
+        return storage
 
     async def _parse_info_file(self, file_name: str) -> Dict[str, Any]:
         info_file = self.path.joinpath(file_name)
@@ -178,6 +199,7 @@ class ZipDeploy(AppDeploy):
         if not self.errors:
             self.verified = True
         await self._process_latest_release(latest_release)
+        self._save_state()
         self._log_zipapp_info()
 
     async def _fetch_github_releases(self,
