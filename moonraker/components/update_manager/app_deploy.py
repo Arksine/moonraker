@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 import hashlib
+import json
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -40,9 +41,11 @@ class AppDeploy(BaseDeploy):
                  cmd_helper: CommandHelper,
                  app_params: Optional[Dict[str, Any]]
                  ) -> None:
-        super().__init__(config, cmd_helper)
         self.config = config
         self.app_params = app_params
+        cfg_hash = self._calc_config_hash()
+        super().__init__(config, cmd_helper, prefix="Application",
+                         cfg_hash=cfg_hash)
         self.debug = self.cmd_helper.is_debug_enabled()
         if app_params is not None:
             self.channel: str = app_params['channel']
@@ -69,8 +72,9 @@ class AppDeploy(BaseDeploy):
             self.venv_args = config.get('venv_args', None)
 
         self.is_service = config.getboolean("is_system_service", True)
-        self.need_channel_update = False
-        self._is_valid = False
+        storage = self._load_storage()
+        self.need_channel_update = storage.get('need_channel_upate', False)
+        self._is_valid = storage.get('is_valid', False)
 
         # We need to fetch all potential options for an Application.  Not
         # all options apply to each subtype, however we can't limit the
@@ -98,6 +102,15 @@ class AppDeploy(BaseDeploy):
         if isinstance(app_path, str):
             app_path = pathlib.Path(app_path).expanduser()
         return app_path.joinpath('.git').exists()
+
+    def _calc_config_hash(self) -> str:
+        cfg_hash = self.config.get_hash()
+        if self.app_params is None:
+            return cfg_hash.hexdigest()
+        else:
+            app_bytes = json.dumps(self.app_params).encode()
+            cfg_hash.update(app_bytes)
+            return cfg_hash.hexdigest()
 
     def _verify_path(self,
                      config: ConfigHelper,
@@ -172,6 +185,12 @@ class AppDeploy(BaseDeploy):
             'is_valid': self._is_valid,
             'configured_type': self.type
         }
+
+    def get_persistent_data(self) -> Dict[str, Any]:
+        storage = super().get_persistent_data()
+        storage['is_valid'] = self._is_valid
+        storage['need_channel_update'] = self.need_channel_update
+        return storage
 
     async def _get_file_hash(self,
                              filename: Optional[pathlib.Path]
