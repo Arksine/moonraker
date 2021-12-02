@@ -32,6 +32,7 @@ from typing import (
     Union,
     Dict,
     List,
+    cast
 )
 if TYPE_CHECKING:
     from tornado.httpclient import HTTPResponse
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from components.klippy_apis import KlippyAPI as APIComp
     from components.shell_command import ShellCommandFactory as SCMDComp
     from components.database import MoonrakerDatabase as DBComp
+    from components.database import NamespaceWrapper
     JsonType = Union[List[Any], Dict[str, Any]]
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
@@ -167,11 +169,9 @@ class UpdateManager:
     async def component_init(self) -> None:
         async with self.cmd_request_lock:
             for updater in list(self.updaters.values()):
-                if isinstance(updater, PackageDeploy):
-                    ret = updater.refresh(False)
-                else:
+                if updater.needs_refresh():
                     ret = updater.refresh()
-                await ret
+                    await ret
         if self.refresh_cb is not None:
             self.refresh_cb.start()
 
@@ -436,6 +436,11 @@ class CommandHelper:
         self.http_client = AsyncHTTPClient()
         self.github_request_cache: Dict[str, CachedGithubResponse] = {}
 
+        # database management
+        db: DBComp = self.server.lookup_component('database')
+        db.register_local_namespace("update_manager")
+        self.umdb = db.wrap_namespace("update_manager")
+
         # Refresh Time Tracking (default is to refresh every 28 days)
         reresh_interval = config.getint('refresh_interval', 672)
         # Convert to seconds
@@ -456,6 +461,9 @@ class CommandHelper:
 
     def get_refresh_interval(self) -> float:
         return self.refresh_interval
+
+    def get_umdb(self) -> NamespaceWrapper:
+        return self.umdb
 
     def is_debug_enabled(self) -> bool:
         return self.debug_enabled
@@ -744,15 +752,16 @@ class PackageDeploy(BaseDeploy):
                  config: ConfigHelper,
                  cmd_helper: CommandHelper
                  ) -> None:
-        super().__init__(config, cmd_helper)
+        super().__init__(config, cmd_helper, "system", "", "")
         cmd_helper.set_package_updater(self)
-        self.available_packages: List[str] = []
+        storage = self._load_storage()
+        self.available_packages: List[str] = storage.get('packages', [])
         self.refresh_evt: Optional[asyncio.Event] = None
         # Initialze to current time so an update is not performed on init
         self.last_apt_update_time: float = time.time()
         self.mutex: asyncio.Lock = asyncio.Lock()
 
-    async def refresh(self, fetch_packages: bool = True) -> None:
+    async def refresh(self) -> None:
         # TODO: Use python-apt python lib rather than command line for updates
         if self.refresh_evt is not None:
             self.refresh_evt.wait()
@@ -760,7 +769,7 @@ class PackageDeploy(BaseDeploy):
         async with self.mutex:
             self.refresh_evt = asyncio.Event()
             try:
-                await self._update_apt(force=fetch_packages)
+                await self._update_apt()
                 res = await self.cmd_helper.run_cmd_with_response(
                     "apt list --upgradable", timeout=60.)
                 pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
@@ -776,6 +785,13 @@ class PackageDeploy(BaseDeploy):
                 logging.exception("Error Refreshing System Packages")
             self.refresh_evt.set()
             self.refresh_evt = None
+            # Update Persistent Storage
+            self._save_state()
+
+    def get_persistent_data(self) -> Dict[str, Any]:
+        storage = super().get_persistent_data()
+        storage['packages'] = self.available_packages
+        return storage
 
     async def update(self) -> bool:
         async with self.mutex:
@@ -830,7 +846,7 @@ class WebClientDeploy(BaseDeploy):
                  config: ConfigHelper,
                  cmd_helper: CommandHelper
                  ) -> None:
-        super().__init__(config, cmd_helper)
+        super().__init__(config, cmd_helper, prefix="Web Client")
         self.repo = config.get('repo').strip().strip("/")
         self.owner = self.repo.split("/", 1)[0]
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
@@ -844,9 +860,12 @@ class WebClientDeploy(BaseDeploy):
                 raise config.error(
                     "Invalid value for option 'persistent_files': "
                     "'.version' can not be persistent")
-        self.version: str = "?"
-        self.remote_version: str = "?"
-        self.dl_info: Tuple[str, str, int] = ("?", "?", 0)
+        storage = self._load_storage()
+        self.version: str = storage.get('version', "?")
+        self.remote_version: str = storage.get('remote_version', "?")
+        dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
+        self.dl_info: Tuple[str, str, int] = cast(
+            Tuple[str, str, int], tuple(dl_info))
         self.refresh_evt: Optional[asyncio.Event] = None
         self.mutex: asyncio.Lock = asyncio.Lock()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
@@ -875,6 +894,7 @@ class WebClientDeploy(BaseDeploy):
                 logging.exception("Error Refreshing Client")
             self.refresh_evt.set()
             self.refresh_evt = None
+            self._save_state()
 
     async def _get_remote_version(self) -> None:
         # Remote state
@@ -908,6 +928,13 @@ class WebClientDeploy(BaseDeploy):
             f"url: {dl_url}\n"
             f"size: {size}\n"
             f"Content Type: {content_type}")
+
+    def get_persistent_data(self) -> Dict[str, Any]:
+        storage = super().get_persistent_data()
+        storage['version'] = self.version
+        storage['remote_version'] = self.remote_version
+        storage['dl_info'] = list(self.dl_info)
+        return storage
 
     async def update(self) -> bool:
         async with self.mutex:
@@ -947,6 +974,7 @@ class WebClientDeploy(BaseDeploy):
                     version_path.write_text, self.version)
             self.cmd_helper.notify_update_response(
                 f"Client Update Finished: {self.name}", is_complete=True)
+            self._save_state()
             return True
 
     def _extract_release(self,
