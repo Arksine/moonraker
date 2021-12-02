@@ -14,8 +14,12 @@ sensor:
       - display_status
       - virtual_sdcard
     value_template: >-
-      {{ 'OK' if ('result' in value_json) else None }}
-
+      {{ 'OK' if ('result' in value_json) else None }}    
+    #  Adding an API key is only necessary while using the [authorization] component
+    #  and if Home Assistant is not a trusted client
+    headers:
+      x-api-key: 123456789abcdefghijklmno
+      
   - platform: template
     sensors:
 
