@@ -217,7 +217,6 @@ class UpdateManager:
         pstate: str = result.get('print_stats', {}).get('state', "")
         return pstate.lower() == "printing"
 
-
     async def _handle_auto_refresh(self) -> None:
         if await self._check_klippy_printing():
             # Don't Refresh during a print
@@ -359,16 +358,25 @@ class UpdateManager:
                                      web_request: WebRequest
                                      ) -> Dict[str, Any]:
         check_refresh = web_request.get_boolean('refresh', False)
-        # Don't refresh if a print is currently in progress or
-        # if an update is in progress.  Just return the current
-        # state
-        if self.cmd_helper.is_update_busy() or \
-                await self._check_klippy_printing():
+        # Override a request to refresh if:
+        #   - An update is in progress
+        #   - Klippy is printing
+        if (
+            self.cmd_helper.is_update_busy() or
+            await self._check_klippy_printing()
+        ):
             check_refresh = False
 
         if check_refresh:
             # Acquire the command request lock if we want force a refresh
             await self.cmd_request_lock.acquire()
+            # Now that we have acquired the lock reject attempts to spam
+            # the refresh request.
+            lrt = max([upd.get_last_refresh_time()
+                       for upd in self.updaters.values()])
+            if time.time() < lrt + 60.:
+                check_refresh = False
+                self.cmd_request_lock.release()
         vinfo: Dict[str, Any] = {}
         try:
             for name, updater in list(self.updaters.items()):
