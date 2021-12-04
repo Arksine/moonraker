@@ -128,6 +128,14 @@ class UpdateManager:
                 raise config.error(
                     f"Invalid type '{client_type}' for section [{section}]")
 
+        # Prune stale data from the database
+        umdb = self.cmd_helper.get_umdb()
+        db_keys = umdb.keys()
+        for key in db_keys:
+            if key not in self.updaters:
+                logging.info(f"Removing stale update_manager data: {key}")
+                umdb.pop(key, None)
+
         self.cmd_request_lock = asyncio.Lock()
         self.klippy_identified_evt: Optional[asyncio.Event] = None
 
