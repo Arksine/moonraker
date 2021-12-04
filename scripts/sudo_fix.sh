@@ -53,12 +53,12 @@ Cmnd_Alias SHUTDOWN = /sbin/shutdown now, /sbin/shutdown -h now, /bin/systemctl 
 Cmnd_Alias APT = /usr/bin/apt-get
 Cmnd_Alias SYSTEMCTL = /bin/systemctl
 
-  
+
 
 %GROUPNAME ALL=(ALL) NOPASSWD: REBOOT, SHUTDOWN, APT, SYSTEMCTL
 
 #EOF
- 
+
     report_status "\e[1;32m...done\e[0m"
 }
 
@@ -70,17 +70,22 @@ update_env()
 
 verify_syntax()
 {
-    report_status "\e[1;33mVerifying Syntax of ${SUDOERS_FILE}\e[0m\n"
+    if [ -n "$(whereis -b visudo | awk '{print $2}')" ]; then
 
-    if [ $(LANG=C visudo -cf $SCRIPT_TEMP_PATH/$SUDOERS_FILE | grep -c "OK" ) -eq 1 ];
-        then
-            VERIFY_STATUS=0
-            report_status "\e[1;32m$(LANG=C visudo -cf $SCRIPT_TEMP_PATH/$SUDOERS_FILE)\e[0m"
-        else
-            report_status "\e[1;31mSyntax Error:\e[0m Check File: $SCRIPT_TEMP_PATH/$SUDOERS_FILE"
-            exit 1
+        report_status "\e[1;33mVerifying Syntax of ${SUDOERS_FILE}\e[0m\n"
+
+        if [ $(LANG=C sudo visudo -cf $SCRIPT_TEMP_PATH/$SUDOERS_FILE | grep -c "OK" ) -eq 1 ];
+            then
+                VERIFY_STATUS=0
+                report_status "\e[1;32m$(LANG=C sudo visudo -cf $SCRIPT_TEMP_PATH/$SUDOERS_FILE)\e[0m"
+            else
+                report_status "\e[1;31mSyntax Error:\e[0m Check File: $SCRIPT_TEMP_PATH/$SUDOERS_FILE"
+                exit 1
+        fi
+    else
+        VERIFY_STATUS=0
+        report_status "\e[1;31mCommand 'visudo' not found. Skip verifying sudoers file.\e[0m"
     fi
-    
 }
 
 install_sudoers_file()
@@ -148,7 +153,7 @@ if [ -e "$SUDOERS_DIR/$SUDOERS_FILE" ] && [ $(sudo cat /etc/gshadow | grep -c "$
         check_update_sudoers_file
         report_status "\e[1;32mEverything is setup, nothing to do...\e[0m\n"
         exit 0
-    
+
     else
 
         if [ -e "$SUDOERS_DIR/$SUDOERS_FILE" ];
