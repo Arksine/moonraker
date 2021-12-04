@@ -157,6 +157,9 @@ class Server:
     def get_event_loop(self) -> EventLoop:
         return self.event_loop
 
+    def is_running(self) -> bool:
+        return self.server_running
+
     async def _start_server(self):
         optional_comps: List[Coroutine] = []
         for name, component in self.components.items():

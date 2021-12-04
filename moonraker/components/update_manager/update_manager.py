@@ -773,8 +773,6 @@ class PackageDeploy(BaseDeploy):
         storage = self._load_storage()
         self.available_packages: List[str] = storage.get('packages', [])
         self.refresh_evt: Optional[asyncio.Event] = None
-        # Initialze to current time so an update is not performed on init
-        self.last_apt_update_time: float = time.time()
         self.mutex: asyncio.Lock = asyncio.Lock()
 
     async def refresh(self) -> None:
@@ -785,7 +783,9 @@ class PackageDeploy(BaseDeploy):
         async with self.mutex:
             self.refresh_evt = asyncio.Event()
             try:
-                await self._update_apt()
+                # Do not force a refresh until the server has started
+                force = self.server.is_running()
+                await self._update_apt(force=force)
                 res = await self.cmd_helper.run_cmd_with_response(
                     "apt list --upgradable", timeout=60.)
                 pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
@@ -822,6 +822,7 @@ class PackageDeploy(BaseDeploy):
             except Exception:
                 raise self.server.error("Error updating system packages")
             self.available_packages = []
+            self._save_state()
             self.cmd_helper.notify_update_response(
                 "Package update finished...", is_complete=True)
             return True
@@ -831,12 +832,11 @@ class PackageDeploy(BaseDeploy):
                           notify: bool = False
                           ) -> None:
         curtime = time.time()
-        if force or curtime > self.last_apt_update_time + 3600.:
+        if force or curtime > self.last_refresh_time + 3600.:
             # Don't update if a request was done within the last hour
             await self.cmd_helper.run_cmd(
                 f"{self.APT_CMD} update --allow-releaseinfo-change",
                 timeout=300., notify=notify)
-            self.last_apt_update_time = time.time()
 
     async def install_packages(self,
                                package_list: List[str],
