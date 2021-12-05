@@ -578,6 +578,11 @@ enable_auto_refresh: False
 #   When set to False Moonraker will only fetch update state on startup
 #   and clients will need to request that Moonraker updates state.  The
 #   default is False.
+refresh_interval: 672
+#   The interval (in hours) after which the update manager will check
+#   for new updates.  This interval is applies to updates for Moonraker,
+#   Klipper, and System Packages, and is the default for all clients.
+#   The default is 672 hours (28 days).
 enable_system_updates: True
 #   A boolean value that can be used to toggle system package updates.
 #   Currently Moonraker only supports updating packages via APT, so
@@ -622,6 +627,9 @@ persistent_files:
 #   A list of newline separated file names that should persist between
 #   updates.  This is useful for static configuration files, or perhaps
 #   themes.  The default is no persistent files.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
 ```
 
 This second example is for "applications".  These may be git repositories
@@ -685,6 +693,9 @@ is_system_service: True
 #   If set to true the update manager will attempt to use systemctl to restart
 #   the service after an update has completed.  This can be set to flase for
 #   repos that are not installed as a service.  The default is True.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
 ```
 
 ### `[mqtt]`
