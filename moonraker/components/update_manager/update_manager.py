@@ -784,8 +784,8 @@ class PackageDeploy(BaseDeploy):
             self.refresh_evt = asyncio.Event()
             try:
                 # Do not force a refresh until the server has started
-                force = self.server.is_running()
-                await self._update_apt(force=force)
+                if self.server.is_running():
+                    await self._update_apt(force=True)
                 res = await self.cmd_helper.run_cmd_with_response(
                     "apt list --upgradable", timeout=60.)
                 pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
