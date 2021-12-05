@@ -424,7 +424,8 @@ class Machine:
             for interface in decoded:
                 if (
                     interface['operstate'] != "UP" or
-                    interface['link_type'] == "loopback"
+                    interface['link_type'] != "ether" or
+                    'address' not in interface
                 ):
                     continue
                 addresses: List[Dict[str, Any]] = [
@@ -436,6 +437,8 @@ class Machine:
                     for addr in interface.get('addr_info', [])
                     if 'family' in addr and 'local' in addr
                 ]
+                if not addresses:
+                    continue
                 network[interface['ifname']] = {
                     'mac_address': interface['address'],
                     'ip_addresses': addresses
