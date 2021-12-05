@@ -1410,7 +1410,7 @@ class MetadataStorage:
                  ) -> None:
         self.server = config.get_server()
         self.enable_object_proc = config.getboolean(
-            'enable_object_postprocessing', False)
+            'enable_object_processing', False)
         self.gc_path = gc_path
         db.register_local_namespace(METADATA_NAMESPACE)
         self.mddb = db.wrap_namespace(
