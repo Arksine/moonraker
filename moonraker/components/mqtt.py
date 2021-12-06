@@ -232,8 +232,9 @@ class MQTTClient(APITransport, Subscribable):
         retries = 5
         for _ in range(retries):
             try:
-                self.client.connect(self.address, self.port)
-            except (ConnectionRefusedError, socket.gaierror) as e:
+                await self.event_loop.run_in_thread(
+                    self.client.connect, self.address, self.port)
+            except Exception as e:
                 logging.info(f"MQTT connection error, {e}, "
                              f"retries remaining: {retries}")
                 await asyncio.sleep(2.)
@@ -351,14 +352,15 @@ class MQTTClient(APITransport, Subscribable):
 
     async def _do_reconnect(self) -> None:
         logging.info("Attempting MQTT Reconnect")
+        self.event_loop
         while True:
             try:
                 await asyncio.sleep(2.)
             except asyncio.CancelledError:
                 break
             try:
-                self.client.reconnect()
-            except (ConnectionRefusedError, socket.gaierror):
+                await self.event_loop.run_in_thread(self.client.reconnect)
+            except Exception:
                 continue
             self.client.socket().setsockopt(
                 socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
