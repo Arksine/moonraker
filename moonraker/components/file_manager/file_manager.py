@@ -1523,6 +1523,10 @@ class MetadataStorage:
         metadata: Optional[Dict[str, Any]]
         metadata = self.mddb.pop(prev_fname, None)
         if metadata is None:
+            # If this move overwrites an existing file it is necessary
+            # to rescan which requires that we remove any existing
+            # metadata.
+            self.mddb.pop(new_fname, None)
             return False
         self.mddb[new_fname] = metadata
         prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
