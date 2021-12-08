@@ -1170,15 +1170,18 @@ class INotifyHandler:
 
     def parse_gcode_metadata(self, file_path: str) -> asyncio.Event:
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
+        ext = os.path.splitext(rel_path)[-1].lower()
         try:
             path_info = self.file_manager.get_path_info(file_path, "gcodes")
         except Exception:
-            logging.exception(
-                f"Error retreiving path info for file {file_path}")
+            path_info = {}
+        if (
+            ext not in VALID_GCODE_EXTS or
+            path_info.get('size', 0) == 0
+        ):
             evt = asyncio.Event()
             evt.set()
             return evt
-        ext = os.path.splitext(file_path)[-1].lower()
         if ext == ".ufp":
             rel_path = os.path.splitext(rel_path)[0] + ".gcode"
             path_info['ufp_path'] = file_path
