@@ -802,6 +802,7 @@ class InotifyNode:
                               new_name: str,
                               new_parent: InotifyNode
                               ) -> None:
+        self.flush_delete()
         child_node = self.pop_child_node(child_name)
         if child_node is None:
             logging.info(f"No child for node at path: {self.get_path()}")
@@ -835,6 +836,7 @@ class InotifyNode:
         self.pending_file_events[file_name] = evt_name
 
     async def complete_file_write(self, file_name: str) -> None:
+        self.flush_delete()
         evt_name = self.pending_file_events.pop(file_name, None)
         if evt_name is None:
             logging.info(f"Invalid file write event: {file_name}")
@@ -873,6 +875,7 @@ class InotifyNode:
                           name: str,
                           notify: bool = True
                           ) -> InotifyNode:
+        self.flush_delete()
         if name in self.child_nodes:
             return self.child_nodes[name]
         new_child = InotifyNode(self.ihdlr, self, name)
@@ -939,6 +942,13 @@ class InotifyNode:
         hdl = self.pending_node_events.pop(evt_name, None)
         if hdl is not None:
             hdl.cancel()
+
+    def flush_delete(self):
+        if 'delete_child' not in self.pending_node_events:
+            return
+        hdl = self.pending_node_events['delete_child']
+        hdl.cancel()
+        self._finish_delete_child()
 
     def clear_events(self, include_children: bool = True) -> None:
         if include_children:
@@ -1295,6 +1305,7 @@ class INotifyHandler:
         elif evt.mask & iFlags.MOVED_TO:
             logging.debug(f"Inotify file move to: {root}, "
                           f"{node_path}, {evt.name}")
+            node.flush_delete()
             moved_evt = self.pending_moves.pop(evt.cookie, None)
             # Don't emit file events if the node is processing metadata
             can_notify = not node.is_processing()
