@@ -180,7 +180,7 @@ class UpdateManager:
                     ret = updater.refresh()
                     await ret
         if self.refresh_timer is not None:
-            self.refresh_timer.start()
+            self.refresh_timer.start(delay=UPDATE_REFRESH_INTERVAL)
 
     async def _set_klipper_repo(self) -> None:
         if self.klippy_identified_evt is not None:
@@ -225,7 +225,7 @@ class UpdateManager:
         return pstate.lower() == "printing"
 
     async def _handle_auto_refresh(self, eventtime: float) -> float:
-        cur_hour = time.localtime(eventtime).tm_hour
+        cur_hour = time.localtime(time.time()).tm_hour
         # Update when the local time is between 12AM and 5AM
         if cur_hour >= MAX_UPDATE_HOUR:
             return eventtime + UPDATE_REFRESH_INTERVAL
@@ -234,18 +234,22 @@ class UpdateManager:
             logging.info("Klippy is printing, auto refresh aborted")
             return eventtime + UPDATE_REFRESH_INTERVAL
         vinfo: Dict[str, Any] = {}
+        need_notify = False
         async with self.cmd_request_lock:
             try:
                 for name, updater in list(self.updaters.items()):
-                    await updater.refresh()
+                    if updater.needs_refresh():
+                        await updater.refresh()
+                        need_notify = True
                     vinfo[name] = updater.get_update_status()
             except Exception:
                 logging.exception("Unable to Refresh Status")
                 return eventtime + UPDATE_REFRESH_INTERVAL
-        uinfo = self.cmd_helper.get_rate_limit_stats()
-        uinfo['version_info'] = vinfo
-        uinfo['busy'] = self.cmd_helper.is_update_busy()
-        self.server.send_event("update_manager:update_refreshed", uinfo)
+        if need_notify:
+            uinfo = self.cmd_helper.get_rate_limit_stats()
+            uinfo['version_info'] = vinfo
+            uinfo['busy'] = self.cmd_helper.is_update_busy()
+            self.server.send_event("update_manager:update_refreshed", uinfo)
         return eventtime + UPDATE_REFRESH_INTERVAL
 
     async def _handle_update_request(self,
