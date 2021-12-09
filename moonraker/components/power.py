@@ -11,7 +11,6 @@ import struct
 import socket
 import asyncio
 import time
-from tornado.iostream import IOStream
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
 
@@ -565,18 +564,18 @@ class TPLinkSmartPlug(PowerDevice):
             }
         else:
             raise self.server.error(f"Invalid tplink command: {command}")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        stream = IOStream(s)
+        reader, writer = await asyncio.open_connection(
+            self.addr[0], self.port, family=socket.AF_INET)
         try:
-            await stream.connect((self.addr[0], self.port))
-            await stream.write(self._encrypt(out_cmd))
-            data = await stream.read_bytes(2048, partial=True)
+            writer.write(self._encrypt(out_cmd))
+            await writer.drain()
+            data = await reader.read(2048)
             length: int = struct.unpack(">I", data[:4])[0]
             data = data[4:]
             retries = 5
             remaining = length - len(data)
             while remaining and retries:
-                data += await stream.read_bytes(remaining)
+                data += await reader.read(remaining)
                 remaining = length - len(data)
                 retries -= 1
             if not retries:
@@ -586,7 +585,8 @@ class TPLinkSmartPlug(PowerDevice):
             logging.exception(msg)
             raise self.server.error(msg)
         finally:
-            stream.close()
+            writer.close()
+            await writer.wait_closed()
         return json.loads(self._decrypt(data))
 
     def _encrypt(self, outdata: Dict[str, Any]) -> bytes:
