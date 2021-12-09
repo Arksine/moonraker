@@ -306,16 +306,19 @@ class PanelDue:
         sub_args = {k: None for k in self.printer_state.keys()}
         self.extruder_count = 0
         self.heaters = []
+        extruders = []
         for cfg in config:
             if cfg.startswith("extruder"):
                 self.extruder_count += 1
                 self.printer_state[cfg] = {}
-                self.heaters.append(cfg)
+                extruders.append(cfg)
                 sub_args[cfg] = None
             elif cfg == "heater_bed":
                 self.printer_state[cfg] = {}
                 self.heaters.append(cfg)
                 sub_args[cfg] = None
+        extruders.sort()
+        self.heaters.extend(extruders)
         try:
             status: Dict[str, Any]
             status = await self.klippy_apis.subscribe_objects(sub_args)
@@ -680,10 +683,10 @@ class PanelDue:
         if fan_speed is not None:
             response['fanPercent'] = [round(fan_speed * 100, 1)]
 
+        extruder_name: str = ""
         if self.extruder_count > 0:
-            extruder_name: Optional[str]
-            extruder_name = p_state['toolhead'].get('extruder')
-            if extruder_name is not None:
+            extruder_name = p_state['toolhead'].get('extruder', "")
+            if extruder_name:
                 tool = 0
                 if extruder_name != "extruder":
                     tool = int(extruder_name[-1])
@@ -699,10 +702,13 @@ class PanelDue:
             response.setdefault('heaters', []).append(temp)
             response.setdefault('active', []).append(target)
             response.setdefault('standby', []).append(target)
-            response.setdefault('hstat', []).append(2 if target else 0)
             if name.startswith('extruder'):
+                a_stat = 2 if name == extruder_name else 1
+                response.setdefault('hstat', []).append(a_stat if target else 0)
                 response.setdefault('efactor', []).append(efactor)
                 response.setdefault('extr', []).append(round(pos[3], 2))
+            else:
+                response.setdefault('hstat', []).append(2 if target else 0)
 
         # Display message (via M117)
         msg: str = p_state['display_status'].get('message', "")
