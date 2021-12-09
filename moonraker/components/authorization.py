@@ -18,7 +18,6 @@ import re
 import socket
 import logging
 import json
-from tornado.ioloop import PeriodicCallback
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 
@@ -57,7 +56,7 @@ def base64url_decode(data: str) -> bytes:
 
 ONESHOT_TIMEOUT = 5
 TRUSTED_CONNECTION_TIMEOUT = 3600
-PRUNE_CHECK_TIME = 300 * 1000
+PRUNE_CHECK_TIME = 300.
 
 HASH_ITER = 100000
 API_USER = "_API_KEY_USER_"
@@ -184,9 +183,10 @@ class Authorization:
             f"Trusted Clients:\n{t_clients}\n"
             f"CORS Domains:\n{c_domains}")
 
-        self.prune_handler = PeriodicCallback(
-            self._prune_conn_handler, PRUNE_CHECK_TIME)
-        self.prune_handler.start()
+        eventloop = self.server.get_event_loop()
+        self.prune_timer = eventloop.register_timer(
+            self._prune_conn_handler)
+        self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
         # Register Authorization Endpoints
         self.permitted_paths.add("/server/redirect")
@@ -516,7 +516,7 @@ class Authorization:
         key = base64url_decode(jwk['x'])
         return Verifier(key.hex().encode())
 
-    def _prune_conn_handler(self) -> None:
+    def _prune_conn_handler(self, eventtime: float) -> float:
         cur_time = time.time()
         for ip, user_info in list(self.trusted_users.items()):
             exp_time: float = user_info['expires_at']
@@ -524,6 +524,7 @@ class Authorization:
                 self.trusted_users.pop(ip, None)
                 logging.info(
                     f"Trusted Connection Expired, IP: {ip}")
+        return eventtime + PRUNE_CHECK_TIME
 
     def _oneshot_token_expire_handler(self, token):
         self.oneshot_tokens.pop(token, None)
@@ -709,7 +710,7 @@ class Authorization:
                 "X-Api-Key")
 
     def close(self) -> None:
-        self.prune_handler.stop()
+        self.prune_timer.stop()
 
 
 def load_component(config: ConfigHelper) -> Authorization:
