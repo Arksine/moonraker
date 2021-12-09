@@ -15,7 +15,6 @@ import shutil
 import zipfile
 import time
 import tempfile
-from tornado.ioloop import PeriodicCallback
 from tornado.httpclient import AsyncHTTPClient
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
@@ -43,6 +42,7 @@ if TYPE_CHECKING:
     from components.shell_command import ShellCommandFactory as SCMDComp
     from components.database import MoonrakerDatabase as DBComp
     from components.database import NamespaceWrapper
+    from eventloop import FlexTimer
     JsonType = Union[List[Any], Dict[str, Any]]
 
 MOONRAKER_PATH = os.path.normpath(os.path.join(
@@ -53,7 +53,7 @@ KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
 KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
 
 # Check To see if Updates are necessary each hour
-UPDATE_REFRESH_INTERVAL_MS = 3600000
+UPDATE_REFRESH_INTERVAL = 3600.
 # Perform auto refresh no later than 4am
 MAX_UPDATE_HOUR = 4
 
@@ -140,11 +140,10 @@ class UpdateManager:
         self.klippy_identified_evt: Optional[asyncio.Event] = None
 
         # Auto Status Refresh
-        self.refresh_cb: Optional[PeriodicCallback] = None
+        self.refresh_timer: Optional[FlexTimer] = None
         if auto_refresh_enabled:
-            self.refresh_cb = PeriodicCallback(
-                self._handle_auto_refresh,  # type: ignore
-                UPDATE_REFRESH_INTERVAL_MS)
+            self.refresh_timer = self.event_loop.register_timer(
+                self._handle_auto_refresh)
 
         self.server.register_endpoint(
             "/machine/update/moonraker", ["POST"],
@@ -180,8 +179,8 @@ class UpdateManager:
                 if updater.needs_refresh():
                     ret = updater.refresh()
                     await ret
-        if self.refresh_cb is not None:
-            self.refresh_cb.start()
+        if self.refresh_timer is not None:
+            self.refresh_timer.start()
 
     async def _set_klipper_repo(self) -> None:
         if self.klippy_identified_evt is not None:
@@ -225,16 +224,15 @@ class UpdateManager:
         pstate: str = result.get('print_stats', {}).get('state', "")
         return pstate.lower() == "printing"
 
-    async def _handle_auto_refresh(self) -> None:
+    async def _handle_auto_refresh(self, eventtime: float) -> float:
+        cur_hour = time.localtime(eventtime).tm_hour
+        # Update when the local time is between 12AM and 5AM
+        if cur_hour >= MAX_UPDATE_HOUR:
+            return eventtime + UPDATE_REFRESH_INTERVAL
         if await self._check_klippy_printing():
             # Don't Refresh during a print
             logging.info("Klippy is printing, auto refresh aborted")
-            return
-        cur_time = time.time()
-        cur_hour = time.localtime(cur_time).tm_hour
-        # Update when the local time is between 12AM and 5AM
-        if cur_hour >= MAX_UPDATE_HOUR:
-            return
+            return eventtime + UPDATE_REFRESH_INTERVAL
         vinfo: Dict[str, Any] = {}
         async with self.cmd_request_lock:
             try:
@@ -243,11 +241,12 @@ class UpdateManager:
                     vinfo[name] = updater.get_update_status()
             except Exception:
                 logging.exception("Unable to Refresh Status")
-                return
+                return eventtime + UPDATE_REFRESH_INTERVAL
         uinfo = self.cmd_helper.get_rate_limit_stats()
         uinfo['version_info'] = vinfo
         uinfo['busy'] = self.cmd_helper.is_update_busy()
         self.server.send_event("update_manager:update_refreshed", uinfo)
+        return eventtime + UPDATE_REFRESH_INTERVAL
 
     async def _handle_update_request(self,
                                      web_request: WebRequest
@@ -436,8 +435,8 @@ class UpdateManager:
 
     def close(self) -> None:
         self.cmd_helper.close()
-        if self.refresh_cb is not None:
-            self.refresh_cb.stop()
+        if self.refresh_timer is not None:
+            self.refresh_timer.stop()
 
 class CommandHelper:
     def __init__(self, config: ConfigHelper) -> None:
