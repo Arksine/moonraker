@@ -38,6 +38,7 @@ class EventLoop:
         self.create_future = self.aioloop.create_future
         self.create_task = self.aioloop.create_task
         self.call_at = self.aioloop.call_at
+        self.set_debug = self.aioloop.set_debug
 
     def register_callback(self,
                           callback: FlexCallback,

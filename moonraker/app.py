@@ -149,9 +149,7 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
 
-        self.debug = config.getboolean('enable_debug_logging', False)
-        log_level = logging.DEBUG if self.debug else logging.INFO
-        logging.getLogger().setLevel(log_level)
+        self.debug = self.server.is_debug_enabled()
         app_args: Dict[str, Any] = {
             'serve_traceback': self.debug,
             'websocket_ping_interval': 10,
@@ -544,6 +542,14 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 args[key] = value
         return args
 
+    def _log_debug(self, header: str, args: Dict[str, Any]) -> None:
+        if self.server.is_debug_enabled():
+            if self.request.path.startswith('/access'):
+                resp = {key: "<sanitized>" for key in args}
+            else:
+                resp = args
+            logging.debug(f"{header}::{resp}")
+
     async def get(self, *args, **kwargs) -> None:
         await self._process_http_request()
 
@@ -579,7 +585,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         conn = self.get_associated_websocket()
         args = self.parse_args()
         req = f"{self.request.method} {self.request.path}"
-        logging.debug(f"HTTP Request::{req}::{args}")
+        self._log_debug(f"HTTP Request::{req}", args)
         try:
             result = await self._do_request(args, conn)
         except ServerError as e:
@@ -587,7 +593,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 e.status_code, str(e)) from e
         if self.wrap_result:
             result = {'result': result}
-        logging.debug(f"HTTP Response::{req}::{result}")
+        self._log_debug(f"HTTP Response::{req}", result)
         self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):

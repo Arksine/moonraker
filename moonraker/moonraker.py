@@ -88,6 +88,13 @@ class Server:
         self.ssl_port: int = config.getint('ssl_port', 7130)
         self.exit_reason: str = ""
 
+        # Configure Debug Logging
+        self.debug = config.getboolean('enable_debug_logging', False)
+        asyncio_debug = config.getboolean('enable_asyncio_debug', False)
+        log_level = logging.DEBUG if self.debug else logging.INFO
+        logging.getLogger().setLevel(log_level)
+        self.event_loop.set_debug(asyncio_debug)
+
         # Event initialization
         self.events: Dict[str, List[FlexCallback]] = {}
 
@@ -159,6 +166,9 @@ class Server:
 
     def is_running(self) -> bool:
         return self.server_running
+
+    def is_debug_enabled(self) -> bool:
+        return self.debug
 
     async def _start_server(self):
         optional_comps: List[Coroutine] = []
