@@ -94,6 +94,12 @@ class AIOHelper:
                         userdata: Any,
                         sock: socket.socket
                         ) -> None:
+        self.loop.call_soon_threadsafe(
+            self._do_socket_open, client, sock)
+
+    def _do_socket_open(self,
+                        client: paho_mqtt.Client,
+                        sock: socket.socket) -> None:
         logging.info("MQTT Socket Opened")
         self.loop.add_reader(sock, client.loop_read)
         self.misc_task = self.loop.create_task(self.misc_loop())
