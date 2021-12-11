@@ -24,11 +24,13 @@ class JobState:
         self.server = config.get_server()
         self.last_print_stats: Dict[str, Any] = {}
         self.server.register_event_handler(
-            "server:klippy_ready", self._handle_ready)
+            "server:klippy_started", self._handle_started)
         self.server.register_event_handler(
             "server:status_update", self._status_update)
 
-    async def _handle_ready(self) -> None:
+    async def _handle_started(self, state: str) -> None:
+        if state != "ready":
+            return
         kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
         try:
