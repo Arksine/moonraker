@@ -738,14 +738,17 @@ class KlippyConnection:
         return True
 
     async def _read_stream(self, reader: asyncio.StreamReader) -> None:
-        while not reader.at_eof():
+        errors_remaining: int = 10
+        while not reader.at_eof() and errors_remaining:
             try:
                 data = await reader.readuntil(b'\x03')
-            except asyncio.IncompleteReadError:
+            except (ConnectionError, asyncio.IncompleteReadError):
                 break
             except Exception:
                 logging.exception("Klippy Stream Read Error")
+                errors_remaining -= 1
                 continue
+            errors_remaining = 10
             try:
                 decoded_cmd = json.loads(data[:-1])
                 self.on_recd(decoded_cmd)
@@ -772,8 +775,11 @@ class KlippyConnection:
     async def close(self) -> None:
         async with self.close_mutex:
             if self.writer is not None:
-                self.writer.close()
-                await self.writer.wait_closed()
+                try:
+                    self.writer.close()
+                    await self.writer.wait_closed()
+                except Exception:
+                    logging.exception("Error closing Klippy Unix Socket")
                 self.writer = None
             if not self.closed:
                 self.closed = True
