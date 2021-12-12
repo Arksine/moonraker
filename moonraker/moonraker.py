@@ -707,35 +707,36 @@ class KlippyConnection:
                  event_loop: EventLoop
                  ) -> None:
         self.writer: Optional[asyncio.StreamWriter] = None
-        self.closed: bool = True
-        self.close_mutex: asyncio.Lock = asyncio.Lock()
+        self.connection_mutex: asyncio.Lock = asyncio.Lock()
         self.on_recd = on_recd
         self.on_close = on_close
         self.event_loop = event_loop
         self.log_no_access = True
 
     async def connect(self, address: str) -> bool:
-        if not os.path.exists(address):
-            return False
-        if not os.access(address, os.R_OK | os.W_OK):
-            if self.log_no_access:
-                user = getpass.getuser()
-                logging.info(
-                    f"Cannot connect to Klippy, Linux user '{user}' lacks "
-                    f"permission to open Unix Domain Socket: {address}")
-                self.log_no_access = False
-            return False
-        self.log_no_access = True
-        try:
-            reader, writer = await asyncio.open_unix_connection(
-                address, limit=UNIX_BUFFER_LIMIT)
-        except Exception:
-            return False
-        logging.info("Klippy Connection Established")
-        self.closed = False
-        self.writer = writer
-        self.event_loop.register_callback(self._read_stream, reader)
-        return True
+        if self.is_connected():
+            await self.close()
+        async with self.connection_mutex:
+            if not os.path.exists(address):
+                return False
+            if not os.access(address, os.R_OK | os.W_OK):
+                if self.log_no_access:
+                    user = getpass.getuser()
+                    logging.info(
+                        f"Cannot connect to Klippy, Linux user '{user}' lacks "
+                        f"permission to open Unix Domain Socket: {address}")
+                    self.log_no_access = False
+                return False
+            self.log_no_access = True
+            try:
+                reader, writer = await asyncio.open_unix_connection(
+                    address, limit=UNIX_BUFFER_LIMIT)
+            except Exception:
+                return False
+            logging.info("Klippy Connection Established")
+            self.writer = writer
+            self.event_loop.register_callback(self._read_stream, reader)
+            return True
 
     async def _read_stream(self, reader: asyncio.StreamReader) -> None:
         errors_remaining: int = 10
@@ -770,21 +771,23 @@ class KlippyConnection:
             await self.close()
 
     def is_connected(self) -> bool:
-        return not self.closed
+        return self.writer is not None
 
     async def close(self) -> None:
-        async with self.close_mutex:
-            if self.writer is not None:
-                try:
-                    self.writer.close()
-                    await self.writer.wait_closed()
-                except Exception:
-                    logging.exception("Error closing Klippy Unix Socket")
-                self.writer = None
-            if not self.closed:
-                self.closed = True
-                self.on_close()
-            self.closing = False
+        if (
+            self.connection_mutex.locked() or
+            self.writer is None
+        ):
+            return
+        async with self.connection_mutex:
+            try:
+                self.writer.close()
+                await self.writer.wait_closed()
+            except Exception:
+                logging.exception("Error closing Klippy Unix Socket")
+            self.writer = None
+            self.on_close()
+
 
 # Basic WebRequest class, easily converted to dict for json encoding
 class BaseRequest:
