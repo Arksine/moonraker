@@ -301,6 +301,7 @@ class MQTTClient(APITransport, Subscribable):
                         BrokerAckLogger(topics, "subscribe"))
                     self.pending_acks[msg_id] = sub_fut
             self.connect_evt.set()
+            self.server.send_event("mqtt:connected")
         else:
             if isinstance(reason_code, int):
                 err_str = paho_mqtt.connack_string(reason_code)
@@ -323,6 +324,7 @@ class MQTTClient(APITransport, Subscribable):
                          f"{paho_mqtt.error_string(reason_code)}")
             if self.reconnect_task is None:
                 self.reconnect_task = asyncio.create_task(self._do_reconnect())
+            self.server.send_event("mqtt:disconnected")
         self.connect_evt.clear()
 
     def _on_publish(self,
