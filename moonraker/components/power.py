@@ -773,7 +773,7 @@ class HomeAssistant(HTTPDevice):
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
         token_file = config.get('token_file', None)
-        token = None
+        token = ""
         if token_file is not None:
             pw_file = pathlib.Path(token_file).expanduser().absolute()
             if not pw_file.exists():
