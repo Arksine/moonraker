@@ -11,6 +11,7 @@ import struct
 import socket
 import asyncio
 import time
+import pathlib
 from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
 
@@ -769,9 +770,17 @@ class HomeAssistant(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config, default_port=8123)
         self.device: str = config.get("device")
-        self.token: str = config.get("token")
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
+        token_file = config.get('token_file', None)
+        if token_file is not None:
+            pw_file = pathlib.Path(token_file).expanduser().absolute()
+            if not pw_file.exists():
+                raise config.error(
+                    f"Home Assistant Token file '{pw_file}' does not exist")
+            self.token: str = pw_file.read_text().strip()
+        else:
+            self.token: str = config.get("token")
 
     async def _send_homeassistant_command(self,
                                           command: str

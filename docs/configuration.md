@@ -411,7 +411,9 @@ port:
 device:
 #   The device ID of the switch to control. This parameter must be provided.
 token:
-#   A token used for request authorization.  This paramter must be provided.
+#   A token used for request authorization.  This parameter must be provided if token_file is not defined
+token_file:
+# A path to a file containing the token used for request authorization. This parameter must be provided if token is not defined.
 domain:
 #   The class of device managed by Home Assistant. Default is "switch".
 status_delay: 1.0
