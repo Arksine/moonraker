@@ -42,6 +42,8 @@ SD_MFGRS = {
     '74': "PNY"
 }
 IP_FAMILIES = {'inet': 'ipv4', 'inet6': 'ipv6'}
+
+
 class Machine:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -55,8 +57,6 @@ class Machine:
             }
         else:
             dist_info = {"name": distro.name(pretty=True)}
-        dist_info.update(distro.info())
-        dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
         self.inside_container = False
         self.virt_id = "none"
@@ -460,6 +460,7 @@ class Machine:
         if notify and network != prev_network:
             self.server.send_event("machine:net_state_changed", network)
         self.system_info['network'] = network
+
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
