@@ -46,6 +46,16 @@ class Machine:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         dist_info: Dict[str, Any]
+        if len(distro.distro_release_info()) > 0:
+            dist_info = {
+                "name": distro.distro_release_info()["name"]
+                + " "
+                + distro.distro_release_info()["version_id"],
+                "codename": distro.name(pretty=True),
+            }
+        else:
+            dist_info = {"name": distro.name(pretty=True)}
+        dist_info.update(distro.info())
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
         self.inside_container = False
