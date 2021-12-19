@@ -431,6 +431,55 @@ password:
 output_id:
 #   The name of a programmed output, virtual input or virtual
 #   output in the loxone configuration.  The default is no output id.
+#
+#  *** The following options apply to "mqtt" devices. ***
+qos:
+#  The MQTT QOS level to use when publishing and subscribing to topics.
+#  The default is to use the setting supplied in the [mqtt] section.
+command_topic:
+#  The mqtt topic used to publish commands to the device.  This parameter must
+#  be provided.
+command_payload:
+#  The payload sent with the topic.  This can be a template, with a "request"
+#  variable included in the template context, where "request" is either "on"
+#  or "off".  For example:
+#    {% if request == "on" %}
+#      TURN_ON
+#    {% else %}
+#      TURN_OFF
+#  The above example would resolve to "TURN_ON" if the request is turn the
+#  the device on, and "TURN_OFF" if the request is to turn the device off.
+#  This parameter must be provided.
+retain_command_state:
+#  When set to true, the retain flag will be set when the command topic is
+#  published.  Default is False
+state_topic:
+#  The mqtt topic to subscribe to for state updates.  This parameter must be
+#  provided.
+state_response_template:
+#  A template used to parse the payload received with the state topic.  A
+#  "payload" variable is included with the request context.  This template
+#  must resolve to "on" or "off".  For example:
+#    {% set resp = payload|fromjson %}
+#    {resp["POWER"]|lower}
+#  The above example assumes a json response is received, with a "POWER" field
+#  that set to either "ON" or "OFF".  The resolved response will always be
+#  trimmed of whitespace and converted to lowercase. The default is the payload.
+state_timeout:
+#  The amount of time (in seconds) to wait for the state topic to receive an
+#  update before putting the device in an "error" state.  This timeout is
+#  applied during initialization and after a command has been sent.
+#  The default is 2 seconds.
+query_topic:
+#  The topic used to query command state.  It is expected that the device will
+#  respond by publishing to the "state_topic".  This parameter is optional,
+query_payload:
+#  The payload to send with the query topic.  This may be a template or a string.
+#  The default is no payload.
+query_after_command:
+#  If set to True, Moonraker will publish the query topic after publishing the
+#  command topic.  This should only be necessary if the device does not publish a
+#  reponse to a command request to the state topic.  The default is false.
 ```
 
 !!! Tip
