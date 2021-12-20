@@ -276,16 +276,20 @@ gcode:
 ```
 
 ### `[power]`
-Enables device power control.  Currently GPIO (relays), RF transmitter, TPLink Smartplug,
-and Tasmota (via http) devices, HomeAssistant switch are supported.
+Enables device power control.  Multiple "power" devices may be configured,
+each with their own section, ie: `[power my_printer]`, `[power my_led]`.
+
+#### Options common to all power devices
+
+The following configuration options are available for all power device types:
 
 ```ini
 # moonraker.conf
 
 [power device_name]
-type: gpio
+type:
 #   The type of device.  Can be either gpio, rf, tplink_smartplug, tasmota
-#   shelly, homeseer, homeassistant, or loxonev1.
+#   shelly, homeseer, homeassistant, loxonev1, or mqtt.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -318,8 +322,28 @@ bound_service:
 #   been set the service will be started when the device powers on and stopped
 #   when the device powers off.  The default is no service is bound to the
 #   device.
-#
-# *** The following options apply to "gpio" and "rf" types ***
+```
+
+!!! Tip
+    Moonraker is authorized to manage the `klipper`, `klipper_mcu`,
+    `webcamd`, `MoonCord`, `KlipperScreen`, and `moonraker-telegram-bot`
+    services.  It can also manage multiple instances of a service, ie:
+    `klipper_1`, `klipper_2`.  Keep in mind that service names are case
+    sensitive.
+
+!!! Note
+    If a device has been bound to the `klipper` service and the
+    `restart_klipper_when_powered` option is set to `True`, the restart
+    will be scheduled to execute after Klipper reports that its startup
+    sequence is complete.
+
+#### GPIO Device Configuration
+
+The following options are available for `gpio` device types:
+
+```ini
+# moonraker.conf
+
 pin: gpiochip0/gpio26
 #   The pin to use for GPIO and RF devices.  The chip is optional, if left out
 #   then the module will default to gpiochip0.  If one wishes to invert
@@ -339,14 +363,78 @@ timer:
 #    This option is available for gpio, tplink_smartplug, shelly, and tasmota
 #    devices.  The timer may be a floating point value for gpio types, it should
 #    be an integer for all other types.  The default is no timer is set.
-#
-# *** The following options apply to "rf" devices ***
+```
+
+!!! Note
+    Moonraker can only be used to toggle host device GPIOs (ie: GPIOs on your
+    PC or SBC).  Moonraker cannot control GPIOs on an MCU, Klipper should be
+    used for this purpose.
+
+Examples:
+
+```ini
+# moonraker.conf
+
+# Control a relay providing power to the printer
+[power printer]
+type: gpio
+pin: gpio26  # uses pin 26 on gpiochip0
+off_when_shutdown: True
+initial_state: off
+
+# Control a status led
+[power printer_led]
+type: gpio
+pin: !gpiochip0/gpio16  # inverts pin
+initial_state: off
+
+# Control a printer illumination, powers on when
+# Moonraker starts
+[power light_strip]
+type: gpio
+pin: gpiochip0/gpio17
+initial_state: on
+```
+
+#### RF Device Configuration
+
+The following options are available for gpio controlled `rf` device types:
+
+```ini
+# moonraker.conf
+
+pin: gpiochip0/gpio26
+#   The pin to use for GPIO and RF devices.  The chip is optional, if left out
+#   then the module will default to gpiochip0.  If one wishes to invert
+#   the signal, a "!" may be prefixed to the pin.  Valid examples:
+#      gpiochip0/gpio26
+#      gpio26
+#      !gpiochip0/gpio26
+#      !gpio26
+#    This parameter must be provided for "gpio" type devices
+initial_state: off
+#    The initial state for GPIO type devices.  May be on or
+#    off.  When moonraker starts the device will be set to this
+#    state.  Default is off.
+timer:
+#    A time (in seconds) after which the device will power off after being.
+#    switched on. This effectively turns the device into a  momentary switch.
+#    This option is available for gpio, tplink_smartplug, shelly, and tasmota
+#    devices.  The timer may be a floating point value for gpio types, it should
+#    be an integer for all other types.  The default is no timer is set.
 on_code:
 off_code:
 #   Valid binary codes that are sent via the RF transmitter.
 #   For example: 1011.
-#
-# *** The following options apply to "tplink_smartplug" devices ***
+```
+
+#### TPLink Smartplug Configuration
+
+The following options are availble for `tplink_smartplug` device types:
+
+```ini
+# moonraker.conf
+
 address:
 #   A valid ip address or hostname for the tplink device.  "Power Strips" can
 #   be controlled by including the socket index  in the ip address.  For example,
@@ -356,7 +444,23 @@ address:
 port:
 #   The port to connect to.  Default is 9999.
 #
-# *** The following options apply to "tasmota" devices ***
+```
+
+Example:
+
+```ini
+# moonraker.conf
+
+[power printer_plug]
+type: tplink_smartplug
+address: 192.168.1.123
+```
+
+#### Tasmota Configuration
+
+The following options are available for `tasmota` device types:
+
+```ini
 #   Note:
 #   If your single-relay Tasmota device switches on/off successfully,
 #   but fails to report its state, ensure that 'SetOption26' is set in
@@ -369,8 +473,29 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Tasmota device supports
 #   more than one output.  Default is 1.
-#
-#  *** The following options apply to "shelly" devices ***
+```
+
+!!! Note
+    This implmentation communicates with Tasmota firmware through its
+    HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
+    to control devices flashed with Tasmota.
+
+Example:
+
+```ini
+# moonraker.conf
+
+[power tasmota_plug]
+type: tasmota
+address: 192.168.1.124
+password: mypassword
+```
+
+#### Shelly Configuration
+
+The following options are available for `shelly` device types:
+
+```ini
 address:
 #   A valid ip address or hostname for the shelly device.  This parameter
 #   must be provided.
@@ -383,8 +508,32 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Shelly device supports
 #   more than one output.  Default is 1.
-#
-# *** The following options apply to "homeseer" devices ***
+```
+
+!!! Note
+    This implmentation communicates with Shelly firmware through its
+    HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
+    to control Shelly devices.
+
+Example:
+
+```ini
+# moonraker.conf
+
+[power shelly_plug]
+type: shelly
+address: 192.168.1.125
+user: user2
+password: password2
+```
+
+#### Homeseer Configuration
+
+The following options are available for `homeseer` device types:
+
+```ini
+# moonraker.conf
+
 address:
 #   A valid ip address or hostname for the homeseer device.  This parameter
 #   must be provided.
@@ -400,7 +549,15 @@ user:
 password:
 #   The password for request authentication.  The default is no password.
 #
-#  *** The following  options apply to "homeassistant" devices ***
+```
+
+####  Home Assistant Configuration (HTTP)
+
+The following options are available for `homeassistant` device types:
+
+```ini
+# moonraker.conf
+
 address:
 #   A valid ip address or hostname for the Home Assistant server.  This
 #   parameter must be provided.
@@ -420,7 +577,26 @@ status_delay: 1.0
 #   to validate that Home Assistant has successfully toggled the device,
 #   as the API is currently broken on their end.  Default is 1 second.
 #
-#  *** The following options apply to "loxone" devices ***
+```
+
+Example:
+```ini
+# moonraker.conf
+
+[power homeassistant_switch]
+type: homeassistant
+address: 192.168.1.126
+port: 8123
+device: switch.1234567890abcdefghij
+token: home-assistant-very-long-token
+domain: switch
+```
+
+#### Loxone Device Configuration
+
+The following options are available for `loxone` device types:
+
+```ini
 address:
 #   A valid ip address or hostname for the Loxone server.  This
 #   parameter must be provided.
@@ -432,7 +608,13 @@ output_id:
 #   The name of a programmed output, virtual input or virtual
 #   output in the loxone configuration.  The default is no output id.
 #
-#  *** The following options apply to "mqtt" devices. ***
+```
+
+#### MQTT Device Configuration
+
+The following options are available for `mqtt` device types:
+
+```ini
 qos:
 #  The MQTT QOS level to use when publishing and subscribing to topics.
 #  The default is to use the setting supplied in the [mqtt] section.
@@ -440,10 +622,10 @@ command_topic:
 #  The mqtt topic used to publish commands to the device.  This parameter must
 #  be provided.
 command_payload:
-#  The payload sent with the topic.  This can be a template, with a "request"
-#  variable included in the template context, where "request" is either "on"
+#  The payload sent with the topic.  This can be a template, with a "command"
+#  variable included in the template context, where "command" is either "on"
 #  or "off".  For example:
-#    {% if request == "on" %}
+#    {% if command == "on" %}
 #      TURN_ON
 #    {% else %}
 #      TURN_OFF
@@ -451,24 +633,24 @@ command_payload:
 #  the device on, and "TURN_OFF" if the request is to turn the device off.
 #  This parameter must be provided.
 retain_command_state:
-#  When set to true, the retain flag will be set when the command topic is
-#  published.  Default is False
+#  If set to True the retain flag will be set when the command topic is
+#  published.  Default is False.
 state_topic:
 #  The mqtt topic to subscribe to for state updates.  This parameter must be
 #  provided.
 state_response_template:
 #  A template used to parse the payload received with the state topic.  A
-#  "payload" variable is included with the request context.  This template
+#  "payload" variable is provided the template's context.  This template
 #  must resolve to "on" or "off".  For example:
 #    {% set resp = payload|fromjson %}
-#    {resp["POWER"]|lower}
+#    {resp["POWER"]}
 #  The above example assumes a json response is received, with a "POWER" field
 #  that set to either "ON" or "OFF".  The resolved response will always be
 #  trimmed of whitespace and converted to lowercase. The default is the payload.
 state_timeout:
 #  The amount of time (in seconds) to wait for the state topic to receive an
-#  update before putting the device in an "error" state.  This timeout is
-#  applied during initialization and after a command has been sent.
+#  update. If the timeout expires the device revert to an "error" state.  This
+#  timeout is applied during initialization and after a command has been sent.
 #  The default is 2 seconds.
 query_topic:
 #  The topic used to query command state.  It is expected that the device will
@@ -477,66 +659,52 @@ query_payload:
 #  The payload to send with the query topic.  This may be a template or a string.
 #  The default is no payload.
 query_after_command:
-#  If set to True, Moonraker will publish the query topic after publishing the
+#  If set to True Moonraker will publish the query topic after publishing the
 #  command topic.  This should only be necessary if the device does not publish a
-#  reponse to a command request to the state topic.  The default is false.
+#  reponse to a command request to the state topic.  The default is False.
 ```
+!!! Note
+    Moonraker's MQTT client must be properly configured to add a MQTT device.
+    See the [mqtt](#mqtt) section for details.
 
 !!! Tip
-    Moonraker is authorized to manage the `klipper`, `klipper_mcu`,
-    `webcamd`, `MoonCord`, `KlipperScreen`, and `moonraker-telegram-bot`
-    services.  It can also manage multiple instances of a service, ie:
-    `klipper_1`, `klipper_2`.  Keep in mind that service names are case
-    sensitive.
+    MQTT is the most robust way of managing networked devices through
+    Moonraker.  A well implemented MQTT device will publish all
+    changes in state to the `state_topic`.  Moonraker recieves these changes,
+    updates its internal state, and notifies connected clients.  This allows
+    for device control outside of Moonraker.  Note however that post command
+    actions, such as bound services, will not be run if a device is toggled
+    outside of Moonraker.
 
-!!! Note
-    If a device has been bound to the `klipper` service and the
-    `restart_klipper_when_powered` option is set to `True`, the restart
-    will be scheduled to execute after Klipper reports that its startup
-    sequence is complete.
+Example:
 
-Below are some potential examples:
 ```ini
 # moonraker.conf
 
-[power printer]
-type: gpio
-pin: gpio26
-off_when_shutdown: True
-initial_state: off
-
-[power printer_led]
-type: gpio
-pin: !gpiochip0/gpio16
-initial_state: off
-
-[power light_strip]
-type: gpio
-pin: gpiochip0/gpio17
-initial_state: on
-
-[power wifi_switch]
-type: tplink_smartplug
-address: 192.168.1.123
-
-[power tasmota_plug]
-type: tasmota
-address: 192.168.1.124
-password: password1
-
-[power shelly_plug]
-type: shelly
-address: 192.168.1.125
-user: user2
-password: password2
-
-[power homeassistant_switch]
-type: homeassistant
-address: 192.168.1.126
-port: 8123
-device: switch.1234567890abcdefghij
-token: home-assistant-very-long-token
-domain: switch
+# Example configuration for ing with Tasmota firmware over mqtt
+[power mqtt_plug]
+type: mqtt
+command_topic: cmnd/tasmota_switch/POWER
+# Tasmota uses "on" and "off" as the payload, so our template simply renders
+# the command
+command_payload:
+  {command}
+# There is no need to set the retain flag for Tasmota devices.  Moonraker
+# will use the query topic to initalize the device.  Tasmota will publish
+# all changes in state to the state topic.
+retain_command_state: False
+# To query a tasmota device we send the command topic without a payload.
+# Otpionally we could send a "?" as the payload.
+query_topic: cmnd/tasmota_switch/POWER
+# query_payload: ?
+state_topic: stat/tasmota_switch/POWER
+# The response is either "ON" or "OFF".  Moonraker will handle converting to
+# lower case.
+state_response_template:
+  {payload}
+# Tasmota updates the state topic when the device state changes, so it is not
+# not necessary to query after a command
+query_after_command: False
 ```
 
 #### Toggling device state from Klipper
@@ -934,4 +1102,45 @@ easily detect and use Moonraker instances.
 # moonraker.conf
 
 [zeroconf]
+```
+
+
+## Jinja2 Templates
+
+Some Moonraker configuration options make use of Jinja2 Templates.  For
+consistency, Moonraker uses the same Jinja2 syntax as Klipper. Statements
+should be enclosed in `{% %}`, and expressions in `{ }`.  There are some
+key differences, as outlined below:
+
+- Moonraker templates do not currently include globals like
+ `printer` and `params` in the context.  Variables included in the
+ context will be specified in the option's documentation.
+- Moonraker's template environment adds the `ext.do` extension.  The
+  `{% do expression %}` statement can be used to modify variables without
+  printing any text.  See the example below for details.
+- Klipper uses Jinja2 exclusively for evaluating gcode statements.  Moonraker
+  uses it to provide configuration options that may need to change based on
+  runtime parameters.
+
+For an example of how to use the `do` statement, lets assume we need to
+send a specific json payload with an MQTT power device command.  Rather
+than attempt to type out the json ourselves, it may be easier to create
+a `dictionary` object and convert it to json:
+```ini
+# moonraker.conf
+
+[power my_mqtt_device]
+type: mqtt
+command_topic: my/mqtt/command
+# Lets assume this device requres a json payload with each command.
+# We will use a dict to generate the payload
+command_payload:
+  {% set my_payload = {} %}
+  {% do my_payload["SOME_FIELD"] = "some_string" %}
+  {% do my_payload["ANOTHER_FIELD"] = True %}
+  # Here we set the actual command, the "command" variable
+  # is passed to the context of this template
+  {% do my_payload["POWER_COMMAND"] = command %}
+  # generate the json output
+  { my_payload|tojson }
 ```
