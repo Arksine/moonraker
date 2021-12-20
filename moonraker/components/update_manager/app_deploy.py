@@ -65,9 +65,15 @@ class AppDeploy(BaseDeploy):
                 f"section [{config.get_name()}]")
         self._verify_path(config, 'path', self.path)
         self.executable: Optional[pathlib.Path] = None
+        self.pip_exe: Optional[pathlib.Path] = None
         self.venv_args: Optional[str] = None
         if executable is not None:
-            self.executable = pathlib.Path(executable).expanduser().resolve()
+            self.executable = pathlib.Path(executable).expanduser()
+            self.pip_exe = self.executable.parent.joinpath("pip")
+            if not self.pip_exe.exists():
+                self.server.add_warning(
+                    f"Update Manger {self.name}: Unable to locate pip "
+                    "executable")
             self._verify_path(config, 'env', self.executable)
             self.venv_args = config.get('venv_args', None)
 
@@ -228,10 +234,9 @@ class AppDeploy(BaseDeploy):
     async def _update_virtualenv(self,
                                  requirements: Union[pathlib.Path, List[str]]
                                  ) -> None:
-        if self.executable is None:
+        if self.pip_exe is None:
             return
         # Update python dependencies
-        bin_dir = self.executable.parent
         if isinstance(requirements, pathlib.Path):
             if not requirements.is_file():
                 self.log_info(
@@ -240,24 +245,23 @@ class AppDeploy(BaseDeploy):
             args = f"-r {requirements}"
         else:
             args = " ".join(requirements)
-        pip = bin_dir.joinpath("pip")
         self.notify_status("Updating python packages...")
         try:
             # First attempt to update pip
             await self.cmd_helper.run_cmd(
-                f"{pip} install -U pip", timeout=1200., notify=True,
+                f"{self.pip_exe} install -U pip", timeout=1200., notify=True,
                 retries=3)
             await self.cmd_helper.run_cmd(
-                f"{pip} install {args}", timeout=1200., notify=True,
+                f"{self.pip_exe} install {args}", timeout=1200., notify=True,
                 retries=3)
         except Exception:
             self.log_exc("Error updating python requirements")
 
     async def _build_virtualenv(self) -> None:
-        if self.executable is None or self.venv_args is None:
+        if self.pip_exe is None or self.venv_args is None:
             return
-        bin_dir = self.executable.parent
-        env_path = bin_dir.joinpath("..").resolve()
+        bin_dir = self.pip_exe.parent
+        env_path = bin_dir.parent.resolve()
         self.notify_status(f"Creating virtualenv at: {env_path}...")
         if env_path.exists():
             shutil.rmtree(env_path)
@@ -267,5 +271,5 @@ class AppDeploy(BaseDeploy):
         except Exception:
             self.log_exc(f"Error creating virtualenv")
             return
-        if not self.executable.exists():
+        if not self.pip_exe.exists():
             raise self.log_exc("Failed to create new virtualenv", False)
