@@ -141,9 +141,9 @@ class Authorization:
                     " permitted in the top level domain.")
             if domain.endswith("/"):
                 self.server.add_warning(
-                    f"Invalid domain '{domain}' in option 'cors_domains',  "
-                    "section [authorization].  Domain's cannot contain a "
-                    "trailing slash.")
+                    f"[authorization]: Invalid domain '{domain}' in option "
+                    "'cors_domains'.  Domain's cannot contain a trailing "
+                    "slash.")
             else:
                 self.cors_domains.append(
                     domain.replace(".", "\\.").replace("*", ".*"))
@@ -164,13 +164,24 @@ class Authorization:
             # Check ip network
             try:
                 tc = ipaddress.ip_network(val)
-            except ValueError:
+            except ValueError as e:
+                if "has host bits set" in str(e):
+                    self.server.add_warning(
+                        f"[authorization]: Invalid CIDR expression '{val}' "
+                        "in option 'trusted_clients'")
+                    continue
                 pass
             else:
                 self.trusted_ranges.append(tc)
                 continue
             # Check hostname
-            self.trusted_domains.append(val.lower())
+            match = re.match(r"([a-z0-9]+(-[a-z0-9]+)*\.?)+[a-z]{2,}$", val)
+            if match is not None:
+                self.trusted_domains.append(val.lower())
+            else:
+                self.server.add_warning(
+                    f"[authorization]: Invalid domain name '{val}' "
+                    "in option 'trusted_clients'")
 
         t_clients = "\n".join(
             [str(ip) for ip in self.trusted_ips] +
