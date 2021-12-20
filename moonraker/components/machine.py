@@ -48,6 +48,7 @@ class Machine:
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
+        dist_info['release_info'] = distro.distro_release_info()
         self.inside_container = False
         self.virt_id = "none"
         self.system_info: Dict[str, Any] = {
