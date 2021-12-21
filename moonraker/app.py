@@ -17,7 +17,7 @@ import tornado.iostream
 import tornado.httputil
 import tornado.web
 from inspect import isclass
-from tornado.escape import json_encode, url_unescape
+from tornado.escape import json_encode, url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
@@ -311,10 +311,14 @@ class MoonrakerApp:
         params = {'path': file_path}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
-    def register_upload_handler(self, pattern: str) -> None:
-        self.mutable_router.add_handler(
-            pattern, FileUploadHandler,
-            {'max_upload_size': self.max_upload_size})
+    def register_upload_handler(self,
+                                pattern: str,
+                                location_prefix: Optional[str] = None
+                                ) -> None:
+        params: Dict[str, Any] = {'max_upload_size': self.max_upload_size}
+        if location_prefix is not None:
+            params['location_prefix'] = location_prefix
+        self.mutable_router.add_handler(pattern, FileUploadHandler, params)
 
     def remove_handler(self, endpoint: str) -> None:
         api_def = self.api_cache.pop(endpoint, None)
@@ -752,7 +756,11 @@ class FileRequestHandler(AuthorizedFileHandler):
 
 @tornado.web.stream_request_body
 class FileUploadHandler(AuthorizedRequestHandler):
-    def initialize(self, max_upload_size: int = MAX_BODY_SIZE) -> None:
+    def initialize(self,
+                   location_prefix: str = "server/files",
+                   max_upload_size: int = MAX_BODY_SIZE
+                   ) -> None:
+        self.location_prefix = location_prefix
         super(FileUploadHandler, self).initialize()
         self.file_manager: FileManager = self.server.lookup_component(
             'file_manager')
@@ -814,6 +822,25 @@ class FileUploadHandler(AuthorizedRequestHandler):
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, str(e))
+        # Return 201 and add the Location Header
+        item: Dict[str, Any] = result.get('item', {})
+        root: Optional[str] = item.get('root', None)
+        fpath: Optional[str] = item.get('path', None)
+        if root is not None and fpath is not None:
+            path_parts = fpath.split("/")
+            fpath = "/".join([url_escape(p) for p in path_parts])
+            proto = self.request.protocol
+            if not isinstance(proto, str):
+                proto = "http"
+            host = self.request.host
+            if not isinstance(host, str):
+                si = self.server.get_host_info()
+                port = si['port'] if proto == "http" else si['ssl_port']
+                host = f"{si['address']}:{port}"
+            location = f"{proto}://{host}/{self.location_prefix}/{root}/{fpath}"
+            self.set_header("Location", location)
+            logging.debug(f"Upload Location header set: {location}")
+        self.set_status(201)
         self.finish(result)
 
 # Default Handler for unregistered endpoints
