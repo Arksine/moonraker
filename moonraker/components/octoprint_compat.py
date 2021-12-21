@@ -95,6 +95,10 @@ class OctoprintCompat:
             '/api/printerprofiles', ['GET'], self._get_printerprofiles,
             transports=['http'], wrap_result=False)
 
+        # Upload Handlers
+        self.server.register_upload_handler(
+            "/api/files/local", location_prefix="api/moonraker/files/")
+
         # System
         # TODO: shutdown/reboot/restart operations
 

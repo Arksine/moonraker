@@ -176,6 +176,7 @@ class MoonrakerApp:
                 "moonraker.log", logfile, force=True)
         self.register_static_file_handler(
             "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
+        self.register_upload_handler("/server/files/upload")
 
     def _get_path_option(self, config: ConfigHelper, option: str) -> str:
         path: Optional[str] = config.get(option, None)

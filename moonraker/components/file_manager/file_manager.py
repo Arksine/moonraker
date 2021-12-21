@@ -87,9 +87,6 @@ class FileManager:
             transports=["websocket"])
         # register client notificaitons
         self.server.register_notification("file_manager:filelist_changed")
-        # Register APIs to handle file uploads
-        self.server.register_upload_handler("/server/files/upload")
-        self.server.register_upload_handler("/api/files/local")
 
         self.server.register_event_handler(
             "server:klippy_identified", self._update_fixed_paths)
