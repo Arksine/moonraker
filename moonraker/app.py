@@ -598,6 +598,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 e.status_code, str(e)) from e
         if self.wrap_result:
             result = {'result': result}
+        if result is None:
+            self.set_status(204)
         self._log_debug(f"HTTP Response::{req}", result)
         self.finish(result)
 
