@@ -202,6 +202,9 @@ class FileManager:
         file_path = os.path.join(root_dir, filename)
         return os.path.exists(file_path)
 
+    def upload_queue_enabled(self) -> bool:
+        return self.queue_gcodes
+
     def sync_inotify_event(self, path: str) -> Optional[NotifySyncLock]:
         if self.notify_sync_lock is None or \
                 not self.notify_sync_lock.check_need_sync(path):

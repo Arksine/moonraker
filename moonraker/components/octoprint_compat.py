@@ -17,8 +17,9 @@ from typing import (
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
-    from . import klippy_apis
-    APIComp = klippy_apis.KlippyAPI
+    from .klippy_apis import KlippyAPI as APIComp
+    from .file_manager.file_manager import FileManager
+    from .job_queue import JobQueue
 
 OCTO_VERSION = '1.5.0'
 
@@ -97,7 +98,10 @@ class OctoprintCompat:
 
         # Upload Handlers
         self.server.register_upload_handler(
-            "/api/files/local", location_prefix="api/moonraker/files/")
+            "/api/files/local", location_prefix="api/files/moonraker")
+        self.server.register_endpoint(
+            "/api/files/moonraker/(?P<relative_path>.+)", ['POST'],
+            self._select_file, transports=['http'], wrap_result=False)
 
         # System
         # TODO: shutdown/reboot/restart operations
@@ -327,6 +331,54 @@ class OctoprintCompat:
                 }
             }
         }
+
+    async def _select_file(self,
+                           web_request: WebRequest
+                           ) -> None:
+        command: str = web_request.get('command')
+        rel_path: str = web_request.get('relative_path')
+        root, filename = rel_path.strip("/").split("/", 1)
+        fmgr: FileManager = self.server.lookup_component('file_manager')
+        if command == "select":
+            start_print: bool = web_request.get('print', False)
+            if not start_print:
+                # No-op, selecting a file has no meaning in Moonraker
+                return
+            if root != "gcodes":
+                raise self.server.error(
+                    "File must be located in the 'gcodes' root", 400)
+            if not fmgr.check_file_exists(root, filename):
+                raise self.server.error("File does not exist")
+            try:
+                ret = await self.klippy_apis.query_objects(
+                    {'print_stats': None})
+                pstate: str = ret['print_stats']['state']
+            except self.server.error:
+                pstate = "not_avail"
+            started: bool = False
+            if pstate not in ["printing", "paused", "not_avail"]:
+                try:
+                    await self.klippy_apis.start_print(filename)
+                except self.server.error:
+                    started = False
+                else:
+                    logging.debug(f"Job '{filename}' started via Octoprint API")
+                    started = True
+            if not started:
+                if fmgr.upload_queue_enabled():
+                    job_queue: JobQueue = self.server.lookup_component(
+                        'job_queue')
+                    await job_queue.queue_job(filename, check_exists=False)
+                    # Fire the file_manager's upload_queued event for
+                    # compatibility.  We assume that this endpoint is
+                    # requests by Cura after a file has been uploaded.
+                    self.server.send_event("file_manager:upload_queued",
+                                           filename)
+                    logging.debug(f"Job '{filename}' queued via Octoprint API")
+                else:
+                    raise self.server.error("Conflict", 409)
+        else:
+            raise self.server.error(f"Unsupported Command: {command}")
 
 
 def load_component(config: ConfigHelper) -> OctoprintCompat:
