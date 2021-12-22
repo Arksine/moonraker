@@ -41,6 +41,7 @@ class OctoprintCompat:
         self.server = config.get_server()
         self.software_version = self.server.get_app_args().get(
             'software_version')
+        self.enable_ufp: bool = config.getboolean('enable_ufp', True)
 
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
@@ -219,19 +220,8 @@ class OctoprintCompat:
         Hardcode capabilities to be basically there and use default
         fluid/mainsail webcam path.
         """
-        return {
-            'plugins': {
-                'UltimakerFormatPackage': {
-                    'align_inline_thumbnail': False,
-                    'inline_thumbnail': False,
-                    'inline_thumbnail_align_value': 'left',
-                    'inline_thumbnail_scale_value': '50',
-                    'installed': True,
-                    'installed_version': '0.2.2',
-                    'scale_inline_thumbnail': False,
-                    'state_panel_thumbnail': True,
-                },
-            },
+        settings = {
+            'plugins': {},
             'feature': {
                 'sdSupport': False,
                 'temperatureGraph': False
@@ -246,6 +236,20 @@ class OctoprintCompat:
                 'webcamEnabled': True,
             },
         }
+        if self.enable_ufp:
+            settings['plugins'] = {
+                'UltimakerFormatPackage': {
+                    'align_inline_thumbnail': False,
+                    'inline_thumbnail': False,
+                    'inline_thumbnail_align_value': 'left',
+                    'inline_thumbnail_scale_value': '50',
+                    'installed': True,
+                    'installed_version': '0.2.2',
+                    'scale_inline_thumbnail': False,
+                    'state_panel_thumbnail': True,
+                },
+            }
+        return settings
 
     async def _get_job(self,
                        web_request: WebRequest
