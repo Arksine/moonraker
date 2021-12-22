@@ -298,6 +298,7 @@ class PrusaSlicer(BaseSlicer):
                 return None
         thumb_base = os.path.splitext(os.path.basename(self.path))[0]
         parsed_matches: List[Dict[str, Any]] = []
+        has_miniature: bool = False
         for match in thumb_matches:
             lines = re.split(r"\r?\n", match.replace('; ', ''))
             info = _regex_find_ints(r".*", lines[0])
@@ -321,6 +322,33 @@ class PrusaSlicer(BaseSlicer):
                 'width': info[0], 'height': info[1],
                 'size': os.path.getsize(thumb_path),
                 'relative_path': rel_thumb_path})
+            if info[0] == 32 and info[1] == 32:
+                has_miniature = True
+        if len(parsed_matches) > 0 and not has_miniature:
+            # find the largest thumb index
+            largest_match = parsed_matches[0]
+            for item in parsed_matches:
+                if item['size'] > largest_match['size']:
+                    largest_match = item
+            # Create miniature thumbnail if one does not exist
+            thumb_full_name = largest_match['relative_path'].split("/")[-1]
+            thumb_path = os.path.join(thumb_dir, f"{thumb_full_name}")
+            rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
+            thumb_path_small = os.path.join(
+                thumb_dir, f"{thumb_base}-32x32.png")
+            # read file
+            try:
+                with Image.open(thumb_path) as im:
+                    # Create 32x32 thumbnail
+                    im.thumbnail((32, 32))
+                    im.save(thumb_path_small, format="PNG")
+                    parsed_matches.insert(0, {
+                        'width': im.width, 'height': im.height,
+                        'size': os.path.getsize(thumb_path_small),
+                        'relative_path': rel_path_small
+                    })
+            except Exception as e:
+                log_to_stderr(str(e))
         return parsed_matches
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
@@ -654,37 +682,6 @@ class IdeaMaker(PrusaSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
-
-    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
-        # Attempt to parse thumbnails from file metadata
-        thumbs = super().parse_thumbnails()
-        if thumbs is not None:
-            # Check for extracted single size thumbnail from gcode
-            thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
-            thumb_base = os.path.splitext(os.path.basename(self.path))[0]
-            thumb_full_name = thumbs[0]['relative_path'].split("/")[1]
-            thumb_path = os.path.join(thumb_dir, f"{thumb_full_name}")
-            rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
-            thumb_path_small = os.path.join(
-                thumb_dir, f"{thumb_base}-32x32.png")
-            if not os.path.isfile(thumb_path):
-                return None
-            # read file
-            try:
-                with Image.open(thumb_path) as im:
-                    # Create 32x32 thumbnail
-                    im.thumbnail((32, 32))
-                    im.save(thumb_path_small, format="PNG")
-                    thumbs.insert(0, {
-                        'width': im.width, 'height': im.height,
-                        'size': os.path.getsize(thumb_path_small),
-                        'relative_path': rel_path_small
-                    })
-            except Exception as e:
-                log_to_stderr(str(e))
-                return None
-        return thumbs
-
 
 class IceSL(BaseSlicer):
     def check_identity(self, data) -> Optional[Dict[str, Any]]:
