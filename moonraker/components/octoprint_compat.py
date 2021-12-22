@@ -332,6 +332,24 @@ class OctoprintCompat:
                     'current': True,
                     'heatedBed': 'heater_bed' in self.heaters,
                     'heatedChamber': 'chamber' in self.heaters,
+                    'axes': {
+                        'x': {
+                            'speed': 6000.,
+                            'inverted': False
+                        },
+                        'y': {
+                            'speed': 6000.,
+                            'inverted': False
+                        },
+                        'z': {
+                            'speed': 6000.,
+                            'inverted': False
+                        },
+                        'e': {
+                            'speed': 300.,
+                            'inverted': False
+                        }
+                    }
                 }
             }
         }
