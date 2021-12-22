@@ -210,7 +210,22 @@ Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
 # moonraker.conf
 
 [octoprint_compat]
+enable_ufp: True
+#   When set to True the octoprint_compat module will report that the UFP
+#   plugin is available.  If the installed version of Cura supports UFP
+#   files will be uploaded in UFP format.  When set to False Cura will
+#   upload files in .gcode format.  This setting has no impact on other
+#   slicers.  The default is True.
 ```
+
+!!! Tip
+    It is possible to embed "Prusa" style thumbnails in .gcode files using
+    the latest version of Cura.  Select `Extensions` -> `Post Processing` ->
+    `Modify G-Code`.  In the dialog click the `Add a script` button and select
+    `Create Thumbnail`.   Change the width and height (most Moonraker clients
+    handle 300x300 well) then click close.  A single large thumbnail is all
+    that is necessary, Moonraker will generate a smaller 32x32 thumbnail from
+    it.  This is convenient for users who do not wish to upload in UFP format.
 
 ### `[history]`
 Enables print history tracking.
