@@ -222,9 +222,15 @@ class MQTTClient(APITransport, Subscribable):
             self.subscribe_topic(self.api_request_topic,
                                  self._process_api_request,
                                  self.api_qos)
-            logging.info(
-                f"Moonraker API topics - Request: {self.api_request_topic}, "
-                f"Response: {self.api_resp_topic}")
+
+        self.server.register_remote_method("publish_mqtt_topic",
+                                           self._publish_from_klipper)
+        logging.info(
+            f"\nReserved MQTT topics:\n"
+            f"API Request: {self.api_request_topic}\n"
+            f"API Response: {self.api_resp_topic}\n"
+            f"Moonraker Status: {self.moonraker_status_topic}\n"
+            f"Klipper Status: {self.klipper_status_topic}")
 
     async def component_init(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
@@ -644,6 +650,17 @@ class MQTTClient(APITransport, Subscribable):
                 continue
             fut.set_exception(
                 self.server.error("Moonraker Shutdown", 503))
+
+    async def _publish_from_klipper(self,
+                                    topic: str,
+                                    payload: Any = None,
+                                    qos: Optional[int] = None,
+                                    retain: bool = False,
+                                    use_prefix: bool = False
+                                    ) -> None:
+        if use_prefix:
+            topic = f"{self.instance_name}/{topic.lstrip('/')}"
+        await self.publish_topic(topic, payload, qos, retain)
 
 
 def load_component(config: ConfigHelper) -> MQTTClient:
