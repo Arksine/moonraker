@@ -445,6 +445,16 @@ off_code:
 
 #### TPLink Smartplug Configuration
 
+!!! Warning
+    TPLink has removed access to the local API for some of its Kasa devices
+    in recent firmware releases.  As such, it is possible that Moonraker
+    will be unable to communicate with your device.  While TPLink claims that
+    they will provide a new local API, they have have not done so as of
+    December 22nd, 2021.
+    See [this TPLink forum post](https://community.tp-link.com/en/smart-home/forum/topic/239364)
+    and [this Home Assistant Alert](https://alerts.home-assistant.io/#tplink.markdown)
+    for details.
+
 The following options are availble for `tplink_smartplug` device types:
 
 ```ini
