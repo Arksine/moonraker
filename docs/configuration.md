@@ -1034,6 +1034,40 @@ api_qos:
 #   value specified by "default_qos" will be used.
 ```
 
+#### Publishing topics from Klipper
+
+It is possible to publish a topic from a Klipper gcode macro with the
+`publish_mqtt_topic` remote method.  For example:
+
+```ini
+[gcode_macro PUBLISH_ALERT]
+gcode:
+  {% set data = params.PAYLOAD|default(None) %}
+  {action_call_remote_method("publish_mqtt_topic",
+                             topic="klipper/alert",
+                             payload=data,
+                             qos=0,
+                             retain=False,
+                             use_prefix=True)}
+
+```
+
+The `topic` is required, all other parameters are optional.  Below is a brief
+explanation of each parameter:
+
+- `topic`: a valid mqtt topic
+- `payload`: Defaults to an empty payload.  This can be set to string, integer,
+  float, boolean, any json encodable object (dict or list) or None. The default
+  value is None, in which no payload will be sent with the topic
+- `qos`: an integer value in the range from 0 to 2.  The default is the qos
+  set in the configuration.
+- `retain`: When set to True the retain flag will be set with the published topic.
+  Defaults to False.
+- `use_prefix`: When set to True the configured `instance_name` will be prefixed
+  to the topic.  For example, if the instance_name is `my_printer` and the topic
+  is `klipper/alert` the published topic will be `my_printer/klipper/alert`.  The
+  default is False.
+
 ### `[wled]`
 Enables control of an WLED strip.
 
