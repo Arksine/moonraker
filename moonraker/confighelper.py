@@ -98,7 +98,8 @@ class ConfigHelper:
                     above: Optional[Union[int, float]] = None,
                     below: Optional[Union[int, float]] = None,
                     minval: Optional[Union[int, float]] = None,
-                    maxval: Optional[Union[int, float]] = None
+                    maxval: Optional[Union[int, float]] = None,
+                    deprecate: bool = False
                     ) -> _T:
         try:
             val = func(self.section, option)
@@ -113,6 +114,11 @@ class ConfigHelper:
                 f"Error parsing option ({option}) from "
                 f"section [{self.section}]")
         else:
+            if deprecate:
+                self.server.add_warning(
+                    f"[{self.section}]: Option '{option}' in is "
+                    "deprecated, see the configuration documention "
+                    "at https://moonraker.readthedocs.io")
             self._check_option(option, val, above, below, minval, maxval)
         if self.section in self.orig_sections:
             # Only track sections included in the original config
@@ -149,10 +155,12 @@ class ConfigHelper:
 
     def get(self,
             option: str,
-            default: Union[SentinelClass, _T] = SENTINEL
+            default: Union[SentinelClass, _T] = SENTINEL,
+            deprecate: bool = False
             ) -> Union[str, _T]:
         return self._get_option(
-            self.config.get, option, default)
+            self.config.get, option, default,
+            deprecate=deprecate)
 
     def getint(self,
                option: str,
@@ -160,18 +168,21 @@ class ConfigHelper:
                above: Optional[int] = None,
                below: Optional[int] = None,
                minval: Optional[int] = None,
-               maxval: Optional[int] = None
+               maxval: Optional[int] = None,
+               deprecate: bool = False
                ) -> Union[int, _T]:
         return self._get_option(
             self.config.getint, option, default,
-            above, below, minval, maxval)
+            above, below, minval, maxval, deprecate)
 
     def getboolean(self,
                    option: str,
-                   default: Union[SentinelClass, _T] = SENTINEL
+                   default: Union[SentinelClass, _T] = SENTINEL,
+                   deprecate: bool = False
                    ) -> Union[bool, _T]:
         return self._get_option(
-            self.config.getboolean, option, default)
+            self.config.getboolean, option, default,
+            deprecate=deprecate)
 
     def getfloat(self,
                  option: str,
@@ -179,18 +190,20 @@ class ConfigHelper:
                  above: Optional[float] = None,
                  below: Optional[float] = None,
                  minval: Optional[float] = None,
-                 maxval: Optional[float] = None
+                 maxval: Optional[float] = None,
+                 deprecate: bool = False
                  ) -> Union[float, _T]:
         return self._get_option(
             self.config.getfloat, option, default,
-            above, below, minval, maxval)
+            above, below, minval, maxval, deprecate)
 
     def getlists(self,
                  option: str,
                  default: Union[SentinelClass, _T] = SENTINEL,
                  list_type: Type = str,
                  separators: Tuple[str, ...] = ('\n',),
-                 count: Optional[Tuple[Optional[int], ...]] = None
+                 count: Optional[Tuple[Optional[int], ...]] = None,
+                 deprecate: bool = False
                  ) -> Union[List[Any], _T]:
         if count is not None and len(count) != len(separators):
             raise ConfigError(
@@ -230,39 +243,47 @@ class ConfigHelper:
             assert count is not None
             return list_parser(val, list_type, separators, count)
 
-        return self._get_option(getlist_wrapper, option, default)
+        return self._get_option(getlist_wrapper, option, default,
+                                deprecate=deprecate)
 
 
     def getlist(self,
                 option: str,
                 default: Union[SentinelClass, _T] = SENTINEL,
                 separator: str = '\n',
-                count: Optional[int] = None
+                count: Optional[int] = None,
+                deprecate: bool = False
                 ) -> Union[List[str], _T]:
-        return self.getlists(option, default, str, (separator,), (count,))
+        return self.getlists(option, default, str, (separator,), (count,),
+                             deprecate=deprecate)
 
     def getintlist(self,
                    option: str,
                    default: Union[SentinelClass, _T] = SENTINEL,
                    separator: str = '\n',
-                   count: Optional[int] = None
+                   count: Optional[int] = None,
+                   deprecate: bool = False
                    ) -> Union[List[int], _T]:
-        return self.getlists(option, default, int, (separator,), (count,))
+        return self.getlists(option, default, int, (separator,), (count,),
+                             deprecate=deprecate)
 
     def getfloatlist(self,
                      option: str,
                      default: Union[SentinelClass, _T] = SENTINEL,
                      separator: str = '\n',
-                     count: Optional[int] = None
+                     count: Optional[int] = None,
+                     deprecate: bool = False
                      ) -> Union[List[float], _T]:
-        return self.getlists(option, default, float, (separator,), (count,))
+        return self.getlists(option, default, float, (separator,), (count,),
+                             deprecate=deprecate)
 
     def getdict(self,
                 option: str,
                 default: Union[SentinelClass, _T] = SENTINEL,
                 separators: Tuple[str, str] = ('\n', '='),
                 dict_type: Type = str,
-                allow_empty_fields: bool = False
+                allow_empty_fields: bool = False,
+                deprecate: bool = False
                 ) -> Union[Dict[str, Any], _T]:
         if len(separators) != 2:
             raise ConfigError(
@@ -287,12 +308,14 @@ class ConfigHelper:
                     ret[parts[0].strip()] = dict_type(parts[1].strip())
             return ret
 
-        return self._get_option(getdict_wrapper, option, default)
+        return self._get_option(getdict_wrapper, option, default,
+                                deprecate=deprecate)
 
     def getgpioout(self,
                    option: str,
                    default: Union[SentinelClass, _T] = SENTINEL,
-                   initial_value: int = 0
+                   initial_value: int = 0,
+                   deprecate: bool = False
                    ) -> Union[GpioOutputPin, _T]:
         try:
             gpio: GpioFactory = self.server.load_component(self, 'gpio')
@@ -304,11 +327,13 @@ class ConfigHelper:
         def getgpio_wrapper(sec: str, opt: str) -> GpioOutputPin:
             val = self.config.get(sec, opt)
             return gpio.setup_gpio_out(val, initial_value)
-        return self._get_option(getgpio_wrapper, option, default)
+        return self._get_option(getgpio_wrapper, option, default,
+                                deprecate=deprecate)
 
     def gettemplate(self,
                     option: str,
-                    default: Union[SentinelClass, _T] = SENTINEL
+                    default: Union[SentinelClass, _T] = SENTINEL,
+                    deprecate: bool = False
                     ) -> Union[JinjaTemplate, _T]:
         try:
             template: TemplateFactory
@@ -322,7 +347,8 @@ class ConfigHelper:
             val = self.config.get(sec, opt)
             return template.create_template(val)
 
-        return self._get_option(gettemplate_wrapper, option, default)
+        return self._get_option(gettemplate_wrapper, option, default,
+                                deprecate=deprecate)
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
