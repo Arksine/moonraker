@@ -486,6 +486,8 @@ address: 192.168.1.123
 The following options are available for `tasmota` device types:
 
 ```ini
+# moonraker.conf
+#
 #   Note:
 #   If your single-relay Tasmota device switches on/off successfully,
 #   but fails to report its state, ensure that 'SetOption26' is set in
@@ -521,6 +523,8 @@ password: mypassword
 The following options are available for `shelly` device types:
 
 ```ini
+# moonraker.conf
+
 address:
 #   A valid ip address or hostname for the shelly device.  This parameter
 #   must be provided.
@@ -622,6 +626,8 @@ domain: switch
 The following options are available for `loxone` device types:
 
 ```ini
+# moonraker.conf
+
 address:
 #   A valid ip address or hostname for the Loxone server.  This
 #   parameter must be provided.
@@ -640,6 +646,8 @@ output_id:
 The following options are available for `mqtt` device types:
 
 ```ini
+# moonraker.conf
+
 qos:
 #  The MQTT QOS level to use when publishing and subscribing to topics.
 #  The default is to use the setting supplied in the [mqtt] section.
@@ -964,6 +972,8 @@ It is also possible for other components within Moonraker to use MQTT to
 publish and subscribe to topics.
 
 ```ini
+# moonraker.conf
+
 [mqtt]
 address:
 #   Address of the Broker.  This may be a hostname or IP Address.  This
@@ -1040,6 +1050,8 @@ It is possible to publish a topic from a Klipper gcode macro with the
 `publish_mqtt_topic` remote method.  For example:
 
 ```ini
+# printer.cfg
+
 [gcode_macro PUBLISH_ALERT]
 gcode:
   {% set data = params.PAYLOAD|default(None) %}
