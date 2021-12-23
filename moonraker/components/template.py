@@ -18,14 +18,17 @@ from typing import (
 if TYPE_CHECKING:
     from moonraker import Server
     from confighelper import ConfigHelper
+    from .secrets import Secrets
 
 class TemplateFactory:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        secrets: Secrets = self.server.load_component(config, 'secrets')
         self.jenv = jinja2.Environment('{%', '%}', '{', '}')
         self.jenv.add_extension("jinja2.ext.do")
         self.jenv.filters['fromjson'] = json.loads
         self.add_environment_global('raise_error', self._raise_error)
+        self.add_environment_global('secrets', secrets)
 
     def add_environment_global(self, name: str, value: Any):
         if name in self.jenv.globals:
