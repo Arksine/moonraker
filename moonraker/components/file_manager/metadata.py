@@ -182,7 +182,74 @@ class BaseSlicer(object):
         return None
 
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
-        return None
+        for data in [self.header_data, self.footer_data]:
+            thumb_matches: List[str] = re.findall(
+                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
+            if thumb_matches:
+                break
+        else:
+            return None
+        thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
+        if not os.path.exists(thumb_dir):
+            try:
+                os.mkdir(thumb_dir)
+            except Exception:
+                log_to_stderr(f"Unable to create thumb dir: {thumb_dir}")
+                return None
+        thumb_base = os.path.splitext(os.path.basename(self.path))[0]
+        parsed_matches: List[Dict[str, Any]] = []
+        has_miniature: bool = False
+        for match in thumb_matches:
+            lines = re.split(r"\r?\n", match.replace('; ', ''))
+            info = _regex_find_ints(r".*", lines[0])
+            data = "".join(lines[1:-1])
+            if len(info) != 3:
+                log_to_stderr(
+                    f"MetadataError: Error parsing thumbnail"
+                    f" header: {lines[0]}")
+                continue
+            if len(data) != info[2]:
+                log_to_stderr(
+                    f"MetadataError: Thumbnail Size Mismatch: "
+                    f"detected {info[2]}, actual {len(data)}")
+                continue
+            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
+            thumb_path = os.path.join(thumb_dir, thumb_name)
+            rel_thumb_path = os.path.join(".thumbs", thumb_name)
+            with open(thumb_path, "wb") as f:
+                f.write(base64.b64decode(data.encode()))
+            parsed_matches.append({
+                'width': info[0], 'height': info[1],
+                'size': os.path.getsize(thumb_path),
+                'relative_path': rel_thumb_path})
+            if info[0] == 32 and info[1] == 32:
+                has_miniature = True
+        if len(parsed_matches) > 0 and not has_miniature:
+            # find the largest thumb index
+            largest_match = parsed_matches[0]
+            for item in parsed_matches:
+                if item['size'] > largest_match['size']:
+                    largest_match = item
+            # Create miniature thumbnail if one does not exist
+            thumb_full_name = largest_match['relative_path'].split("/")[-1]
+            thumb_path = os.path.join(thumb_dir, f"{thumb_full_name}")
+            rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
+            thumb_path_small = os.path.join(
+                thumb_dir, f"{thumb_base}-32x32.png")
+            # read file
+            try:
+                with Image.open(thumb_path) as im:
+                    # Create 32x32 thumbnail
+                    im.thumbnail((32, 32))
+                    im.save(thumb_path_small, format="PNG")
+                    parsed_matches.insert(0, {
+                        'width': im.width, 'height': im.height,
+                        'size': os.path.getsize(thumb_path_small),
+                        'relative_path': rel_path_small
+                    })
+            except Exception as e:
+                log_to_stderr(str(e))
+        return parsed_matches
 
     def parse_layer_count(self) -> Optional[int]:
         return None
@@ -204,6 +271,9 @@ class UnknownSlicer(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
+    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
+        return None
 
 class PrusaSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
@@ -281,76 +351,6 @@ class PrusaSlicer(BaseSlicer):
             return None
         return round(total_time, 2)
 
-    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
-        for data in [self.header_data, self.footer_data]:
-            thumb_matches: List[str] = re.findall(
-                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
-            if thumb_matches:
-                break
-        else:
-            return None
-        thumb_dir = os.path.join(os.path.dirname(self.path), ".thumbs")
-        if not os.path.exists(thumb_dir):
-            try:
-                os.mkdir(thumb_dir)
-            except Exception:
-                log_to_stderr(f"Unable to create thumb dir: {thumb_dir}")
-                return None
-        thumb_base = os.path.splitext(os.path.basename(self.path))[0]
-        parsed_matches: List[Dict[str, Any]] = []
-        has_miniature: bool = False
-        for match in thumb_matches:
-            lines = re.split(r"\r?\n", match.replace('; ', ''))
-            info = _regex_find_ints(r".*", lines[0])
-            data = "".join(lines[1:-1])
-            if len(info) != 3:
-                log_to_stderr(
-                    f"MetadataError: Error parsing thumbnail"
-                    f" header: {lines[0]}")
-                continue
-            if len(data) != info[2]:
-                log_to_stderr(
-                    f"MetadataError: Thumbnail Size Mismatch: "
-                    f"detected {info[2]}, actual {len(data)}")
-                continue
-            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
-            thumb_path = os.path.join(thumb_dir, thumb_name)
-            rel_thumb_path = os.path.join(".thumbs", thumb_name)
-            with open(thumb_path, "wb") as f:
-                f.write(base64.b64decode(data.encode()))
-            parsed_matches.append({
-                'width': info[0], 'height': info[1],
-                'size': os.path.getsize(thumb_path),
-                'relative_path': rel_thumb_path})
-            if info[0] == 32 and info[1] == 32:
-                has_miniature = True
-        if len(parsed_matches) > 0 and not has_miniature:
-            # find the largest thumb index
-            largest_match = parsed_matches[0]
-            for item in parsed_matches:
-                if item['size'] > largest_match['size']:
-                    largest_match = item
-            # Create miniature thumbnail if one does not exist
-            thumb_full_name = largest_match['relative_path'].split("/")[-1]
-            thumb_path = os.path.join(thumb_dir, f"{thumb_full_name}")
-            rel_path_small = os.path.join(".thumbs", f"{thumb_base}-32x32.png")
-            thumb_path_small = os.path.join(
-                thumb_dir, f"{thumb_base}-32x32.png")
-            # read file
-            try:
-                with Image.open(thumb_path) as im:
-                    # Create 32x32 thumbnail
-                    im.thumbnail((32, 32))
-                    im.save(thumb_path_small, format="PNG")
-                    parsed_matches.insert(0, {
-                        'width': im.width, 'height': im.height,
-                        'size': os.path.getsize(thumb_path_small),
-                        'relative_path': rel_path_small
-                    })
-            except Exception as e:
-                log_to_stderr(str(e))
-        return parsed_matches
-
     def parse_first_layer_extr_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"; first_layer_temperature = (\d+\.?\d*)", self.footer_data)
@@ -410,7 +410,7 @@ class Slic3r(Slic3rPE):
     def parse_estimated_time(self) -> Optional[float]:
         return None
 
-class Cura(PrusaSlicer):
+class Cura(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"Cura_SteamEngine\s(.*)", data)
         if match:
@@ -613,7 +613,7 @@ class KISSlicer(BaseSlicer):
             r"; bed_C = (\d+\.?\d*)", self.header_data)
 
 
-class IdeaMaker(PrusaSlicer):
+class IdeaMaker(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"\sideaMaker\s(.*),", data)
         if match:
