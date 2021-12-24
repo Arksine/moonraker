@@ -2,6 +2,11 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### December 24th 2021
+- The `password_file` option in the `[mqtt]` section has been deprecated.
+  Use the `password` option instead.  This option may be a template, thus
+  can resolve secrets stored in the `[secrets]` module.
+
 ### November 7th 2021
 - Previously all core components received configuration through
   the `[server]` config section.  As Moonraker's core functionality

@@ -529,10 +529,12 @@ address:
 #   A valid ip address or hostname for the shelly device.  This parameter
 #   must be provided.
 user:
-#   A user name to use for request authentication.  If no password is set
-#   the the default is no user, otherwise the default is "admin".
+#   A user name to use for request authentication.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.  If no password
+#   is set the the default is no user, otherwise the default is "admin".
 password:
-#   The password to use for request authentication.  The default is no
+#   The password to use for request authentication.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. The default is no
 #   password.
 output_id:
 #   The output_id (or relay id) to use if the Shelly device supports
@@ -574,9 +576,13 @@ device:
 #   "ID" in the "advanced information" section.  This parameter must be
 #   provided.
 user:
-#   The user name for request authentication.  This default is "admin".
+#   The user name for request authentication.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.  This
+#   default is "admin".
 password:
-#   The password for request authentication.  The default is no password.
+#   The password for request authentication.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. The
+#   default is no password.
 #
 ```
 
@@ -597,7 +603,9 @@ port:
 device:
 #   The device ID of the switch to control. This parameter must be provided.
 token:
-#   A token used for request authorization.  This paramter must be provided.
+#   A token used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. This paramter
+#   must be provided.
 domain:
 #   The class of device managed by Home Assistant. Default is "switch".
 status_delay: 1.0
@@ -632,9 +640,13 @@ address:
 #   A valid ip address or hostname for the Loxone server.  This
 #   parameter must be provided.
 user:
-#  The user name used for request authorization.  The default is "admin".
+#   The user name used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. The default is
+#   "admin".
 password:
-#  The password used for request authorization.  The default is "admin".
+#   The password used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. The default
+#   is "admin".
 output_id:
 #   The name of a programmed output, virtual input or virtual
 #   output in the loxone configuration.  The default is no output id.
@@ -981,9 +993,15 @@ address:
 port:
 #   Port the Broker is listening on.  Default is 1883.
 username:
-#   An optional username used to log in to the Broker.  Default is no
-#   username (an anonymous login will be attempted)
+#   An optional username used to log in to the Broker.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. The default is
+#   no username (an anonymous login will be attempted).
+password:
+#   An optional password used to log in to the Broker.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.  The default is
+#   no password.
 password_file:
+#   *** DEPRECATED - Use the "password" option ***
 #   An optional path to a text file containing a password used to log in
 #   to the broker.  It is strongly recommended that this file be located
 #   in a folder not served by Moonraker.  It is also recommended that the
@@ -1175,6 +1193,96 @@ easily detect and use Moonraker instances.
 [zeroconf]
 ```
 
+### `[secrets]`
+
+Retreives credentials and other information from a "secrets" file
+separate from `moonraker.conf`.  This allows users to safely distribute
+their configuration and log files without revealing credentials and
+other sensitive information.
+
+```ini
+# moonraker.conf
+
+[secrets]
+secrets_path:
+#   A valid path to the "secrets" file.  A secrets file should either be
+#   in "ini" format (ie: the same format as moonraker.conf) or "json"
+#   format.  If the file is a "json" file, the top level item must be
+#   an Object.  When this parameter is not specified no file will be
+#   loaded.
+```
+
+!!! Warning
+    For maximum security the secrets file should be located in a folder
+    not served by Moonraker.
+
+Example ini file:
+
+```ini
+# moonraker_secrets.ini
+
+[mqtt_credentials]
+username: mqtt_user
+password: my_mqtt_password
+
+[home_assistant]
+token: long_token_string
+
+```
+
+Example json file:
+
+```json
+{
+    "mqtt_credentials": {
+        "username": "mqtt_user",
+        "password": "my_mqtt_password"
+    },
+    "home_assistant" {
+      "token": "long_token_string"
+    }
+}
+```
+
+!!! Tip
+    Generally speaking `ini` files are easier to manually edit.  However,
+    options are limited to string values without parsing and converting.
+    The strength of `json` is that a field may be an integer, string,
+    float, boolean, array, or object.
+
+#### Accessing secret credentials
+
+The `secrets` object is added to Moonraker's Jinja2 environment as a
+global, thus it is available in all templates. All options in
+Moonraker's configuration that accept credentials support templates.
+
+MQTT configuration example with secret credentaials:
+
+```ini
+[mqtt]
+address: mqtt-broker.local
+port: 1883
+# The username and password options below may be templates that
+# we can use to resolve stored secrets
+username: {secrets.mqtt_credentials.username}
+password: {secrets.mqtt_credentials.password}
+enable_moonraker_api: True
+```
+
+Home Assistant Switch Example:
+
+```ini
+# moonraker.conf
+
+[power homeassistant_switch]
+type: homeassistant
+address: home-assistant-host.local
+port: 8123
+device: switch.1234567890abcdefghij
+# The token option may be a template
+token: {secrets.home_assistant.token}
+domain: switch
+```
 
 ## Jinja2 Templates
 
