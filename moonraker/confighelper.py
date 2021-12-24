@@ -350,6 +350,18 @@ class ConfigHelper:
         return self._get_option(gettemplate_wrapper, option, default,
                                 deprecate=deprecate)
 
+    def load_template(self,
+                      option: str,
+                      default: Union[SentinelClass, str] = SENTINEL,
+                      deprecate: bool = False
+                      ) -> JinjaTemplate:
+        val = self.gettemplate(option, default, deprecate)
+        if isinstance(val, str):
+            template: TemplateFactory
+            template = self.server.lookup_component('template')
+            return template.create_template(val)
+        return val
+
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
         if not os.path.isfile(cfg_file_path):
