@@ -143,8 +143,12 @@ class MQTTClient(APITransport, Subscribable):
         self.event_loop = self.server.get_event_loop()
         self.address: str = config.get('address')
         self.port: int = config.getint('port', 1883)
-        self.user_name = config.get('username', None)
-        pw_file_path = config.get('password_file', None)
+        user = config.gettemplate('username', None)
+        self.user_name: Optional[str] = None
+        if user:
+            self.user_name = user.render()
+        pw_file_path = config.get('password_file', None, deprecate=True)
+        pw_template = config.gettemplate('password', None)
         self.password: Optional[str] = None
         if pw_file_path is not None:
             pw_file = pathlib.Path(pw_file_path).expanduser().absolute()
@@ -152,6 +156,8 @@ class MQTTClient(APITransport, Subscribable):
                 raise config.error(
                     f"Password file '{pw_file}' does not exist")
             self.password = pw_file.read_text().strip()
+        if pw_template is not None:
+            self.password = pw_template.render()
         protocol = config.get('mqtt_protocol', "v3.1.1")
         self.protocol = MQTT_PROTOCOLS.get(protocol, None)
         if self.protocol is None:
