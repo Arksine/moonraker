@@ -386,8 +386,9 @@ class HTTPDevice(PowerDevice):
         self.request_mutex = asyncio.Lock()
         self.addr: str = config.get("address")
         self.port = config.getint("port", default_port)
-        self.user = config.get("user", default_user)
-        self.password = config.get("password", default_password)
+        self.user = config.load_template("user", default_user).render()
+        self.password = config.load_template(
+            "password", default_password).render()
         self.protocol = config.get("protocol", default_protocol)
 
     async def initialize(self) -> None:
@@ -781,7 +782,7 @@ class HomeAssistant(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config, default_port=8123)
         self.device: str = config.get("device")
-        self.token: str = config.get("token")
+        self.token: str = config.gettemplate("token").render()
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
 
@@ -878,10 +879,8 @@ class MQTTDevice(PowerDevice):
 
         self.state_topic: str = config.get('state_topic')
         self.state_timeout = config.getfloat('state_timeout', 2.)
-        template: TemplateFactory = self.server.lookup_component('template')
-        default_state_response = template.create_template("{payload}")
-        self.state_response = config.gettemplate('state_response_template',
-                                                 default_state_response)
+        self.state_response = config.load_template('state_response_template',
+                                                   "{payload}")
         self.qos: Optional[int] = config.getint('qos', None, minval=0, maxval=2)
         self.mqtt.subscribe_topic(
             self.state_topic, self._on_state_update, self.qos)
