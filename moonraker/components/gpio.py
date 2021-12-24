@@ -11,8 +11,7 @@ from utils import load_system_module
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Tuple,
+    Dict
 )
 
 if TYPE_CHECKING:
@@ -39,18 +38,18 @@ class GpioFactory:
                        initial_value: int = 0
                        ) -> GpioOutputPin:
         initial_value = int(not not initial_value)
-        pin_id, chip_id, invert = self._parse_pin(pin_name)
-        full_name = f"{pin_id}:{chip_id}"
+        pparams = self._parse_pin(pin_name)
+        full_name = pparams['full_name']
         if full_name in self.reserved_gpios:
             raise self.server.error(f"GPIO {full_name} already reserved")
         try:
-            chip = self._get_gpio_chip(chip_id)
-            line = chip.get_line(pin_id)
+            chip = self._get_gpio_chip(pparams['chip_id'])
+            line = chip.get_line(pparams['pin_id'])
             args: Dict[str, Any] = {
                 'consumer': "moonraker",
                 'type': self.gpiod.LINE_REQ_DIR_OUT
             }
-            if invert:
+            if pparams['invert']:
                 args['flags'] = self.gpiod.LINE_REQ_FLAG_ACTIVE_LOW
             if self.gpiod_version < (1, 3):
                 args['default_vals'] = [initial_value]
@@ -59,20 +58,22 @@ class GpioFactory:
             line.request(**args)
         except Exception:
             logging.exception(
-                f"Unable to init {pin_id}.  Make sure the gpio is not in "
+                f"Unable to init {full_name}.  Make sure the gpio is not in "
                 "use by another program or exported by sysfs.")
             raise
-        gpio_out = GpioOutputPin(pin_name, full_name, line, invert,
-                                 initial_value)
+        gpio_out = GpioOutputPin(line, pparams, initial_value)
         self.reserved_gpios[full_name] = gpio_out
         return gpio_out
 
-    def _parse_pin(self, pin_name: str) -> Tuple[int, str, bool]:
+    def _parse_pin(self, pin_name: str) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            'orig': pin_name,
+            'invert': False,
+        }
         pin = pin_name
-        invert = False
         if pin[0] == "!":
             pin = pin[1:]
-            invert = True
+            params['invert'] = True
         chip_id: str = "gpiochip0"
         pin_parts = pin.split("/")
         if len(pin_parts) == 2:
@@ -87,26 +88,27 @@ class GpioFactory:
             raise self.server.error(
                 f"Invalid Gpio Pin: {pin_name}")
         pin_id = int(pin[4:])
-        return pin_id, chip_id, invert
+        params['pin_id'] = pin_id
+        params['chip_id'] = chip_id
+        params['full_name'] = f"{chip_id}:{pin}"
+        return params
 
     def close(self) -> None:
-        for output_pin in self.reserved_gpios.values():
-            output_pin.release()
+        for line in self.reserved_gpios.values():
+            line.release()
         for chip in self.chips.values():
             chip.close()
 
 class GpioOutputPin:
     def __init__(self,
-                 orig_name: str,
-                 name: str,
                  line: Any,
-                 inverted: bool,
+                 pin_params: Dict[str, Any],
                  initial_val: int
                  ) -> None:
-        self.orig = orig_name
-        self.name = name
+        self.orig = pin_params['orig']
+        self.name = pin_params['full_name']
         self.line = line
-        self.inverted = inverted
+        self.inverted = pin_params['invert']
         self.value = initial_val
         self.release = line.release
 
