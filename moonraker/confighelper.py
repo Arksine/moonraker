@@ -333,6 +333,7 @@ class ConfigHelper:
     def gettemplate(self,
                     option: str,
                     default: Union[SentinelClass, _T] = SENTINEL,
+                    is_async: bool = False,
                     deprecate: bool = False
                     ) -> Union[JinjaTemplate, _T]:
         try:
@@ -345,7 +346,7 @@ class ConfigHelper:
 
         def gettemplate_wrapper(sec: str, opt: str) -> JinjaTemplate:
             val = self.config.get(sec, opt)
-            return template.create_template(val)
+            return template.create_template(val.strip(), is_async)
 
         return self._get_option(gettemplate_wrapper, option, default,
                                 deprecate=deprecate)
@@ -353,13 +354,14 @@ class ConfigHelper:
     def load_template(self,
                       option: str,
                       default: Union[SentinelClass, str] = SENTINEL,
+                      is_async: bool = False,
                       deprecate: bool = False
                       ) -> JinjaTemplate:
-        val = self.gettemplate(option, default, deprecate)
+        val = self.gettemplate(option, default, is_async, deprecate)
         if isinstance(val, str):
             template: TemplateFactory
             template = self.server.lookup_component('template')
-            return template.create_template(val)
+            return template.create_template(val.strip(), is_async)
         return val
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
