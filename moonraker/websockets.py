@@ -27,8 +27,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from moonraker import Server
-    from eventloop import EventLoop
-    from app import APIDefinition, MoonrakerApp
+    from app import APIDefinition
     import components.authorization
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
@@ -381,10 +380,9 @@ class WebsocketManager(APITransport):
 
 class WebSocket(WebSocketHandler, Subscribable):
     def initialize(self) -> None:
-        app: MoonrakerApp = self.settings['parent']
-        self.server = app.get_server()
+        self.server: Server = self.settings['server']
         self.event_loop = self.server.get_event_loop()
-        self.wsm = app.get_websocket_manager()
+        self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.rpc = self.wsm.rpc
         self.uid = id(self)
         self.is_closed: bool = False

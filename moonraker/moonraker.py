@@ -32,14 +32,13 @@ from typing import (
     Optional,
     Callable,
     Coroutine,
-    Tuple,
     Dict,
     List,
     Union,
     TypeVar,
 )
 if TYPE_CHECKING:
-    from websockets import WebRequest, Subscribable
+    from websockets import WebRequest, Subscribable, WebsocketManager
     from components.data_store import DataStore
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
@@ -110,6 +109,7 @@ class Server:
         self.klippy_state: str = "disconnected"
         self.klippy_disconnect_evt: Optional[asyncio.Event] = None
         self.connection_init_lock: asyncio.Lock = asyncio.Lock()
+        self.components: Dict[str, Any] = {}
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
         self.failed_components: List[str] = []
         self.warnings: List[str] = []
@@ -120,7 +120,6 @@ class Server:
         self.register_endpoint = app.register_local_handler
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
-        self.get_websocket_manager = app.get_websocket_manager
         self.register_api_transport = app.register_api_transport
 
         self.register_endpoint(
@@ -150,7 +149,6 @@ class Server:
             need_klippy_reg=False)
 
         # Component initialization
-        self.components: Dict[str, Any] = {}
         self._load_components(config)
         self.klippy_apis: KlippyAPI = self.lookup_component('klippy_apis')
         config.validate_config()
@@ -275,11 +273,17 @@ class Server:
         if component_name not in self.failed_components:
             self.failed_components.append(component_name)
 
+    def register_component(self, component_name: str, component: Any) -> None:
+        if component_name in self.components:
+            raise self.error(
+                f"Component '{component_name}' already registered")
+        self.components[component_name] = component
+
     def register_notification(self,
                               event_name: str,
                               notify_name: Optional[str] = None
                               ) -> None:
-        wsm = self.get_websocket_manager()
+        wsm: WebsocketManager = self.lookup_component("websockets")
         wsm.register_notification(event_name, notify_name)
 
     def register_event_handler(self,
@@ -682,6 +686,7 @@ class Server:
         reg_dirs = []
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
+        wsm: WebsocketManager = self.lookup_component('websockets')
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_state,
@@ -689,7 +694,7 @@ class Server:
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,
             'warnings': self.warnings,
-            'websocket_count': self.get_websocket_manager().get_count(),
+            'websocket_count': wsm.get_count(),
             'moonraker_version': self.app_args['software_version']
         }
 

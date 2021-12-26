@@ -24,7 +24,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from websockets import WebRequest, WebsocketManager
     from . import shell_command
     from .machine import Machine
 
@@ -95,7 +95,8 @@ class ProcStats:
             ts = await self._check_throttled_state()
         cpu_temp = await self.event_loop.run_in_thread(
             self._get_cpu_temperature)
-        websocket_count = self.server.get_websocket_manager().get_count()
+        wsm: WebsocketManager = self.server.lookup_component("websockets")
+        websocket_count = wsm.get_count()
         return {
             'moonraker_stats': list(self.proc_stat_queue),
             'throttled_state': ts,
@@ -140,7 +141,8 @@ class ProcStats:
             'mem_units': mem_units
         }
         self.proc_stat_queue.append(result)
-        websocket_count = self.server.get_websocket_manager().get_count()
+        wsm: WebsocketManager = self.server.lookup_component("websockets")
+        websocket_count = wsm.get_count()
         self.server.send_event("proc_stats:proc_stat_update", {
             'moonraker_stats': result,
             'cpu_temp': cpu_temp,

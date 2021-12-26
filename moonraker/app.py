@@ -192,7 +192,7 @@ class MoonrakerApp:
             'serve_traceback': self.debug,
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
-            'parent': self,
+            'server': self.server,
             'default_handler_class': AuthorizedErrorHandler,
             'default_handler_args': {},
             'log_function': self.log_request
@@ -215,6 +215,12 @@ class MoonrakerApp:
         self.register_static_file_handler(
             "klippy.log", DEFAULT_KLIPPY_LOG_PATH, force=True)
         self.register_upload_handler("/server/files/upload")
+
+        # Register Server Components
+        self.server.register_component("application", self)
+        self.server.register_component("websockets", self.wsm)
+        self.server.register_component("internal_transport",
+                                       self.internal_transport)
 
     def _get_path_option(self, config: ConfigHelper, option: str) -> str:
         path: Optional[str] = config.get(option, None)
@@ -264,12 +270,6 @@ class MoonrakerApp:
 
     def get_server(self) -> Server:
         return self.server
-
-    def get_websocket_manager(self) -> WebsocketManager:
-        return self.wsm
-
-    def get_internal_transport(self) -> InternalTransport:
-        return self.internal_transport
 
     async def close(self) -> None:
         if self.http_server is not None:
@@ -412,13 +412,13 @@ class MoonrakerApp:
 
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
-        self.server: Server = self.settings['parent'].get_server()
+        self.server: Server = self.settings['server']
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
         # it is necessary to look up the parent app here,
         # as initialize() may not yet be called
-        server: Server = self.settings['parent'].get_server()
+        server: Server = self.settings['server']
         auth: AuthComp = server.lookup_component('authorization', None)
         self.cors_enabled = False
         if auth is not None:
@@ -448,8 +448,8 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             except Exception:
                 pass
             else:
-                parent: MoonrakerApp = self.settings['parent']
-                wsm: WebsocketManager = parent.get_websocket_manager()
+                wsm: WebsocketManager = self.server.lookup_component(
+                    "websockets")
                 conn = wsm.get_websocket(conn_id)
         return conn
 
@@ -468,13 +468,13 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
                    default_filename: Optional[str] = None
                    ) -> None:
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
-        self.server: Server = self.settings['parent'].get_server()
+        self.server: Server = self.settings['server']
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
         # it is necessary to look up the parent app here,
         # as initialize() may not yet be called
-        server: Server = self.settings['parent'].get_server()
+        server: Server = self.settings['server']
         auth: AuthComp = server.lookup_component('authorization', None)
         self.cors_enabled = False
         if auth is not None:
