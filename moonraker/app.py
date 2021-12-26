@@ -17,12 +17,12 @@ import tornado.iostream
 import tornado.httputil
 import tornado.web
 from inspect import isclass
-from tornado.escape import json_encode, url_unescape, url_escape
+from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
 from utils import ServerError
-from websockets import WebRequest, WebsocketManager, WebSocket
+from websockets import WebRequest, WebsocketManager, WebSocket, APITransport
 from streaming_form_data import StreamingFormDataParser
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -36,6 +36,7 @@ from typing import (
     Union,
     Dict,
     List,
+    Tuple,
     AsyncGenerator,
 )
 if TYPE_CHECKING:
@@ -43,7 +44,6 @@ if TYPE_CHECKING:
     from moonraker import Server
     from eventloop import EventLoop
     from confighelper import ConfigHelper
-    from websockets import APITransport
     from components.file_manager.file_manager import FileManager
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
@@ -62,7 +62,7 @@ MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
-ALL_TRANSPORTS = ["http", "websocket", "mqtt"]
+ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application: MoonrakerApp) -> None:
@@ -123,6 +123,42 @@ class APIDefinition:
         self.callback = callback
         self.need_object_parser = need_object_parser
 
+class InternalTransport(APITransport):
+    def __init__(self, server: Server) -> None:
+        self.server = server
+        self.callbacks: Dict[str, Tuple[str, str, APICallback]] = {}
+
+    def register_api_handler(self, api_def: APIDefinition) -> None:
+        ep = api_def.endpoint
+        cb = api_def.callback
+        if cb is None:
+            # Request to Klippy
+            method = api_def.jrpc_methods[0]
+            action = ""
+            cb = self.server.make_request
+            self.callbacks[method] = (ep, action, cb)
+        else:
+            for method, action in \
+                    zip(api_def.jrpc_methods, api_def.request_methods):
+                self.callbacks[method] = (ep, action, cb)
+
+    def remove_api_handler(self, api_def: APIDefinition) -> None:
+        for method in api_def.jrpc_methods:
+            self.callbacks.pop(method, None)
+
+    async def call_method(self,
+                          method_name: str,
+                          request_arguments: Dict[str, Any] = {},
+                          **kwargs
+                          ) -> Any:
+        if method_name not in self.callbacks:
+            raise self.server.error(f"No method {method_name} available")
+        ep, action, func = self.callbacks[method_name]
+        # Request arguments can be suppplied either through a dict object
+        # or via keyword arugments
+        args = request_arguments or kwargs
+        return await func(WebRequest(ep, args, action))
+
 class MoonrakerApp:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -141,8 +177,10 @@ class MoonrakerApp:
 
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
+        self.internal_transport = InternalTransport(self.server)
         self.api_transports: Dict[str, APITransport] = {
-            "websocket": self.wsm
+            "websocket": self.wsm,
+            "internal": self.internal_transport
         }
 
         mimetypes.add_type('text/plain', '.log')
@@ -229,6 +267,9 @@ class MoonrakerApp:
 
     def get_websocket_manager(self) -> WebsocketManager:
         return self.wsm
+
+    def get_internal_transport(self) -> InternalTransport:
+        return self.internal_transport
 
     async def close(self) -> None:
         if self.http_server is not None:
