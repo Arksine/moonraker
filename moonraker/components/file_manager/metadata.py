@@ -254,6 +254,9 @@ class BaseSlicer(object):
     def parse_layer_count(self) -> Optional[int]:
         return None
 
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return None
+
 class UnknownSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         return {'slicer': "Unknown"}
@@ -359,6 +362,10 @@ class PrusaSlicer(BaseSlicer):
         return _regex_find_first(
             r"; first_layer_bed_temperature = (\d+\.?\d*)", self.footer_data)
 
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\snozzle_diameter\s=\s(\d+\.\d*)", self.footer_data)
+
     def parse_layer_count(self) -> Optional[int]:
         match = re.search(r"; total layers count = (\d+)", self.footer_data)
         val: Optional[int] = None
@@ -456,6 +463,10 @@ class Cura(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return _regex_find_first(
+            r";Nozzle\sdiameter\s=\s(\d+\.\d*)", self.header_data)
 
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         # Attempt to parse thumbnails from file metadata
@@ -562,6 +573,10 @@ class Simplify3D(BaseSlicer):
 
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return self._get_first_layer_temp("Heated Bed")
+
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\s+extruderDiameter,(\d+\.\d*)", self.header_data)
 
 class KISSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, Any]]:
@@ -683,6 +698,10 @@ class IdeaMaker(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return _regex_find_first(
+            r";Nozzle\sdiameter\s=\s(\d+\.\d*)", self.header_data)
+
 class IceSL(BaseSlicer):
     def check_identity(self, data) -> Optional[Dict[str, Any]]:
         match = re.search(r"; <IceSL.*>", data)
@@ -720,10 +739,19 @@ SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
     KISSlicer, IdeaMaker, IceSL
 ]
 SUPPORTED_DATA = [
-    'layer_height', 'first_layer_height', 'object_height',
-    'filament_total', 'filament_weight_total', 'estimated_time',
-    'thumbnails', 'first_layer_bed_temp', 'first_layer_extr_temp',
-    'gcode_start_byte', 'gcode_end_byte', 'layer_count']
+    'gcode_start_byte',
+    'gcode_end_byte',
+    'layer_count',
+    'object_height',
+    'estimated_time',
+    'nozzle_diameter',
+    'layer_height',
+    'first_layer_height',
+    'first_layer_extr_temp',
+    'first_layer_bed_temp',
+    'filament_total',
+    'filament_weight_total',
+    'thumbnails']
 
 def process_objects(file_path: str) -> None:
     fname = os.path.basename(file_path)
