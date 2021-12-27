@@ -26,6 +26,7 @@ from typing import (
     Dict,
     List,
     Type,
+    Union
 )
 if TYPE_CHECKING:
     pass
@@ -82,6 +83,12 @@ def _regex_find_first(pattern: str, data: str) -> Optional[float]:
         except Exception:
             return None
     return val
+
+def _regex_find_string(pattern: str, data: str) -> Optional[str]:
+    match = re.search(pattern, data)
+    if match:
+        return match.group(1)
+    return None
 
 # Slicer parsing implementations
 class BaseSlicer(object):
@@ -170,6 +177,9 @@ class BaseSlicer(object):
         return None
 
     def parse_filament_weight_total(self) -> Optional[float]:
+        return None
+
+    def parse_filament_type(self) -> Optional[str]:
         return None
 
     def parse_estimated_time(self) -> Optional[float]:
@@ -336,6 +346,10 @@ class PrusaSlicer(BaseSlicer):
         return _regex_find_first(
             r"total\sfilament\sused\s\[g\]\s=\s(\d+\.\d*)", self.footer_data)
 
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\sfilament_type\s=\s(.*)", self.footer_data)
+
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
             r';\sestimated\sprinting\stime.*', self.footer_data)
@@ -452,6 +466,10 @@ class Cura(BaseSlicer):
     def parse_filament_weight_total(self) -> Optional[float]:
         return _regex_find_first(
             r";Filament\sweight\s=\s.(\d+\.\d+).", self.header_data)
+
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Filament\stype\s=\s(.*)", self.header_data)
 
     def parse_estimated_time(self) -> Optional[float]:
         return self._parse_max_float(r";TIME:.*", self.header_data)
@@ -671,6 +689,10 @@ class IdeaMaker(BaseSlicer):
             return sum(filament)
         return None
 
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Filament\stype\s=\s(.*)", self.header_data)
+
     def parse_filament_weight_total(self) -> Optional[float]:
         pi = 3.141592653589793
         length = _regex_find_floats(
@@ -751,6 +773,7 @@ SUPPORTED_DATA = [
     'first_layer_bed_temp',
     'filament_total',
     'filament_weight_total',
+    'filament_type',
     'thumbnails']
 
 def process_objects(file_path: str) -> None:
