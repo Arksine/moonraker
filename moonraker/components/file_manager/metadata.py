@@ -179,6 +179,9 @@ class BaseSlicer(object):
     def parse_filament_weight_total(self) -> Optional[float]:
         return None
 
+    def parse_filament_name(self) -> Optional[str]:
+        return None
+
     def parse_filament_type(self) -> Optional[str]:
         return None
 
@@ -350,6 +353,10 @@ class PrusaSlicer(BaseSlicer):
         return _regex_find_string(
             r";\sfilament_type\s=\s(.*)", self.footer_data)
 
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\sfilament_settings_id\s=\s(.*)", self.footer_data)
+
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
             r';\sestimated\sprinting\stime.*', self.footer_data)
@@ -471,6 +478,10 @@ class Cura(BaseSlicer):
         return _regex_find_string(
             r";Filament\stype\s=\s(.*)", self.header_data)
 
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Filament\sname\s=\s(.*)", self.header_data)
+
     def parse_estimated_time(self) -> Optional[float]:
         return self._parse_max_float(r";TIME:.*", self.header_data)
 
@@ -550,6 +561,10 @@ class Simplify3D(BaseSlicer):
     def parse_filament_weight_total(self) -> Optional[float]:
         return _regex_find_first(
             r";\s+Plastic\sweight:\s(\d+\.?\d*)\sg", self.footer_data)
+
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\s+printMaterial,(.*)", self.header_data)
 
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
@@ -693,6 +708,10 @@ class IdeaMaker(BaseSlicer):
         return _regex_find_string(
             r";Filament\stype\s=\s(.*)", self.header_data)
 
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Filament\sname\s=\s(.*)", self.header_data)
+
     def parse_filament_weight_total(self) -> Optional[float]:
         pi = 3.141592653589793
         length = _regex_find_floats(
@@ -771,9 +790,10 @@ SUPPORTED_DATA = [
     'first_layer_height',
     'first_layer_extr_temp',
     'first_layer_bed_temp',
+    'filament_name',
+    'filament_type',
     'filament_total',
     'filament_weight_total',
-    'filament_type',
     'thumbnails']
 
 def process_objects(file_path: str) -> None:
