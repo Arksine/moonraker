@@ -1196,7 +1196,7 @@ easily detect and use Moonraker instances.
 
 ### `[secrets]`
 
-Retreives credentials and other information from a "secrets" file
+Retrieves credentials and other information from a "secrets" file
 separate from `moonraker.conf`.  This allows users to safely distribute
 their configuration and log files without revealing credentials and
 other sensitive information.

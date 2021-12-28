@@ -1509,7 +1509,7 @@ Returns: Information about the copied file or directory
 ```
 
 #### File download
-Retreives file `filename` at root `root`.  The `filename` must include
+Retrieves file `filename` at root `root`.  The `filename` must include
 the relative path if it is not in the root folder.
 
 HTTP request:
@@ -1963,7 +1963,7 @@ An object containing an array of namespaces in the following format:
 ```
 
 #### Get Database Item
-Retreives an item from a specified namespace. The `key` argument may be
+Retrieves an item from a specified namespace. The `key` argument may be
 omitted, in which case an object representing the entire namespace will
 be returned in the `value` field.  If the `key` is provided and does not
 exist in the database an error will be returned.
@@ -2089,7 +2089,7 @@ contain multiple references to the same job.
 
 #### Retrieve the job queue status
 
-Retreives the current state of the job queue
+Retrieves the current state of the job queue
 
 HTTP request:
 ```http
@@ -2396,7 +2396,7 @@ The following endpoints are available when the `[update_manager]` component has
 been configured:
 
 #### Get update status
-Retreives the current state of each "package" available for update.  Typically
+Retrieves the current state of each "package" available for update.  Typically
 this will consist of information regarding `moonraker`, `klipper`, `system`
 packages, along with configured clients.  If moonraker has not yet received
 information from Klipper then its status will be omitted.  One may request that
@@ -3684,7 +3684,7 @@ process statistics:
 ```
 
 As with the [proc_stats request](#get-moonraker-process-stats) the `cpu_temp`
-field will be set to `null` if the host machine does not support retreiving CPU
+field will be set to `null` if the host machine does not support retrieving CPU
 temperatures at `/sys/class/thermal/thermal_zone0`.
 
 #### History Changed

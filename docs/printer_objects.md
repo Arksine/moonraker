@@ -4,13 +4,13 @@ As mentioned in the API documentation, it is possible to
 [subscribe](web_api.md#subscribe-to-printer-object-status)
 to "Klipper Printer Objects."  There are numerous printer objects in
 Klipper, many of which are optional and only report status if they are
-enabled by Klipper's configuration.  Client's may retreive a list of
+enabled by Klipper's configuration.  Client's may retrieve a list of
 available printer objects via the
 [list objects endpoint](web_api.md#list-available-printer-objects).  This
 should be done after Klipper reports its state as "ready".
 
 This section will provide an overview of the most useful printer objects.
-If a developer is interested in retreiving state for an object not listed here,
+If a developer is interested in retrieving state for an object not listed here,
 look in Klipper's source code for module you wish to query.  If the module
 contains a "get_status()" method, its return value will contain a dictionary
 that reports state which can be queried.
