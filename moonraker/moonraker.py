@@ -491,7 +491,7 @@ class Server:
         result = await self.klippy_apis.get_object_list(default=None)
         if result is None:
             logging.info(
-                f"Unable to retreive Klipper Object List")
+                f"Unable to retrieve Klipper Object List")
             return
         req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
         missing_objs = req_objs - set(result)
