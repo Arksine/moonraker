@@ -277,7 +277,7 @@
   /printer/extras/endstops` to `GET /printer/endstops`
 - Serveral API changes have been made to accomodate the addition of webhooks:
   - `GET /printer/klippy_info` is now `GET /printer/info`.  This endpoint no
-    longer  returns host information, as that can be retreived direct via the
+    longer  returns host information, as that can be retrieved direct via the
     `location` object in javascript.  Instead it returns CPU information.
   - `GET /printer/objects` is no longer used to accomodate multiple request
     types by modifying the "Accept" headers.  Each request has been broken

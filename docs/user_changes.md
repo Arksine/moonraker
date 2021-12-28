@@ -26,11 +26,11 @@ such as a configuration change or a reinstallation.
   if configured and disabled otherwise.
 - The API Key is now stored in the database.  This deprecates the
   `api_key_file` option in the `[authorization]` module.  Users can
-  no longer read the contents of the API Key file to retreive the
+  no longer read the contents of the API Key file to retrieve the
   API Key.  Instead, users can run `scripts/fetch-apikey.sh` to
   print the API Key.  Alternative a user can navigate to
   `http://{moonraker-host}/access/api_key` from a trusted client
-  to retreive the API Key.
+  to retrieve the API Key.
 
 ### March 10th 2021
 - The `cors_domain` option in the `[authoriztion]` section is now
