@@ -240,7 +240,7 @@ class MQTTClient(APITransport, Subscribable):
 
     async def component_init(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
-        # prior to retreiving it
+        # prior to retrieving it
         self.helper = AIOHelper(self.client)
         if self.user_name is not None:
             self.client.username_pw_set(self.user_name, self.password)
