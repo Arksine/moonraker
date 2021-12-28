@@ -674,6 +674,7 @@ command_payload:
 #      TURN_ON
 #    {% else %}
 #      TURN_OFF
+#    {% endif %}
 #  The above example would resolve to "TURN_ON" if the request is turn the
 #  the device on, and "TURN_OFF" if the request is to turn the device off.
 #  This parameter must be provided.
