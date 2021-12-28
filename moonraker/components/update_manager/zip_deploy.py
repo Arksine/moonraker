@@ -183,7 +183,7 @@ class ZipDeploy(AppDeploy):
         self.package_list = sorted(dep_info.get(
             'debian', {}).get('packages', []))
         self.python_pkg_list = sorted(dep_info.get('python', []))
-        # Retreive version info from github to check for updates and
+        # Retrieve version info from github to check for updates and
         # validate local release info
         host_repo = release_info.get('host_repo', "?")
         release_tag = release_info.get('release_tag', "?")
