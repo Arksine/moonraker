@@ -87,7 +87,7 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
 
 # Parse the git version from the command line.  This code
 # is borrowed from Klipper.
-def retreive_git_version(source_path: str) -> str:
+def retrieve_git_version(source_path: str) -> str:
     # Obtain version info from "git" program
     prog = ('git', '-C', source_path, 'describe', '--always',
             '--tags', '--long', '--dirty')
@@ -97,13 +97,13 @@ def retreive_git_version(source_path: str) -> str:
     retcode = process.wait()
     if retcode == 0:
         return ver.strip().decode()
-    raise Exception(f"Failed to retreive git version: {err.decode()}")
+    raise Exception(f"Failed to retrieve git version: {err.decode()}")
 
 def get_software_version() -> str:
     version = "?"
 
     try:
-        version = retreive_git_version(MOONRAKER_PATH)
+        version = retrieve_git_version(MOONRAKER_PATH)
     except Exception:
         vfile = pathlib.Path(os.path.join(
             MOONRAKER_PATH, "moonraker/.version"))
