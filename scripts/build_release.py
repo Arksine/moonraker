@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Set, Optional
 MOONRAKER_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(MOONRAKER_PATH, "moonraker"))
-from utils import hash_directory, retreive_git_version  # noqa:E402
+from utils import hash_directory, retrieve_git_version  # noqa:E402
 
 # Dirs and exts to ignore when calculating the repo hash
 IGNORE_DIRS = ["out", "lib", "test", "docs", "__pycache__"]
@@ -242,7 +242,7 @@ def generate_version_info(path: str,
     owner_repo = OWNER_REPOS[source_dir]
     curtime = int(time.time())
     date_str = time.strftime("%Y%m%d", time.gmtime(curtime))
-    version = retreive_git_version(path)
+    version = retrieve_git_version(path)
     if release_tag is None:
         release_tag = version.split('-')[0]
     source_hash = hash_directory(path, IGNORE_EXTS, IGNORE_DIRS)
