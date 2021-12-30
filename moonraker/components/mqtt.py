@@ -141,7 +141,7 @@ class MQTTClient(APITransport, Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.address: str = config.get('address')
+        self.address: str = config.load_template("address", "").render()
         self.port: int = config.getint('port', 1883)
         user = config.gettemplate('username', None)
         self.user_name: Optional[str] = None

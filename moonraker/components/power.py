@@ -376,6 +376,7 @@ class PowerDevice:
 class HTTPDevice(PowerDevice):
     def __init__(self,
                  config: ConfigHelper,
+                 default_addr: str = "",
                  default_port: int = -1,
                  default_user: str = "",
                  default_password: str = "",
@@ -384,7 +385,7 @@ class HTTPDevice(PowerDevice):
         super().__init__(config)
         self.client = AsyncHTTPClient()
         self.request_mutex = asyncio.Lock()
-        self.addr: str = config.get("address")
+        self.addr: str = config.load_template("address", default_addr).render()
         self.port = config.getint("port", default_port)
         self.user = config.load_template("user", default_user).render()
         self.password = config.load_template(
