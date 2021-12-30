@@ -466,6 +466,7 @@ address:
 #   to control socket index 1:
 #     192.168.1.127/1
 #   This parameter must be provided.
+#   This option accepts Jinja2 Templates, see the [secrets] section for details.
 port:
 #   The port to connect to.  Default is 9999.
 #
@@ -494,7 +495,8 @@ The following options are available for `tasmota` device types:
 #   Tasmota.
 address:
 #   A valid ip address or hostname for the tasmota device.  This parameter
-#   must be provided.
+#   must be provided. This option accepts Jinja2 Templates, see the [secrets]
+#   section for details.
 password:
 #   A password used to authenticate requests.  Default is no password.
 output_id:
@@ -527,7 +529,8 @@ The following options are available for `shelly` device types:
 
 address:
 #   A valid ip address or hostname for the shelly device.  This parameter
-#   must be provided.
+#   must be provided. This option accepts Jinja2 Templates, see the [secrets]
+#   section for details.
 user:
 #   A user name to use for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details.  If no password
@@ -567,7 +570,8 @@ The following options are available for `homeseer` device types:
 
 address:
 #   A valid ip address or hostname for the homeseer device.  This parameter
-#   must be provided.
+#   must be provided. This option accepts Jinja2 Templates, see the [secrets]
+#   section for details.
 device:
 #   The ID of the device to control.
 #   To find out the ID in the HomeSeer UI, click on the device you want to
@@ -595,7 +599,8 @@ The following options are available for `homeassistant` device types:
 
 address:
 #   A valid ip address or hostname for the Home Assistant server.  This
-#   parameter must be provided.
+#   parameter must be provided. This option accepts Jinja2 Templates, see
+#   the [secrets] section for details.
 protocol:
 #   The protocol for the URL to the Home Assistant server. Default is http.
 port:
@@ -638,7 +643,8 @@ The following options are available for `loxone` device types:
 
 address:
 #   A valid ip address or hostname for the Loxone server.  This
-#   parameter must be provided.
+#   parameter must be provided. This option accepts Jinja2 Templates, see
+#   the [secrets] section for details.
 user:
 #   The user name used for request authorization.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. The default is
@@ -990,7 +996,8 @@ publish and subscribe to topics.
 [mqtt]
 address:
 #   Address of the Broker.  This may be a hostname or IP Address.  This
-#   parameter must be provided.
+#   parameter must be provided. This option accepts Jinja2 Templates, see
+#   the [secrets] section for details.
 port:
 #   Port the Broker is listening on.  Default is 1883.
 username:
@@ -1255,9 +1262,10 @@ Example json file:
 
 The `secrets` object is added to Moonraker's Jinja2 environment as a
 global, thus it is available in all templates. All options in
-Moonraker's configuration that accept credentials support templates.
+Moonraker's configuration that accept credentials or hostnames support
+templates.
 
-MQTT configuration example with secret credentaials:
+MQTT configuration example with secret credentials:
 
 ```ini
 [mqtt]
