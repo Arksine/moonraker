@@ -26,7 +26,6 @@ from typing import (
     Dict,
     List,
     Type,
-    Union
 )
 if TYPE_CHECKING:
     pass
