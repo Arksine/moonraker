@@ -158,7 +158,7 @@ class Strip:
             raise self.server.error(msg)
 
     async def _send_wled_command_http(self: Strip,
-                                 state: Dict[str, Any]) -> None:
+                                      state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: url:{self.url} json:{state}")
 
@@ -176,7 +176,7 @@ class Strip:
                 f"response:{response.body}")
 
     async def _send_wled_command_serial(self: Strip,
-                                 state: Dict[str, Any]) -> None:
+                                        state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: serial:{self.ser.name} json:{state}")
 
