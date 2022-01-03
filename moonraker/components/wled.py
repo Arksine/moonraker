@@ -1,6 +1,6 @@
 # WLED neopixel support
 #
-# Copyright (C) 2021  Richard Mitchell <richardjm+moonraker@gmail.com>
+# Copyright (C) 2021-2022 Richard Mitchell <richardjm+moonraker@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -81,8 +81,7 @@ class Strip:
                                      write_timeout=self.timeout)
             self.use_http: bool = False
         else:
-            raise cfg.error(
-                        f"Address or serial must be specified")
+            raise cfg.error(f"Address or serial must be specified")
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -165,11 +164,11 @@ class Strip:
 
             headers = {"Content-Type": "application/json"}
             request = HTTPRequest(url=self.url,
-                                    method="POST",
-                                    headers=headers,
-                                    body=json.dumps(state),
-                                    connect_timeout=self.timeout,
-                                    request_timeout=self.timeout)
+                                  method="POST",
+                                  headers=headers,
+                                  body=json.dumps(state),
+                                  connect_timeout=self.timeout,
+                                  request_timeout=self.timeout)
             response = await self.client.fetch(request)
 
             logging.debug(
@@ -188,9 +187,8 @@ class Strip:
             self.ser.write(json.dumps(state).encode())
             self.ser.flush()
 
-            logging.debug(
-                f"WLED: serial:{self.ser.name} flushed")
-                
+            logging.debug(f"WLED: serial:{self.ser.name} flushed")
+
             self.ser.close()
 
     async def wled_on(self: Strip, preset: int) -> None:
