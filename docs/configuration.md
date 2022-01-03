@@ -1107,8 +1107,11 @@ Enables control of an WLED strip.
 
 [wled strip_name]
 address:
-#   The address should be a valid ip or hostname for the wled webserver and
-#   must be specified
+#   The address should be a valid ip or hostname for the wled webserver.
+#   Address or serial must be specified.
+serial:
+#   The serial port to be used to communicate directly to wled. Requires wled
+#   0.13 Build 2108250 or later. Address or serial must be specified.
 initial_preset:
 #   Initial preset ID (favourite) to use. If not specified initial_colors
 #   will be used instead.
@@ -1139,6 +1142,11 @@ initial_red: 0.5
 initial_green: 0.4
 initial_blue: 0.3
 chain_count: 42
+
+[wled stealthburner]
+serial: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+initial_white: 0.6
+chain_count: 3
 ```
 
 It is possible to control wled from the klippy host, this can be done using

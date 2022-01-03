@@ -13,6 +13,7 @@ from enum import Enum
 import logging
 import json
 import asyncio
+import serial
 from tornado.httpclient import AsyncHTTPClient
 from tornado.httpclient import HTTPRequest
 from tornado.escape import json_decode
@@ -55,19 +56,33 @@ class Strip:
                  color_order: ColorOrder,
                  cfg: ConfigHelper):
         self.server = cfg.get_server()
-        self.client = AsyncHTTPClient()
         self.request_mutex = asyncio.Lock()
 
         self.name = name
         self.color_order = color_order
 
         # Read the uri information
-        addr: str = cfg.get("address")
+        addr: str = cfg.get("address", "")
         port: int = cfg.getint("port", 80)
         protocol: str = cfg.get("protocol", "http")
         self.url = f"{protocol}://{addr}:{port}/json"
 
+        # Read the serial information (requires wled 0.13 2108250 or greater)
+        serialport: str = cfg.get("serial", "")
+        baud: int = cfg.getint("baud", 115200, above=49)
+
         self.timeout: float = cfg.getfloat("timeout", 2.)
+
+        if addr != "":
+            self.client = AsyncHTTPClient()
+            self.use_http: bool = True
+        elif serialport != "":
+            self.ser = serial.Serial(serialport, baud,
+                                     write_timeout=self.timeout)
+            self.use_http: bool = False
+        else:
+            raise cfg.error(
+                        f"Address or serial must be specified")
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -130,29 +145,53 @@ class Strip:
 
     async def _send_wled_command(self: Strip,
                                  state: Dict[str, Any]) -> None:
+        try:
+            if self.use_http:
+                await self._send_wled_command_http(state)
+            else:
+                await self._send_wled_command_serial(state)
+
+            self.error_state = None
+        except Exception as e:
+            msg = f"WLED: Error {e}"
+            self.error_state = msg
+            logging.exception(msg)
+            raise self.server.error(msg)
+
+    async def _send_wled_command_http(self: Strip,
+                                 state: Dict[str, Any]) -> None:
         async with self.request_mutex:
-            try:
-                logging.debug(f"WLED: url:{self.url} json:{state}")
+            logging.debug(f"WLED: url:{self.url} json:{state}")
 
-                headers = {"Content-Type": "application/json"}
-                request = HTTPRequest(url=self.url,
-                                      method="POST",
-                                      headers=headers,
-                                      body=json.dumps(state),
-                                      connect_timeout=self.timeout,
-                                      request_timeout=self.timeout)
-                response = await self.client.fetch(request)
+            headers = {"Content-Type": "application/json"}
+            request = HTTPRequest(url=self.url,
+                                    method="POST",
+                                    headers=headers,
+                                    body=json.dumps(state),
+                                    connect_timeout=self.timeout,
+                                    request_timeout=self.timeout)
+            response = await self.client.fetch(request)
 
-                logging.debug(
-                    f"WLED: url:{self.url} status:{response.code} "
-                    f"response:{response.body}")
+            logging.debug(
+                f"WLED: url:{self.url} status:{response.code} "
+                f"response:{response.body}")
 
-                self.error_state = None
-            except Exception as e:
-                msg = f"WLED: Error {e}"
-                self.error_state = msg
-                logging.exception(msg)
-                raise self.server.error(msg)
+    async def _send_wled_command_serial(self: Strip,
+                                 state: Dict[str, Any]) -> None:
+        async with self.request_mutex:
+            logging.debug(f"WLED: serial:{self.ser.name} json:{state}")
+
+            if not self.ser.is_open:
+                self.ser.open()
+
+            # asyncio support is still experimental in pySerial
+            self.ser.write(json.dumps(state).encode())
+            self.ser.flush()
+
+            logging.debug(
+                f"WLED: serial:{self.ser.name} flushed")
+                
+            self.ser.close()
 
     async def wled_on(self: Strip, preset: int) -> None:
         self.onoff = OnOff.on
@@ -245,7 +284,7 @@ class WLED:
                 color_order_cfg: str = cfg.get("color_order", "RGB")
                 color_order = color_orders.get(color_order_cfg)
                 if color_order is None:
-                    raise config.error(
+                    raise cfg.error(
                         f"Color order not supported: {color_order_cfg}")
 
                 self.strips[name] = Strip(name, color_order, cfg)
