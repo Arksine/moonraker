@@ -73,13 +73,13 @@ class Strip:
 
         self.timeout: float = cfg.getfloat("timeout", 2.)
 
+        self.use_http: bool = True
         if addr != "":
             self.client = AsyncHTTPClient()
-            self.use_http: bool = True
         elif serialport != "":
             self.ser = serial.Serial(serialport, baud,
                                      write_timeout=self.timeout)
-            self.use_http: bool = False
+            self.use_http = False
         else:
             raise cfg.error(f"Address or serial must be specified")
 
