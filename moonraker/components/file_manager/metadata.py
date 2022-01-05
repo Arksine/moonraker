@@ -740,7 +740,7 @@ class IdeaMaker(BaseSlicer):
 
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
-            r";Nozzle\sdiameter\s=\s(\d+\.\d*)", self.header_data)
+            r";Dimension:(?:\s\d+\.\d+){3}\s(\d+\.\d+)", self.header_data)
 
 class IceSL(BaseSlicer):
     def check_identity(self, data) -> Optional[Dict[str, Any]]:
