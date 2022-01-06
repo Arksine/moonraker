@@ -9,8 +9,6 @@
 # Wiki at https://kno.wled.ge/
 
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from collections import UserString
 from enum import Enum
 import logging
 import json
@@ -52,7 +50,7 @@ class OnOff(str, Enum):
     on: str = "on"
     off: str = "off"
 
-class Strip(ABC):
+class Strip():
     def __init__(self: Strip,
                  name: str,
                  color_order: ColorOrder,
@@ -122,14 +120,12 @@ class Strip(ABC):
             elem_size = len(led_data)
             self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
 
-    @abstractmethod
     async def send_wled_command_impl(self: Strip,
                                      state: Dict[str, Any]) -> None:
-        """Sends the json request to wled"""
+        pass
 
-    @abstractmethod
     def close(self: Strip):
-        """Closes any wled communication mechanism"""
+        pass
 
     async def _send_wled_command(self: Strip,
                                  state: Dict[str, Any]) -> None:
@@ -224,23 +220,21 @@ class StripHttp(Strip):
 
     async def send_wled_command_impl(self: StripHttp,
                                 state: Dict[str, Any]) -> None:
-        logging.debug(f"WLED: url:{self.url} json:{state}")
+        async with self.request_mutex:
+            logging.debug(f"WLED: url:{self.url} json:{state}")
 
-        headers = {"Content-Type": "application/json"}
-        request = HTTPRequest(url=self.url,
-                                method="POST",
-                                headers=headers,
-                                body=json.dumps(state),
-                                connect_timeout=self.timeout,
-                                request_timeout=self.timeout)
-        response = await self.client.fetch(request)
+            headers = {"Content-Type": "application/json"}
+            request = HTTPRequest(url=self.url,
+                                    method="POST",
+                                    headers=headers,
+                                    body=json.dumps(state),
+                                    connect_timeout=self.timeout,
+                                    request_timeout=self.timeout)
+            response = await self.client.fetch(request)
 
-        logging.debug(
-            f"WLED: url:{self.url} status:{response.code} "
-            f"response:{response.body}")
-
-    def close(self: StripHttp):
-        pass
+            logging.debug(
+                f"WLED: url:{self.url} status:{response.code} "
+                f"response:{response.body}")
 
 class StripSerial(Strip):
     def __init__(self: StripSerial,
@@ -271,6 +265,8 @@ class StripSerial(Strip):
     def close(self: StripSerial):
         if self.ser.is_open:
             self.ser.close()
+            logging.info(f"WLED: Closing serial {self.ser.name}")
+
 
 class WLED:
     def __init__(self: WLED, config: ConfigHelper) -> None:
