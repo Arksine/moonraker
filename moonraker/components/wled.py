@@ -219,17 +219,17 @@ class StripHttp(Strip):
         self.client = AsyncHTTPClient()
 
     async def send_wled_command_impl(self: StripHttp,
-                                state: Dict[str, Any]) -> None:
+                                     state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: url:{self.url} json:{state}")
 
             headers = {"Content-Type": "application/json"}
             request = HTTPRequest(url=self.url,
-                                    method="POST",
-                                    headers=headers,
-                                    body=json.dumps(state),
-                                    connect_timeout=self.timeout,
-                                    request_timeout=self.timeout)
+                                  method="POST",
+                                  headers=headers,
+                                  body=json.dumps(state),
+                                  connect_timeout=self.timeout,
+                                  request_timeout=self.timeout)
             response = await self.client.fetch(request)
 
             logging.debug(
@@ -252,7 +252,7 @@ class StripSerial(Strip):
                                  write_timeout=0)
 
     async def send_wled_command_impl(self: StripSerial,
-                                state: Dict[str, Any]) -> None:
+                                     state: Dict[str, Any]) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: serial:{self.ser.name} json:{state}")
 
@@ -261,7 +261,7 @@ class StripSerial(Strip):
 
             # asyncio support is still experimental in pySerial
             self.ser.write(json.dumps(state).encode())
-    
+
     def close(self: StripSerial):
         if self.ser.is_open:
             self.ser.close()
