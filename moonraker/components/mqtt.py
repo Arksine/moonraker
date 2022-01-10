@@ -192,11 +192,11 @@ class MQTTClient(APITransport, Subscribable):
         self.server.register_endpoint(
             "/server/mqtt/publish", ["POST"],
             self._handle_publish_request,
-            transports=["http", "websocket"])
+            transports=["http", "websocket", "internal"])
         self.server.register_endpoint(
             "/server/mqtt/subscribe", ["POST"],
             self._handle_subscription_request,
-            transports=["http", "websocket"])
+            transports=["http", "websocket", "internal"])
 
         # Subscribe to API requests
         self.json_rpc = JsonRPC(transport="MQTT")
