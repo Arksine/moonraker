@@ -128,13 +128,9 @@ class PrinterPower:
                 "The following power devices failed init:"
                 f" {failed_names}")
 
-    async def _handle_klippy_shutdown(self) -> None:
-        for name, dev in self.devices.items():
-            if dev.has_off_when_shutdown():
-                logging.info(
-                    f"Powering off device [{name}] due to"
-                    " klippy shutdown")
-                await self._process_request(dev, "off")
+    def _handle_klippy_shutdown(self) -> None:
+        for dev in self.devices.values():
+            dev.process_klippy_shutdown()
 
     async def _handle_upload_queued(self, filename: str) -> None:
         for name, dev in self.devices.items():
@@ -267,6 +263,11 @@ class PowerDevice:
         self.locked_while_printing = config.getboolean(
             'locked_while_printing', False)
         self.off_when_shutdown = config.getboolean('off_when_shutdown', False)
+        self.off_when_shutdown_delay = 0.
+        if self.off_when_shutdown:
+            self.off_when_shutdown_delay = config.getfloat(
+                'off_when_shutdown_delay', 0., minval=0.)
+        self.shutdown_timer_handle: Optional[asyncio.TimerHandle] = None
         self.restart_delay = 1.
         self.klipper_restart = config.getboolean(
             'restart_klipper_when_powered', False)
@@ -335,8 +336,26 @@ class PowerDevice:
                 return
             self._schedule_firmware_restart()
 
-    def has_off_when_shutdown(self) -> bool:
-        return self.off_when_shutdown
+    def process_klippy_shutdown(self) -> None:
+        if not self.off_when_shutdown:
+            return
+        if self.off_when_shutdown_delay == 0.:
+            self._power_off_on_shutdown()
+        else:
+            if self.shutdown_timer_handle is not None:
+                self.shutdown_timer_handle.cancel()
+                self.shutdown_timer_handle = None
+            event_loop = self.server.get_event_loop()
+            self.shutdown_timer_handle = event_loop.delay_callback(
+                self.off_when_shutdown_delay, self._power_off_on_shutdown)
+
+    def _power_off_on_shutdown(self) -> None:
+        if self.server.get_klippy_state() != "shutdown":
+            return
+        logging.info(
+            f"Powering off device '{self.name}' due to klippy shutdown")
+        power: PrinterPower = self.server.lookup_component("power")
+        power.set_device_power(self.name, "off")
 
     def has_on_when_queued(self) -> bool:
         return self.on_when_queued
