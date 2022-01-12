@@ -13,6 +13,7 @@ from enum import Enum
 import logging
 import json
 import asyncio
+import os
 import serial
 from tornado.httpclient import AsyncHTTPClient
 from tornado.httpclient import HTTPRequest
@@ -250,6 +251,8 @@ class StripSerial(Strip):
         # write_timeout of 0 is non-blocking
         self.ser = serial.Serial(serialport, baud,
                                  write_timeout=0)
+        fd = self.ser.fileno()
+        os.set_blocking(fd, False)                         
 
     async def send_wled_command_impl(self: StripSerial,
                                      state: Dict[str, Any]) -> None:
