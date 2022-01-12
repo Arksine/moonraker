@@ -740,7 +740,7 @@ command_payload:
 # all changes in state to the state topic.
 retain_command_state: False
 # To query a tasmota device we send the command topic without a payload.
-# Otpionally we could send a "?" as the payload.
+# Optionally we could send a "?" as the payload.
 query_topic: cmnd/tasmota_switch/POWER
 # query_payload: ?
 state_topic: stat/tasmota_switch/POWER
@@ -1192,6 +1192,133 @@ easily detect and use Moonraker instances.
 # moonraker.conf
 
 [zeroconf]
+```
+
+### `[button]`
+Enables support for handling `button` events.
+
+```ini
+# moonraker.conf
+
+[button my_button]
+type: gpio
+#   Reserved for future use.  Currently the only button type availble is
+#   'gpio', which is the default.
+pin: gpiochip0/gpio26
+#   The gpio pin to watch for button events.  The chip is optional, if
+#   omitted then the module will default to gpiochip0.  The pin may be
+#   inverted by specifying a "!" may be prefix.  Valid examples:
+#      gpiochip0/gpio26
+#      gpio26
+#      !gpiochip0/gpio26
+#      !gpio26
+#   Systems with libgpiod 1.5 or greater installed also support pullup and
+#   pulldown modes.  Prefix a "^" to enable the internal pullup and a "~" to
+#   enable the internal pulldown:
+#      ^gpiochip0/gpio26
+#      ^gpio26
+#      ~gpiochip0/gpio26
+#      ~gpio26
+#      # Its also possible to invert a pin with the pullup/pulldown enabled
+#      ^!gpiochip0/gpio26
+#      ~!gpiochip0/gpio26
+#   This parameter must be provided
+min_event_time: .05
+#   The mimimum time (in seconds) between events to trigger a response.  This is
+#   is used to debounce buttons.  This value must be at least .01 seconds.
+#   The default is .05 seconds (50 milliseconds).
+on_press:
+on_release:
+#   Jinja2 templates to be executed when a button event is detected.  At least one
+#   must be provided.
+
+```
+
+#### Button Templates
+
+Both the `on_press` and `on_release` templates are provided a context with the
+with two methods that may be called in addition to Jinja2's default filters
+adn methods:
+
+- `call_method`:  Calls an internal API method.  See the
+  [API documentation](web_api.md#jinja2-template-api-calls) for  details.
+- `send_notification`:  Emits a websocket notification.  This is useful if you
+   wish to use buttons to notify attached clients of some action.  This
+   method takes an optional argument that can contain any JSON encodable
+   type.  If provided, this value will be sent as part of the payload with
+   the notification.
+
+Additionally, the following context variables are available:
+
+- `event`:  This is a dictionary with details about the event:
+    - `elapsed_time`:  The time elapsed (in seconds) since the last detected
+      button event
+    - `received_time`: The time the event was detected according to asyncio's
+      monotonic clock.  Note that this is not in "unix time".
+    - `render_time`: The time the template was rendered (began execution)
+      according to asyncio's montonic clock.  It is possible execution of
+      an event may be delayed well beyond the `received_time`.
+    - `pressed`: A boolean value to indicate if the button is currently pressed.
+- `user_data`:  This is a dictionary in which templates can store information
+  that will persist across events.  This may be useful to track the number of
+  events, specific timing of events, return values from previous API calls,
+  etc.  Note that the data in this field does not persist across Moonraker
+  restarts.
+
+!!! Warning
+    It is recommended to avoid API calls that may block (ie: the `update` APIs).
+    Only one event may be rendered at a time, subsequent events received will be
+    delayed. Calling a blocking API would effectively make the button
+    non-responsive until the API call returns.
+
+Button Template Examples:
+
+```ini
+# moonraker.conf
+
+# Emergency Stop Example
+[button estop]
+type: gpio
+pin: gpio26
+on_press:
+  # Executes immediately after a press is detected
+  {% do call_method("priner.emergency_stop") %}
+
+# Reboot Long Press Example
+[button reboot]
+type: gpio
+pin: gpio26
+on_release:
+  # Only call reboot if the button was held for more than 1 second.
+  # Note that this won't execute until the button has been released.
+  {% if event.elapsed_time > 1.0 %}
+    {% do call_method("machine.reboot") %}
+  {% endif %}
+
+# Double Click Notificaion Example
+[button notify_btn]
+type: gpio
+pin: gpio26
+on_press:
+  # Use the "user_data" context variable to track a single click
+  {% set clicked = user_data.clicked|default(false) %}
+  # It isn't possible to assign a value to a context variable in Jinja2,
+  # however since user_data is a dict we can call its methods.  The
+  # call to __setitem__ below is equivalent to:
+  #   user_data["clicked"] = true
+  {% do user_data.__setitem__("clicked", true) %}
+  {% if event.elapsed_time < 0.5 and clicked %}
+    # We will consider this a double click if the second click occurs
+    # within .5 seconds of releasing the first
+    {% do user_data.__setitem__("clicked", false) %}
+    {% do user_data.__setitem__("double_clicked", true) %}
+  {% endif %}
+on_release:
+  {% set double_clicked = user_data.double_clicked|default(false) %}
+  {% if double_clicked %}
+    {% do user_data.__setitem__("double_clicked", false) %}
+    {% do send_notification("Double Clicked!") %}
+  {% endif %}
 ```
 
 ### `[secrets]`

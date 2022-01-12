@@ -134,6 +134,38 @@ The `test/client` folder includes a basic test interface with example usage for
 most of the requests below.  It also includes a basic JSON-RPC implementation
 that uses promises to return responses and errors (see json-rpc.js).
 
+### Jinja2 Template API Calls
+
+Some template options in Moonraker's configuration, such as those in the
+[button](configuration.md#button) component, may call Moonraker APIs through
+the `call_method(method_name, kwargs)` context function. The `call_method`
+function takes the API's JSON-RPC method name as its first parameter, followed
+by a set of keyword arguments as per the method's requirements.
+
+```ini
+# moonraker.conf
+
+# Query Printer Objects example
+[button check_status]
+pin: gpio26
+on_press:
+  {% set query_objs = {"toolhead": ["position"], "print_stats": None} %}
+  # JSON-RPC method is "printer.objects.query", which takes a single "objects"
+  # argument
+  {% set status = call_method("printer.objects.query", objects=query_objs) %}
+  # do something with the value returned from the object query, perhaps
+  # send a websocket notification or publish a mqtt topic
+
+# Publish button event to MQTT Topic
+[button check_status]
+pin: gpio26
+on_release:
+  # JSON-RPC method is "server.mqtt.publish"
+  {% do call_method("server.mqtt.publish",
+                    topic="moonraker/mybutton",
+                    payload="Button Released") %}
+```
+
 ### Printer Administration
 
 #### Get Klippy host information
@@ -3787,6 +3819,50 @@ The object sent with the notification contains the following fields:
    containing each item in the queue.  If the queue has not changed this will
    be `null`.
 - `queue_state`: The current queue state
+
+#### Button Event
+Moonraker `[button]` components may be configured to emit websocket
+notifications.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_button_event",
+    "params": [
+        {
+            "name": "my_button",
+            "type": "gpio",
+            "event": {
+                "elapsed_time": 0.09323832602240145,
+                "received_time": 698614.214597004,
+                "render_time": 698614.214728513,
+                "pressed": false
+            },
+            "aux": null
+        }
+    ]
+}
+```
+
+The `params` array will always contain a single object with the following
+fields:
+
+- `name`: The name of the configured button
+- `type`: The button type, currently this will always be `gpio`
+- `event`: An object with details about the button event, containing the
+  following fields:
+    - `elapsed_time`:  The time elapsed (in seconds) since the last detected
+      button event
+    - `received_time`: The time the event was detected according to asyncio's
+      monotonic clock.  Note that this is not in "unix time".
+    - `render_time`: The time the template was rendered (began execution)
+      according to asyncio's montonic clock.  It is possible execution of
+      an event may be delayed well beyond the `received_time`.
+    - `pressed`: A boolean value to indicate if the button is currently pressed.
+- `aux`: This is an optional field where the button may specify any json
+  encodable value.  Clients may suggest a specific button configuration
+  that includes details about the event.  If no aux parameter is specified
+  in the configuration this will be a `null` value.
 
 ### Appendix
 
