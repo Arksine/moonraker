@@ -252,7 +252,7 @@ class StripSerial(Strip):
         self.ser = serial.Serial(serialport, baud,
                                  write_timeout=0)
         fd = self.ser.fileno()
-        os.set_blocking(fd, False)                         
+        os.set_blocking(fd, False)
 
     async def send_wled_command_impl(self: StripSerial,
                                      state: Dict[str, Any]) -> None:
