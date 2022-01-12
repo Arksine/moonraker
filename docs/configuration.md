@@ -310,6 +310,9 @@ off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
 #   the "shutdown" state.  This option applies to all device types.
 #   The default is False.
+off_when_shutdown_delay: 0
+#   If "off_when_shutdown" is set, this option specifies the amount of time
+#   (in seconds) to wait before turning the device off. Default is 0 seconds.
 on_when_upload_queued: False
 #   If set to True the device will power on if the file manager
 #   queues an upload while the device is off.  This allows for an automated
