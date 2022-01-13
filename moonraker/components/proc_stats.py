@@ -18,6 +18,7 @@ from typing import (
     TYPE_CHECKING,
     Deque,
     Any,
+    List,
     Tuple,
     Optional,
     Dict,
@@ -32,6 +33,7 @@ VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
+CPU_STAT_PATH = "/proc/stat"
 STAT_UPDATE_TIME = 1.
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
@@ -71,6 +73,7 @@ class ProcStats:
         self.temp_file = pathlib.Path(TEMPERATURE_PATH)
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
+        self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
@@ -84,6 +87,8 @@ class ProcStats:
         self.last_throttled: int = 0
         self.update_sequence: int = 0
         self.last_net_stats: Dict[str, Dict[str, Any]] = {}
+        self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
+        self.cpu_usage: Dict[str, float] = {}
         self.stat_update_timer.start()
         self.watchdog.start()
 
@@ -102,6 +107,7 @@ class ProcStats:
             'throttled_state': ts,
             'cpu_temp': cpu_temp,
             'network': self.last_net_stats,
+            'system_cpu_usage': self.cpu_usage,
             'websocket_connections': websocket_count
         }
 
@@ -147,6 +153,7 @@ class ProcStats:
             'moonraker_stats': result,
             'cpu_temp': cpu_temp,
             'network': net,
+            'system_cpu_usage': self.cpu_usage,
             'websocket_connections': websocket_count
         })
         self.last_update_time = update_time
@@ -187,6 +194,7 @@ class ProcStats:
         mem, units = self._get_memory_usage()
         temp = self._get_cpu_temperature()
         net_stats = self._get_net_stats()
+        self._update_cpu_stats()
         return temp, mem, units, net_stats
 
     def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
@@ -202,32 +210,49 @@ class ProcStats:
         return mem, units
 
     def _get_cpu_temperature(self) -> Optional[float]:
-        temp = None
-        if self.temp_file.exists():
-            try:
-                res = int(self.temp_file.read_text().strip())
-                temp = res / 1000.
-            except Exception:
-                return None
+        try:
+            res = int(self.temp_file.read_text().strip())
+            temp = res / 1000.
+        except Exception:
+            return None
         return temp
 
     def _get_net_stats(self) -> Dict[str, Any]:
-        if self.netdev_file.exists():
-            net_stats: Dict[str, Any] = {}
-            try:
-                ret = self.netdev_file.read_text()
-                dev_info = re.findall(r"([\w]+):(.+)", ret)
-                for (dev_name, stats) in dev_info:
-                    parsed_stats = stats.strip().split()
-                    net_stats[dev_name] = {
-                        'rx_bytes': int(parsed_stats[0]),
-                        'tx_bytes': int(parsed_stats[8])
-                    }
-                return net_stats
-            except Exception:
-                return {}
-        else:
+        net_stats: Dict[str, Any] = {}
+        try:
+            ret = self.netdev_file.read_text()
+            dev_info = re.findall(r"([\w]+):(.+)", ret)
+            for (dev_name, stats) in dev_info:
+                parsed_stats = stats.strip().split()
+                net_stats[dev_name] = {
+                    'rx_bytes': int(parsed_stats[0]),
+                    'tx_bytes': int(parsed_stats[8])
+                }
+            return net_stats
+        except Exception:
             return {}
+
+    def _update_cpu_stats(self) -> None:
+        try:
+            cpu_usage: Dict[str, Any] = {}
+            ret = self.cpu_stats_file.read_text()
+            usage_info: List[str] = re.findall(r"cpu[^\n]+", ret)
+            for cpu in usage_info:
+                parts = cpu.split()
+                name = parts[0]
+                cpu_sum = sum([int(t) for t in parts[1:]])
+                cpu_idle = int(parts[4])
+                if name in self.last_cpu_stats:
+                    last_sum, last_idle = self.last_cpu_stats[name]
+                    cpu_delta = cpu_sum - last_sum
+                    idle_delta = cpu_idle - last_idle
+                    cpu_used = cpu_delta - idle_delta
+                    cpu_usage[name] = round(
+                        100 * (cpu_used / cpu_delta), 2)
+                self.cpu_usage = cpu_usage
+                self.last_cpu_stats[name] = (cpu_sum, cpu_idle)
+        except Exception:
+            pass
 
     def _format_stats(self, stats: Dict[str, Any]) -> str:
         return f"System Time: {stats['time']:2f}, " \
