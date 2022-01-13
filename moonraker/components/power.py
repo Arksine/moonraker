@@ -43,6 +43,7 @@ class PrinterPower:
         prefix_sections = config.get_prefix_sections("power")
         logging.info(f"Power component loading devices: {prefix_sections}")
         dev_types = {
+            "gcode": GcodeDevice,
             "gpio": GpioDevice,
             "tplink_smartplug": TPLinkSmartPlug,
             "tasmota": Tasmota,
@@ -488,6 +489,44 @@ class GpioDevice(PowerDevice):
         if self.timer_handle is not None:
             self.timer_handle.cancel()
             self.timer_handle = None
+
+class GcodeDevice(PowerDevice):
+    def __init__(self,
+                 config: ConfigHelper,
+                 initial_val: Optional[int] = None
+                 ) -> None:
+        super().__init__(config)
+        self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+        self.initial_state = config.getboolean('initial_state', False)
+        self.gcode_on = config.get("gcode_on", None)
+        if self.gcode_on is None:
+            raise config.error(
+                f"Option 'gcode_on' in section [{config.get_name()}] must "
+                "be set")
+        self.gcode_off = config.get("gcode_off", None)
+        if self.gcode_off is None:
+            raise config.error(
+                f"Option 'gcode_off' in section [{config.get_name()}] must "
+                "be set")
+
+    def initialize(self) -> None:
+        super().initialize()
+        self.set_power("on" if self.initial_state else "off")
+
+    def refresh_status(self) -> None:
+        pass
+
+    async def set_power(self, state) -> None:
+        try:
+            gcommand = self.gcode_on if state == "on" else self.gcode_off
+            logging.debug(f"Power {self.name} sending Gcode: {gcommand}")
+            await self.klippy_apis.run_gcode(gcommand)
+        except self.server.error:
+            self.state = "error"
+            msg = f"Error Toggling Device Power: {self.name} - Error executing GCode {gcommand}"
+            logging.exception(msg) 
+            raise self.server.error(msg) from None
+        self.state = state
 
 class RFDevice(GpioDevice):
 

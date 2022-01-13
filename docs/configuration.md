@@ -303,7 +303,7 @@ The following configuration options are available for all power device types:
 
 [power device_name]
 type:
-#   The type of device.  Can be either gpio, rf, tplink_smartplug, tasmota
+#   The type of device.  Can be either gpio, gcode, rf, tplink_smartplug, tasmota
 #   shelly, homeseer, homeassistant, loxonev1, or mqtt.
 #   This parameter must be provided.
 off_when_shutdown: False
@@ -409,6 +409,40 @@ initial_state: off
 type: gpio
 pin: gpiochip0/gpio17
 initial_state: on
+```
+
+#### GCode Device Configuration
+
+The following options are available for `gcode` device types:
+
+```ini
+# moonraker.conf
+
+gcode_on:
+#   The GCode command to send to power. 
+#    This parameter must be provided for "gcode" type devices
+gcode_off:
+#   The GCode command to send to remove power. 
+#    This parameter must be provided for "gcode" type devices
+initial_state: off
+#    The initial state for GPIO type devices.  May be on or
+#    off.  When moonraker starts the device will be set to this
+#    state.  Default is off.
+```
+
+
+Examples:
+
+```ini
+# moonraker.conf
+
+# Control a neopixel strip on pin 'led'
+[power printer_led]
+type: gpio
+gcode_on: SET_LED LED=led RED=1 GREEN=1 BLUE=1 WHITE=1 SYNC=0
+gcode_off: SET_LED LED=led RED=0 GREEN=0 BLUE=0 WHITE=0 SYNC=1
+initial_state: off
+
 ```
 
 #### RF Device Configuration
