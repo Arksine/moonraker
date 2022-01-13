@@ -1091,6 +1091,13 @@ An object in the following format:
             "bandwidth": 4455.91
         }
     },
+    "system_cpu_usage": {
+        "cpu": 2.53,
+        "cpu0": 3.03,
+        "cpu1": 5.1,
+        "cpu2": 1.02,
+        "cpu3": 1
+    },
     "websocket_connections": 4
 }
 ```
@@ -1142,6 +1149,10 @@ will be tracked.  Each interface reports the following fields:
 
 If network information is not available then the `network` field will
 contain an empty object.
+
+If the system reports cpu usage at `/proc/stat` then the `system_cpu_usage`
+field will contain an object with cpu usage data.  The `cpu` field of this
+object reports total cpu usage, while each `cpuX` field is usage per core.
 
 The `websocket_connections` field reports the number of active websockets
 currently connected to moonraker.
@@ -3709,6 +3720,13 @@ process statistics:
                 "tx_bytes": 115035939,
                 "bandwidth": 3458.77
             }
+        },
+        "system_cpu_usage": {
+            "cpu": 2.53,
+            "cpu0": 3.03,
+            "cpu1": 5.1,
+            "cpu2": 1.02,
+            "cpu3": 1
         },
         "websocket_connections": 2
     }]
