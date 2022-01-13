@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from .template import JinjaTemplate
     APIComp = klippy_apis.KlippyAPI
 
+
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -374,6 +375,7 @@ class PowerDevice:
     def close(self) -> Optional[Coroutine]:
         pass
 
+
 class HTTPDevice(PowerDevice):
     def __init__(self,
                  config: ConfigHelper,
@@ -490,6 +492,7 @@ class GpioDevice(PowerDevice):
             self.timer_handle.cancel()
             self.timer_handle = None
 
+
 class GcodeDevice(PowerDevice):
     def __init__(self,
                  config: ConfigHelper,
@@ -523,10 +526,11 @@ class GcodeDevice(PowerDevice):
             await self.klippy_apis.run_gcode(gcommand)
         except self.server.error:
             self.state = "error"
-            msg = f"Error Toggling Device Power: {self.name} - Error executing GCode {gcommand}"
-            logging.exception(msg) 
+            msg = f"Error Toggling Device Power: {self.name} - GCode {gcommand}"
+            logging.exception(msg)
             raise self.server.error(msg) from None
         self.state = state
+
 
 class RFDevice(GpioDevice):
 
@@ -582,6 +586,7 @@ class RFDevice(GpioDevice):
 #  Copyright 2016 softScheck GmbH
 class TPLinkSmartPlug(PowerDevice):
     START_KEY = 0xAB
+
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
         self.timer = config.get("timer", "")
@@ -871,6 +876,7 @@ class HomeAssistant(HTTPDevice):
         res = await self._send_status_request()
         return res
 
+
 class Loxonev1(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config, default_user="admin",
@@ -909,7 +915,8 @@ class MQTTDevice(PowerDevice):
         self.eventloop = self.server.get_event_loop()
         self.cmd_topic: str = config.get('command_topic')
         self.cmd_payload: JinjaTemplate = config.gettemplate('command_payload')
-        self.retain_cmd_state = config.getboolean('retain_command_state', False)
+        self.retain_cmd_state = config.getboolean(
+            'retain_command_state', False)
         self.query_topic: Optional[str] = config.get('query_topic', None)
         self.query_payload = config.gettemplate('query_payload', None)
         self.must_query = config.getboolean('query_after_command', False)
@@ -920,7 +927,8 @@ class MQTTDevice(PowerDevice):
         self.state_timeout = config.getfloat('state_timeout', 2.)
         self.state_response = config.load_template('state_response_template',
                                                    "{payload}")
-        self.qos: Optional[int] = config.getint('qos', None, minval=0, maxval=2)
+        self.qos: Optional[int] = config.getint(
+            'qos', None, minval=0, maxval=2)
         self.mqtt.subscribe_topic(
             self.state_topic, self._on_state_update, self.qos)
         self.query_response: Optional[asyncio.Future] = None
