@@ -523,6 +523,7 @@ class GcodeDevice(PowerDevice):
         try:
             gcommand = self.gcode_on if state == "on" else self.gcode_off
             logging.debug(f"Power {self.name} sending Gcode: {gcommand}")
+            assert gcommand is not None
             await self.klippy_apis.run_gcode(gcommand)
         except self.server.error:
             self.state = "error"
