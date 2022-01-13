@@ -1106,9 +1106,16 @@ Enables control of an WLED strip.
 # moonraker.conf
 
 [wled strip_name]
+type:
+#   The type of device. Can be either http, or serial.
+#   This parameter must be provided.
 address:
-#   The address should be a valid ip or hostname for the wled webserver and
-#   must be specified
+#   The address should be a valid ip or hostname for the wled webserver.
+#   Required when type: http
+serial:
+#   The serial port to be used to communicate directly to wled. Requires wled
+#   0.13 Build 2108250 or later.
+#   Required when type: serial
 initial_preset:
 #   Initial preset ID (favourite) to use. If not specified initial_colors
 #   will be used instead.
@@ -1124,21 +1131,29 @@ color_order:
 #   Color order for WLED strip, RGB or RGBW (default: RGB)
 
 ```
-Below are some potential examples:
+Below are some examples:
 ```ini
 # moonraker.conf
 
 [wled case]
+type: http
 address: led1.lan
 initial_preset: 45
 chain_count: 76
 
 [wled lounge]
+type: http
 address: 192.168.0.45
 initial_red: 0.5
 initial_green: 0.4
 initial_blue: 0.3
 chain_count: 42
+
+[wled stealthburner]
+type: serial
+serial: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+initial_white: 0.6
+chain_count: 3
 ```
 
 It is possible to control wled from the klippy host, this can be done using
