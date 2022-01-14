@@ -18,9 +18,11 @@ import distro
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     List,
-    Optional
+    Optional,
+    Tuple
 )
 
 if TYPE_CHECKING:
@@ -28,6 +30,9 @@ if TYPE_CHECKING:
     from websockets import WebRequest
     from .shell_command import ShellCommandFactory as SCMDComp
     from .proc_stats import ProcStats
+    from .dbus_manager import DbusManager
+    from dbus_next.aio import ProxyInterface
+    from dbus_next import Variant
 
 ALLOWED_SERVICES = [
     "moonraker", "klipper", "webcamd", "MoonCord",
@@ -61,7 +66,16 @@ class Machine:
             'virtualization': self._check_inside_container()
         }
         self._update_log_rollover(log=True)
-        self.sys_provider = SystemdCliProvider(config)
+        providers: Dict[str, type] = {
+            "systemd_cli": SystemdCliProvider,
+            "systemd_dbus": SystemdDbusProvider
+        }
+        ptype = config.get('provider', 'systemd_dbus')
+        pclass = providers.get(ptype)
+        if pclass is None:
+            raise config.error(f"Invalid Provider: {ptype}")
+        self.sys_provider: BaseProvider = pclass(config)
+        logging.info(f"Using System Provider: {ptype}")
 
         self.server.register_endpoint(
             "/machine/reboot", ['POST'], self._handle_machine_request)
@@ -486,6 +500,183 @@ class SystemdCliProvider(BaseProvider):
                             {svc: new_state})
         except Exception:
             logging.exception("Error processing service state update")
+
+class SystemdDbusProvider(BaseProvider):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        self.dbus_mgr: DbusManager = self.server.lookup_component(
+            "dbus_manager")
+        self.login_mgr: Optional[ProxyInterface] = None
+        self.props: List[Tuple[ProxyInterface, Callable]] = []
+
+    async def initialize(self) -> None:
+        if not self.dbus_mgr.is_connected():
+            self.server.add_warning(
+                "[machine]: DBus Connection Not available, systemd "
+                " service tracking and actions are disabled")
+            return
+        # Get the systemd manager interface
+        self.systemd_mgr = await self.dbus_mgr.get_interface(
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager"
+        )
+        # Check for systemd PolicyKit Permissions
+        await self.dbus_mgr.check_permission(
+            "org.freedesktop.systemd1.manage-units",
+            "System Service Management (start, stop, restart) "
+            "will be disabled")
+        await self.dbus_mgr.check_permission(
+            "org.freedesktop.login1.power-off",
+            "The shutdown API will be disabled"
+        )
+        await self.dbus_mgr.check_permission(
+            "org.freedesktop.login1.power-off-multiple-sessions",
+            "The shutdown API will be disabled if multiple user "
+            "sessions are open."
+        )
+        try:
+            # Get the login manaager interface
+            self.login_mgr = await self.dbus_mgr.get_interface(
+                "org.freedesktop.login1",
+                "/org/freedesktop/login1",
+                "org.freedesktop.login1.Manager"
+            )
+        except self.dbus_mgr.DbusError as e:
+            logging.info(
+                "Unable to acquire the systemd-logind D-Bus interface, "
+                f"falling back to CLI Reboot and Shutdown APIs. {e}")
+            self.login_mgr = None
+        else:
+            # Check for logind permissions
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.reboot",
+                "The reboot API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.reboot-multiple-sessions",
+                "The reboot API will be disabled if multiple user "
+                "sessions are open."
+            )
+        await self._detect_active_services()
+
+    async def reboot(self) -> None:
+        if self.login_mgr is None:
+            await super().reboot()
+        await self.login_mgr.call_reboot(False)  # type: ignore
+
+    async def shutdown(self) -> None:
+        if self.login_mgr is None:
+            await super().shutdown()
+        await self.login_mgr.call_power_off(False)  # type: ignore
+
+    async def do_service_action(self,
+                                action: str,
+                                service_name: str
+                                ) -> None:
+        if not self.dbus_mgr.is_connected():
+            raise self.server.error("DBus Not Connected, ", 503)
+        mgr = self.systemd_mgr
+        if not service_name.endswith(".service"):
+            service_name += ".service"
+        if action == "start":
+            await mgr.call_start_unit(service_name, "replace")  # type: ignore
+        elif action == "stop":
+            await mgr.call_stop_unit(service_name, "replace")   # type: ignore
+        elif action == "restart":
+            await mgr.call_restart_unit(                        # type: ignore
+                service_name, "replace")
+        else:
+            raise self.server.error(f"Invalid service action: {action}")
+
+    async def check_virt_status(self) -> Dict[str, Any]:
+        if not self.dbus_mgr.is_connected():
+            return {
+                'virt_type': "unknown",
+                'virt_identifier': "unknown"
+            }
+        mgr = self.systemd_mgr
+        virt_id = virt_type = "none"
+        virt: str = await mgr.get_virtualization()  # type: ignore
+        virt = virt.strip()
+        if virt:
+            virt_id = virt
+            container_types = [
+                "openvz", "lxc", "lxc-libvirt", "systemd-nspawn",
+                "docker", "podman", "rkt", "wsl", "proot", "pouch"]
+            if virt_id in container_types:
+                virt_type = "container"
+            else:
+                virt_type = "vm"
+            logging.info(
+                f"Virtualized Environment Detected, Type: {virt_type} "
+                f"id: {virt_id}")
+        else:
+            logging.info("No Virtualization Detected")
+        return {
+            'virt_type': virt_type,
+            'virt_identifier': virt_id
+        }
+
+    async def _detect_active_services(self) -> None:
+        # Get loaded service
+        mgr = self.systemd_mgr
+        patterns = [f"{svc}*.service" for svc in ALLOWED_SERVICES]
+        units = await mgr.call_list_units_by_patterns(  # type: ignore
+            ["loaded"], patterns)
+        for unit in units:
+            name: str = unit[0].split('.')[0]
+            state: str = unit[3]
+            substate: str = unit[4]
+            dbus_path: str = unit[6]
+            if name in self.available_services:
+                continue
+            self.available_services[name] = {
+                'active_state': state,
+                'sub_state': substate
+            }
+            # setup state monitoring
+            props = await self.dbus_mgr.get_interface(
+                "org.freedesktop.systemd1", dbus_path,
+                "org.freedesktop.DBus.Properties"
+            )
+            prop_callback = self._create_properties_callback(name)
+            self.props.append((props, prop_callback))
+            props.on_properties_changed(  # type: ignore
+                prop_callback)
+
+    def _create_properties_callback(self, name) -> Callable:
+        def prop_wrapper(dbus_obj: str,
+                         changed_props: Dict[str, Variant],
+                         invalid_props: Dict[str, Variant]
+                         ) -> None:
+            if dbus_obj != 'org.freedesktop.systemd1.Unit':
+                return
+            self._on_service_update(name, changed_props)
+        return prop_wrapper
+
+    def _on_service_update(self,
+                           service_name: str,
+                           changed_props: Dict[str, Variant]
+                           ) -> None:
+        if service_name not in self.available_services:
+            return
+        svc = self.available_services[service_name]
+        notify = False
+        if "ActiveState" in changed_props:
+            state: str = changed_props['ActiveState'].value
+            if state != svc['active_state']:
+                notify = True
+                svc['active_state'] = state
+        if "SubState" in changed_props:
+            state = changed_props['SubState'].value
+            if state != svc['sub_state']:
+                notify = True
+                svc['sub_state'] = state
+        if notify:
+            self.server.send_event("machine:service_state_changed",
+                                   {service_name: dict(svc)})
+
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
