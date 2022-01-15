@@ -1,6 +1,7 @@
 # Python dependencies for Moonraker
 tornado==6.1.0
 pyserial==3.4
+pyserial-asyncio==0.6
 pillow==9.0.0
 lmdb==1.2.1
 streaming-form-data==1.8.1
@@ -12,4 +13,3 @@ pycurl==7.44.1
 zeroconf==0.37.0
 preprocess-cancellation==0.1.6
 jinja2==3.0.3
-pyserial-asyncio==0.6
