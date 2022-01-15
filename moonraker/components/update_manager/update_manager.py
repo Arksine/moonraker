@@ -766,12 +766,12 @@ class StreamingDownload:
         self.busy_evt.set()
 
 class PackageDeploy(BaseDeploy):
-    APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
     def __init__(self,
                  config: ConfigHelper,
                  cmd_helper: CommandHelper
                  ) -> None:
         super().__init__(config, cmd_helper, "system", "", "")
+        self.provider = AptCliProvider(config, cmd_helper)
         cmd_helper.set_package_updater(self)
         storage = self._load_storage()
         self.available_packages: List[str] = storage.get('packages', [])
@@ -788,14 +788,8 @@ class PackageDeploy(BaseDeploy):
             try:
                 # Do not force a refresh until the server has started
                 if self.server.is_running():
-                    await self._update_apt(force=True)
-                res = await self.cmd_helper.run_cmd_with_response(
-                    "apt list --upgradable", timeout=60.)
-                pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
-                if pkg_list:
-                    pkg_list = pkg_list[2:]
-                    self.available_packages = [p.split("/", maxsplit=1)[0]
-                                               for p in pkg_list]
+                    await self._update_package_cache(force=True)
+                self.available_packages = await self.provider.get_packages()
                 pkg_msg = "\n".join(self.available_packages)
                 logging.info(
                     f"Detected {len(self.available_packages)} package updates:"
@@ -818,10 +812,8 @@ class PackageDeploy(BaseDeploy):
                 return False
             self.cmd_helper.notify_update_response("Updating packages...")
             try:
-                await self._update_apt(force=True, notify=True)
-                await self.cmd_helper.run_cmd(
-                    f"{self.APT_CMD} upgrade --yes", timeout=3600.,
-                    notify=True)
+                await self._update_package_cache(force=True, notify=True)
+                await self.provider.upgrade_system()
             except Exception:
                 raise self.server.error("Error updating system packages")
             self.available_packages = []
@@ -830,16 +822,65 @@ class PackageDeploy(BaseDeploy):
                 "Package update finished...", is_complete=True)
             return True
 
-    async def _update_apt(self,
-                          force: bool = False,
-                          notify: bool = False
-                          ) -> None:
+    async def _update_package_cache(self,
+                                    force: bool = False,
+                                    notify: bool = False
+                                    ) -> None:
         curtime = time.time()
         if force or curtime > self.last_refresh_time + 3600.:
             # Don't update if a request was done within the last hour
-            await self.cmd_helper.run_cmd(
-                f"{self.APT_CMD} update --allow-releaseinfo-change",
-                timeout=300., notify=notify)
+            await self.provider.refresh_packages()
+
+    async def install_packages(self,
+                               package_list: List[str],
+                               **kwargs
+                               ) -> None:
+        await self.provider.install_packages(package_list, **kwargs)
+
+    def get_update_status(self) -> Dict[str, Any]:
+        return {
+            'package_count': len(self.available_packages),
+            'package_list': self.available_packages
+        }
+
+class BasePackageProvider:
+    def __init__(self,
+                 config: ConfigHelper,
+                 cmd_helper: CommandHelper
+                 ) -> None:
+        self.server = config.get_server()
+        self.cmd_helper = cmd_helper
+
+    async def refresh_packages(self, notify: bool = False) -> None:
+        raise NotImplementedError("Children must implement refresh_packages()")
+
+    async def get_packages(self) -> List[str]:
+        raise NotImplementedError("Children must implement getpackages()")
+
+    async def install_packages(self,
+                               package_list: List[str],
+                               **kwargs
+                               ) -> None:
+        raise NotImplementedError("Children must implement install_packages()")
+
+    async def upgrade_system(self) -> None:
+        raise NotImplementedError("Children must implement upgrade_system()")
+
+class AptCliProvider(BasePackageProvider):
+    APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
+
+    async def refresh_packages(self, notify: bool = False) -> None:
+        await self.cmd_helper.run_cmd(
+            f"{self.APT_CMD} update", timeout=600., notify=notify)
+
+    async def get_packages(self) -> List[str]:
+        res = await self.cmd_helper.run_cmd_with_response(
+            "apt list --upgradable", timeout=60.)
+        pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
+        if pkg_list:
+            pkg_list = pkg_list[2:]
+            return [p.split("/", maxsplit=1)[0] for p in pkg_list]
+        return []
 
     async def install_packages(self,
                                package_list: List[str],
@@ -849,16 +890,15 @@ class PackageDeploy(BaseDeploy):
         retries: int = kwargs.get('retries', 3)
         notify: bool = kwargs.get('notify', False)
         pkgs = " ".join(package_list)
-        await self._update_apt(notify=notify)
+        await self.refresh_packages(notify=notify)
         await self.cmd_helper.run_cmd(
             f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
             retries=retries, notify=notify)
 
-    def get_update_status(self) -> Dict[str, Any]:
-        return {
-            'package_count': len(self.available_packages),
-            'package_list': self.available_packages
-        }
+    async def upgrade_system(self) -> None:
+        await self.cmd_helper.run_cmd(
+            f"{self.APT_CMD} upgrade --yes", timeout=3600.,
+            notify=True)
 
 class WebClientDeploy(BaseDeploy):
     def __init__(self,
