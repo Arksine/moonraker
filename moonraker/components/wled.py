@@ -68,8 +68,6 @@ class Strip():
 
         self.onoff = OnOff.off
         self.preset = self.initial_preset
-        self.send_full_chain_data = True
-        self.error_state = None
 
     def get_strip_info(self: Strip) -> Dict[str, Any]:
         return {
@@ -244,12 +242,11 @@ class StripSerial(Strip):
         # Read the serial information (requires wled 0.13 2108250 or greater)
         self.serialport: str = cfg.get("serial")
         self.baud: int = cfg.getint("baud", 115200, above=49)
-        self.ser = None
 
     async def send_wled_command_impl(self: StripSerial,
                                      state: Dict[str, Any]) -> None:
         async with self.request_mutex:
-            if self.ser is None:
+            if not hasattr(self, 'ser'):
                 _, self.ser = await serial_asyncio.open_serial_connection(
                     url=self.serialport, baudrate=self.baud)
 
