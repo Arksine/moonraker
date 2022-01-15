@@ -13,8 +13,8 @@ from enum import Enum
 import logging
 import json
 import asyncio
+import serial_asyncio
 import os
-import serial
 from tornado.httpclient import AsyncHTTPClient
 from tornado.httpclient import HTTPRequest
 from tornado.escape import json_decode
@@ -245,30 +245,23 @@ class StripSerial(Strip):
         super().__init__(name, color_order, cfg)
 
         # Read the serial information (requires wled 0.13 2108250 or greater)
-        serialport: str = cfg.get("serial")
-        baud: int = cfg.getint("baud", 115200, above=49)
-
-        # write_timeout of 0 is non-blocking
-        self.ser = serial.Serial(serialport, baud,
-                                 write_timeout=0)
-        fd = self.ser.fileno()
-        os.set_blocking(fd, False)
+        self.serialport: str = cfg.get("serial")
+        self.baud: int = cfg.getint("baud", 115200, above=49)
 
     async def send_wled_command_impl(self: StripSerial,
                                      state: Dict[str, Any]) -> None:
         async with self.request_mutex:
-            logging.debug(f"WLED: serial:{self.ser.name} json:{state}")
+            if not self.hasattr('ser'):
+                _, self.ser = await serial_asyncio.open_serial_connection(url=self.serialport, baudrate=self.baud)
+                
+            logging.debug(f"WLED: serial:{self.serialport} json:{state}")
 
-            if not self.ser.is_open:
-                self.ser.open()
-
-            # asyncio support is still experimental in pySerial
             self.ser.write(json.dumps(state).encode())
 
     def close(self: StripSerial):
         if self.ser.is_open:
             self.ser.close()
-            logging.info(f"WLED: Closing serial {self.ser.name}")
+            logging.info(f"WLED: Closing serial {self.serialport}")
 
 
 class WLED:
