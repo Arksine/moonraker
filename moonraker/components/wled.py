@@ -255,7 +255,7 @@ class StripSerial(Strip):
             self.ser.write(json.dumps(state).encode())
 
     def close(self: StripSerial):
-        if self.ser.is_open:
+        if hasattr(self, 'ser'):
             self.ser.close()
             logging.info(f"WLED: Closing serial {self.serialport}")
 
