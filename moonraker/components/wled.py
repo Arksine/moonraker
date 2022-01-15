@@ -13,11 +13,9 @@ from enum import Enum
 import logging
 import json
 import asyncio
-import os
-import serial
+import serial_asyncio
 from tornado.httpclient import AsyncHTTPClient
 from tornado.httpclient import HTTPRequest
-from tornado.escape import json_decode
 
 # Annotation imports
 from typing import (
@@ -27,9 +25,6 @@ from typing import (
     Any,
     Optional,
     Dict,
-    Coroutine,
-    Tuple,
-    Union,
 )
 
 if TYPE_CHECKING:
@@ -245,31 +240,24 @@ class StripSerial(Strip):
         super().__init__(name, color_order, cfg)
 
         # Read the serial information (requires wled 0.13 2108250 or greater)
-        serialport: str = cfg.get("serial")
-        baud: int = cfg.getint("baud", 115200, above=49)
-
-        # write_timeout of 0 is non-blocking
-        self.ser = serial.Serial(serialport, baud,
-                                 write_timeout=0)
-        fd = self.ser.fileno()
-        os.set_blocking(fd, False)
+        self.serialport: str = cfg.get("serial")
+        self.baud: int = cfg.getint("baud", 115200, above=49)
 
     async def send_wled_command_impl(self: StripSerial,
                                      state: Dict[str, Any]) -> None:
         async with self.request_mutex:
-            logging.debug(f"WLED: serial:{self.ser.name} json:{state}")
+            if not hasattr(self, 'ser'):
+                _, self.ser = await serial_asyncio.open_serial_connection(
+                    url=self.serialport, baudrate=self.baud)
 
-            if not self.ser.is_open:
-                self.ser.open()
+            logging.debug(f"WLED: serial:{self.serialport} json:{state}")
 
-            # asyncio support is still experimental in pySerial
             self.ser.write(json.dumps(state).encode())
 
     def close(self: StripSerial):
-        if self.ser.is_open:
+        if hasattr(self, 'ser'):
             self.ser.close()
-            logging.info(f"WLED: Closing serial {self.ser.name}")
-
+            logging.info(f"WLED: Closing serial {self.serialport}")
 
 class WLED:
     def __init__(self: WLED, config: ConfigHelper) -> None:
