@@ -1130,8 +1130,10 @@ initial_white:
 #   initial_white will only be used for RGBW wled strips (defaults: 0.5)
 chain_count:
 #   Number of addressable neopixels for use (default: 1)
-color_order:
-#   Color order for WLED strip, RGB or RGBW (default: RGB)
+color_config:
+#   Indicates if any strip connected to wled supports the white channel.
+#   The actual color order is set per GPIO in wled directly. Must be
+#   either RGB or RGBW (default: RGB)
 
 ```
 Below are some examples:
@@ -1157,6 +1159,7 @@ type: serial
 serial: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
 initial_white: 0.6
 chain_count: 3
+color_config: RGBW
 ```
 
 It is possible to control wled from the klippy host, this can be done using

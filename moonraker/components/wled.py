@@ -33,12 +33,12 @@ if TYPE_CHECKING:
     from . import klippy_apis
     APIComp = klippy_apis.KlippyAPI
 
-class ColorOrder(str, Enum):
+class ColorConfig(str, Enum):
     RGB: str = "RGB"
     RGBW: str = "RGBW"
 
     def Elem_Size(self):
-        if self is ColorOrder.RGB:
+        if self is ColorConfig.RGB:
             return 3
         return 4
 
@@ -49,13 +49,13 @@ class OnOff(str, Enum):
 class Strip():
     def __init__(self: Strip,
                  name: str,
-                 color_order: ColorOrder,
+                 color_config: ColorConfig,
                  cfg: ConfigHelper):
         self.server = cfg.get_server()
         self.request_mutex = asyncio.Lock()
 
         self.name = name
-        self.color_order = color_order
+        self.color_config = color_config
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -64,7 +64,8 @@ class Strip():
         self.initial_white: float = cfg.getfloat("initial_white", 0.5)
         self.chain_count: int = cfg.getint("chain_count", 1)
 
-        self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
+        self._chain_data = bytearray(
+            self.chain_count * color_config.Elem_Size())
 
         self.onoff = OnOff.off
         self.preset = self.initial_preset
@@ -75,7 +76,7 @@ class Strip():
             "status": self.onoff,
             "chain_count": self.chain_count,
             "preset": self.preset,
-            "color_order": self.color_order,
+            "color_config": self.color_config,
             "error": self.error_state
         }
 
@@ -105,7 +106,7 @@ class Strip():
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
         white = int(white * 255. + .5)
-        if self.color_order is ColorOrder.RGB:
+        if self.color_config is ColorConfig.RGB:
             led_data = [red, green, blue]
         else:
             led_data = [red, green, blue, white]
@@ -159,7 +160,7 @@ class Strip():
             f"INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
-            elem_size = self.color_order.Elem_Size()
+            elem_size = self.color_config.Elem_Size()
             if self.onoff == OnOff.off:
                 # Without a separate On call individual led control doesn"t
                 # turn the led strip back on
@@ -201,9 +202,9 @@ class Strip():
 class StripHttp(Strip):
     def __init__(self: StripHttp,
                  name: str,
-                 color_order: ColorOrder,
+                 color_config: ColorConfig,
                  cfg: ConfigHelper):
-        super().__init__(name, color_order, cfg)
+        super().__init__(name, color_config, cfg)
 
         # Read the uri information
         addr: str = cfg.get("address")
@@ -235,9 +236,9 @@ class StripHttp(Strip):
 class StripSerial(Strip):
     def __init__(self: StripSerial,
                  name: str,
-                 color_order: ColorOrder,
+                 color_config: ColorConfig,
                  cfg: ConfigHelper):
-        super().__init__(name, color_order, cfg)
+        super().__init__(name, color_config, cfg)
 
         # Read the serial information (requires wled 0.13 2108250 or greater)
         self.serialport: str = cfg.get("serial")
@@ -261,25 +262,29 @@ class StripSerial(Strip):
 
 class WLED:
     def __init__(self: WLED, config: ConfigHelper) -> None:
-        try:
-            # root_logger = logging.getLogger()
-            # root_logger.setLevel(logging.DEBUG)
+        # root_logger = logging.getLogger()
+        # root_logger.setLevel(logging.DEBUG)
 
-            self.server = config.get_server()
-            prefix_sections = config.get_prefix_sections("wled")
-            logging.info(f"WLED component loading strips: {prefix_sections}")
-            color_orders = {
-                "RGB": ColorOrder.RGB,
-                "RGBW": ColorOrder.RGBW
-            }
-            strip_types = {
-                "http": StripHttp,
-                "serial": StripSerial
-            }
-            self.strips = {}
-            for section in prefix_sections:
-                cfg = config[section]
+        self.server = config.get_server()
+        prefix_sections = config.get_prefix_sections("wled")
+        logging.info(f"WLED component loading strips: {prefix_sections}")
+        # Allow unexpected color config strings to match klipper
+        color_configs = {
+            "GRB": ColorConfig.RGB,
+            "RGB": ColorConfig.RGB,
+            "BRG": ColorConfig.RGB,
+            "GRBW": ColorConfig.RGBW,
+            "RGBW": ColorConfig.RGBW
+        }
+        strip_types = {
+            "HTTP": StripHttp,
+            "SERIAL": StripSerial
+        }
+        self.strips = {}
+        for section in prefix_sections:
+            cfg = config[section]
 
+            try:
                 name_parts = cfg.get_name().split(maxsplit=1)
                 if len(name_parts) != 2:
                     raise cfg.error(
@@ -288,52 +293,51 @@ class WLED:
 
                 logging.info(f"WLED strip: {name}")
 
-                color_order_cfg: str = cfg.get("color_order", "RGB")
-                color_order = color_orders.get(color_order_cfg)
-                if color_order is None:
-                    raise cfg.error(
-                        f"Color order not supported: {color_order_cfg}")
+                # Public setting name change but support old name internally
+                color_cfg: str = cfg.get("color_order", "RGB")
+                color_cfg = cfg.get("color_config", color_cfg)
+                color_config = color_configs.get(color_cfg.upper())
+                if color_config is None:
+                    raise config.error(
+                        f"Color not supported: {color_cfg}")
 
                 strip_type: str = cfg.get("type", "http")
                 strip_class: Optional[Type[Strip]]
-                strip_class = strip_types.get(strip_type)
+                strip_class = strip_types.get(strip_type.upper())
                 if strip_class is None:
-                    raise cfg.error(f"Unsupported Strip Type: {strip_type}")
-                try:
-                    strip = strip_class(name, color_order, cfg)
-                except Exception as e:
-                    msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
-                    self.server.add_warning(msg)
-                    continue
+                    raise config.error(f"Unsupported Strip Type: {strip_type}")
 
-                self.strips[name] = strip
+                self.strips[name] = strip_class(name, color_config, cfg)
 
-            # Register two remote methods for GCODE
-            self.server.register_remote_method(
-                "set_wled_state", self.set_wled_state)
-            self.server.register_remote_method(
-                "set_wled", self.set_wled)
+            except Exception as e:
+                # Ensures errors such as "Color not supported" are visible
+                msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
+                self.server.add_warning(msg)
+                continue
 
-            # As moonraker is about making things a web api, let's try it
-            # Yes, this is largely a cut-n-paste from power.py
-            self.server.register_endpoint(
-                "/machine/wled/strips", ["GET"],
-                self._handle_list_strips)
-            self.server.register_endpoint(
-                "/machine/wled/status", ["GET"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/on", ["POST"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/off", ["POST"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/strip", ["GET", "POST"],
-                self._handle_single_wled_request)
+        # Register two remote methods for GCODE
+        self.server.register_remote_method(
+            "set_wled_state", self.set_wled_state)
+        self.server.register_remote_method(
+            "set_wled", self.set_wled)
 
-        except Exception as e:
-            logging.exception(e)
+        # As moonraker is about making things a web api, let's try it
+        # Yes, this is largely a cut-n-paste from power.py
+        self.server.register_endpoint(
+            "/machine/wled/strips", ["GET"],
+            self._handle_list_strips)
+        self.server.register_endpoint(
+            "/machine/wled/status", ["GET"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/on", ["POST"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/off", ["POST"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/strip", ["GET", "POST"],
+            self._handle_single_wled_request)
 
     async def component_init(self) -> None:
         try:
