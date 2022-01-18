@@ -106,7 +106,7 @@ class Strip():
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
         white = int(white * 255. + .5)
-        if self.color_config is ColorConfig.RGB:
+        if self.color_config.Elem_Size() == 3:
             led_data = [red, green, blue]
         else:
             led_data = [red, green, blue, white]
@@ -152,6 +152,13 @@ class Strip():
         self.onoff = OnOff.off
         await self._send_wled_command({"on": False})
 
+    def _wled_pixel(self: Strip, index: int) -> List[int]:
+        elem_size = self.color_config.Elem_Size()
+        elem: List[int] = []
+        for p in self._chain_data[(index-1)*elem_size: (index)*elem_size]:
+            elem.append(p)
+        return elem
+
     async def set_wled(self: Strip,
                        red: float, green: float, blue: float, white: float,
                        index: Optional[int], transmit: bool) -> None:
@@ -160,40 +167,40 @@ class Strip():
             f"INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
-            elem_size = self.color_config.Elem_Size()
+
             if self.onoff == OnOff.off:
                 # Without a separate On call individual led control doesn"t
-                # turn the led strip back on
+                # turn the led strip back on or doesn't set brightness
+                # correctly
                 self.onoff = OnOff.on
-                await self._send_wled_command({"on": True})
+                await self._send_wled_command({"on": True,
+                                               "tt": 0,
+                                               "bri": 255,
+                                               "seg": {"bri": 255,
+                                                       "i": []}})
+
+            # Base command for setting an led (for all active segments)
+            # See https://kno.wled.ge/interfaces/json-api/
+            state: Dict[str, Any] = {"tt": 0,
+                                     "seg": {"i": []}}
             if index is None:
-                # All pixels same color only send range command
-                elem = []
-                for p in self._chain_data[0:elem_size]:
-                    elem.append(p)
+                # All pixels same color only send range command of first color
                 self.send_full_chain_data = False
-                await self._send_wled_command(
-                    {"seg": {"i": [0, self.chain_count-1, elem]}})
+                state["seg"]["i"] = [0, self.chain_count, self._wled_pixel(1)]
             elif self.send_full_chain_data:
                 # Send a full set of color data (e.g. previous preset)
-                state: Dict[str, Any] = {"seg": {"i": []}}
+                self.send_full_chain_data = False
                 cdata = []
                 for i in range(self.chain_count):
-                    idx = i * elem_size
-                    elem = []
-                    for p in self._chain_data[idx: idx+elem_size]:
-                        elem.append(p)
-                    cdata.append(elem)
+                    cdata.append(self._wled_pixel(i-1))
                 state["seg"]["i"] = cdata
-                self.send_full_chain_data = False
-                await self._send_wled_command(state)
             else:
-                # Only one pixel has changed so send just that one
-                elem = []
-                for p in self._chain_data[(index-1)*elem_size:
-                                          (index-1)*elem_size+elem_size]:
-                    elem.append(p)
-                await self._send_wled_command({"seg": {"i": [index, elem]}})
+                # Only one pixel has changed since last full data sent
+                # so send just that one
+                state["seg"]["i"] = [index-1, self._wled_pixel(index)]
+
+            # Send wled control command
+            await self._send_wled_command(state)
         else:
             # If not transmitting this time easiest just to send all data when
             # next transmitting
