@@ -44,6 +44,7 @@ class PrinterPower:
         logging.info(f"Power component loading devices: {prefix_sections}")
         dev_types = {
             "gpio": GpioDevice,
+            "mcu_output_pin": McuOutputPin,
             "tplink_smartplug": TPLinkSmartPlug,
             "tasmota": Tasmota,
             "shelly": Shelly,
@@ -495,6 +496,89 @@ class GpioDevice(PowerDevice):
             raise self.server.error(msg) from None
         self.state = state
         self._check_timer()
+
+    def _check_timer(self):
+        if self.state == "on" and self.timer is not None:
+            event_loop = self.server.get_event_loop()
+            power: PrinterPower = self.server.lookup_component("power")
+            self.timer_handle = event_loop.delay_callback(
+                self.timer, power.set_device_power, self.name, "off")
+
+    def close(self) -> None:
+        if self.timer_handle is not None:
+            self.timer_handle.cancel()
+            self.timer_handle = None
+
+class McuOutputPin(PowerDevice):
+    def __init__(self,
+                 config: ConfigHelper,
+                 initial_val: Optional[int] = None
+                 ) -> None:
+        super().__init__(config)
+        self.timer: Optional[float] = config.getfloat('timer', None)
+        if self.timer is not None and self.timer < 0.000001:
+            raise config.error(
+                f"Option 'timer' in section [{config.get_name()}] must "
+                "be above 0.0")
+        self.timer_handle: Optional[asyncio.TimerHandle] = None
+        self.output_pin = config.get('output_pin')
+
+        self.server.register_event_handler(
+            "server:status_update", self._status_update)
+        self.server.register_event_handler(
+            "server:klippy_ready", self._handle_ready)
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._handle_disconnect)
+
+    def _status_update(self, data: Dict[str, Any]) -> None:
+        self._set_state_from_data(data)
+
+    async def _handle_ready(self) -> None:
+        kapis: APIComp = self.server.lookup_component('klippy_apis')
+        output_pin_entry = f"output_pin {self.output_pin}"
+        sub: Dict[str, Optional[List[str]]] = {output_pin_entry: None}
+        try:
+            data = await kapis.subscribe_objects(sub)
+            self._set_state_from_data(data)
+        except self.server.error as e:
+            logging.info(f"Error subscribing to {output_pin_entry}")
+
+    async def _handle_disconnect(self) -> None:
+        self._set_state("init")
+
+    def refresh_status(self) -> None:
+        pass
+
+    async def set_power(self, state) -> None:
+        if self.timer_handle is not None:
+            self.timer_handle.cancel()
+            self.timer_handle = None
+        try:
+            kapis: APIComp = self.server.lookup_component('klippy_apis')
+            output_pin_value = "1" if state == "on" else "0"
+            await kapis.run_gcode(
+                f"SET_PIN PIN={self.output_pin} VALUE={output_pin_value}")
+        except Exception:
+            self.state = "error"
+            msg = f"Error Toggling Device Power: {self.name}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
+        self._check_timer()
+
+    def _set_state_from_data(self, data) -> None:
+        output_pin_entry = f"output_pin {self.output_pin}"
+        if output_pin_entry not in data:
+            return
+        is_on = data.get(output_pin_entry, {}).get('value', 0.0) == 1.0
+        state = "on" if is_on else "off"
+        self._set_state(state)
+
+    def _set_state(self, state) -> None:
+        last_state = self.state
+        self.state = state
+        if last_state != state:
+            self.notify_power_changed()
 
     def _check_timer(self):
         if self.state == "on" and self.timer is not None:

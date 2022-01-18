@@ -303,8 +303,9 @@ The following configuration options are available for all power device types:
 
 [power device_name]
 type:
-#   The type of device.  Can be either gpio, rf, tplink_smartplug, tasmota
-#   shelly, homeseer, homeassistant, loxonev1, or mqtt.
+#   The type of device.  Can be either gpio, mcu_output_pin, rf,
+#   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
+#   or mqtt.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -378,15 +379,11 @@ initial_state: off
 timer:
 #    A time (in seconds) after which the device will power off after being.
 #    switched on. This effectively turns the device into a  momentary switch.
-#    This option is available for gpio, tplink_smartplug, shelly, and tasmota
-#    devices.  The timer may be a floating point value for gpio types, it should
-#    be an integer for all other types.  The default is no timer is set.
+#    This option is available for gpio, mcu_output_pin, tplink_smartplug,
+#    shelly, and tasmota devices.  The timer may be a floating point value
+#    for gpio types, it should be an integer for all other types.  The
+#    default is no timer is set.
 ```
-
-!!! Note
-    Moonraker can only be used to toggle host device GPIOs (ie: GPIOs on your
-    PC or SBC).  Moonraker cannot control GPIOs on an MCU, Klipper should be
-    used for this purpose.
 
 Examples:
 
@@ -414,6 +411,37 @@ pin: gpiochip0/gpio17
 initial_state: on
 ```
 
+#### MCU Output Pin Device Configuration
+
+The following options are available for `mcu_output_pin` device types:
+
+```ini
+# moonraker.conf
+
+output_pin: my_pin
+#    The MCU output_pin (as defined in your Klipper config).  Valid examples:
+#      my_pin
+#    This parameter must be provided for "mcu_output_pin" type devices
+timer:
+#    A time (in seconds) after which the device will power off after being.
+#    switched on. This effectively turns the device into a  momentary switch.
+#    This option is available for gpio, mcu_output_pin, tplink_smartplug,
+#    shelly, and tasmota devices.  The timer may be a floating point value
+#    for gpio types, it should be an integer for all other types.  The
+#    default is no timer is set.
+```
+
+Examples:
+
+```ini
+# moonraker.conf
+
+# Control a relay providing power to the printer
+[power my_pin]
+type: mcu_output_pin
+output_pin: my_pin
+```
+
 #### RF Device Configuration
 
 The following options are available for gpio controlled `rf` device types:
@@ -437,9 +465,10 @@ initial_state: off
 timer:
 #    A time (in seconds) after which the device will power off after being.
 #    switched on. This effectively turns the device into a  momentary switch.
-#    This option is available for gpio, tplink_smartplug, shelly, and tasmota
-#    devices.  The timer may be a floating point value for gpio types, it should
-#    be an integer for all other types.  The default is no timer is set.
+#    This option is available for gpio, mcu_output_pin, tplink_smartplug,
+#    shelly, and tasmota devices.  The timer may be a floating point value
+#    for gpio types, it should be an integer for all other types.  The
+#    default is no timer is set.
 on_code:
 off_code:
 #   Valid binary codes that are sent via the RF transmitter.
