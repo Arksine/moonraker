@@ -150,6 +150,9 @@ class Strip():
     async def wled_off(self: Strip) -> None:
         logging.debug(f"WLED: {self.name} off")
         self.onoff = OnOff.off
+        # Without this calling SET_WLED for a single pixel after WLED_OFF
+        # would send just that pixel
+        self.send_full_chain_data = True
         await self._send_wled_command({"on": False})
 
     def _wled_pixel(self: Strip, index: int) -> List[int]:
