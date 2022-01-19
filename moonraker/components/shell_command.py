@@ -121,7 +121,7 @@ class SCProcess(asyncio.subprocess.Process):
         else:
             stderr = self._noop()  # type: ignore
         stdin, stdout, stderr = await asyncio.tasks.gather(
-            stdin, stdout, stderr, loop=self._loop)  # type: ignore
+            stdin, stdout, stderr)
         await self.wait()
 
 class ShellCommand:
