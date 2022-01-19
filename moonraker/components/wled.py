@@ -168,16 +168,15 @@ class Strip():
         self._update_color_data(red, green, blue, white, index)
         if transmit:
 
-            if self.onoff == OnOff.off:
+            if self.onoff == OnOff.off or self.send_full_chain_data:
                 # Without a separate On call individual led control doesn"t
                 # turn the led strip back on or doesn't set brightness
-                # correctly
+                # correctly from off or a preset
                 self.onoff = OnOff.on
                 await self._send_wled_command({"on": True,
                                                "tt": 0,
                                                "bri": 255,
-                                               "seg": {"bri": 255,
-                                                       "i": []}})
+                                               "seg": {"bri": 255}})
 
             # Base command for setting an led (for all active segments)
             # See https://kno.wled.ge/interfaces/json-api/
@@ -192,7 +191,7 @@ class Strip():
                 self.send_full_chain_data = False
                 cdata = []
                 for i in range(self.chain_count):
-                    cdata.append(self._wled_pixel(i-1))
+                    cdata.append(self._wled_pixel(i+1))
                 state["seg"]["i"] = cdata
             else:
                 # Only one pixel has changed since last full data sent
