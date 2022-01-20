@@ -1169,7 +1169,7 @@ one or more macros, such as:
 # printer.cfg
 
 [gcode_macro WLED_ON]
-description: Turn WLED strip on using optional preset
+description: Turn WLED strip on using optional preset and resets led colors
 gcode:
   {% set strip = params.STRIP|string %}
   {% set preset = params.PRESET|default(-1)|int %}
@@ -1189,7 +1189,7 @@ gcode:
                              state=False)}
 
 [gcode_macro SET_WLED]
-description: SET_LED like functionlity for WLED
+description: SET_LED like functionlity for WLED, applies to all active segments
 gcode:
     {% set strip = params.STRIP|string %}
     {% set red = params.RED|default(0)|float %}
