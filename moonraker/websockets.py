@@ -343,13 +343,13 @@ class WebsocketManager(APITransport):
 
     def add_websocket(self, ws: WebSocket) -> None:
         self.websockets[ws.uid] = ws
-        logging.info(f"New Websocket Added: {ws.uid}")
+        logging.debug(f"New Websocket Added: {ws.uid}")
 
     def remove_websocket(self, ws: WebSocket) -> None:
         old_ws = self.websockets.pop(ws.uid, None)
         if old_ws is not None:
             self.server.remove_subscription(old_ws)
-            logging.info(f"Websocket Removed: {ws.uid}")
+            logging.debug(f"Websocket Removed: {ws.uid}")
         if self.closed_event is not None and not self.websockets:
             self.closed_event.set()
 
@@ -371,7 +371,7 @@ class WebsocketManager(APITransport):
             return
         self.closed_event = asyncio.Event()
         for ws in list(self.websockets.values()):
-            ws.close()
+            ws.close(1001, "Server Shutdown")
         try:
             await asyncio.wait_for(self.closed_event.wait(), 2.)
         except asyncio.TimeoutError:
@@ -389,13 +389,20 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.ip_addr: str = self.request.remote_ip
         self.queue_busy: bool = False
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
+        self.last_pong_time: float = self.event_loop.get_loop_time()
 
     def open(self, *args, **kwargs) -> None:
         self.set_nodelay(True)
+        agent = self.request.headers.get("User-Agent", "")
+        logging.info(f"Websocket Opened: ID: {self.uid}, "
+                     f"User Agent: {agent}")
         self.wsm.add_websocket(self)
 
     def on_message(self, message: Union[bytes, str]) -> None:
         self.event_loop.register_callback(self._process_message, message)
+
+    def on_pong(self, data: bytes) -> None:
+        self.last_pong_time = self.event_loop.get_loop_time()
 
     async def _process_message(self, message: str) -> None:
         try:
@@ -445,6 +452,12 @@ class WebSocket(WebSocketHandler, Subscribable):
     def on_close(self) -> None:
         self.is_closed = True
         self.message_buf = []
+        now = self.event_loop.get_loop_time()
+        pong_elapsed = now - self.last_pong_time
+        logging.info(f"Websocket Closed: ID: {self.uid} "
+                     f"Close Code: {self.close_code}, "
+                     f"Close Reason: {self.close_reason}, "
+                     f"Pong Time Elapsed: {pong_elapsed:.2f}")
         self.wsm.remove_websocket(self)
 
     def check_origin(self, origin: str) -> bool:
