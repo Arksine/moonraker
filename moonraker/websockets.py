@@ -394,7 +394,14 @@ class WebSocket(WebSocketHandler, Subscribable):
     def open(self, *args, **kwargs) -> None:
         self.set_nodelay(True)
         agent = self.request.headers.get("User-Agent", "")
+        is_proxy = False
+        if (
+            "X-Forwarded-For" in self.request.headers or
+            "X-Real-Ip" in self.request.headers
+        ):
+            is_proxy = True
         logging.info(f"Websocket Opened: ID: {self.uid}, "
+                     f"Proxied: {is_proxy}, "
                      f"User Agent: {agent}")
         self.wsm.add_websocket(self)
 
