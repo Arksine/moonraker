@@ -171,20 +171,12 @@ class Strip():
         self._update_color_data(red, green, blue, white, index)
         if transmit:
 
-            if self.onoff == OnOff.off or self.send_full_chain_data:
-                # Without a separate On call individual led control doesn"t
-                # turn the led strip back on or doesn't set brightness
-                # correctly from off or a preset
-                self.onoff = OnOff.on
-                await self._send_wled_command({"on": True,
-                                               "tt": 0,
-                                               "bri": 255,
-                                               "seg": {"bri": 255}})
-
             # Base command for setting an led (for all active segments)
             # See https://kno.wled.ge/interfaces/json-api/
-            state: Dict[str, Any] = {"tt": 0,
-                                     "seg": {"i": []}}
+            state: Dict[str, Any] = {"on": True,
+                                     "tt": 0,
+                                     "bri": 255,
+                                     "seg": {"bri": 255, "i": []}}
             if index is None:
                 # All pixels same color only send range command of first color
                 self.send_full_chain_data = False
@@ -203,6 +195,15 @@ class Strip():
 
             # Send wled control command
             await self._send_wled_command(state)
+
+            if self.onoff == OnOff.off or self.send_full_chain_data:
+                # Without a repeated call individual led control doesn't
+                # turn the led strip back on or doesn't set brightness
+                # correctly from off or a preset
+                # Confirmed as a bug:
+                # https://discord.com/channels/473448917040758787/757254961640898622/934135556370202645
+                self.onoff = OnOff.on
+                await self._send_wled_command(state)
         else:
             # If not transmitting this time easiest just to send all data when
             # next transmitting
