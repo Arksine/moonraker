@@ -33,29 +33,20 @@ if TYPE_CHECKING:
     from . import klippy_apis
     APIComp = klippy_apis.KlippyAPI
 
-class ColorConfig(str, Enum):
-    RGB: str = "RGB"
-    RGBW: str = "RGBW"
-
-    def Elem_Size(self):
-        if self is ColorConfig.RGB:
-            return 3
-        return 4
-
 class OnOff(str, Enum):
     on: str = "on"
     off: str = "off"
 
 class Strip():
+    _COLORSIZE: int = 4
+
     def __init__(self: Strip,
                  name: str,
-                 color_config: ColorConfig,
                  cfg: ConfigHelper):
         self.server = cfg.get_server()
         self.request_mutex = asyncio.Lock()
 
         self.name = name
-        self.color_config = color_config
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -64,8 +55,9 @@ class Strip():
         self.initial_white: float = cfg.getfloat("initial_white", 0.5)
         self.chain_count: int = cfg.getint("chain_count", 1)
 
+        # Supports rgbw always
         self._chain_data = bytearray(
-            self.chain_count * color_config.Elem_Size())
+            self.chain_count * self._COLORSIZE)
 
         self.onoff = OnOff.off
         self.preset = self.initial_preset
@@ -76,7 +68,6 @@ class Strip():
             "status": self.onoff,
             "chain_count": self.chain_count,
             "preset": self.preset,
-            "color_config": self.color_config,
             "error": self.error_state
         }
 
@@ -106,10 +97,7 @@ class Strip():
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
         white = int(white * 255. + .5)
-        if self.color_config.Elem_Size() == 3:
-            led_data = [red, green, blue]
-        else:
-            led_data = [red, green, blue, white]
+        led_data = [red, green, blue, white]
 
         if index is None:
             self._chain_data[:] = led_data * self.chain_count
@@ -156,11 +144,11 @@ class Strip():
         await self._send_wled_command({"on": False})
 
     def _wled_pixel(self: Strip, index: int) -> List[int]:
-        elem_size = self.color_config.Elem_Size()
-        elem: List[int] = []
-        for p in self._chain_data[(index-1)*elem_size: (index)*elem_size]:
-            elem.append(p)
-        return elem
+        led_color_data: List[int] = []
+        for p in self._chain_data[(index-1)*self._COLORSIZE:
+                                  (index)*self._COLORSIZE]:
+            led_color_data.append(p)
+        return led_color_data
 
     async def set_wled(self: Strip,
                        red: float, green: float, blue: float, white: float,
@@ -212,9 +200,8 @@ class Strip():
 class StripHttp(Strip):
     def __init__(self: StripHttp,
                  name: str,
-                 color_config: ColorConfig,
                  cfg: ConfigHelper):
-        super().__init__(name, color_config, cfg)
+        super().__init__(name, cfg)
 
         # Read the uri information
         addr: str = cfg.get("address")
@@ -246,9 +233,8 @@ class StripHttp(Strip):
 class StripSerial(Strip):
     def __init__(self: StripSerial,
                  name: str,
-                 color_config: ColorConfig,
                  cfg: ConfigHelper):
-        super().__init__(name, color_config, cfg)
+        super().__init__(name, cfg)
 
         # Read the serial information (requires wled 0.13 2108250 or greater)
         self.serialport: str = cfg.get("serial")
@@ -278,14 +264,7 @@ class WLED:
         self.server = config.get_server()
         prefix_sections = config.get_prefix_sections("wled")
         logging.info(f"WLED component loading strips: {prefix_sections}")
-        # Allow unexpected color config strings to match klipper
-        color_configs = {
-            "GRB": ColorConfig.RGB,
-            "RGB": ColorConfig.RGB,
-            "BRG": ColorConfig.RGB,
-            "GRBW": ColorConfig.RGBW,
-            "RGBW": ColorConfig.RGBW
-        }
+
         strip_types = {
             "HTTP": StripHttp,
             "SERIAL": StripSerial
@@ -303,13 +282,8 @@ class WLED:
 
                 logging.info(f"WLED strip: {name}")
 
-                # Public setting name change but support old name internally
-                color_cfg: str = cfg.get("color_order", "RGB")
-                color_cfg = cfg.get("color_config", color_cfg)
-                color_config = color_configs.get(color_cfg.upper())
-                if color_config is None:
-                    raise config.error(
-                        f"Color not supported: {color_cfg}")
+                # Discard old color_order setting, always support 4 color strips
+                _ = cfg.get("color_order", "")
 
                 strip_type: str = cfg.get("type", "http")
                 strip_class: Optional[Type[Strip]]
@@ -317,7 +291,7 @@ class WLED:
                 if strip_class is None:
                     raise config.error(f"Unsupported Strip Type: {strip_type}")
 
-                self.strips[name] = strip_class(name, color_config, cfg)
+                self.strips[name] = strip_class(name, cfg)
 
             except Exception as e:
                 # Ensures errors such as "Color not supported" are visible
