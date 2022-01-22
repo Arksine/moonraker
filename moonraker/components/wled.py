@@ -184,10 +184,10 @@ class Strip():
             # Send wled control command
             await self._send_wled_command(state)
 
-            if self.onoff == OnOff.off or self.send_full_chain_data:
+            if self.onoff == OnOff.off:
                 # Without a repeated call individual led control doesn't
                 # turn the led strip back on or doesn't set brightness
-                # correctly from off or a preset
+                # correctly from off
                 # Confirmed as a bug:
                 # https://discord.com/channels/473448917040758787/757254961640898622/934135556370202645
                 self.onoff = OnOff.on
