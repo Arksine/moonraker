@@ -255,20 +255,31 @@ machine_name: Klipper
 #   An optional unique machine name which displays on the PanelDue's
 #   Header.  The default is "Klipper".
 macros:
- LOAD_FILAMENT
- UNLOAD_FILAMENT
- PANELDUE_BEEP FREQUENCY=500 DURATION=1
+  MACRO1, Subdir1_Test/Macro1 in Subdir1
+  MACRO2, Subdir1_Test/Macro2 in Subdir1
+  MACRO3, Subdir2_Test/Subdir3_Test/Macro3 in Subdir3
+  GOTO_HOME, Go to 0, 0
+  LOAD_FILAMENT
+  PANELDUE_BEEP FREQUENCY=500 DURATION=1, Paneldue Beep
 #   A list of newline separated "macros" that are displayed in the
 #   PanelDue's "macros" tab.  These can be gcode macros or simple
 #   gcodes.  A macro may contain parameters.  The default is no
 #   macros will be displayed by the PanelDue.
+#
+#   It is also possible to use virtual 'folders' to organise your macros.
+#   The format for that is: <real macro name>, <folder/macro display name>
+#
+#   Multiple levels are supported. This is all optional, so specifying only
+#   the macro name will work too.
+#   !! Unfortunately, the PanelDue firmware (1.24) does not seem to support 
+#   spaces in the FOLDER names so you have to use underscores or equivalents. 
+#   Macro names, however, can contain spaces.
 confirmed_macros:
-  RESTART
-  FIRMWARE_RESTART
-#  Like the "macros" option, this list is added to the macros tab.
-#  When one of these macros is excuted the PanelDue will prompt
-#  the user with a confirmation dialog.  The default is to include
-#  RESTART and FIRMWARE_RESTART.
+  RESTART, Restart
+  FIRMWARE_RESTART, Restart the Firmware
+#   Like the "macros" option, this list is added to the macros tab.
+#   When one of these macros is excuted the PanelDue will prompt
+#   the user with a confirmation dialog.
 ```
 
 Most options above are self explanatory.  The "macros" option can be used
