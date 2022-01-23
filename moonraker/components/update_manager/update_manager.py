@@ -783,8 +783,6 @@ class PackageDeploy(BaseDeploy):
         storage = self._load_storage()
         self.use_packagekit = config.getboolean("enable_packagekit", True)
         self.available_packages: List[str] = storage.get('packages', [])
-        self.refresh_evt: Optional[asyncio.Event] = None
-        self.mutex: asyncio.Lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         provider: BasePackageProvider
@@ -833,26 +831,19 @@ class PackageDeploy(BaseDeploy):
         return provider
 
     async def refresh(self) -> None:
-        if self.refresh_evt is not None:
-            self.refresh_evt.wait()
-            return
-        async with self.mutex:
-            self.refresh_evt = asyncio.Event()
-            try:
-                # Do not force a refresh until the server has started
-                if self.server.is_running():
-                    await self._update_package_cache(force=True)
-                self.available_packages = await self.provider.get_packages()
-                pkg_msg = "\n".join(self.available_packages)
-                logging.info(
-                    f"Detected {len(self.available_packages)} package updates:"
-                    f"\n{pkg_msg}")
-            except Exception:
-                logging.exception("Error Refreshing System Packages")
-            self.refresh_evt.set()
-            self.refresh_evt = None
-            # Update Persistent Storage
-            self._save_state()
+        try:
+            # Do not force a refresh until the server has started
+            if self.server.is_running():
+                await self._update_package_cache(force=True)
+            self.available_packages = await self.provider.get_packages()
+            pkg_msg = "\n".join(self.available_packages)
+            logging.info(
+                f"Detected {len(self.available_packages)} package updates:"
+                f"\n{pkg_msg}")
+        except Exception:
+            logging.exception("Error Refreshing System Packages")
+        # Update Persistent Storage
+        self._save_state()
 
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
@@ -860,20 +851,19 @@ class PackageDeploy(BaseDeploy):
         return storage
 
     async def update(self) -> bool:
-        async with self.mutex:
-            if not self.available_packages:
-                return False
-            self.cmd_helper.notify_update_response("Updating packages...")
-            try:
-                await self._update_package_cache(force=True, notify=True)
-                await self.provider.upgrade_system()
-            except Exception:
-                raise self.server.error("Error updating system packages")
-            self.available_packages = []
-            self._save_state()
-            self.cmd_helper.notify_update_response(
-                "Package update finished...", is_complete=True)
-            return True
+        if not self.available_packages:
+            return False
+        self.cmd_helper.notify_update_response("Updating packages...")
+        try:
+            await self._update_package_cache(force=True, notify=True)
+            await self.provider.upgrade_system()
+        except Exception:
+            raise self.server.error("Error updating system packages")
+        self.available_packages = []
+        self._save_state()
+        self.cmd_helper.notify_update_response(
+            "Package update finished...", is_complete=True)
+        return True
 
     async def _update_package_cache(self,
                                     force: bool = False,
@@ -1304,8 +1294,6 @@ class WebClientDeploy(BaseDeploy):
         dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
         self.dl_info: Tuple[str, str, int] = cast(
             Tuple[str, str, int], tuple(dl_info))
-        self.refresh_evt: Optional[asyncio.Event] = None
-        self.mutex: asyncio.Lock = asyncio.Lock()
         logging.info(f"\nInitializing Client Updater: '{self.name}',"
                      f"\nChannel: {self.channel}"
                      f"\npath: {self.path}")
@@ -1320,19 +1308,12 @@ class WebClientDeploy(BaseDeploy):
             self.version = "?"
 
     async def refresh(self) -> None:
-        if self.refresh_evt is not None:
-            self.refresh_evt.wait()
-            return
-        async with self.mutex:
-            self.refresh_evt = asyncio.Event()
-            try:
-                await self._get_local_version()
-                await self._get_remote_version()
-            except Exception:
-                logging.exception("Error Refreshing Client")
-            self.refresh_evt.set()
-            self.refresh_evt = None
-            self._save_state()
+        try:
+            await self._get_local_version()
+            await self._get_remote_version()
+        except Exception:
+            logging.exception("Error Refreshing Client")
+        self._save_state()
 
     async def _get_remote_version(self) -> None:
         # Remote state
@@ -1375,45 +1356,44 @@ class WebClientDeploy(BaseDeploy):
         return storage
 
     async def update(self) -> bool:
-        async with self.mutex:
+        if self.remote_version == "?":
+            await self._get_remote_version()
             if self.remote_version == "?":
-                await self._get_remote_version()
-                if self.remote_version == "?":
-                    raise self.server.error(
-                        f"Client {self.repo}: Unable to locate update")
-            dl_url, content_type, size = self.dl_info
-            if dl_url == "?":
                 raise self.server.error(
-                    f"Client {self.repo}: Invalid download url")
-            if self.version == self.remote_version:
-                # Already up to date
-                return False
-            event_loop = self.server.get_event_loop()
+                    f"Client {self.repo}: Unable to locate update")
+        dl_url, content_type, size = self.dl_info
+        if dl_url == "?":
+            raise self.server.error(
+                f"Client {self.repo}: Invalid download url")
+        if self.version == self.remote_version:
+            # Already up to date
+            return False
+        event_loop = self.server.get_event_loop()
+        self.cmd_helper.notify_update_response(
+            f"Updating Web Client {self.name}...")
+        self.cmd_helper.notify_update_response(
+            f"Downloading Client: {self.name}")
+        with tempfile.TemporaryDirectory(
+                suffix=self.name, prefix="client") as tempdirname:
+            tempdir = pathlib.Path(tempdirname)
+            temp_download_file = tempdir.joinpath(f"{self.name}.zip")
+            temp_persist_dir = tempdir.joinpath(self.name)
+            await self.cmd_helper.streaming_download_request(
+                dl_url, temp_download_file, content_type, size)
             self.cmd_helper.notify_update_response(
-                f"Updating Web Client {self.name}...")
-            self.cmd_helper.notify_update_response(
-                f"Downloading Client: {self.name}")
-            with tempfile.TemporaryDirectory(
-                    suffix=self.name, prefix="client") as tempdirname:
-                tempdir = pathlib.Path(tempdirname)
-                temp_download_file = tempdir.joinpath(f"{self.name}.zip")
-                temp_persist_dir = tempdir.joinpath(self.name)
-                await self.cmd_helper.streaming_download_request(
-                    dl_url, temp_download_file, content_type, size)
-                self.cmd_helper.notify_update_response(
-                    f"Download Complete, extracting release to '{self.path}'")
-                await event_loop.run_in_thread(
-                    self._extract_release, temp_persist_dir,
-                    temp_download_file)
-            self.version = self.remote_version
-            version_path = self.path.joinpath(".version")
-            if not version_path.exists():
-                await event_loop.run_in_thread(
-                    version_path.write_text, self.version)
-            self.cmd_helper.notify_update_response(
-                f"Client Update Finished: {self.name}", is_complete=True)
-            self._save_state()
-            return True
+                f"Download Complete, extracting release to '{self.path}'")
+            await event_loop.run_in_thread(
+                self._extract_release, temp_persist_dir,
+                temp_download_file)
+        self.version = self.remote_version
+        version_path = self.path.joinpath(".version")
+        if not version_path.exists():
+            await event_loop.run_in_thread(
+                version_path.write_text, self.version)
+        self.cmd_helper.notify_update_response(
+            f"Client Update Finished: {self.name}", is_complete=True)
+        self._save_state()
+        return True
 
     def _extract_release(self,
                          persist_dir: pathlib.Path,

@@ -5,7 +5,6 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import asyncio
 import os
 import pathlib
 import json
@@ -74,8 +73,6 @@ class ZipDeploy(AppDeploy):
         self.package_list: List[str] = []
         self.python_pkg_list: List[str] = []
         self.release_download_info: Tuple[str, str, int] = ("?", "?", 0)
-        self.mutex: asyncio.Lock = asyncio.Lock()
-        self.refresh_event: Optional[asyncio.Event] = None
 
     @staticmethod
     async def from_application(app: AppDeploy) -> ZipDeploy:
@@ -125,18 +122,11 @@ class ZipDeploy(AppDeploy):
         return tag_version
 
     async def refresh(self) -> None:
-        if self.refresh_event is not None:
-            await self.refresh_event.wait()
-            return
-        async with self.mutex:
-            self.refresh_event = asyncio.Event()
-            try:
-                await self._update_repo_state()
-            except Exception:
-                self.verified = False
-                self.log_exc("Error refreshing application state")
-            self.refresh_event.set()
-            self.refresh_event = None
+        try:
+            await self._update_repo_state()
+        except Exception:
+            self.verified = False
+            self.log_exc("Error refreshing application state")
 
     async def _update_repo_state(self) -> None:
         self.errors = []
@@ -372,42 +362,40 @@ class ZipDeploy(AppDeploy):
             zf.extractall(self.path)
 
     async def update(self, force_dep_update: bool = False) -> bool:
-        async with self.mutex:
-            if not self._is_valid:
-                raise self.log_exc("Update aborted, repo not valid", False)
-            if self.short_version == self.latest_version:
-                # already up to date
-                return False
-            self.cmd_helper.notify_update_response(
-                f"Updating Application {self.name}...")
-            npm_hash = await self._get_file_hash(self.npm_pkg_json)
-            dl_url, content_type, size = self.release_download_info
-            self.notify_status("Starting Download...")
-            with tempfile.TemporaryDirectory(
-                    suffix=self.name, prefix="app") as tempdirname:
-                tempdir = pathlib.Path(tempdirname)
-                temp_download_file = tempdir.joinpath(f"{self.name}.zip")
-                await self.cmd_helper.streaming_download_request(
-                    dl_url, temp_download_file, content_type, size)
-                self.notify_status(
-                    f"Download Complete, extracting release to '{self.path}'")
-                event_loop = self.server.get_event_loop()
-                await event_loop.run_in_thread(
-                    self._extract_release, temp_download_file)
-            await self._update_dependencies(npm_hash, force=force_dep_update)
-            await self._update_repo_state()
-            await self.restart_service()
-            self.notify_status("Update Finished...", is_complete=True)
-            return True
+        if not self._is_valid:
+            raise self.log_exc("Update aborted, repo not valid", False)
+        if self.short_version == self.latest_version:
+            # already up to date
+            return False
+        self.cmd_helper.notify_update_response(
+            f"Updating Application {self.name}...")
+        npm_hash = await self._get_file_hash(self.npm_pkg_json)
+        dl_url, content_type, size = self.release_download_info
+        self.notify_status("Starting Download...")
+        with tempfile.TemporaryDirectory(
+                suffix=self.name, prefix="app") as tempdirname:
+            tempdir = pathlib.Path(tempdirname)
+            temp_download_file = tempdir.joinpath(f"{self.name}.zip")
+            await self.cmd_helper.streaming_download_request(
+                dl_url, temp_download_file, content_type, size)
+            self.notify_status(
+                f"Download Complete, extracting release to '{self.path}'")
+            event_loop = self.server.get_event_loop()
+            await event_loop.run_in_thread(
+                self._extract_release, temp_download_file)
+        await self._update_dependencies(npm_hash, force=force_dep_update)
+        await self._update_repo_state()
+        await self.restart_service()
+        self.notify_status("Update Finished...", is_complete=True)
+        return True
 
     async def recover(self,
                       hard: bool = False,
                       force_dep_update: bool = False
                       ) -> None:
-        async with self.mutex:
-            url = f"https://api.github.com/repos/{self.host_repo}/releases"
-            releases = await self._fetch_github_releases(url)
-            await self._process_latest_release(releases[1])
+        url = f"https://api.github.com/repos/{self.host_repo}/releases"
+        releases = await self._fetch_github_releases(url)
+        await self._process_latest_release(releases[1])
         await self.update(force_dep_update=force_dep_update)
 
     async def reinstall(self) -> None:
