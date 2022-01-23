@@ -80,6 +80,35 @@ enable_object_processing: False
     See the [preprocess-cancellation](https://github.com/kageurufu/cancelobject-preprocessor)
     documentation for details.
 
+### `[machine]`
+
+The `machine` section provides configuration for Moonraker's machine component, which
+is responsible for for collecting "machine" (ie: PC, SBC, etc) data and communicating
+with system services such as systemd.
+
+```ini
+# moonraker.conf
+[machine]
+provider: systemd_dbus
+#   The provider implementation used to collect system service information
+#   and run service actions (ie: start, restart, stop).  This can be "none",
+#   "systemd_dbus", or "systemd_cli".  If the provider is set to "none" service
+#   action APIs will be disabled.  The default is systemd_dbus.
+```
+
+!!! Note
+    See the [install documentation](installation.md#policykit-permissions) for
+    details on PolicyKit permissions when using the DBus provider.
+
+!!! Warning
+    Some distributions (ie: DietPi) disable and mask the `systemd-logind`
+    service.  This service is necessary for the DBus provider to issue
+    `reboot` and `shutdown` commands.  In this scenario, Moonraker will fall
+    back to CLI based `reboot` and `shutdown` commands.  These commands require
+    that Moonraker be able to run `sudo` commands without a password.
+    Alternatively it may be possible to enable the `systemd-logind` service,
+    consult with your distro's documentation.
+
 ### `[database]`
 
 The `database` section provides configuration for Moonraker's lmdb database.
@@ -869,6 +898,11 @@ enable_system_updates: True
 #   that prefer to manage their packages directly.  Note that if this
 #   is set to False users will be need to make sure that all system
 #   dependencies are up to date.  The default is True.
+enable_packagekit: True
+#   This option is available when system updates are enabled via the
+#   "enable_system_updates" option.  When set to True, system package
+#   updates will be processed via PackageKit over D-Bus.  When set to False
+#   the "apt cli" fallback will be used.  The default is True.
 channel: dev
 #   The update channel applied to Klipper and Moonraker.  May be 'dev'
 #   which will fetch updates using git, or 'beta' which will fetch
