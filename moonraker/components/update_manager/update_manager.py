@@ -86,9 +86,14 @@ class UpdateManager:
         self.updaters: Dict[str, BaseDeploy] = {}
         if config.getboolean('enable_system_updates', True):
             self.updaters['system'] = PackageDeploy(config, self.cmd_helper)
+        db: DBComp = self.server.lookup_component('database')
+        kpath = db.get_item("moonraker", "klipper_path",
+                            KLIPPER_DEFAULT_PATH)
+        kenv_path = db.get_item("moonraker", "klipper_exec",
+                                KLIPPER_DEFAULT_EXEC)
         if (
-            os.path.exists(KLIPPER_DEFAULT_PATH) and
-            os.path.exists(KLIPPER_DEFAULT_EXEC)
+            os.path.exists(kpath) and
+            os.path.exists(kenv_path)
         ):
             self.updaters['klipper'] = get_deploy_class(KLIPPER_DEFAULT_PATH)(
                 self.app_config[f"update_manager klipper"], self.cmd_helper,
@@ -206,6 +211,10 @@ class UpdateManager:
         ):
             # Current Klipper Updater is valid
             return
+        # Update paths in the database
+        db: DBComp = self.server.lookup_component('database')
+        db.insert_item("moonraker", "klipper_path", kpath)
+        db.insert_item("moonraker", "klipper_exec", executable)
         need_notification = not isinstance(kupdater, AppDeploy)
         self.updaters['klipper'] = get_deploy_class(kpath)(
             self.app_config[f"update_manager klipper"], self.cmd_helper,
