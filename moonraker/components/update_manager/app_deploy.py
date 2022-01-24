@@ -147,8 +147,11 @@ class AppDeploy(BaseDeploy):
         executable = executable.expanduser()
         if self.executable is None:
             return False
-        return self.path.samefile(app_path) and \
-            self.executable.samefile(executable)
+        try:
+            return self.path.samefile(app_path) and \
+                self.executable.samefile(executable)
+        except Exception:
+            return False
 
     async def recover(self,
                       hard: bool = False,
