@@ -15,6 +15,7 @@ from utils import ServerError
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
+    Awaitable,
     List,
     Optional,
     Callable,
@@ -348,6 +349,23 @@ class ShellCommandFactory:
                             ) -> ShellCommand:
         return ShellCommand(self, cmd, callback, std_err_callback, env,
                             log_stderr, cwd)
+
+    def exec_cmd(self,
+                 cmd: str,
+                 timeout: float = 2.,
+                 retries: int = 1,
+                 sig_idx: int = 1,
+                 proc_input: Optional[str] = None,
+                 log_complete: bool = True,
+                 log_stderr: bool = False,
+                 env: Optional[Dict[str, str]] = None,
+                 cwd: Optional[str] = None
+                 ) -> Awaitable:
+        scmd = ShellCommand(self, cmd, None, None, env,
+                            log_stderr, cwd)
+        coro = scmd.run_with_response(timeout, retries, log_complete,
+                                      sig_idx, proc_input)
+        return asyncio.create_task(coro)
 
     async def close(self) -> None:
         for cmd in self.running_commands:
