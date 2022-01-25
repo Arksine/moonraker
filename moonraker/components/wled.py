@@ -283,7 +283,7 @@ class WLED:
                 logging.info(f"WLED strip: {name}")
 
                 # Discard old color_order setting, always support 4 color strips
-                _ = cfg.get("color_order", "")
+                _ = cfg.get("color_order", "", deprecate=True)
 
                 strip_type: str = cfg.get("type", "http")
                 strip_class: Optional[Type[Strip]]

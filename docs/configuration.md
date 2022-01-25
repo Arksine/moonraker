@@ -1132,6 +1132,9 @@ initial_white:
 #   initial_white will only be used for RGBW wled strips (defaults: 0.5)
 chain_count:
 #   Number of addressable neopixels for use (default: 1)
+color_order:
+#   *** DEPRECATED - Color order is defined per GPIO in WLED directly ***
+#   Color order for WLED strip, RGB or RGBW (default: RGB)
 ```
 Below are some examples:
 ```ini
