@@ -546,6 +546,9 @@ class McuOutputPin(PowerDevice):
     async def _handle_disconnect(self) -> None:
         self._set_state("init")
 
+    def process_klippy_shutdown(self) -> None:
+        self._set_state("init")
+
     def refresh_status(self) -> None:
         pass
 
