@@ -570,7 +570,7 @@ class McuOutputPin(PowerDevice):
         output_pin_entry = f"output_pin {self.output_pin}"
         if output_pin_entry not in data:
             return
-        is_on = data.get(output_pin_entry, {}).get('value', 0.0) == 1.0
+        is_on = data.get(output_pin_entry, {}).get('value', 0.0) > 0.0
         state = "on" if is_on else "off"
         self._set_state(state)
 
