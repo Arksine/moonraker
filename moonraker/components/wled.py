@@ -33,29 +33,20 @@ if TYPE_CHECKING:
     from . import klippy_apis
     APIComp = klippy_apis.KlippyAPI
 
-class ColorOrder(str, Enum):
-    RGB: str = "RGB"
-    RGBW: str = "RGBW"
-
-    def Elem_Size(self):
-        if self is ColorOrder.RGB:
-            return 3
-        return 4
-
 class OnOff(str, Enum):
     on: str = "on"
     off: str = "off"
 
 class Strip():
+    _COLORSIZE: int = 4
+
     def __init__(self: Strip,
                  name: str,
-                 color_order: ColorOrder,
                  cfg: ConfigHelper):
         self.server = cfg.get_server()
         self.request_mutex = asyncio.Lock()
 
         self.name = name
-        self.color_order = color_order
 
         self.initial_preset: int = cfg.getint("initial_preset", -1)
         self.initial_red: float = cfg.getfloat("initial_red", 0.5)
@@ -64,7 +55,9 @@ class Strip():
         self.initial_white: float = cfg.getfloat("initial_white", 0.5)
         self.chain_count: int = cfg.getint("chain_count", 1)
 
-        self._chain_data = bytearray(self.chain_count * color_order.Elem_Size())
+        # Supports rgbw always
+        self._chain_data = bytearray(
+            self.chain_count * self._COLORSIZE)
 
         self.onoff = OnOff.off
         self.preset = self.initial_preset
@@ -75,7 +68,6 @@ class Strip():
             "status": self.onoff,
             "chain_count": self.chain_count,
             "preset": self.preset,
-            "color_order": self.color_order,
             "error": self.error_state
         }
 
@@ -105,10 +97,7 @@ class Strip():
         blue = int(blue * 255. + .5)
         green = int(green * 255. + .5)
         white = int(white * 255. + .5)
-        if self.color_order is ColorOrder.RGB:
-            led_data = [red, green, blue]
-        else:
-            led_data = [red, green, blue, white]
+        led_data = [red, green, blue, white]
 
         if index is None:
             self._chain_data[:] = led_data * self.chain_count
@@ -149,7 +138,17 @@ class Strip():
     async def wled_off(self: Strip) -> None:
         logging.debug(f"WLED: {self.name} off")
         self.onoff = OnOff.off
+        # Without this calling SET_WLED for a single pixel after WLED_OFF
+        # would send just that pixel
+        self.send_full_chain_data = True
         await self._send_wled_command({"on": False})
+
+    def _wled_pixel(self: Strip, index: int) -> List[int]:
+        led_color_data: List[int] = []
+        for p in self._chain_data[(index-1)*self._COLORSIZE:
+                                  (index)*self._COLORSIZE]:
+            led_color_data.append(p)
+        return led_color_data
 
     async def set_wled(self: Strip,
                        red: float, green: float, blue: float, white: float,
@@ -159,40 +158,40 @@ class Strip():
             f"INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
-            elem_size = self.color_order.Elem_Size()
-            if self.onoff == OnOff.off:
-                # Without a separate On call individual led control doesn"t
-                # turn the led strip back on
-                self.onoff = OnOff.on
-                await self._send_wled_command({"on": True})
+
+            # Base command for setting an led (for all active segments)
+            # See https://kno.wled.ge/interfaces/json-api/
+            state: Dict[str, Any] = {"on": True,
+                                     "tt": 0,
+                                     "bri": 255,
+                                     "seg": {"bri": 255, "i": []}}
             if index is None:
-                # All pixels same color only send range command
-                elem = []
-                for p in self._chain_data[0:elem_size]:
-                    elem.append(p)
+                # All pixels same color only send range command of first color
                 self.send_full_chain_data = False
-                await self._send_wled_command(
-                    {"seg": {"i": [0, self.chain_count-1, elem]}})
+                state["seg"]["i"] = [0, self.chain_count, self._wled_pixel(1)]
             elif self.send_full_chain_data:
                 # Send a full set of color data (e.g. previous preset)
-                state: Dict[str, Any] = {"seg": {"i": []}}
+                self.send_full_chain_data = False
                 cdata = []
                 for i in range(self.chain_count):
-                    idx = i * elem_size
-                    elem = []
-                    for p in self._chain_data[idx: idx+elem_size]:
-                        elem.append(p)
-                    cdata.append(elem)
+                    cdata.append(self._wled_pixel(i+1))
                 state["seg"]["i"] = cdata
-                self.send_full_chain_data = False
-                await self._send_wled_command(state)
             else:
-                # Only one pixel has changed so send just that one
-                elem = []
-                for p in self._chain_data[(index-1)*elem_size:
-                                          (index-1)*elem_size+elem_size]:
-                    elem.append(p)
-                await self._send_wled_command({"seg": {"i": [index, elem]}})
+                # Only one pixel has changed since last full data sent
+                # so send just that one
+                state["seg"]["i"] = [index-1, self._wled_pixel(index)]
+
+            # Send wled control command
+            await self._send_wled_command(state)
+
+            if self.onoff == OnOff.off:
+                # Without a repeated call individual led control doesn't
+                # turn the led strip back on or doesn't set brightness
+                # correctly from off
+                # Confirmed as a bug:
+                # https://discord.com/channels/473448917040758787/757254961640898622/934135556370202645
+                self.onoff = OnOff.on
+                await self._send_wled_command(state)
         else:
             # If not transmitting this time easiest just to send all data when
             # next transmitting
@@ -201,9 +200,8 @@ class Strip():
 class StripHttp(Strip):
     def __init__(self: StripHttp,
                  name: str,
-                 color_order: ColorOrder,
                  cfg: ConfigHelper):
-        super().__init__(name, color_order, cfg)
+        super().__init__(name, cfg)
 
         # Read the uri information
         addr: str = cfg.get("address")
@@ -235,9 +233,8 @@ class StripHttp(Strip):
 class StripSerial(Strip):
     def __init__(self: StripSerial,
                  name: str,
-                 color_order: ColorOrder,
                  cfg: ConfigHelper):
-        super().__init__(name, color_order, cfg)
+        super().__init__(name, cfg)
 
         # Read the serial information (requires wled 0.13 2108250 or greater)
         self.serialport: str = cfg.get("serial")
@@ -261,25 +258,22 @@ class StripSerial(Strip):
 
 class WLED:
     def __init__(self: WLED, config: ConfigHelper) -> None:
-        try:
-            # root_logger = logging.getLogger()
-            # root_logger.setLevel(logging.DEBUG)
+        # root_logger = logging.getLogger()
+        # root_logger.setLevel(logging.DEBUG)
 
-            self.server = config.get_server()
-            prefix_sections = config.get_prefix_sections("wled")
-            logging.info(f"WLED component loading strips: {prefix_sections}")
-            color_orders = {
-                "RGB": ColorOrder.RGB,
-                "RGBW": ColorOrder.RGBW
-            }
-            strip_types = {
-                "http": StripHttp,
-                "serial": StripSerial
-            }
-            self.strips = {}
-            for section in prefix_sections:
-                cfg = config[section]
+        self.server = config.get_server()
+        prefix_sections = config.get_prefix_sections("wled")
+        logging.info(f"WLED component loading strips: {prefix_sections}")
 
+        strip_types = {
+            "HTTP": StripHttp,
+            "SERIAL": StripSerial
+        }
+        self.strips = {}
+        for section in prefix_sections:
+            cfg = config[section]
+
+            try:
                 name_parts = cfg.get_name().split(maxsplit=1)
                 if len(name_parts) != 2:
                     raise cfg.error(
@@ -288,52 +282,46 @@ class WLED:
 
                 logging.info(f"WLED strip: {name}")
 
-                color_order_cfg: str = cfg.get("color_order", "RGB")
-                color_order = color_orders.get(color_order_cfg)
-                if color_order is None:
-                    raise cfg.error(
-                        f"Color order not supported: {color_order_cfg}")
+                # Discard old color_order setting, always support 4 color strips
+                _ = cfg.get("color_order", "", deprecate=True)
 
                 strip_type: str = cfg.get("type", "http")
                 strip_class: Optional[Type[Strip]]
-                strip_class = strip_types.get(strip_type)
+                strip_class = strip_types.get(strip_type.upper())
                 if strip_class is None:
-                    raise cfg.error(f"Unsupported Strip Type: {strip_type}")
-                try:
-                    strip = strip_class(name, color_order, cfg)
-                except Exception as e:
-                    msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
-                    self.server.add_warning(msg)
-                    continue
+                    raise config.error(f"Unsupported Strip Type: {strip_type}")
 
-                self.strips[name] = strip
+                self.strips[name] = strip_class(name, cfg)
 
-            # Register two remote methods for GCODE
-            self.server.register_remote_method(
-                "set_wled_state", self.set_wled_state)
-            self.server.register_remote_method(
-                "set_wled", self.set_wled)
+            except Exception as e:
+                # Ensures errors such as "Color not supported" are visible
+                msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
+                self.server.add_warning(msg)
+                continue
 
-            # As moonraker is about making things a web api, let's try it
-            # Yes, this is largely a cut-n-paste from power.py
-            self.server.register_endpoint(
-                "/machine/wled/strips", ["GET"],
-                self._handle_list_strips)
-            self.server.register_endpoint(
-                "/machine/wled/status", ["GET"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/on", ["POST"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/off", ["POST"],
-                self._handle_batch_wled_request)
-            self.server.register_endpoint(
-                "/machine/wled/strip", ["GET", "POST"],
-                self._handle_single_wled_request)
+        # Register two remote methods for GCODE
+        self.server.register_remote_method(
+            "set_wled_state", self.set_wled_state)
+        self.server.register_remote_method(
+            "set_wled", self.set_wled)
 
-        except Exception as e:
-            logging.exception(e)
+        # As moonraker is about making things a web api, let's try it
+        # Yes, this is largely a cut-n-paste from power.py
+        self.server.register_endpoint(
+            "/machine/wled/strips", ["GET"],
+            self._handle_list_strips)
+        self.server.register_endpoint(
+            "/machine/wled/status", ["GET"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/on", ["POST"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/off", ["POST"],
+            self._handle_batch_wled_request)
+        self.server.register_endpoint(
+            "/machine/wled/strip", ["GET", "POST"],
+            self._handle_single_wled_request)
 
     async def component_init(self) -> None:
         try:
