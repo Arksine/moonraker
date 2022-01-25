@@ -431,6 +431,10 @@ timer:
 #    default is no timer is set.
 ```
 
+!!! Note
+    These devices cannot be used to toggle Klipper's power supply as they
+    require Klipper to actually be running.
+
 Examples:
 
 ```ini
