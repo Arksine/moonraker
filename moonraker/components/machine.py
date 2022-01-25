@@ -67,6 +67,7 @@ class Machine:
         }
         self._update_log_rollover(log=True)
         providers: Dict[str, type] = {
+            "none": BaseProvider,
             "systemd_cli": SystemdCliProvider,
             "systemd_dbus": SystemdDbusProvider
         }
@@ -391,10 +392,13 @@ class BaseProvider:
                                 action: str,
                                 service_name: str
                                 ) -> None:
-        pass
+        raise self.server.error("Serice Actions Not Available", 503)
 
     async def check_virt_status(self) -> Dict[str, Any]:
-        pass
+        return {
+            'virt_type': "unknown",
+            'virt_identifier': "unknown"
+        }
 
     def is_service_available(self, service: str) -> bool:
         return service in self.available_services
