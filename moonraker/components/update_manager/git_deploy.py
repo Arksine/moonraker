@@ -335,6 +335,20 @@ class GitRepo:
                 f"{self.git_remote}/{self.git_branch} "
                 "--always --tags --long")
 
+            # Get the latest tag as a fallback for shallow clones
+            tag: Optional[str] = None
+            try:
+                tagged_hash = await self.rev_list("--tags --max-count=1")
+                tag = await self.describe(f"--tags {tagged_hash}")
+            except Exception:
+                pass
+            else:
+                tag_match = re.match(r"v\d+\.\d+\.\d+", tag)
+                if tag_match is not None:
+                    tag = tag_match.group()
+                else:
+                    tag = None
+
             # Parse GitHub Owner from URL
             owner_match = re.match(r"https?://[^/]+/([^/]+)", self.upstream_url)
             self.git_owner = "?"
@@ -351,12 +365,21 @@ class GitRepo:
             self.dirty = current_version.endswith("dirty")
 
             # Parse Version Info
-            versions = []
+            versions: List[str] = []
             for ver in [current_version, upstream_version]:
                 tag_version = "?"
-                ver_match = re.match(r"v\d+\.\d+\.\d-\d+", ver)
+                ver_match = re.match(r"v\d+\.\d+\.\d+-\d+", ver)
                 if ver_match:
                     tag_version = ver_match.group()
+                elif tag is not None:
+                    if len(versions) == 0:
+                        count = await self.rev_list(f"{tag}..HEAD --count")
+                        full_ver = f"{tag}-{count}-g{ver}-shallow"
+                        self.full_version_string = full_ver
+                    else:
+                        count = await self.rev_list(
+                            f"{tag}..{self.upstream_commit} --count")
+                    tag_version = f"{tag}-{count}"
                 versions.append(tag_version)
             self.current_version, self.upstream_version = versions
 
@@ -536,6 +559,12 @@ class GitRepo:
         self._verify_repo()
         async with self.git_operation_lock:
             resp = await self._run_git_cmd(f"rev-parse {args}".strip())
+            return resp.strip()
+
+    async def rev_list(self, args: str = "") -> str:
+        self._verify_repo()
+        async with self.git_operation_lock:
+            resp = await self._run_git_cmd(f"rev-list {args}".strip())
             return resp.strip()
 
     async def get_config_item(self, item: str) -> str:
