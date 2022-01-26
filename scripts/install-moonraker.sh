@@ -59,10 +59,11 @@ create_virtualenv()
 # Step 5: Install startup script
 install_script()
 {
-# Create systemd service file
+    # Create systemd service file
     SERVICE_FILE="${SYSTEMDDIR}/moonraker.service"
     [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
     report_status "Installing system start script..."
+    sudo groupadd -f moonraker-admin
     sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
 #Systemd service file for moonraker
 [Unit]
@@ -76,6 +77,7 @@ WantedBy=multi-user.target
 [Service]
 Type=simple
 User=$USER
+SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
 WorkingDirectory=${SRCDIR}
 ExecStart=${LAUNCH_CMD} -c ${CONFIG_PATH} -l ${LOG_PATH}
@@ -87,6 +89,32 @@ EOF
     sudo systemctl daemon-reload
 }
 
+check_polkit_rules()
+{
+    if [ ! -x "$(command -v pkaction)" ]; then
+        return
+    fi
+    POLKIT_VERSION="$( pkaction --version | grep -Po "(\d?\.\d+)" )"
+    if [ "$POLKIT_VERSION" = "0.105" ]; then
+        POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker.pkla"
+        # legacy policykit rules don't give users other than root read access
+        if sudo [ ! -f $POLKIT_LEGACY_FILE ]; then
+            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
+            echo "*** if you wish to grant Moonraker authorization to manage"
+            echo "*** system services, reboot/shutdown the system, and update"
+            echo "*** packages."
+        fi
+    else
+        POLKIT_FILE="/etc/polkit-1/rules.d/moonraker.rules"
+        POLKIT_USR_FILE="/usr/share/polkit-1/rules.d/moonraker.rules"
+        if [ ! -f $POLKIT_FILE ] && [ ! -f $POLKIT_USR_FILE ]; then
+            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
+            echo "*** if you wish to grant Moonraker authorization to manage"
+            echo "*** system services, reboot/shutdown the system, and update"
+            echo "*** packages."
+        fi
+    fi
+}
 
 # Step 6: Start server
 start_software()
@@ -132,4 +160,5 @@ cleanup_legacy
 install_packages
 create_virtualenv
 install_script
+check_polkit_rules
 start_software
