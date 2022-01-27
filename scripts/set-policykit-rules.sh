@@ -4,6 +4,22 @@
 POLKIT_LEGACY_DIR="/etc/polkit-1/localauthority/50-local.d"
 POLKIT_DIR="/etc/polkit-1/rules.d"
 POLKIT_USR_DIR="/usr/share/polkit-1/rules.d"
+MOONRAKER_UNIT="/etc/systemd/system/moonraker.service"
+MOONRAKER_GID="-1"
+
+check_moonraker_service()
+{
+
+    # Force Add the moonraker-admin group
+    sudo groupadd -f moonraker-admin
+    [ ! -f $MOONRAKER_UNIT ] && return
+    # Make sure the unit file contains supplementary group
+    HAS_SUPP="$( grep -cm1 "SupplementaryGroups=moonraker-admin" $MOONRAKER_UNIT || true )"
+    [ "$HAS_SUPP" -eq 1 ] && return
+    report_status "Adding moonraker-admin supplementary group to $MOONRAKER_UNIT"
+    sudo sed -i "/^Type=simple$/a SupplementaryGroups=moonraker-admin" $MOONRAKER_UNIT
+    sudo systemctl daemon-reload
+}
 
 add_polkit_legacy_rules()
 {
@@ -31,7 +47,7 @@ add_polkit_rules()
     fi
     POLKIT_VERSION="$( pkaction --version | grep -Po "(\d?\.\d+)" )"
     report_status "PolicyKit Version ${POLKIT_VERSION} Detected"
-    if [ $POLKIT_VERSION = "0.105" ]; then
+    if [ "$POLKIT_VERSION" = "0.105" ]; then
         # install legacy pkla file
         add_polkit_legacy_rules
         return
@@ -46,6 +62,7 @@ add_polkit_rules()
         exit 1
     fi
     report_status "Installing PolicyKit Rules to ${RULE_FILE}..."
+    MOONRAKER_GID=$( getent group moonraker-admin | awk -F: '{printf "%d", $3}' )
     sudo /bin/sh -c "cat > ${RULE_FILE}" << EOF
 // Allow Moonraker User to manage systemd units, reboot and shutdown
 // the system
@@ -57,7 +74,16 @@ polkit.addRule(function(action, subject) {
          action.id == "org.freedesktop.login1.reboot-multiple-sessions" ||
          action.id.startsWith("org.freedesktop.packagekit.")) &&
         subject.user == "$USER") {
-        return polkit.Result.YES;
+        // Only allow processes with the "moonraker-admin" supplementary group
+        // access
+        var regex = "^Groups:.+?\\\s$MOONRAKER_GID[\\\s\\\0]";
+        var cmdpath = "/proc/" + subject.pid.toString() + "/status";
+        try {
+            polkit.spawn(["grep", "-Po", regex, cmdpath]);
+            return polkit.Result.YES;
+        } catch (error) {
+            return polkit.Result.NOT_HANDLED;
+        }
     }
 });
 EOF
@@ -87,9 +113,12 @@ verify_ready()
 
 CLEAR="$1"
 
-if [ $CLEAR = "--clear" ] || [ $CLEAR = "-c" ]; then
+if [ "$CLEAR" = "--clear" ] || [ "$CLEAR" = "-c" ]; then
     clear_polkit_rules
 else
     set -e
+    check_moonraker_service
     add_polkit_rules
+    report_status "Restarting Moonraker..."
+    sudo systemctl restart moonraker
 fi
