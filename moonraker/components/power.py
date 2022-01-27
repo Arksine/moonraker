@@ -416,15 +416,20 @@ class HTTPDevice(PowerDevice):
 
     async def _send_http_command(self,
                                  url: str,
-                                 command: str
+                                 command: str,
+                                 retries: int = 3
                                  ) -> Dict[str, Any]:
-        try:
-            response = await self.client.fetch(url)
-            data = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending '{self.type}' command: {command}"
-            logging.exception(msg)
-            raise self.server.error(msg)
+        for i in range(retries):
+            try:
+                response = await self.client.fetch(
+                    url, connect_timeout=5., request_timeout=20.)
+                data = json_decode(response.body)
+            except Exception as e:
+                if i == retries - 1:
+                    msg = f"Error sending '{self.type}' command: {command}"
+                    raise self.server.error(msg) from e
+            else:
+                break
         return data
 
     async def _send_power_request(self, state: str) -> str:
