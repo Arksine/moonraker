@@ -654,8 +654,9 @@ class FileRequestHandler(AuthorizedFileHandler):
         ascii_basename = self._escape_filename_to_ascii(basename)
         utf8_basename = self._escape_filename_to_utf8(basename)
         self.set_header(
-            "Content-Disposition", f"attachment; filename={ascii_basename}; "
-                                   f"filename*=UTF-8\'\'{utf8_basename}")
+            "Content-Disposition",
+            f"attachment; filename=\"{ascii_basename}\"; "
+            f"filename*=UTF-8\'\'{utf8_basename}")
 
     async def delete(self, path: str) -> None:
         path = self.request.path.lstrip("/").split("/", 2)[-1]
@@ -760,7 +761,8 @@ class FileRequestHandler(AuthorizedFileHandler):
             assert self.request.method == "HEAD"
 
     def _escape_filename_to_ascii(self, basename: str) -> str:
-        return basename.encode("ascii", "replace").decode()
+        ret = basename.encode("ascii", "replace").decode()
+        return ret.replace('"', '\\"')
 
     def _escape_filename_to_utf8(self, basename: str) -> str:
         return urllib.parse.quote(basename, encoding="utf-8")
