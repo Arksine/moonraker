@@ -428,6 +428,7 @@ class HTTPDevice(PowerDevice):
                 if i == retries - 1:
                     msg = f"Error sending '{self.type}' command: {command}"
                     raise self.server.error(msg) from e
+                await asyncio.sleep(1.0)
             else:
                 break
         return data
