@@ -99,19 +99,20 @@ class MoonrakerDatabase:
             "moonraker", "database.protected_namespaces", ["moonraker"]))
         self.forbidden_namespaces = set(self.get_item(
             "moonraker", "database.forbidden_namespaces", []))
+        # Track debug access and unsafe shutdowns
         debug_counter: int = self.get_item(
             "moonraker", "database.debug_counter", 0)
         if self.enable_debug:
             debug_counter += 1
             self.insert_item("moonraker", "database.debug_counter",
                              debug_counter)
-        if debug_counter:
-            logging.info(f"Database Debug Count: {debug_counter}")
-
-        # Track unsafe shutdowns
         unsafe_shutdowns: int = self.get_item(
             "moonraker", "database.unsafe_shutdowns", 0)
-        logging.info(f"Unsafe Shutdown Count: {unsafe_shutdowns}")
+        msg = f"Unsafe Shutdown Count: {unsafe_shutdowns}"
+        if debug_counter:
+            msg += f"; Database Debug Count: {debug_counter}"
+        self.server.add_log_rollover_item("database", msg)
+
         # Increment unsafe shutdown counter.  This will be reset if
         # moonraker is safely restarted
         self.insert_item("moonraker", "database.unsafe_shutdowns",
