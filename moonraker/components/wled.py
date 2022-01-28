@@ -213,7 +213,9 @@ class StripHttp(Strip):
         self.client = AsyncHTTPClient()
 
     async def send_wled_command_impl(self: StripHttp,
-                                     state: Dict[str, Any]) -> None:
+                                     state: Dict[str, Any],
+                                     retries: int = 3
+                                     ) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: url:{self.url} json:{state}")
 
@@ -224,11 +226,19 @@ class StripHttp(Strip):
                                   body=json.dumps(state),
                                   connect_timeout=self.timeout,
                                   request_timeout=self.timeout)
-            response = await self.client.fetch(request)
+            for i in range(retries):
+                try:
+                    response = await self.client.fetch(request)
+                except Exception:
+                    if i == retries - 1:
+                        raise
+                    await asyncio.sleep(1.0)
+                else:
+                    break
 
             logging.debug(
                 f"WLED: url:{self.url} status:{response.code} "
-                f"response:{response.body}")
+                f"response:{response.body.decode()}")
 
 class StripSerial(Strip):
     def __init__(self: StripSerial,
