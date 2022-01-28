@@ -919,4 +919,9 @@ class RedirectHandler(AuthorizedRequestHandler):
                     400, "No url argument provided")
             url = body_args['url']
             assert url is not None
+        # validate the url origin
+        auth: AuthComp = self.server.lookup_component('authorization', None)
+        if auth is None or not auth.check_cors(url.rstrip("/")):
+            raise tornado.web.HTTPError(
+                400, f"Unauthorized URL redirect: {url}")
         self.redirect(url)
