@@ -44,7 +44,7 @@ class PrinterPower:
         logging.info(f"Power component loading devices: {prefix_sections}")
         dev_types = {
             "gpio": GpioDevice,
-            "mcu_output_pin": McuOutputPin,
+            "klipper_device": KlipperDevice,
             "tplink_smartplug": TPLinkSmartPlug,
             "tasmota": Tasmota,
             "shelly": Shelly,
@@ -509,19 +509,33 @@ class GpioDevice(PowerDevice):
             self.timer_handle.cancel()
             self.timer_handle = None
 
-class McuOutputPin(PowerDevice):
+class KlipperDevice(PowerDevice):
     def __init__(self,
                  config: ConfigHelper,
                  initial_val: Optional[int] = None
                  ) -> None:
+        if config.getboolean('off_when_shutdown', None) is not None:
+            raise config.error(
+                "Option 'off_when_shutdown' in section "
+                f"[{config.get_name()}] is unsupported for 'klipper_device'")
+        if config.getboolean('klipper_restart', None) is not None:
+            raise config.error(
+                "Option 'klipper_restart' in section "
+                f"[{config.get_name()}] is unsupported for 'klipper_device'")
         super().__init__(config)
+        self.off_when_shutdown = False
+        self.klipper_restart = False
         self.timer: Optional[float] = config.getfloat('timer', None)
         if self.timer is not None and self.timer < 0.000001:
             raise config.error(
                 f"Option 'timer' in section [{config.get_name()}] must "
                 "be above 0.0")
         self.timer_handle: Optional[asyncio.TimerHandle] = None
-        self.output_pin = config.get('output_pin')
+        self.object_name = config.get('object_name', '')
+        if not self.object_name.startswith("output_pin "):
+            raise config.error(
+                "Currently only Klipper 'output_pin' objects supported for "
+                f"'object_name' in section [{config.get_name()}]")
 
         self.server.register_event_handler(
             "server:status_update", self._status_update)
@@ -535,13 +549,12 @@ class McuOutputPin(PowerDevice):
 
     async def _handle_ready(self) -> None:
         kapis: APIComp = self.server.lookup_component('klippy_apis')
-        output_pin_entry = f"output_pin {self.output_pin}"
-        sub: Dict[str, Optional[List[str]]] = {output_pin_entry: None}
+        sub: Dict[str, Optional[List[str]]] = {self.object_name: None}
         try:
             data = await kapis.subscribe_objects(sub)
             self._set_state_from_data(data)
         except self.server.error as e:
-            logging.info(f"Error subscribing to {output_pin_entry}")
+            logging.info(f"Error subscribing to {self.object_name}")
 
     async def _handle_disconnect(self) -> None:
         self._set_state("init")
@@ -558,9 +571,10 @@ class McuOutputPin(PowerDevice):
             self.timer_handle = None
         try:
             kapis: APIComp = self.server.lookup_component('klippy_apis')
-            output_pin_value = "1" if state == "on" else "0"
+            object_name = self.object_name[len("output_pin "):]
+            object_name_value = "1" if state == "on" else "0"
             await kapis.run_gcode(
-                f"SET_PIN PIN={self.output_pin} VALUE={output_pin_value}")
+                f"SET_PIN PIN={object_name} VALUE={object_name_value}")
         except Exception:
             self.state = "error"
             msg = f"Error Toggling Device Power: {self.name}"
@@ -570,10 +584,9 @@ class McuOutputPin(PowerDevice):
         self._check_timer()
 
     def _set_state_from_data(self, data) -> None:
-        output_pin_entry = f"output_pin {self.output_pin}"
-        if output_pin_entry not in data:
+        if self.object_name not in data:
             return
-        is_on = data.get(output_pin_entry, {}).get('value', 0.0) > 0.0
+        is_on = data.get(self.object_name, {}).get('value', 0.0) > 0.0
         state = "on" if is_on else "off"
         self._set_state(state)
 
