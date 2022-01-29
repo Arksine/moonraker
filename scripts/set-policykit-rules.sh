@@ -112,6 +112,7 @@ verify_ready()
 }
 
 CLEAR="$1"
+verify_ready
 
 if [ "$CLEAR" = "--clear" ] || [ "$CLEAR" = "-c" ]; then
     clear_polkit_rules
