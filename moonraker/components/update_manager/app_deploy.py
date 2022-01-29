@@ -23,6 +23,7 @@ from typing import (
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from .update_manager import CommandHelper
+    from ..machine import Machine
 
 CHANNEL_TO_TYPE = {
     "stable": "zip",
@@ -146,8 +147,11 @@ class AppDeploy(BaseDeploy):
         executable = executable.expanduser()
         if self.executable is None:
             return False
-        return self.path.samefile(app_path) and \
-            self.executable.samefile(executable)
+        try:
+            return self.path.samefile(app_path) and \
+                self.executable.samefile(executable)
+        except Exception:
+            return False
 
     async def recover(self,
                       hard: bool = False,
@@ -173,9 +177,9 @@ class AppDeploy(BaseDeploy):
 
     async def _do_restart(self) -> None:
         self.notify_status("Restarting Service...")
+        machine: Machine = self.server.lookup_component("machine")
         try:
-            await self.cmd_helper.run_cmd(
-                f"sudo systemctl restart {self.name}")
+            await machine.do_service_action("restart", self.name)
         except Exception:
             if self.name == "moonraker":
                 # We will always get an error when restarting moonraker

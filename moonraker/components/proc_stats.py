@@ -16,6 +16,8 @@ from collections import deque
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
+    Awaitable,
+    Callable,
     Deque,
     Any,
     List,
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest, WebsocketManager
     from . import shell_command
-    from .machine import Machine
+    STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
@@ -55,7 +57,6 @@ class ProcStats:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.machine: Machine = self.server.load_component(config, 'machine')
         self.watchdog = Watchdog(self)
         self.stat_update_timer = self.event_loop.register_timer(
             self._handle_stat_update)
@@ -89,8 +90,12 @@ class ProcStats:
         self.last_net_stats: Dict[str, Dict[str, Any]] = {}
         self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
         self.cpu_usage: Dict[str, float] = {}
+        self.stat_callbacks: List[STAT_CALLBACK] = []
         self.stat_update_timer.start()
         self.watchdog.start()
+
+    def register_stat_callback(self, callback: STAT_CALLBACK) -> None:
+        self.stat_callbacks.append(callback)
 
     async def _handle_stat_request(self,
                                    web_request: WebRequest
@@ -156,11 +161,7 @@ class ProcStats:
             'system_cpu_usage': self.cpu_usage,
             'websocket_connections': websocket_count
         })
-        self.last_update_time = update_time
-        self.last_proc_time = proc_time
-        self.update_sequence += 1
-        if self.update_sequence == THROTTLE_CHECK_INTERVAL:
-            self.update_sequence = 0
+        if not self.update_sequence % THROTTLE_CHECK_INTERVAL:
             if self.vcgencmd is not None:
                 ts = await self._check_throttled_state()
                 cur_throttled = ts['bits']
@@ -171,8 +172,13 @@ class ProcStats:
                     self.server.send_event("proc_stats:cpu_throttled", ts)
                 self.last_throttled = cur_throttled
                 self.total_throttled |= cur_throttled
-            await self.machine.parse_network_interfaces()
-        await self.machine.update_service_status()
+        for cb in self.stat_callbacks:
+            ret = cb(self.update_sequence)
+            if ret is not None:
+                await ret
+        self.last_update_time = update_time
+        self.last_proc_time = proc_time
+        self.update_sequence += 1
         return eventtime + STAT_UPDATE_TIME
 
     async def _check_throttled_state(self) -> Dict[str, Any]:

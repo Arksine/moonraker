@@ -16,6 +16,8 @@ import subprocess
 import asyncio
 import hashlib
 import json
+import shlex
+import re
 from queue import SimpleQueue as Queue
 
 # Annotation imports
@@ -85,19 +87,38 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
         if self.stream is not None:
             self.stream.write("\n".join(lines) + "\n")
 
+def _run_git_command(cmd: str) -> str:
+    prog = shlex.split(cmd)
+    process = subprocess.Popen(prog, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    ret, err = process.communicate()
+    retcode = process.wait()
+    if retcode == 0:
+        return ret.strip().decode()
+    raise Exception(f"Failed to run git command: {cmd}")
+
+def _retrieve_git_tag(source_path: str) -> str:
+    cmd = f"git -C {source_path} rev-list --tags --max-count=1"
+    hash = _run_git_command(cmd)
+    cmd = f"git -C {source_path} describe --tags {hash}"
+    tag = _run_git_command(cmd)
+    cmd = f"git -C {source_path} rev-list {tag}..HEAD --count"
+    count = _run_git_command(cmd)
+    return f"{tag}-{count}"
+
 # Parse the git version from the command line.  This code
 # is borrowed from Klipper.
 def retrieve_git_version(source_path: str) -> str:
     # Obtain version info from "git" program
-    prog = ('git', '-C', source_path, 'describe', '--always',
-            '--tags', '--long', '--dirty')
-    process = subprocess.Popen(prog, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
-    ver, err = process.communicate()
-    retcode = process.wait()
-    if retcode == 0:
-        return ver.strip().decode()
-    raise Exception(f"Failed to retrieve git version: {err.decode()}")
+    cmd = f"git -C {source_path} describe --always --tags --long --dirty"
+    ver = _run_git_command(cmd)
+    tag_match = re.match(r"v\d+\.\d+\.\d+", ver)
+    if tag_match is not None:
+        return ver
+    # This is likely a shallow clone.  Resolve the tag and manually create
+    # the version string
+    tag = _retrieve_git_tag(source_path)
+    return f"t{tag}-g{ver}-shallow"
 
 def get_software_version() -> str:
     version = "?"

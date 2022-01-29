@@ -2,6 +2,11 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### January 22th 2022
+- The `color_order` option in the `[wled]` section has been deprecated.
+  This is configured in wled directly. This is not a breaking change,
+  the setting will simply be ignored not affecting functionality.
+
 ### December 24th 2021
 - The `password_file` option in the `[mqtt]` section has been deprecated.
   Use the `password` option instead.  This option may be a template, thus

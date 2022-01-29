@@ -185,6 +185,61 @@ These options may be changed by editing
 `/etc/systemd/system/moonraker.service`.  The `install-moonraker.sh` script
 may also be used to modify the config file location.
 
+### PolicyKit Permissions
+
+Some of Moonraker's components require elevated privileges to perform actions.
+Previously these actions could only be run via commandline programs launched
+with the `sudo` prefix.  This has significant downsides:
+
+- The user must be granted `NOPASSWD` sudo access.  Raspberry Pi OS
+  grants the Pi user this access by default, however most other distros
+  require that this be enabled through editing `visudo` or adding files
+  in `/etc/sudoers.d/`.
+- Some linux distributions require additional steps such as those taken
+  in `sudo_fix.sh`.
+- Running CLI programs is relatively expensive.  This isn't an issue for
+  programs that are run once at startup, but is undesirable if Moonraker
+  wants to poll information about the system.
+
+Moonraker now supports communicating with system services via D-Bus.
+Operations that require elevated privileges are authrorized through
+PolicyKit. On startup Moonraker will check for the necessary privileges
+and warn users if they are not available.  Warnings are presented in
+`moonraker.log` and directly to the user through some clients.
+
+To resolve these warnings users have two options:
+
+1) Install the PolicyKit permissions with the `set-policykit-rules.sh` script,
+   for example:
+
+```shell
+cd ~/moonraker/scripts
+./set-policykit-rules.sh
+sudo service moonraker restart
+```
+
+2) Configure Moonraker to use the legacy backend implementations for
+   the `machine` and/or `update_manager` components, ie:
+
+```ini
+# Use the systemd CLI provider rather than the DBus Provider
+[machine]
+provider: systemd_cli
+
+# Disable PackageKit to fallback to the APT CLI Package Update
+# implementation.
+[update_manager]
+enable_packagekit: False
+
+# Alternatively system updates can be disabled
+[update_manager]
+enable_system_updates: False
+```
+
+!!! Note
+    Previously installed PolicyKit rules can be removed by running
+    `set-policykit-rules.sh -c`
+
 ### Retrieving the API Key
 
 Some clients may require an API Key to connect to Moonraker.  After the
