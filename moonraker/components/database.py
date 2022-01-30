@@ -88,16 +88,40 @@ class MoonrakerDatabase:
                     self.namespaces[key.decode()] = self.lmdb_env.open_db(
                         key, txn)
                     remaining = cursor.next()
-                cursor.close()
-                if "moonraker" not in self.namespaces:
-                    mrdb = self.lmdb_env.open_db(b"moonraker", txn)
-                    self.namespaces["moonraker"] = mrdb
-                    txn.put(b'database_version',
-                            self._encode_value(DATABASE_VERSION),
-                            db=mrdb)
-        # Read out all namespaces to remove any invalid keys on init
-        for ns in self.namespaces.keys():
-            self._get_namespace(ns)
+            if "moonraker" not in self.namespaces:
+                mrdb = self.lmdb_env.open_db(b"moonraker", txn)
+                self.namespaces["moonraker"] = mrdb
+                txn.put(b'database_version',
+                        self._encode_value(DATABASE_VERSION),
+                        db=mrdb)
+            # Iterate through all records, checking for invalid keys
+            for ns, db in self.namespaces.items():
+                with txn.cursor(db=db) as cursor:
+                    remaining = cursor.first()
+                    while remaining:
+                        key_buf = cursor.key()
+                        try:
+                            decoded_key = bytes(key_buf).decode()
+                        except Exception:
+                            logging.info("Database Key Decode Error")
+                            decoded_key = ''
+                        if not decoded_key:
+                            hex_key = bytes(key_buf).hex()
+                            try:
+                                invalid_val = self._decode_value(cursor.value())
+                            except Exception:
+                                invalid_val = ""
+                            logging.info(
+                                f"Invalid Key '{hex_key}' found in namespace "
+                                f"'{ns}', dropping value: {repr(invalid_val)}")
+                            try:
+                                remaining = cursor.delete()
+                            except Exception:
+                                logging.exception("Error Deleting LMDB Key")
+                            else:
+                                continue
+                        remaining = cursor.next()
+
         # Protected Namespaces have read-only API access.  Write access can
         # be granted by enabling the debug option.  Forbidden namespaces
         # have no API access.  This cannot be overridden.
