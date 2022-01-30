@@ -226,13 +226,16 @@ sudo service moonraker restart
 [machine]
 provider: systemd_cli
 
-# Disable PackageKit to fallback to the APT CLI Package Update
+# Edit your existing [update_manager] section to disable
+# PackageKit.  This will fallback to the APT CLI Package Update
 # implementation.
 [update_manager]
+#..other update manager options
 enable_packagekit: False
 
 # Alternatively system updates can be disabled
 [update_manager]
+#..other update manager options
 enable_system_updates: False
 ```
 
