@@ -49,7 +49,11 @@ create_virtualenv()
     fi
 
     if [ ! -d ${PYTHONDIR} ]; then
-        virtualenv -p /usr/bin/python3 ${PYTHONDIR}
+        GET_PIP="${HOME}/get-pip.py"
+        virtualenv --no-pip -p /usr/bin/python3 ${PYTHONDIR}
+        curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o ${GET_PIP}
+        ${PYTHONDIR}/bin/python ${GET_PIP}
+        rm ${GET_PIP}
     fi
 
     # Install/update dependencies
