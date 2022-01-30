@@ -406,10 +406,11 @@ class MoonrakerDatabase:
         with self.thread_lock:
             try:
                 key_list = self._process_key(key)
+                record = self._get_record(namespace, key_list[0])
                 if len(key_list) == 1:
-                    return key_list[0] in self.ns_keys(namespace)
-                ns = self._get_namespace(namespace)
-                reduce(operator.getitem, key_list[1:], ns)
+                    return True
+                reduce(operator.getitem,      # type: ignore
+                       key_list[1:], record)
             except Exception:
                 return False
             return True
