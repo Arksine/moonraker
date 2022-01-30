@@ -111,10 +111,30 @@ verify_ready()
     fi
 }
 
-CLEAR="$1"
-verify_ready
+CLEAR="n"
+ROOT="n"
 
-if [ "$CLEAR" = "--clear" ] || [ "$CLEAR" = "-c" ]; then
+# Parse command line arguments
+while :; do
+    case $1 in
+        -c|--clear)
+            CLEAR="y"
+            ;;
+        -r|--root)
+            ROOT="y"
+            ;;
+        *)
+            break
+    esac
+
+    shift
+done
+
+if [ "$ROOT" = "n" ]; then
+    verify_ready
+fi
+
+if [ "$CLEAR" = "y" ]; then
     clear_polkit_rules
 else
     set -e
