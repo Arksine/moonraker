@@ -252,9 +252,9 @@ class AppDeploy(BaseDeploy):
         self.notify_status("Updating python packages...")
         try:
             # First attempt to update pip
-            await self.cmd_helper.run_cmd(
-                f"{self.pip_exe} install -U pip", timeout=1200., notify=True,
-                retries=3)
+            # await self.cmd_helper.run_cmd(
+            #     f"{self.pip_exe} install -U pip", timeout=1200., notify=True,
+            #     retries=3)
             await self.cmd_helper.run_cmd(
                 f"{self.pip_exe} install {args}", timeout=1200., notify=True,
                 retries=3)
