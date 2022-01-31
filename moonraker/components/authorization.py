@@ -75,7 +75,8 @@ class Authorization:
         self.force_logins = config.getboolean('force_logins', False)
         database: DBComp = self.server.lookup_component('database')
         database.register_local_namespace('authorized_users', forbidden=True)
-        self.users = database.wrap_namespace('authorized_users')
+        self.user_db = database.wrap_namespace('authorized_users')
+        self.users: Dict[str, Dict[str, Any]] = self.user_db.as_dict()
         api_user: Optional[Dict[str, Any]] = self.users.get(API_USER, None)
         if api_user is None:
             self.api_key = uuid.uuid4().hex
@@ -126,7 +127,8 @@ class Authorization:
                     self.users[username] = user_info
                     continue
                 self.public_jwks[jwk_id] = self._generate_public_jwk(priv_key)
-
+        # sync user changes to the database
+        self.user_db.sync(self.users)
         self.trusted_users: Dict[IPAddr, Any] = {}
         self.oneshot_tokens: Dict[str, OneshotToken] = {}
         self.permitted_paths: Set[str] = set()
@@ -229,6 +231,9 @@ class Authorization:
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
+    def _sync_user(self, username: str) -> None:
+        self.user_db[username] = self.users[username]
+
     async def component_init(self) -> None:
         self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
@@ -236,7 +241,8 @@ class Authorization:
         action = web_request.get_action()
         if action.upper() == 'POST':
             self.api_key = uuid.uuid4().hex
-            self.users[f'{API_USER}.api_key'] = self.api_key
+            self.users[API_USER]['api_key'] = self.api_key
+            self._sync_user(API_USER)
         return self.api_key
 
     async def _handle_oneshot_request(self, web_request: WebRequest) -> str:
@@ -256,8 +262,9 @@ class Authorization:
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid log out request for user {username}")
-        self.users.pop(f"{username}.jwt_secret", None)
-        jwk_id: str = self.users.pop(f"{username}.jwk_id", "")
+        self.users[username].pop("jwt_secret", None)
+        jwk_id: str = self.users[username].pop("jwk_id", None)
+        self._sync_user(username)
         self.public_jwks.pop(jwk_id, None)
         return {
             "username": username,
@@ -342,7 +349,8 @@ class Authorization:
             raise self.server.error("Invalid Password")
         new_hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', new_pass.encode(), salt, HASH_ITER).hex()
-        self.users[f'{username}.password'] = new_hashed_pass
+        self.users[username]['password'] = new_hashed_pass
+        self._sync_user(username)
         return {
             'username': username,
             'action': "user_password_reset"
@@ -371,6 +379,7 @@ class Authorization:
                 'created_on': time.time()
             }
             self.users[username] = user_info
+            self._sync_user(username)
             action = "user_created"
         else:
             if username not in self.users:
@@ -389,6 +398,7 @@ class Authorization:
             user_info['jwt_secret'] = private_key.hex_seed().decode()
             user_info['jwk_id'] = jwk_id
             self.users[username] = user_info
+            self._sync_user(username)
             self.public_jwks[jwk_id] = self._generate_public_jwk(private_key)
         else:
             private_key = self._load_private_key(jwt_secret_hex)
@@ -424,8 +434,10 @@ class Authorization:
         user_info: Optional[Dict[str, Any]] = self.users.get(username)
         if user_info is None:
             raise self.server.error(f"No registered user: {username}")
-        self.public_jwks.pop(self.users.get(f"{username}.jwk_id"), None)
+        if 'jwk_id' in user_info:
+            self.public_jwks.pop(user_info['jwk_id'], None)
         del self.users[username]
+        del self.user_db[username]
         event_loop = self.server.get_event_loop()
         event_loop.delay_callback(
             .005, self.server.send_event,
