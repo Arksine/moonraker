@@ -12,6 +12,7 @@ import logging
 import json
 import tempfile
 import asyncio
+from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
 
@@ -197,6 +198,9 @@ class FileManager:
         if root_dir is None or not full_path.startswith(root_dir):
             return ""
         return os.path.relpath(full_path, start=root_dir)
+
+    def get_metadata_storage(self) -> MetadataStorage:
+        return self.gcode_metadata
 
     def check_file_exists(self, root: str, filename: str) -> bool:
         root_dir = self.file_paths.get(root, "")
@@ -1500,7 +1504,12 @@ class MetadataStorage:
             key: str,
             default: _T = None
             ) -> Union[_T, Dict[str, Any]]:
-        return self.metadata.get(key, default)
+        return deepcopy(self.metadata.get(key, default))
+
+    def insert(self, key: str, value: Dict[str, Any]) -> None:
+        val = deepcopy(value)
+        self.metadata[key] = val
+        self.mddb[key] = val
 
     def _has_valid_data(self,
                         fname: str,
