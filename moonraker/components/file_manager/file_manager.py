@@ -33,7 +33,6 @@ from typing import (
 
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
-    from moonraker import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from components import database
@@ -60,7 +59,7 @@ class FileManager:
         self.file_paths: Dict[str, str] = {}
         db: DBComp = self.server.load_component(config, "database")
         gc_path: str = db.get_item(
-            "moonraker", "file_manager.gcode_path", "")
+            "moonraker", "file_manager.gcode_path", "").result()
         self.gcode_metadata = MetadataStorage(config, gc_path, db)
         self.inotify_handler = INotifyHandler(config, self,
                                               self.gcode_metadata)
@@ -172,8 +171,7 @@ class FileManager:
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
                 db: DBComp = self.server.lookup_component("database")
-                moon_db = db.wrap_namespace("moonraker")
-                moon_db["file_manager.gcode_path"] = path
+                db.insert_item("moonraker", "file_manager.gcode_path", path)
                 # scan for metadata changes
                 self.gcode_metadata.update_gcode_path(path)
             if full_access:
@@ -1162,10 +1160,10 @@ class INotifyHandler:
                 new_rel_path = self.file_manager.get_relative_path(
                     "gcodes", new_path)
                 if is_dir:
-                    self.gcode_metadata.move_directory_metadata(
+                    await self.gcode_metadata.move_directory_metadata(
                         prev_rel_path, new_rel_path)
                 else:
-                    return self.gcode_metadata.move_file_metadata(
+                    return await self.gcode_metadata.move_file_metadata(
                         prev_rel_path, new_rel_path)
             else:
                 # move from a non-gcodes root to gcodes root needs a rescan
@@ -1448,29 +1446,53 @@ class MetadataStorage:
         self.mddb = db.wrap_namespace(
             METADATA_NAMESPACE, parse_keys=False)
         version = db.get_item(
-            "moonraker", "file_manager.metadata_version", 0)
+            "moonraker", "file_manager.metadata_version", 0).result()
         if version != METADATA_VERSION:
             # Clear existing metadata when version is bumped
-            for fname in self.mddb.keys():
-                self.remove_file_metadata(fname)
+            self.mddb.clear()
             db.insert_item(
                 "moonraker", "file_manager.metadata_version",
                 METADATA_VERSION)
+        # Keep a local cache of the metadata.  This allows for synchronous
+        # queries.  Metadata is generally under 1KiB per entry, so even at
+        # 1000 gcode files we are using < 1MiB of additional memory.
+        # That said, in the future all components that access metadata should
+        # be refactored to do so asynchronously.
+        self.metadata: Dict[str, Any] = self.mddb.as_dict()
         self.pending_requests: Dict[
             str, Tuple[Dict[str, Any], asyncio.Event]] = {}
         self.busy: bool = False
+
+        # Check for removed gcode files while moonraker was shutdown
         if self.gc_path:
-            # Check for removed gcode files while moonraker was shutdown
-            for fname in list(self.mddb.keys()):
+            del_keys: List[str] = []
+            for fname in list(self.metadata.keys()):
                 fpath = os.path.join(self.gc_path, fname)
                 if not os.path.isfile(fpath):
-                    self.remove_file_metadata(fname)
-                    logging.info(f"Pruned file: {fname}")
-                    continue
+                    del self.metadata[fname]
+                    del_keys.append(fname)
+                elif "thumbnails" in self.metadata[fname]:
+                    # Check for any stale data entries and remove them
+                    need_sync = False
+                    for thumb in self.metadata[fname]['thumbnails']:
+                        if 'data' in thumb:
+                            del thumb['data']
+                            need_sync = True
+                    if need_sync:
+                        self.mddb[fname] = self.metadata[fname]
+            # Delete any removed keys from the database
+            if del_keys:
+                ret = self.mddb.delete_batch(del_keys).result()
+                self._remove_thumbs(ret)
+                pruned = '\n'.join(ret.keys())
+                if pruned:
+                    logging.info(f"Pruned metadata for the following:\n"
+                                 f"{pruned}")
 
     def update_gcode_path(self, path: str) -> None:
         if path == self.gc_path:
             return
+        self.metadata.clear()
         self.mddb.clear()
         self.gc_path = path
 
@@ -1478,10 +1500,7 @@ class MetadataStorage:
             key: str,
             default: _T = None
             ) -> Union[_T, Dict[str, Any]]:
-        return self.mddb.get(key, default)
-
-    def __getitem__(self, key: str) -> Dict[str, Any]:
-        return self.mddb[key]
+        return self.metadata.get(key, default)
 
     def _has_valid_data(self,
                         fname: str,
@@ -1491,7 +1510,7 @@ class MetadataStorage:
             # UFP files always need processing
             return False
         mdata: Dict[str, Any]
-        mdata = self.mddb.get(fname, {'size': "", 'modified': 0})
+        mdata = self.metadata.get(fname, {'size': "", 'modified': 0})
         for field in ['size', 'modified']:
             if mdata[field] != path_info.get(field, None):
                 return False
@@ -1500,72 +1519,113 @@ class MetadataStorage:
     def remove_directory_metadata(self, dir_name: str) -> None:
         if dir_name[-1] != "/":
             dir_name += "/"
-        for fname in list(self.mddb.keys()):
+        del_items: Dict[str, Any] = {}
+        for fname in list(self.metadata.keys()):
             if fname.startswith(dir_name):
-                self.remove_file_metadata(fname)
+                md = self.metadata.pop(fname, None)
+                if md:
+                    del_items[fname] = md
+        if del_items:
+            # Remove items from persistent storage
+            self.mddb.delete_batch(list(del_items.keys()))
+            eventloop = self.server.get_event_loop()
+            # Remove thumbs in a nother thread
+            eventloop.run_in_thread(self._remove_thumbs, del_items)
 
     def remove_file_metadata(self, fname: str) -> None:
-        metadata: Optional[Dict[str, Any]]
-        metadata = self.mddb.pop(fname, None)
-        if metadata is None:
+        md: Optional[Dict[str, Any]] = self.metadata.pop(fname, None)
+        if md is None:
             return
-        # Delete associated thumbnails
-        fdir = os.path.dirname(os.path.join(self.gc_path, fname))
-        if "thumbnails" in metadata:
-            thumb: Dict[str, Any]
-            for thumb in metadata["thumbnails"]:
-                path: Optional[str] = thumb.get("relative_path", None)
-                if path is None:
-                    continue
-                thumb_path = os.path.join(fdir, path)
-                if not os.path.isfile(thumb_path):
-                    continue
-                try:
-                    os.remove(thumb_path)
-                except Exception:
-                    logging.debug(f"Error removing thumb at {thumb_path}")
+        self.mddb.pop(fname, None)
+        eventloop = self.server.get_event_loop()
+        eventloop.run_in_thread(self._remove_thumbs, {fname: md})
 
-    def move_directory_metadata(self, prev_dir: str, new_dir: str) -> None:
+    def _remove_thumbs(self, records: Dict[str, Dict[str, Any]]) -> None:
+        for fname, metadata in records.items():
+            # Delete associated thumbnails
+            fdir = os.path.dirname(os.path.join(self.gc_path, fname))
+            if "thumbnails" in metadata:
+                thumb: Dict[str, Any]
+                for thumb in metadata["thumbnails"]:
+                    path: Optional[str] = thumb.get("relative_path", None)
+                    if path is None:
+                        continue
+                    thumb_path = os.path.join(fdir, path)
+                    if not os.path.isfile(thumb_path):
+                        continue
+                    try:
+                        os.remove(thumb_path)
+                    except Exception:
+                        logging.debug(f"Error removing thumb at {thumb_path}")
+
+    async def move_directory_metadata(self,
+                                      prev_dir: str,
+                                      new_dir: str
+                                      ) -> None:
         if prev_dir[-1] != "/":
             prev_dir += "/"
-        for prev_fname in list(self.mddb.keys()):
+        moved: List[Tuple[str, str, Dict[str, Any]]] = []
+        for prev_fname in list(self.metadata.keys()):
             if prev_fname.startswith(prev_dir):
                 new_fname = os.path.join(new_dir, prev_fname[len(prev_dir):])
-                self.move_file_metadata(prev_fname, new_fname, False)
+                md: Optional[Dict[str, Any]]
+                md = self.metadata.pop(prev_fname, None)
+                if md is None:
+                    continue
+                self.metadata[new_fname] = md
+                moved.append((prev_fname, new_fname, md))
+        if moved:
+            source = [m[0] for m in moved]
+            dest = [m[1] for m in moved]
+            self.mddb.move_batch(source, dest)
+            eventloop = self.server.get_event_loop()
+            await eventloop.run_in_thread(self._move_thumbnails, moved)
 
-    def move_file_metadata(self,
-                           prev_fname: str,
-                           new_fname: str,
-                           move_thumbs: bool = True
-                           ) -> bool:
+    async def move_file_metadata(self,
+                                 prev_fname: str,
+                                 new_fname: str,
+                                 move_thumbs: bool = True
+                                 ) -> bool:
         metadata: Optional[Dict[str, Any]]
-        metadata = self.mddb.pop(prev_fname, None)
+        metadata = self.metadata.pop(prev_fname, None)
         if metadata is None:
             # If this move overwrites an existing file it is necessary
             # to rescan which requires that we remove any existing
             # metadata.
-            self.mddb.pop(new_fname, None)
+            if self.metadata.pop(new_fname, None) is not None:
+                self.mddb.pop(new_fname, None)
             return False
-        self.mddb[new_fname] = metadata
-        prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
-        new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
-        if "thumbnails" in metadata and move_thumbs:
-            thumb: Dict[str, Any]
-            for thumb in metadata["thumbnails"]:
-                path: Optional[str] = thumb.get("relative_path", None)
-                if path is None:
-                    continue
-                thumb_path = os.path.join(prev_dir, path)
-                if not os.path.isfile(thumb_path):
-                    continue
-                new_path = os.path.join(new_dir, path)
-                try:
-                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                    shutil.move(thumb_path, new_path)
-                except Exception:
-                    logging.debug(f"Error moving thumb from {thumb_path}"
-                                  f" to {new_path}")
+        self.metadata[new_fname] = metadata
+        self.mddb.move_batch([prev_fname], [new_fname])
+        if move_thumbs:
+            eventloop = self.server.get_event_loop()
+            await eventloop.run_in_thread(
+                self._move_thumbnails,
+                [(prev_fname, new_fname, metadata)])
         return True
+
+    def _move_thumbnails(self,
+                         records: List[Tuple[str, str, Dict[str, Any]]]
+                         ) -> None:
+        for (prev_fname, new_fname, metadata) in records:
+            prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
+            new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
+            if "thumbnails" in metadata:
+                thumb: Dict[str, Any]
+                for thumb in metadata["thumbnails"]:
+                    path: Optional[str] = thumb.get("relative_path", None)
+                    if path is None:
+                        continue
+                    thumb_path = os.path.join(prev_dir, path)
+                    if not os.path.isfile(thumb_path):
+                        continue
+                    new_path = os.path.join(new_dir, path)
+                    try:
+                        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                        shutil.move(thumb_path, new_path)
+                    except Exception:
+                        logging.debug(f"Error moving thumb from {thumb_path}"
+                                      f" to {new_path}")
 
     def parse_metadata(self,
                        fname: str,
@@ -1609,12 +1669,13 @@ class MetadataStorage:
                     break
             else:
                 if ufp_path is None:
-                    self.mddb[fname] = {
+                    self.metadata[fname] = {
                         'size': path_info.get('size', 0),
                         'modified': path_info.get('modified', 0),
                         'print_start_time': None,
                         'job_id': None
                     }
+                    self.mddb[fname] = self.metadata[fname]
                 logging.info(
                     f"Unable to extract medatadata from file: {fname}")
             self.pending_requests.pop(fname, None)
@@ -1652,8 +1713,8 @@ class MetadataStorage:
             # This indicates an error, do not add metadata for this
             raise self.server.error("Unable to extract metadata")
         metadata.update({'print_start_time': None, 'job_id': None})
-        self.mddb[path] = dict(metadata)
-        metadata['filename'] = path
+        self.metadata[path] = metadata
+        self.mddb[path] = metadata
 
 def load_component(config: ConfigHelper) -> FileManager:
     return FileManager(config)
