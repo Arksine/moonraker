@@ -51,9 +51,9 @@ MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 UNIX_BUFFER_LIMIT = 2 * 1024 * 1024
 
 CORE_COMPONENTS = [
-    'database', 'file_manager', 'klippy_apis', 'machine',
-    'data_store', 'shell_command', 'proc_stats', 'job_state',
-    'job_queue'
+    'dbus_manager', 'database', 'file_manager', 'klippy_apis',
+    'machine', 'data_store', 'shell_command', 'proc_stats',
+    'job_state', 'job_queue'
 ]
 
 SENTINEL = SentinelClass.get_instance()
