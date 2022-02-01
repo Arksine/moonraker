@@ -80,9 +80,6 @@ class AppDeploy(BaseDeploy):
 
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.is_service = config.getboolean("is_system_service", True)
-        storage = self._load_storage()
-        self.need_channel_update = storage.get('need_channel_upate', False)
-        self._is_valid = storage.get('is_valid', False)
 
         # We need to fetch all potential options for an Application.  Not
         # all options apply to each subtype, however we can't limit the
@@ -110,6 +107,12 @@ class AppDeploy(BaseDeploy):
         if isinstance(app_path, str):
             app_path = pathlib.Path(app_path).expanduser()
         return app_path.joinpath('.git').exists()
+
+    async def initialize(self) -> Dict[str, Any]:
+        storage = await super().initialize()
+        self.need_channel_update = storage.get('need_channel_upate', False)
+        self._is_valid = storage.get('is_valid', False)
+        return storage
 
     def _calc_config_hash(self) -> str:
         cfg_hash = self.config.get_hash()

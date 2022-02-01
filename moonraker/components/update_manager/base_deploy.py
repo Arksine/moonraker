@@ -37,24 +37,23 @@ class BaseDeploy:
         if cfg_hash is None:
             cfg_hash = config.get_hash().hexdigest()
         self.cfg_hash = cfg_hash
-        storage: Dict[str, Any] = self._load_storage()
+
+    async def initialize(self) -> Dict[str, Any]:
+        umdb = self.cmd_helper.get_umdb()
+        storage: Dict[str, Any] = await umdb.get(self.name, {})
         self.last_refresh_time: float = storage.get('last_refresh_time', 0.0)
+        self.last_cfg_hash: str = storage.get('last_config_hash', "")
+        return storage
 
     def needs_refresh(self) -> bool:
-        storage = self._load_storage()
-        last_cfg_hash = storage.get('last_config_hash', "")
         next_refresh_time = self.last_refresh_time + self.refresh_interval
         return (
-            self.cfg_hash != last_cfg_hash or
+            self.cfg_hash != self.last_cfg_hash or
             time.time() > next_refresh_time
         )
 
     def get_last_refresh_time(self) -> float:
         return self.last_refresh_time
-
-    def _load_storage(self) -> Dict[str, Any]:
-        umdb = self.cmd_helper.get_umdb()
-        return umdb.get(self.name, {})
 
     async def refresh(self) -> None:
         pass
@@ -74,6 +73,7 @@ class BaseDeploy:
     def _save_state(self) -> None:
         umdb = self.cmd_helper.get_umdb()
         self.last_refresh_time = time.time()
+        self.last_cfg_hash = self.cfg_hash
         umdb[self.name] = self.get_persistent_data()
 
     def log_exc(self, msg: str, traceback: bool = True) -> ServerError:

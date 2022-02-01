@@ -55,7 +55,18 @@ class ZipDeploy(AppDeploy):
                 "Invalid url set for 'origin' option in section "
                 f"[{config.get_name()}].  Unable to extract owner/repo.")
         self.host_repo: str = config.get('host_repo', self.official_repo)
-        storage = self._load_storage()
+        self.package_list: List[str] = []
+        self.python_pkg_list: List[str] = []
+        self.release_download_info: Tuple[str, str, int] = ("?", "?", 0)
+
+    @staticmethod
+    async def from_application(app: AppDeploy) -> ZipDeploy:
+        new_app = ZipDeploy(app.config, app.cmd_helper, app.app_params)
+        await new_app.reinstall()
+        return new_app
+
+    async def initialize(self) -> Dict[str, Any]:
+        storage = await super().initialize()
         self.detected_type: str = storage.get('detected_type', "?")
         self.source_checksum: str = storage.get("source_checksum", "?")
         self.pristine = storage.get('pristine', False)
@@ -70,15 +81,7 @@ class ZipDeploy(AppDeploy):
         self.latest_build_date: int = storage.get('latest_build_date', 0)
         self.errors: List[str] = storage.get('errors', [])
         self.commit_log: List[Dict[str, Any]] = storage.get('commit_log', [])
-        self.package_list: List[str] = []
-        self.python_pkg_list: List[str] = []
-        self.release_download_info: Tuple[str, str, int] = ("?", "?", 0)
-
-    @staticmethod
-    async def from_application(app: AppDeploy) -> ZipDeploy:
-        new_app = ZipDeploy(app.config, app.cmd_helper, app.app_params)
-        await new_app.reinstall()
-        return new_app
+        return storage
 
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
@@ -399,6 +402,12 @@ class ZipDeploy(AppDeploy):
         await self.update(force_dep_update=force_dep_update)
 
     async def reinstall(self) -> None:
+        # Clear the persistent storage prior to a channel swap.
+        # After the next update is complete new data will be
+        # restored.
+        umdb = self.cmd_helper.get_umdb()
+        await umdb.pop(self.name, None)
+        await self.initialize()
         await self.recover(force_dep_update=True)
 
     def get_update_status(self) -> Dict[str, Any]:

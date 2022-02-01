@@ -34,10 +34,8 @@ class GitDeploy(AppDeploy):
                  app_params: Optional[Dict[str, Any]] = None
                  ) -> None:
         super().__init__(config, cmd_helper, app_params)
-        storage = self._load_storage()
         self.repo = GitRepo(cmd_helper, self.path, self.name,
-                            self.origin, self.moved_origin,
-                            storage)
+                            self.origin, self.moved_origin)
         if self.type != 'git_repo':
             self.need_channel_update = True
 
@@ -46,6 +44,11 @@ class GitDeploy(AppDeploy):
         new_app = GitDeploy(app.config, app.cmd_helper, app.app_params)
         await new_app.reinstall()
         return new_app
+
+    async def initialize(self) -> Dict[str, Any]:
+        storage = await super().initialize()
+        self.repo.restore_state(storage)
+        return storage
 
     async def refresh(self) -> None:
         try:
@@ -126,6 +129,12 @@ class GitDeploy(AppDeploy):
         self.notify_status("Reinstall Complete", is_complete=True)
 
     async def reinstall(self):
+        # Clear the persistent storage prior to a channel swap.
+        # After the next update is complete new data will be
+        # restored.
+        umdb = self.cmd_helper.get_umdb()
+        await umdb.pop(self.name, None)
+        await self.initialize()
         await self.recover(True, True)
 
     def get_update_status(self) -> Dict[str, Any]:
@@ -210,8 +219,7 @@ class GitRepo:
                  git_path: pathlib.Path,
                  alias: str,
                  origin_url: str,
-                 moved_origin_url: Optional[str],
-                 storage: Dict[str, Any]
+                 moved_origin_url: Optional[str]
                  ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -222,6 +230,23 @@ class GitRepo:
         self.backup_path = git_dir.joinpath(f".{git_base}_repo_backup")
         self.origin_url = origin_url
         self.moved_origin_url = moved_origin_url
+        self.recovery_message = \
+            f"""
+            Manually restore via SSH with the following commands:
+            sudo service {self.alias} stop
+            cd {git_dir}
+            rm -rf {git_base}
+            git clone {self.origin_url}
+            sudo service {self.alias} start
+            """
+
+        self.init_evt: Optional[asyncio.Event] = None
+        self.initialized: bool = False
+        self.git_operation_lock = asyncio.Lock()
+        self.fetch_timeout_handle: Optional[asyncio.Handle] = None
+        self.fetch_input_recd: bool = False
+
+    def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
         self.git_owner: str = storage.get('git_owner', "?")
         self.git_repo_name: str = storage.get('git_repo_name', "?")
@@ -239,21 +264,6 @@ class GitRepo:
         self.git_messages: List[str] = storage.get('git_messages', [])
         self.commits_behind: List[Dict[str, Any]] = storage.get(
             'commits_behind', [])
-        self.recovery_message = \
-            f"""
-            Manually restore via SSH with the following commands:
-            sudo service {self.alias} stop
-            cd {git_dir}
-            rm -rf {git_base}
-            git clone {self.origin_url}
-            sudo service {self.alias} start
-            """
-
-        self.init_evt: Optional[asyncio.Event] = None
-        self.initialized: bool = False
-        self.git_operation_lock = asyncio.Lock()
-        self.fetch_timeout_handle: Optional[asyncio.Handle] = None
-        self.fetch_input_recd: bool = False
 
     def get_persisent_data(self) -> Dict[str, Any]:
         return {
