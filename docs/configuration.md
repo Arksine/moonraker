@@ -527,14 +527,15 @@ The following options are availble for `tplink_smartplug` device types:
 # moonraker.conf
 
 address:
-#   A valid ip address or hostname for the tplink device.  "Power Strips" can
-#   be controlled by including the socket index  in the ip address.  For example,
-#   to control socket index 1:
-#     192.168.1.127/1
+#   A valid ip address or hostname for the tplink device.  For example:
+#     192.168.1.127
 #   This parameter must be provided.
 port:
 #   The port to connect to.  Default is 9999.
 #
+output_id:
+#   For power strips, the socket index to use. Default is 0 which indicates the
+#   device is not a power strip.
 ```
 
 Example:
