@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from .machine import Machine
     from . import klippy_apis
     from .mqtt import MQTTClient
-    from .template import TemplateFactory
     from .template import JinjaTemplate
     APIComp = klippy_apis.KlippyAPI
 
@@ -516,32 +515,40 @@ class GpioDevice(PowerDevice):
             self.timer_handle = None
 
 class KlipperDevice(PowerDevice):
-    def __init__(self,
-                 config: ConfigHelper,
-                 initial_val: Optional[int] = None
-                 ) -> None:
-        if config.getboolean('off_when_shutdown', None) is not None:
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        if self.off_when_shutdown:
             raise config.error(
                 "Option 'off_when_shutdown' in section "
                 f"[{config.get_name()}] is unsupported for 'klipper_device'")
-        if config.getboolean('klipper_restart', None) is not None:
+        if self.klipper_restart:
             raise config.error(
-                "Option 'klipper_restart' in section "
+                "Option 'restart_klipper_when_powered' in section "
                 f"[{config.get_name()}] is unsupported for 'klipper_device'")
-        super().__init__(config)
-        self.off_when_shutdown = False
-        self.klipper_restart = False
-        self.timer: Optional[float] = config.getfloat('timer', None)
-        if self.timer is not None and self.timer < 0.000001:
+        if (
+            self.bound_service is not None and
+            self.bound_service.startswith("klipper")
+        ):
+            # Klipper devices cannot be bound to an instance of klipper or
+            # klipper_mcu
             raise config.error(
-                f"Option 'timer' in section [{config.get_name()}] must "
-                "be above 0.0")
+                f"Option 'bound_service' cannot be set to {self.bound_service}"
+                f" for 'klipper_device' [{config.get_name()}]")
+        self.is_shutdown: bool = False
+        self.update_fut: Optional[asyncio.Future] = None
+        self.request_mutex = asyncio.Lock()
+        self.timer: Optional[float] = config.getfloat(
+            'timer', None, above=0.000001)
         self.timer_handle: Optional[asyncio.TimerHandle] = None
-        self.object_name = config.get('object_name', '')
-        if not self.object_name.startswith("output_pin "):
+        self.object_name = config.get('object_name')
+        obj_parts = self.object_name.split()
+        self.gc_cmd = f"SET_PIN PIN={obj_parts[-1]} "
+        if obj_parts[0] == "gcode_macro":
+            self.gc_cmd = obj_parts[-1]
+        elif obj_parts[0] != "output_pin":
             raise config.error(
-                "Currently only Klipper 'output_pin' objects supported for "
-                f"'object_name' in section [{config.get_name()}]")
+                "Klipper object must be either 'output_pin' or 'gcode_macro' "
+                f"for option 'object_name' in section [{config.get_name()}]")
 
         self.server.register_event_handler(
             "server:status_update", self._status_update)
@@ -553,53 +560,104 @@ class KlipperDevice(PowerDevice):
     def _status_update(self, data: Dict[str, Any]) -> None:
         self._set_state_from_data(data)
 
+    def get_device_info(self) -> Dict[str, Any]:
+        dev_info = super().get_device_info()
+        dev_info['is_shutdown'] = self.is_shutdown
+        return dev_info
+
     async def _handle_ready(self) -> None:
         kapis: APIComp = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {self.object_name: None}
-        try:
-            data = await kapis.subscribe_objects(sub)
+        data = await kapis.subscribe_objects(sub, None)
+        if not self._validate_data(data):
+            self.state == "error"
+        else:
+            assert data is not None
             self._set_state_from_data(data)
-        except self.server.error as e:
-            logging.info(f"Error subscribing to {self.object_name}")
 
     async def _handle_disconnect(self) -> None:
+        self.is_shutdown = False
         self._set_state("init")
+        self._reset_timer()
 
     def process_klippy_shutdown(self) -> None:
-        self._set_state("init")
+        self.is_shutdown = True
+        self._set_state("error")
+        self._reset_timer()
 
-    def refresh_status(self) -> None:
-        pass
-
-    async def set_power(self, state) -> None:
-        if self.timer_handle is not None:
-            self.timer_handle.cancel()
-            self.timer_handle = None
-        try:
+    async def refresh_status(self) -> None:
+        if self.is_shutdown or self.state in ["on", "off", "init"]:
+            return
+        async with self.request_mutex:
             kapis: APIComp = self.server.lookup_component('klippy_apis')
-            object_name = self.object_name[len("output_pin "):]
-            object_name_value = "1" if state == "on" else "0"
-            await kapis.run_gcode(
-                f"SET_PIN PIN={object_name} VALUE={object_name_value}")
-        except Exception:
-            self.state = "error"
-            msg = f"Error Toggling Device Power: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
-        self._check_timer()
+            req: Dict[str, Optional[List[str]]] = {self.object_name: None}
+            data: Optional[Dict[str, Any]]
+            data = await kapis.query_objects(req, None)
+            if not self._validate_data(data):
+                self.state = "error"
+            else:
+                assert data is not None
+                self._set_state_from_data(data)
 
-    def _set_state_from_data(self, data) -> None:
+    async def set_power(self, state: str) -> None:
+        if self.is_shutdown:
+            raise self.server.error(
+                f"Power Device {self.name}: Cannot set power for device "
+                f"when Klipper is shutdown")
+        async with self.request_mutex:
+            self._reset_timer()
+            eventloop = self.server.get_event_loop()
+            self.update_fut = eventloop.create_future()
+            try:
+                kapis: APIComp = self.server.lookup_component('klippy_apis')
+                value = "1" if state == "on" else "0"
+                await kapis.run_gcode(f"{self.gc_cmd} VALUE={value}")
+                await asyncio.wait_for(self.update_fut, 1.)
+            except TimeoutError:
+                self.state = "error"
+                raise self.server.error(
+                    f"Power device {self.name}: Timeout "
+                    "waiting for device state update")
+            except Exception:
+                self.state = "error"
+                msg = f"Error Toggling Device Power: {self.name}"
+                logging.exception(msg)
+                raise self.server.error(msg) from None
+            finally:
+                self.update_fut = None
+            self._check_timer()
+
+    def _validate_data(self, data: Optional[Dict[str, Any]]) -> bool:
+        if data is None:
+            logging.info("Error querying klipper object: "
+                         f"{self.object_name}")
+        elif self.object_name not in data:
+            logging.info(
+                f"[power]: Invalid Klipper Device {self.object_name}, "
+                f"no response returned from subscription.")
+        elif 'value' not in data[self.object_name]:
+            logging.info(
+                f"[power]: Invalid Klipper Device {self.object_name}, "
+                f"response does not contain a 'value' parameter")
+        else:
+            return True
+        return False
+
+    def _set_state_from_data(self, data: Dict[str, Any]) -> None:
         if self.object_name not in data:
             return
-        is_on = data.get(self.object_name, {}).get('value', 0.0) > 0.0
-        state = "on" if is_on else "off"
-        self._set_state(state)
+        value = data[self.object_name].get('value')
+        if value is not None:
+            state = "on" if value else "off"
+            self._set_state(state)
+            if self.update_fut is not None:
+                self.update_fut.set_result(state)
 
-    def _set_state(self, state) -> None:
+    def _set_state(self, state: str) -> None:
+        in_event = self.update_fut is not None
         last_state = self.state
         self.state = state
-        if last_state != state:
+        if last_state != state and not in_event:
             self.notify_power_changed()
 
     def _check_timer(self):
@@ -608,6 +666,11 @@ class KlipperDevice(PowerDevice):
             power: PrinterPower = self.server.lookup_component("power")
             self.timer_handle = event_loop.delay_callback(
                 self.timer, power.set_device_power, self.name, "off")
+
+    def _reset_timer(self):
+        if self.timer_handle is not None:
+            self.timer_handle.cancel()
+            self.timer_handle = None
 
     def close(self) -> None:
         if self.timer_handle is not None:
