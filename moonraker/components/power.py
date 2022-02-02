@@ -672,7 +672,15 @@ class TPLinkSmartPlug(PowerDevice):
         super().__init__(config)
         self.timer = config.get("timer", "")
         self.request_mutex = asyncio.Lock()
-        self.addr: List[str] = config.get("address").split('/')
+        addr_and_output_id = config.get("address").split('/')
+        self.addr = addr_and_output_id[0]
+        if (len(addr_and_output_id) > 1):
+            self.server.add_warning(
+                f"Power Device {self.name}: Including the output id in the"
+                " address is deprecated, use the 'output_id' option")
+            self.output_id: Optional[int] = int(addr_and_output_id[1])
+        else:
+            self.output_id = config.getint("output_id", None)
         self.port = config.getint("port", 9999)
 
     async def _send_tplink_command(self,
@@ -684,11 +692,11 @@ class TPLinkSmartPlug(PowerDevice):
                 'system': {'set_relay_state': {'state': int(command == "on")}}
             }
             # TPLink device controls multiple devices
-            if len(self.addr) == 2:
+            if self.output_id is not None:
                 sysinfo = await self._send_tplink_command("info")
                 dev_id = sysinfo["system"]["get_sysinfo"]["deviceId"]
                 out_cmd["context"] = {
-                    'child_ids': [f"{dev_id}{int(self.addr[1]):02}"]
+                    'child_ids': [f"{dev_id}{self.output_id:02}"]
                 }
         elif command == "info":
             out_cmd = {'system': {'get_sysinfo': {}}}
@@ -703,7 +711,7 @@ class TPLinkSmartPlug(PowerDevice):
         else:
             raise self.server.error(f"Invalid tplink command: {command}")
         reader, writer = await asyncio.open_connection(
-            self.addr[0], self.port, family=socket.AF_INET)
+            self.addr, self.port, family=socket.AF_INET)
         try:
             writer.write(self._encrypt(out_cmd))
             await writer.drain()
@@ -755,11 +763,11 @@ class TPLinkSmartPlug(PowerDevice):
             try:
                 state: str
                 res = await self._send_tplink_command("info")
-                if len(self.addr) == 2:
+                if self.output_id is not None:
                     # TPLink device controls multiple devices
                     children: Dict[int, Any]
                     children = res['system']['get_sysinfo']['children']
-                    state = children[int(self.addr[1])]['state']
+                    state = children[self.output_id]['state']
                 else:
                     state = res['system']['get_sysinfo']['relay_state']
             except Exception:
