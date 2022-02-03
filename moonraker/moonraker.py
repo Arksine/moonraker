@@ -122,9 +122,12 @@ class Server:
         self.register_upload_handler = app.register_upload_handler
         self.register_api_transport = app.register_api_transport
 
-        log_warn: Optional[str] = args.get('log_warning')
-        if log_warn is not None:
+        log_warn = args.get('log_warning', "")
+        if log_warn:
             self.add_warning(log_warn)
+        cfg_warn = args.get("config_warning", "")
+        if cfg_warn:
+            self.add_warning(cfg_warn)
 
         self.register_endpoint(
             "/server/info", ['GET'], self._handle_info_request)
@@ -187,6 +190,10 @@ class Server:
         # Asynchronous Optional Component Initialization
         if optional_comps:
             await asyncio.gather(*optional_comps)
+
+        if not self.warnings:
+            cfg_file = self.app_args['config_file']
+            await self.event_loop.run_in_thread(utils.backup_config, cfg_file)
 
         # Start HTTP Server
         logging.info(
@@ -859,7 +866,8 @@ def main() -> None:
             os.path.expanduser(cmd_line_args.logfile))
     app_args['software_version'] = version
     ql, file_logger, warning = utils.setup_logging(app_args)
-    app_args['log_warning'] = warning
+    if warning is not None:
+        app_args['log_warning'] = warning
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
@@ -871,10 +879,27 @@ def main() -> None:
 
     # Start asyncio event loop and server
     event_loop = EventLoop()
+    alt_config_loaded = False
     estatus = 0
     while True:
         try:
             server = Server(app_args, file_logger, event_loop)
+        except confighelper.ConfigError as e:
+            backup_cfg = utils.find_config_backup(app_args['config_file'])
+            if alt_config_loaded or backup_cfg is None:
+                logging.exception("Server Config Error")
+                estatus = 1
+                break
+            app_args['config_file'] = backup_cfg
+            app_args['config_warning'] = (
+                f"Server configuration error: {e}\n"
+                f"Loaded server from most recent working configuration:"
+                f" '{app_args['config_file']}'\n"
+                f"Please fix the issue in moonraker.conf and restart "
+                f"the server."
+            )
+            alt_config_loaded = True
+            continue
         except Exception:
             logging.exception("Moonraker Error")
             estatus = 1
@@ -887,6 +912,12 @@ def main() -> None:
             break
         if server.exit_reason == "terminate":
             break
+        # Restore the original config and clear the warning
+        # before the server restarts
+        if alt_config_loaded:
+            app_args['config_file'] = cmd_line_args.configfile
+            app_args.pop('config_warning', None)
+            alt_config_loaded = False
         event_loop.close()
         # Since we are running outside of the the server
         # it is ok to use a blocking sleep here

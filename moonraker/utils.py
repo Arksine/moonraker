@@ -18,6 +18,8 @@ import hashlib
 import json
 import shlex
 import re
+import shutil
+import filecmp
 from queue import SimpleQueue as Queue
 
 # Annotation imports
@@ -230,3 +232,22 @@ def load_system_module(name: str) -> ModuleType:
     else:
         raise ServerError(f"Unable to import module {name}")
     return module
+
+def backup_config(cfg_path: str) -> None:
+    cfg = pathlib.Path(cfg_path).expanduser().resolve()
+    backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
+    try:
+        if backup.exists() and filecmp.cmp(cfg, backup):
+            # Backup already exists and is current
+            return
+        shutil.copy2(cfg, backup)
+        logging.info(f"Backing up last working configuration to '{backup}'")
+    except Exception:
+        logging.exception("Failed to create a backup")
+
+def find_config_backup(cfg_path: str) -> Optional[str]:
+    cfg = pathlib.Path(cfg_path).expanduser().resolve()
+    backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
+    if backup.is_file():
+        return str(backup)
+    return None
