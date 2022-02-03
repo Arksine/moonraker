@@ -60,8 +60,7 @@ class Secrets:
         try:
             cfg = configparser.ConfigParser(interpolation=None)
             cfg.read_string(data)
-            result = dict(cfg)
-            return result
+            return {sec: dict(cfg.items(sec)) for sec in cfg.sections()}
         except Exception:
             return None
 
