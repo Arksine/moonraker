@@ -122,6 +122,10 @@ class Server:
         self.register_upload_handler = app.register_upload_handler
         self.register_api_transport = app.register_api_transport
 
+        log_warn: Optional[str] = args.get('log_warning')
+        if log_warn is not None:
+            self.add_warning(log_warn)
+
         self.register_endpoint(
             "/server/info", ['GET'], self._handle_info_request)
         self.register_endpoint(
@@ -854,7 +858,8 @@ def main() -> None:
         app_args['log_file'] = os.path.normpath(
             os.path.expanduser(cmd_line_args.logfile))
     app_args['software_version'] = version
-    ql, file_logger = utils.setup_logging(app_args)
+    ql, file_logger, warning = utils.setup_logging(app_args)
+    app_args['log_warning'] = warning
 
     if sys.version_info < (3, 7):
         msg = f"Moonraker requires Python 3.7 or above.  " \
