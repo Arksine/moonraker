@@ -407,27 +407,19 @@ def get_configuration(server: Server,
                       ) -> ConfigHelper:
     cfg_file_path: str = os.path.normpath(os.path.expanduser(
         app_args['config_file']))
-    if not os.path.isfile(cfg_file_path):
-        raise ConfigError(
-            f"Configuration File Not Found: '{cfg_file_path}''")
-    if not os.access(cfg_file_path, os.R_OK | os.W_OK):
-        raise ConfigError(
-            "Moonraker does not have Read/Write permission for "
-            f"config file at path '{cfg_file_path}'")
     config = configparser.ConfigParser(interpolation=None)
     try:
         config.read(cfg_file_path)
     except Exception as e:
+        if not os.path.isfile(cfg_file_path):
+            raise ConfigError(
+                f"Configuration File Not Found: '{cfg_file_path}''") from e
+        if not os.access(cfg_file_path, os.R_OK | os.W_OK):
+            raise ConfigError(
+                "Moonraker does not have Read/Write permission for "
+                f"config file at path '{cfg_file_path}'") from e
         raise ConfigError(f"Error Reading Config: '{cfg_file_path}'") from e
-    try:
-        server_cfg = config['server']
-    except KeyError:
+    if not config.has_section('server'):
         raise ConfigError("No section [server] in config")
-
     orig_sections = config.sections()
-    try:
-        orig_sections.remove("DEFAULT")
-    except Exception:
-        pass
-
     return ConfigHelper(server, config, 'server', orig_sections)
