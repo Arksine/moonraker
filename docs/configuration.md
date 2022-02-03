@@ -450,8 +450,10 @@ The following options are available for `klipper_device` device types:
 object_name: output_pin my_pin
 #    The Klipper object_name (as defined in your Klipper config).  Valid examples:
 #      output_pin my_pin
-#    This parameter must be provided for "klipper_device" type devices.
-#    Currently, only `output_pin` Klipper devices are supported.
+#      gcode_macro MY_MACRO
+#    Currently, only `output_pin` and `gcode_macro` Klipper devices are
+#    supported.  See the note below for macro restrictions. Keep in mind that
+#    the object name is case sensitive.  This parameter must be provided.
 timer:
 #    A time (in seconds) after which the device will power off after being.
 #    switched on. This effectively turns the device into a  momentary switch.
@@ -461,11 +463,66 @@ timer:
 #    default is no timer is set.
 ```
 
-!!! Note
-    These devices cannot be used to toggle Klipper's power supply as they
-    require Klipper to actually be running.
+!!! Warning
+    Klipper devices cannot be used to toggle the printer's power supply as they
+    require that Klipper be running and in the "Ready" state.
 
-Examples:
+!!! Note
+    Some of the options common to all `[power]` devices are not available for
+    the `klipper_device` type.  Specifically `off_when_shutdown` and
+    `restart_klipper_when_powered` may not be configured.  The `bound_service`
+    option is restricted, it may not be set to an instance of `klipper` or
+    `klipper_mcu`.
+
+##### Gcode Macro Restrictions
+
+To control "gcode_macro" klipper devices, macros must be configured to accept a
+VALUE parameter, and they must report and update a `value` variable.  The value
+should be 1 when the device is on, and 0 when the device is off.  For example,
+a macro could be configured like the following in `printer.cfg`:
+
+```ini
+# printer.cfg
+
+# Assume we have a neopixel we want to control
+[neopixel extruder_flare]
+pin: PA13
+
+[gcode_macro SET_FLARE]
+# The variable below should be initialized to the startup value.  If your
+# device is configured to be on at startup use "variable_value: 1"
+variable_value: 0
+  {% if 'VALUE' not in params %}
+    {action_raise_error("Parameter 'VALUE' missing from 'SET_FLARE'")}
+  {% endif %}
+  {% set state = params.VALUE %}
+  {% if state %}
+    # turn the neopixel on
+    SET_LED LED=extruder_flare RED=0.75 BLUE=0.2 GREEN=0.2 SYNC=0
+  {% else %}
+    # turn the neopixel off
+    SET_LED LED=extruder_flare RED=0 BLUE=0 GREEN=0 SYNC=0
+  {% endif %}
+  # Update the state of our variable.  This will inform Moonraker that
+  # the device has changed its state.
+  SET_GCODE_VARIABLE MACRO=SET_FLARE VARIABLE=value value={state}
+```
+
+This can be controlled via Moonraker with the following in `moonraker.conf`:
+
+```ini
+# moonraker.conf
+
+[power flare]
+type: klipper_device
+object_name: gcode_macro SET_FLARE
+# The option below locks out requests to toggle the flare
+# when Klipper is printing, however it cannot prevent a
+# direct call to the SET_FLARE gcode macro.
+locked_while_printing: True
+```
+
+Output Pin Example:
 
 ```ini
 # moonraker.conf
@@ -475,6 +532,11 @@ Examples:
 type: klipper_device
 object_name: output_pin my_pin
 ```
+
+!!! Tip
+    If you need to use pwm you can wrap the call to `SET_PIN` in a
+    gcode_macro and configure Moonraker to toggle the Macro rather than
+    the pin directly.
 
 #### RF Device Configuration
 
