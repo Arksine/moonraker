@@ -13,8 +13,6 @@ import filecmp
 import pathlib
 import logging
 from utils import SentinelClass
-from components.gpio import GpioOutputPin
-from components.template import JinjaTemplate
 
 # Annotation imports
 from typing import (
@@ -32,10 +30,10 @@ from typing import (
 )
 if TYPE_CHECKING:
     from moonraker import Server
-    from components.gpio import GpioFactory
-    from components.template import TemplateFactory
+    from components.gpio import GpioFactory, GpioOutputPin
+    from components.template import TemplateFactory, JinjaTemplate
     _T = TypeVar("_T")
-    ConfigVal = Union[None, int, float, bool, str]
+    ConfigVal = Union[None, int, float, bool, str, dict, list]
 
 SENTINEL = SentinelClass.get_instance()
 
@@ -126,10 +124,14 @@ class ConfigHelper:
             self._check_option(option, val, above, below, minval, maxval)
         if self.section in self.orig_sections:
             # Only track sections included in the original config
-            if isinstance(val, (GpioOutputPin, JinjaTemplate)):
-                self.parsed[self.section][option] = str(val)
-            else:
+            if (
+                val is None or
+                isinstance(val, (int, float, bool, str, dict, list))
+            ):
                 self.parsed[self.section][option] = val
+            else:
+                # If the item cannot be encoded to json serialize to a string
+                self.parsed[self.section][option] = str(val)
         return val
 
     def _check_option(self,
