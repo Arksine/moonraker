@@ -73,15 +73,7 @@ class Server:
         self.event_loop = event_loop
         self.file_logger = file_logger
         self.app_args = args
-        self.config = config = confighelper.get_configuration(self, args)
-        # log config file
-        strio = io.StringIO()
-        config.write_config(strio)
-        cfg_item = f"\n{'#'*20} Moonraker Configuration {'#'*20}\n\n"
-        cfg_item += strio.getvalue()
-        cfg_item += "#"*65
-        strio.close()
-        self.add_log_rollover_item('config', cfg_item)
+        self.config = config = self._parse_config()
         self.host: str = config.get('host', "0.0.0.0")
         self.port: int = config.getint('port', 7125)
         self.ssl_port: int = config.getint('ssl_port', 7130)
@@ -154,14 +146,12 @@ class Server:
         self.register_remote_method(
             'process_status_update', self._process_status_update,
             need_klippy_reg=False)
-
-        # Component initialization
-        self._load_components(config)
-        self.klippy_apis: KlippyAPI = self.lookup_component('klippy_apis')
-        config.validate_config()
         self.event_loop.add_signal_handler(
             signal.SIGTERM, self._handle_term_signal)
-        self.event_loop.register_callback(self._start_server)
+
+    @property
+    def klippy_apis(self) -> KlippyAPI:
+        return self.components['klippy_apis']
 
     def get_app_args(self) -> Dict[str, Any]:
         return dict(self.app_args)
@@ -175,7 +165,20 @@ class Server:
     def is_debug_enabled(self) -> bool:
         return self.debug
 
-    async def _start_server(self):
+    def _parse_config(self) -> confighelper.ConfigHelper:
+        config = confighelper.get_configuration(self, self.app_args)
+        # log config file
+        strio = io.StringIO()
+        config.write_config(strio)
+        cfg_item = f"\n{'#'*20} Moonraker Configuration {'#'*20}\n\n"
+        cfg_item += strio.getvalue()
+        cfg_item += "#"*65
+        strio.close()
+        self.add_log_rollover_item('config', cfg_item)
+        return config
+
+    async def server_init(self, start_server: bool = True) -> None:
+        # Perform asynchronous init after the event loop starts
         optional_comps: List[Coroutine] = []
         for name, component in self.components.items():
             if not hasattr(component, "component_init"):
@@ -196,13 +199,18 @@ class Server:
             await self.event_loop.run_in_thread(
                 confighelper.backup_config, cfg_file)
 
+        if start_server:
+            await self.start_server()
+
+    async def start_server(self, connect_to_klippy: bool = True) -> None:
         # Start HTTP Server
         logging.info(
             f"Starting Moonraker on ({self.host}, {self.port}), "
             f"Hostname: {socket.gethostname()}")
         self.moonraker_app.listen(self.host, self.port, self.ssl_port)
         self.server_running = True
-        await self._connect_klippy()
+        if connect_to_klippy:
+            await self.connect_klippy()
 
     async def wait_connection_initialized(self) -> None:
         async with self.connection_init_lock:
@@ -233,7 +241,8 @@ class Server:
                              f"error: {e}")
             self.set_failed_component(name)
 
-    def _load_components(self, config: confighelper.ConfigHelper) -> None:
+    def load_components(self) -> None:
+        config = self.config
         cfg_sections = [s.split()[0] for s in config.sections()]
         cfg_sections.remove('server')
 
@@ -246,6 +255,8 @@ class Server:
         # load remaining optional components
         for section in cfg_sections:
             self.load_component(config, section, None)
+
+        config.validate_config()
 
     def load_component(self,
                        config: confighelper.ConfigHelper,
@@ -354,12 +365,14 @@ class Server:
         return self.klippy_state
 
     # ***** Klippy Connection *****
-    async def _connect_klippy(self) -> None:
+    async def connect_klippy(self) -> None:
         if not self.server_running:
+            return
+        if self.klippy_connection.is_connected():
             return
         ret = await self.klippy_connection.connect(self.klippy_address)
         if not ret:
-            self.event_loop.delay_callback(.25, self._connect_klippy)
+            self.event_loop.delay_callback(.25, self.connect_klippy)
             return
         self.init_handle = self.event_loop.delay_callback(
             0.01, self._init_klippy_connection)
@@ -414,7 +427,7 @@ class Server:
             self.init_handle.cancel()
             self.init_handle = None
         if self.server_running:
-            self.event_loop.delay_callback(.25, self._connect_klippy)
+            self.event_loop.delay_callback(.25, self.connect_klippy)
         if self.klippy_disconnect_evt is not None:
             self.klippy_disconnect_evt.set()
 
@@ -886,6 +899,7 @@ def main() -> None:
     while True:
         try:
             server = Server(app_args, file_logger, event_loop)
+            server.load_components()
         except confighelper.ConfigError as e:
             backup_cfg = confighelper.find_config_backup(cfg_file)
             if alt_config_loaded or backup_cfg is None:
@@ -907,6 +921,7 @@ def main() -> None:
             estatus = 1
             break
         try:
+            event_loop.register_callback(server.server_init)
             event_loop.start()
         except Exception:
             logging.exception("Server Running Error")
