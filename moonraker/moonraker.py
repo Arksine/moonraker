@@ -952,7 +952,7 @@ def main() -> None:
         else:
             raise RuntimeError("Unable to create new open eventloop")
         asyncio.set_event_loop(new_loop)
-        event_loop = EventLoop()
+        event_loop.reset()
     event_loop.close()
     logging.info("Server Shutdown")
     ql.stop()

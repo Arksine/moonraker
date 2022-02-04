@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 class EventLoop:
     TimeoutError = asyncio.TimeoutError
     def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
         self.aioloop = asyncio.get_event_loop()
         self.add_signal_handler = self.aioloop.add_signal_handler
         self.remove_signal_handler = self.aioloop.remove_signal_handler
