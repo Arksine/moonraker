@@ -101,3 +101,11 @@ switch:
       Content-Type: 'application/json'
     is_on_template: >-
       {{ 'result' in value_json and (value_json.result.values() | list | first == "on") }}
+
+#  MJPEG camera can be exposed to HA
+#
+camera:
+  - platform: mjpeg
+    name: Voron_V0_camera
+    still_image_url: http://192.168.178.56/webcam/?action=snapshot
+    mjpeg_url: http://192.168.178.56/webcam/?action=stream
