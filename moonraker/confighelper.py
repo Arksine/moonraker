@@ -8,6 +8,10 @@ from __future__ import annotations
 import configparser
 import os
 import hashlib
+import shutil
+import filecmp
+import pathlib
+import logging
 from utils import SentinelClass
 from components.gpio import GpioOutputPin
 from components.template import JinjaTemplate
@@ -423,3 +427,22 @@ def get_configuration(server: Server,
         raise ConfigError("No section [server] in config")
     orig_sections = config.sections()
     return ConfigHelper(server, config, 'server', orig_sections)
+
+def backup_config(cfg_path: str) -> None:
+    cfg = pathlib.Path(cfg_path).expanduser().resolve()
+    backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
+    try:
+        if backup.exists() and filecmp.cmp(cfg, backup):
+            # Backup already exists and is current
+            return
+        shutil.copy2(cfg, backup)
+        logging.info(f"Backing up last working configuration to '{backup}'")
+    except Exception:
+        logging.exception("Failed to create a backup")
+
+def find_config_backup(cfg_path: str) -> Optional[str]:
+    cfg = pathlib.Path(cfg_path).expanduser().resolve()
+    backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
+    if backup.is_file():
+        return str(backup)
+    return None

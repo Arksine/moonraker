@@ -193,7 +193,8 @@ class Server:
 
         if not self.warnings:
             cfg_file = self.app_args['config_file']
-            await self.event_loop.run_in_thread(utils.backup_config, cfg_file)
+            await self.event_loop.run_in_thread(
+                confighelper.backup_config, cfg_file)
 
         # Start HTTP Server
         logging.info(
@@ -855,7 +856,8 @@ def main() -> None:
         "-n", "--nologfile", action='store_true',
         help="disable logging to a file")
     cmd_line_args = parser.parse_args()
-    app_args = {'config_file': cmd_line_args.configfile}
+    cfg_file = cmd_line_args.configfile
+    app_args = {'config_file': cfg_file}
 
     # Setup Logging
     version = utils.get_software_version()
@@ -885,7 +887,7 @@ def main() -> None:
         try:
             server = Server(app_args, file_logger, event_loop)
         except confighelper.ConfigError as e:
-            backup_cfg = utils.find_config_backup(app_args['config_file'])
+            backup_cfg = confighelper.find_config_backup(cfg_file)
             if alt_config_loaded or backup_cfg is None:
                 logging.exception("Server Config Error")
                 estatus = 1
@@ -915,7 +917,7 @@ def main() -> None:
         # Restore the original config and clear the warning
         # before the server restarts
         if alt_config_loaded:
-            app_args['config_file'] = cmd_line_args.configfile
+            app_args['config_file'] = cfg_file
             app_args.pop('config_warning', None)
             alt_config_loaded = False
         event_loop.close()
