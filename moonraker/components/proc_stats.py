@@ -91,6 +91,8 @@ class ProcStats:
         self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
         self.cpu_usage: Dict[str, float] = {}
         self.stat_callbacks: List[STAT_CALLBACK] = []
+
+    async def component_init(self) -> None:
         self.stat_update_timer.start()
         self.watchdog.start()
 
