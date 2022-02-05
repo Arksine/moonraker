@@ -197,7 +197,6 @@ class Authorization:
         eventloop = self.server.get_event_loop()
         self.prune_timer = eventloop.register_timer(
             self._prune_conn_handler)
-        self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
         # Register Authorization Endpoints
         self.permitted_paths.add("/server/redirect")
@@ -229,6 +228,9 @@ class Authorization:
             self._handle_oneshot_request, transports=['http'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
+
+    async def component_init(self) -> None:
+        self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
     async def _handle_apikey_request(self, web_request: WebRequest) -> str:
         action = web_request.get_action()
