@@ -166,7 +166,7 @@ class MoonrakerDatabase:
             with self.thread_lock:
                 return command_func(*args)
 
-        if self.eventloop.is_running():
+        if self.server.is_running():
             return cast(Future, self.eventloop.run_in_thread(func_wrapper))
         else:
             ret = func_wrapper()
@@ -551,10 +551,10 @@ class MoonrakerDatabase:
                                  namespace: str,
                                  forbidden: bool = False
                                  ) -> None:
-        if self.eventloop.is_running():
+        if self.server.is_running():
             raise self.server.error(
                 "Cannot register a namespace while the "
-                "eventloop is running")
+                "server is running")
         if namespace not in self.namespaces:
             self.namespaces[namespace] = self.lmdb_env.open_db(
                 namespace.encode())
@@ -573,10 +573,10 @@ class MoonrakerDatabase:
                        namespace: str,
                        parse_keys: bool = True
                        ) -> NamespaceWrapper:
-        if self.eventloop.is_running():
+        if self.server.is_running():
             raise self.server.error(
                 "Cannot wrap a namespace while the "
-                "eventloop is running")
+                "server is running")
         if namespace not in self.namespaces:
             raise self.server.error(
                 f"Namespace '{namespace}' not found", 404)
@@ -836,7 +836,7 @@ class NamespaceWrapper:
             key: Union[List[str], str],
             default: Any = SENTINEL
             ) -> Union[Future[Any], Task[Any]]:
-        if not self.eventloop.is_running():
+        if not self.server.is_running():
             try:
                 val = self.delete(key).result()
             except Exception:
@@ -861,7 +861,7 @@ class NamespaceWrapper:
         return self.db.clear_namespace(self.namespace)
 
     def _check_sync_method(self, func_name: str) -> None:
-        if self.eventloop.is_running():
+        if self.server.is_running():
             raise self.server.error(
                 f"Cannot call method {func_name} while "
                 "the eventloop is running")
