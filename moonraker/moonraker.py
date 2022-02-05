@@ -146,8 +146,6 @@ class Server:
         self.register_remote_method(
             'process_status_update', self._process_status_update,
             need_klippy_reg=False)
-        self.event_loop.add_signal_handler(
-            signal.SIGTERM, self._handle_term_signal)
 
     @property
     def klippy_apis(self) -> KlippyAPI:
@@ -178,6 +176,9 @@ class Server:
         return config
 
     async def server_init(self, start_server: bool = True) -> None:
+        self.event_loop.add_signal_handler(
+            signal.SIGTERM, self._handle_term_signal)
+
         # Perform asynchronous init after the event loop starts
         optional_comps: List[Coroutine] = []
         for name, component in self.components.items():
