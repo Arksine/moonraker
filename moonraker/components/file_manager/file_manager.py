@@ -112,6 +112,9 @@ class FileManager:
         if gc_path:
             self.register_directory('gcodes', gc_path, full_access=True)
 
+    async def component_init(self):
+        self.inotify_handler.initalize_roots()
+
     def _update_fixed_paths(self) -> None:
         kinfo = self.server.get_klippy_info()
         paths: Dict[str, Any] = \
@@ -176,7 +179,7 @@ class FileManager:
             if full_access:
                 # Refresh the file list and add watches
                 self.inotify_handler.add_root_watch(root, path)
-            else:
+            elif self.server.is_running():
                 self.event_loop.register_callback(
                     self.inotify_handler.notify_filelist_changed,
                     "root_update", root, path)
@@ -1071,7 +1074,7 @@ class INotifyHandler:
         self.pending_moves: Dict[
             int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
         self.create_gcode_notifications: Dict[str, Any] = {}
-
+        self.initialized: bool = False
 
     def add_root_watch(self, root: str, root_path: str) -> None:
         # remove all exisiting watches on root
@@ -1081,10 +1084,23 @@ class INotifyHandler:
             old_root.clear_events()
         root_node = InotifyRootNode(self, root, root_path)
         self.watched_roots[root] = root_node
-        mevts = root_node.scan_node()
-        self.log_nodes()
-        self.event_loop.register_callback(
-            self._notify_root_updated, mevts, root, root_path)
+        if self.initialized:
+            mevts = root_node.scan_node()
+            self.log_nodes()
+            self.event_loop.register_callback(
+                self._notify_root_updated, mevts, root, root_path)
+
+    def initalize_roots(self):
+        for root, node in self.watched_roots.items():
+            evts = node.scan_node()
+            if not evts:
+                continue
+            root_path = node.get_path()
+            self.event_loop.register_callback(
+                self._notify_root_updated, evts, root, root_path)
+        if self.watched_roots:
+            self.log_nodes()
+        self.initialized = True
 
     async def _notify_root_updated(self,
                                    mevts: List[asyncio.Event],
@@ -1094,7 +1110,9 @@ class INotifyHandler:
         if mevts:
             mfuts = [e.wait() for e in mevts]
             await asyncio.gather(*mfuts)
-        self.notify_filelist_changed("root_update", root, root_path)
+        cur_path = self.watched_roots[root].get_path()
+        if self.server.is_running() and cur_path == root_path:
+            self.notify_filelist_changed("root_update", root, root_path)
 
     def add_watch(self, node: InotifyNode) -> int:
         dir_path = node.get_path()
