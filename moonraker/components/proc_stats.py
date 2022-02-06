@@ -282,6 +282,7 @@ class Watchdog:
     def __init__(self, proc_stats: ProcStats) -> None:
         self.proc_stats = proc_stats
         self.event_loop = proc_stats.event_loop
+        self.blocked_count: int = 0
         self.last_watch_time: float = 0.
         self.watchdog_timer = self.event_loop.register_timer(
             self._watchdog_callback
@@ -290,8 +291,10 @@ class Watchdog:
     def _watchdog_callback(self, eventtime: float) -> float:
         time_diff = eventtime - self.last_watch_time
         if time_diff > REPORT_BLOCKED_TIME:
+            self.blocked_count += 1
             logging.info(
-                f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds")
+                f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds"
+                f", total blocked count: {self.blocked_count}")
             # delay the stat logging so we capture the CPU percentage after
             # the next cycle
             self.event_loop.delay_callback(
