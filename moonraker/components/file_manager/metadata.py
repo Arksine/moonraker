@@ -83,6 +83,16 @@ def _regex_find_first(pattern: str, data: str) -> Optional[float]:
             return None
     return val
 
+def _regex_find_int(pattern: str, data: str) -> Optional[int]:
+    match = re.search(pattern, data)
+    val: Optional[int] = None
+    if match:
+        try:
+            val = int(match.group(1))
+        except Exception:
+            return None
+    return val
+
 def _regex_find_string(pattern: str, data: str) -> Optional[str]:
     match = re.search(pattern, data)
     if match:
@@ -387,14 +397,8 @@ class PrusaSlicer(BaseSlicer):
             r";\snozzle_diameter\s=\s(\d+\.\d*)", self.footer_data)
 
     def parse_layer_count(self) -> Optional[int]:
-        match = re.search(r"; total layers count = (\d+)", self.footer_data)
-        val: Optional[int] = None
-        if match:
-            try:
-                val = int(match.group(1))
-            except Exception:
-                return None
-        return val
+        return _regex_find_int(
+            r"; total layers count = (\d+)", self.footer_data)
 
 class Slic3rPE(PrusaSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
@@ -491,6 +495,10 @@ class Cura(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
+    def parse_layer_count(self) -> Optional[int]:
+        return _regex_find_int(
+            r";LAYER_COUNT\:(\d+)", self.header_data)
 
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
