@@ -343,9 +343,12 @@ class Server:
                                need_klippy_reg: bool = True
                                ) -> None:
         if method_name in self.remote_methods:
-            # XXX - may want to raise an exception here
-            logging.info(f"Remote method ({method_name}) already registered")
-            return
+            raise self.error(
+                f"Remote method ({method_name}) already registered")
+        if self.server_running:
+            raise self.error(
+                f"Failed to register remote method {method_name}, "
+                "methods must be registered during initialization")
         self.remote_methods[method_name] = cb
         if need_klippy_reg:
             # These methods need to be registered with Klippy
