@@ -6,8 +6,16 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
-import argparse
 import sys
+if sys.version_info < (3, 7):
+    msg = (
+        "Moonraker requires Python 3.7 or above.  "
+        "Detected Version: %s\n"
+    )
+    sys.stdout.write(msg % (sys.version,))
+    sys.stderr.write(msg % (sys.version,))
+    exit(1)
+import argparse
 import importlib
 import os
 import io
@@ -858,21 +866,7 @@ class BaseRequest:
         return {'id': self.id, 'method': self.rpc_method,
                 'params': self.params}
 
-def main() -> None:
-    # Parse start arguments
-    parser = argparse.ArgumentParser(
-        description="Moonraker - Klipper API Server")
-    parser.add_argument(
-        "-c", "--configfile", default="~/moonraker.conf",
-        metavar='<configfile>',
-        help="Location of moonraker configuration file")
-    parser.add_argument(
-        "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
-        help="log file name and location")
-    parser.add_argument(
-        "-n", "--nologfile", action='store_true',
-        help="disable logging to a file")
-    cmd_line_args = parser.parse_args()
+def main(cmd_line_args: argparse.Namespace) -> None:
     cfg_file = cmd_line_args.configfile
     app_args = {'config_file': cfg_file}
 
@@ -887,14 +881,6 @@ def main() -> None:
     ql, file_logger, warning = utils.setup_logging(app_args)
     if warning is not None:
         app_args['log_warning'] = warning
-
-    if sys.version_info < (3, 7):
-        msg = f"Moonraker requires Python 3.7 or above.  " \
-            f"Detected Version: {sys.version}"
-        logging.info(msg)
-        print(msg)
-        ql.stop()
-        exit(1)
 
     # Start asyncio event loop and server
     event_loop = EventLoop()
@@ -964,4 +950,17 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    # Parse start arguments
+    parser = argparse.ArgumentParser(
+        description="Moonraker - Klipper API Server")
+    parser.add_argument(
+        "-c", "--configfile", default="~/moonraker.conf",
+        metavar='<configfile>',
+        help="Location of moonraker configuration file")
+    parser.add_argument(
+        "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
+        help="log file name and location")
+    parser.add_argument(
+        "-n", "--nologfile", action='store_true',
+        help="disable logging to a file")
+    main(parser.parse_args())
