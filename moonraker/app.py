@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from eventloop import EventLoop
     from confighelper import ConfigHelper
+    from klippy_connection import KlippyConnection as Klippy
     from components.file_manager.file_manager import FileManager
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
@@ -135,7 +136,8 @@ class InternalTransport(APITransport):
             # Request to Klippy
             method = api_def.jrpc_methods[0]
             action = ""
-            cb = self.server.make_request
+            klippy: Klippy = self.server.lookup_component("klippy_connection")
+            cb = klippy.request
             self.callbacks[method] = (ep, action, cb)
         else:
             for method, action in \
@@ -620,7 +622,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                                  conn: Optional[WebSocket]
                                  ) -> Any:
         assert isinstance(self.callback, str)
-        return await self.server.make_request(
+        klippy: Klippy = self.server.lookup_component("klippy_connection")
+        return await klippy.request(
             WebRequest(self.callback, args, conn=conn,
                        ip_addr=self.request.remote_ip,
                        user=self.current_user))
