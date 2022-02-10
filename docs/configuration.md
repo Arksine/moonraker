@@ -894,9 +894,8 @@ port: 443
 device: 
 #   The Device guid of the switch to control. This parameter must be provided.
 token:
-#   A token used for request authorization.  This option accepts
-#   Jinja2 Templates, see the [secrets] section for details. This paramter
-#   must be provided.
+#   A token used for request authorization.  
+#   See https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/
 ```
 
 Example:
