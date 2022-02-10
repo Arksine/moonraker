@@ -6,40 +6,63 @@ the Moonraker application into the Klipper repo after Moonraker matures,
 at which point this repo will be archived.  As such, contibuting guidelines
 are near those of Klipper:
 
-- All source files should begin with a copyright notice in the following
-  format:
+#### New Module Contributions
 
-        # Module name and brief description of module
-        #
-        # Copyright (C) 2021 YOUR NAME <YOUR EMAIL ADDRESS>
-        #
-        # This file may be distributed under the terms of the GNU GPLv3 license
+All source files should begin with a copyright notice in the following format:
 
-- No line in the source code should exceed 80 characters.  Be sure there is no
-  trailing whitespace.  To validate code before submission one may use `pycodestyle`
-  with the following options:
-      - `--ignore=E226,E301,E302,E303,W503,W504`
-      - `--max-line-length=80`
-      - `--max-doc-length=80`
-- Generally speaking, each line in submitted documentation should also be no
-  longer than 80 characters, however there are situations where this isn't
-  possible, such as long hyperlinks or example return values.
-- Python code should be fully annotated.  Moonraker uses the `mypy` static
-  type checker for code validation with the following options:
-      - `--ignore-missing-imports`
-      - `--follow-imports=silent`
-- Each Commit message should be in the following format:
+```python
+# Module name and brief description of module
+#
+# Copyright (C) 2021 YOUR NAME <YOUR EMAIL ADDRESS>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license
+```
 
-        module name: brief description of commit
+#### Git Commit Format
 
-        More detailed explanation if necessary.
+Commits should be contain one functional change.  Changes that are unrelated
+or independent should be broken up into multiple commits.  It is acceptable
+for a commit to contain multiple files if a change to one module depends on a
+change to another (ie: changing the name of a method).
 
-        Signed-off-by:  Your Name <your email address>
+Avoid merge commits.  If it is necessary to update a Pull Request from the
+master branch use git's interactive rebase and force push.
 
-- By signing off on commits, you acknowledge that you agree to the
-  [developer certificate of origin](../developer-certificate-of-origin)
-  shown below. Your signature must contain your real name and a current
-  email address.
+Each Commit message should be in the following format:
+
+```text
+module: brief description of commit
+
+More detailed explanation of the change if required
+
+Signed-off-by: Your Name <your email address>
+```
+
+Where:
+
+- `module`: is the name of the Python module you are changing or parent
+  folder if not applicable
+- `Your Name`: Your real first and last name
+- `<your email address>`: A real, reachable email address
+
+For example, the git log of a new `power.py` device implementation might look
+like the following:
+
+```git
+power: add support for mqtt devices
+
+Signed-off-by: Eric Callahan <arksine.code@gmail.com>
+```
+```git
+docs: add mqtt power device documentation
+
+Signed-off-by: Eric Callahan <arksine.code@gmail.com>
+```
+
+By signing off on commits, you acknowledge that you agree to the
+[developer certificate of origin](../developer-certificate-of-origin)
+shown below.  As mentioned above, your signature must contain your
+real name and a current email address.
 
 ```text
 Developer Certificate of Origin
@@ -80,3 +103,26 @@ By making a contribution to this project, I certify that:
     maintained indefinitely and may be redistributed consistent with
     this project or the open source license(s) involved.
 ```
+#### Code Style
+Python methods should be fully annotated. Variables should be annotated where
+the type cannot be inferred. Moonraker uses the `mypy` static type checker for
+code validation with the following options:
+
+  - `--ignore-missing-imports`
+  - `--follow-imports=silent`
+
+No line in the source code should exceed 80 characters.  Be sure there is no
+trailing whitespace.  To validate code before submission one may use
+`pycodestyle` with the following options:
+
+  - `--ignore=E226,E301,E302,E303,W503,W504`
+  - `--max-line-length=80`
+  - `--max-doc-length=80`
+
+Generally speaking, each line in submitted documentation should also be no
+longer than 80 characters, however there are situations where this isn't
+possible, such as long hyperlinks or example return values.  Documentation
+isn't linted, so it
+
+Don't peek into the member variables of another class.  Use getters or
+properties to access object state.

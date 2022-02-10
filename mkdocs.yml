@@ -18,5 +18,8 @@ theme:
 plugins:
     - search
 markdown_extensions:
-    - codehilite
     - admonition
+    - pymdownx.superfences
+    - pymdownx.highlight:
+        use_pygments: false
+    - pymdownx.inlinehilite
