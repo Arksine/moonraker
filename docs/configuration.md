@@ -881,6 +881,36 @@ state_response_template:
 # not necessary to query after a command
 query_after_command: False
 ```
+####  SmartThings (HTTP)
+
+The following options are available for `smartthings` device types:
+
+```ini
+# moonraker.conf
+
+address: api.smartthings.com
+protocol: https
+port: 443
+device: 
+#   The Device guid of the switch to control. This parameter must be provided.
+token:
+#   A token used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. This paramter
+#   must be provided.
+```
+
+Example:
+```ini
+# moonraker.conf
+
+[power smartthings_switch]
+type: smartthings
+address: api.smartthings.com
+protocol: https
+port: 443
+device: smartthings-device-id
+token: smartthings-very-long-token
+```
 
 #### Toggling device state from Klipper
 
