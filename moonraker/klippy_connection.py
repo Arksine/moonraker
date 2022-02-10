@@ -25,6 +25,7 @@ from typing import (
     Coroutine,
     Dict,
     List,
+    Set,
 )
 if TYPE_CHECKING:
     from app import MoonrakerApp
@@ -53,6 +54,7 @@ class KlippyConnection:
         self.closing: bool = False
         self._klippy_info: Dict[str, Any] = {}
         self.init_list: List[str] = []
+        self._missing_reqs: Set[str] = set()
         self.init_attempts: int = 0
         self._state: str = "disconnected"
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
@@ -81,6 +83,10 @@ class KlippyConnection:
     @property
     def klippy_info(self) -> Dict[str, Any]:
         return self._klippy_info
+
+    @property
+    def missing_requirements(self) -> List[str]:
+        return list(self._missing_reqs)
 
     async def wait_connected(self) -> bool:
         if (
@@ -204,6 +210,7 @@ class KlippyConnection:
 
     async def _init_klippy_connection(self) -> bool:
         self.init_list = []
+        self._missing_reqs.clear()
         self.init_attempts = 0
         self._state = "initializing"
         webhooks_err_logged = False
@@ -303,14 +310,14 @@ class KlippyConnection:
                 f"Unable to retrieve Klipper Object List")
             return
         req_objs = set(["virtual_sdcard", "display_status", "pause_resume"])
-        missing_objs = req_objs - set(result)
-        if missing_objs:
-            err_str = ", ".join([f"[{o}]" for o in missing_objs])
+        self._missing_reqs = req_objs - set(result)
+        if self._missing_reqs:
+            err_str = ", ".join([f"[{o}]" for o in self._missing_reqs])
             logging.info(
                 f"\nWarning, unable to detect the following printer "
                 f"objects:\n{err_str}\nPlease add the the above sections "
                 f"to printer.cfg for full Moonraker functionality.")
-        if "virtual_sdcard" not in missing_objs:
+        if "virtual_sdcard" not in self._missing_reqs:
             # Update the gcode path
             query_res = await self.klippy_apis.query_objects(
                 {'configfile': None}, default=None)
@@ -475,6 +482,7 @@ class KlippyConnection:
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
         self.subscriptions = {}
+        self._missing_reqs.clear()
         logging.info("Klippy Connection Removed")
         await self.server.send_event("server:klippy_disconnect")
         if self.server.is_running():

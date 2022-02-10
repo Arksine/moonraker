@@ -388,6 +388,7 @@ class Server:
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
         wsm: WebsocketManager = self.lookup_component('websockets')
+        mreqs = self.klippy_connection.missing_requirements
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_connection.state,
@@ -396,7 +397,8 @@ class Server:
             'registered_directories': reg_dirs,
             'warnings': self.warnings,
             'websocket_count': wsm.get_count(),
-            'moonraker_version': self.app_args['software_version']
+            'moonraker_version': self.app_args['software_version'],
+            'missing_klippy_requirements': mreqs
         }
 
     async def _handle_config_request(self,
