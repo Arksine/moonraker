@@ -881,6 +881,40 @@ state_response_template:
 # not necessary to query after a command
 query_after_command: False
 ```
+####  SmartThings (HTTP)
+
+!!! Important SmartThings Developer API Topics
+* See [Getting a Bearer Token](
+https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/)
+* See [Getting a list of devices]( 
+https://developer-preview.smartthings.com/api/public#operation/getDevices)
+
+The following options are available for `smartthings` device types:
+
+```ini
+# moonraker.conf
+
+address: api.smartthings.com
+protocol: https
+port: 443
+token:
+#   A bearer token used for request authorization. This parameter must be provided.
+device: 
+#   The Device guid of the switch to control. This parameter must be provided.
+```
+
+Example:
+```ini
+# moonraker.conf
+
+[power smartthings_switch]
+type: smartthings
+address: api.smartthings.com
+protocol: https
+port: 443
+token: smartthings-bearer-token
+device: smartthings-device-id
+```
 
 #### Toggling device state from Klipper
 
