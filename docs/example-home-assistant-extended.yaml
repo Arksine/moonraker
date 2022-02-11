@@ -23,43 +23,11 @@ sensor:
       {{ "OK" if ("result" in value_json) else "offline" }}
     #  Adding an API key is only necessary while using the [authorization] component
     #  and if Home Assistant is not a trusted client
-    #headers:
-    #  x-api-key: 123456789abcdefghijklmno
+    headers:
+      x-api-key: 123456789abcdefghijklmno
       
   - platform: template
     sensors:
-#      swx1_hotend_target:
-#        unique_id: sensor.swx1_hotend_target
-#        friendly_name: "Hotend Target"
-#        device_class: temperature
-#        unit_of_measurement: '°C'
-#        value_template: >-
-#          {{ states.sensor.swx1_sensor.attributes['extruder']['target'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-#
-#      swx1_hotend_actual:
-#        unique_id: sensor.swx1_hotend_actual
-#        friendly_name: "Hotend Actual"
-#        device_class: temperature
-#        unit_of_measurement: '°C'
-#        value_template: >-
-#          {{ states.sensor.swx1_sensor.attributes['extruder']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-#
-#      swx1_bed_target:
-#        unique_id: sensor.swx1_bed_target
-#        friendly_name: "Bed Target"
-#        device_class: temperature
-#        unit_of_measurement: '°C'
-#        value_template: >-
-#          {{ states.sensor.swx1_sensor.attributes['heater_bed']['target'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-#
-#      swx1_bed_actual:
-#        unique_id: sensor.swx1_bed_actual
-#        friendly_name: "Bed Actual"
-#        device_class: temperature
-#        unit_of_measurement: '°C'
-#        value_template: >-
-#          {{ states.sensor.swx1_sensor.attributes['heater_bed']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-
       swx1_state:
         unique_id: sensor.swx1_state
         friendly_name: "Status"
@@ -113,7 +81,6 @@ sensor:
           {{ "mdi:printer-3d-nozzle-heat" if states.sensor.swx1_sensor.attributes['extruder']['target'] > 0 else "mdi:printer-3d-nozzle-heat-outline" }}
         value_template: >-
           {{ states.sensor.swx1_sensor.attributes['extruder']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-#          {{ [(states.sensor.swx1_sensor.attributes['extruder']['temperature'] | float | round(1)), " / ", (states.sensor.swx1_sensor.attributes['extruder']['target'] | float | round(1))] | join if is_state('sensor.swx1_sensor', 'OK') else None }}
 
       swx1_bedtemp:
         unique_id: sensor.swx1_bedtemp
@@ -124,17 +91,16 @@ sensor:
           {{ "mdi:radiator" if states.sensor.swx1_sensor.attributes['extruder']['target'] > 0 else "mdi:radiator-off" }}
         value_template: >-
           {{ states.sensor.swx1_sensor.attributes['heater_bed']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
-#          {{ [(states.sensor.swx1_sensor.attributes['heater_bed']['temperature'] | float | round(1) | string), " / ", (states.sensor.swx1_sensor.attributes['heater_bed']['target'] | float | round(1) | string)] | join if is_state('sensor.swx1_sensor', 'OK') else None }}
 #  The following will allow you to control the power of devices configured in the "[power]" sections of moonraker
 #  Make sure to change the `Printer` name below to the device name on your configuration
 #
-#switch:
-#  - platform: rest
-#    name: SWX1_power
-#    resource: "http://192.168.178.66:7125/machine/device_power/device?device=SWX1"
-#    body_on: '{"action": "on"}'
-#    body_off: '{"action": "off"}'
-#    headers:
-#      Content-Type: 'application/json'
-#    is_on_template: >-
-#      {{ 'result' in value_json and (value_json.result.values() | list | first == "on") }}
+switch:
+  - platform: rest
+    name: SWX1_power
+    resource: "http://192.168.178.66:7125/machine/device_power/device?device=SWX1"
+    body_on: '{"action": "on"}'
+    body_off: '{"action": "off"}'
+    headers:
+      Content-Type: 'application/json'
+    is_on_template: >-
+      {{ 'result' in value_json and (value_json.result.values() | list | first == "on") }}
