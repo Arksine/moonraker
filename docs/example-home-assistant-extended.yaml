@@ -1,6 +1,6 @@
 #  Example Home Assistant configuration file for a Artillery Sidewinder X1
 #  Credit to GitHub users @Kruppes and @pedrolamas
-#  expanded by @tispokes
+#  extended by @tispokes
 camera:
   - platform: generic
     still_image_url: http://192.168.178.66/webcam/?action=snapshot
