@@ -28,6 +28,7 @@ from typing import (
 if TYPE_CHECKING:
     from moonraker import Server
     from app import APIDefinition
+    from klippy_connection import KlippyConnection as Klippy
     import components.authorization
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
@@ -270,6 +271,7 @@ class APITransport:
 class WebsocketManager(APITransport):
     def __init__(self, server: Server) -> None:
         self.server = server
+        self.klippy: Klippy = server.lookup_component("klippy_connection")
         self.websockets: Dict[int, WebSocket] = {}
         self.rpc = JsonRPC()
         self.closed_event: Optional[asyncio.Event] = None
@@ -311,7 +313,7 @@ class WebsocketManager(APITransport):
 
     def _generate_callback(self, endpoint: str) -> RPCCallback:
         async def func(ws: WebSocket, **kwargs) -> Any:
-            result = await self.server.make_request(
+            result = await self.klippy.request(
                 WebRequest(endpoint, kwargs, conn=ws, ip_addr=ws.ip_addr,
                            user=ws.current_user))
             return result
@@ -348,7 +350,7 @@ class WebsocketManager(APITransport):
     def remove_websocket(self, ws: WebSocket) -> None:
         old_ws = self.websockets.pop(ws.uid, None)
         if old_ws is not None:
-            self.server.remove_subscription(old_ws)
+            self.klippy.remove_subscription(old_ws)
             logging.debug(f"Websocket Removed: {ws.uid}")
         if self.closed_event is not None and not self.websockets:
             self.closed_event.set()

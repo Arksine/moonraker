@@ -22,6 +22,7 @@ from typing import (
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
+    from klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     _T = TypeVar("_T")
 
@@ -39,6 +40,7 @@ SENTINEL = SentinelClass.get_instance()
 class KlippyAPI(Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.klippy: Klippy = self.server.lookup_component("klippy_connection")
         app_args = self.server.get_app_args()
         self.version = app_args.get('software_version')
         # Maintain a subscription for all moonraker requests, as
@@ -84,7 +86,7 @@ class KlippyAPI(Subscribable):
                                    default: Any = SENTINEL
                                    ) -> Any:
         try:
-            result = await self.server.make_request(
+            result = await self.klippy.request(
                 WebRequest(method, params, conn=self))
         except self.server.error:
             if isinstance(default, SentinelClass):
@@ -102,17 +104,26 @@ class KlippyAPI(Subscribable):
         return result
 
     async def start_print(self, filename: str) -> str:
+        # WARNING: Do not call this method from within the following
+        # event handlers:
+        # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
+        # Doing so will result in a deadlock
         # XXX - validate that file is on disk
         if filename[0] == '/':
             filename = filename[1:]
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
-        await self.server.wait_connection_initialized()
+        await self.klippy.wait_connected()
         return await self.run_gcode(script)
 
     async def do_restart(self, gc: str) -> str:
-        await self.server.wait_connection_initialized()
+        # WARNING: Do not call this method from within the following
+        # event handlers:
+        # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
+        # Doing so will result in a deadlock
+        # XXX - validate that file is on disk
+        await self.klippy.wait_connected()
         try:
             result = await self.run_gcode(gc)
         except self.server.error as e:

@@ -1,1 +1,2 @@
 mkdocs==1.2.3
+pymdown-extensions==9.1

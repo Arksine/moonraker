@@ -31,6 +31,7 @@ from typing import (
 if TYPE_CHECKING:
     from app import APIDefinition
     from confighelper import ConfigHelper
+    from klippy_connection import KlippyConnection as Klippy
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 
@@ -141,6 +142,7 @@ class MQTTClient(APITransport, Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
+        self.klippy: Klippy = self.server.lookup_component("klippy_connection")
         self.address: str = config.get('address')
         self.port: int = config.getint('port', 1883)
         user = config.gettemplate('username', None)
@@ -271,7 +273,7 @@ class MQTTClient(APITransport, Subscribable):
         if self.status_objs:
             args = {'objects': self.status_objs}
             try:
-                await self.server.make_request(
+                await self.klippy.request(
                     WebRequest("objects/subscribe", args, conn=self))
             except self.server.error:
                 pass
@@ -607,7 +609,7 @@ class MQTTClient(APITransport, Subscribable):
     def _generate_remote_callback(self, endpoint: str) -> RPCCallback:
         async def func(**kwargs) -> Any:
             self._check_timestamp(kwargs)
-            result = await self.server.make_request(
+            result = await self.klippy.request(
                 WebRequest(endpoint, kwargs))
             return result
         return func
