@@ -1,0 +1,111 @@
+#  Example Home Assistant configuration file for a Voron V0.
+#  Credit to GitHub users @Kruppes and @pedrolamas
+#
+sensor:
+  - platform: rest
+    name: Voron_V0_sensor
+    resource: "http://192.168.178.56:7125/printer/objects/query?heater_bed&extruder&print_stats&toolhead&display_status&virtual_sdcard"
+    json_attributes_path: "$.result.status"
+    json_attributes:
+      - heater_bed
+      - extruder
+      - print_stats
+      - toolhead
+      - display_status
+      - virtual_sdcard
+    value_template: >-
+      {{ 'OK' if ('result' in value_json) else None }}    
+    #  Adding an API key is only necessary while using the [authorization] component
+    #  and if Home Assistant is not a trusted client
+    headers:
+      x-api-key: 123456789abcdefghijklmno
+      
+  - platform: template
+    sensors:
+
+      vzero_hotend_target:
+        friendly_name: 'V0.126 Hotend Target'
+        device_class: temperature
+        unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['extruder']['target'] | float | round(1) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_hotend_actual:
+        device_class: temperature
+        unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['extruder']['temperature'] | float | round(1) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_bed_target:
+        device_class: temperature
+        unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['heater_bed']['target'] | float | round(1) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_bed_actual:
+        device_class: temperature
+        unit_of_measurement: '°C'
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['heater_bed']['temperature'] | float | round(1) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_state:
+        icon_template: mdi:printer-3d
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['state'] if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_current_print:
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['filename'] if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_current_progress:
+        unit_of_measurement: '%'
+        icon_template: mdi:file-percent
+        value_template: >-
+          {{ (states.sensor.voron_v0_sensor.attributes['display_status']['progress'] * 100) | round(1) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_print_time:
+        icon_template: mdi:clock-start
+        value_template: >-
+          {{ states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] | timestamp_custom("%H:%M:%S", 0) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_time_remaining:
+        icon_template: mdi:clock-end
+        value_template: >-
+          {{ (((states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] / states.sensor.voron_v0_sensor.attributes['display_status']['progress'] - states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration']) if states.sensor.voron_v0_sensor.attributes['display_status']['progress'] > 0 else 0) | timestamp_custom('%H:%M:%S', 0)) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_eta:
+        icon_template: mdi:clock-outline
+        value_template: >-
+          {{ (as_timestamp(now()) + 2 * 60 * 60 + ((states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration'] / states.sensor.voron_v0_sensor.attributes['display_status']['progress'] - states.sensor.voron_v0_sensor.attributes['print_stats']['print_duration']) if states.sensor.voron_v0_sensor.attributes['display_status']['progress'] > 0 else 0)) | timestamp_custom("%H:%M:%S", 0) if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_nozzletemp:
+        icon_template: mdi:thermometer
+        value_template: >-
+          {{ [(states.sensor.voron_v0_sensor.attributes['extruder']['temperature'] | float | round(1) | string), " / ", (states.sensor.voron_v0_sensor.attributes['extruder']['target'] | float | round(1) | string)] | join if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+      vzero_bedtemp:
+        icon_template: mdi:thermometer
+        value_template: >-
+          {{ [(states.sensor.voron_v0_sensor.attributes['heater_bed']['temperature'] | float | round(1) | string), " / ", (states.sensor.voron_v0_sensor.attributes['heater_bed']['target'] | float | round(1) | string)] | join if is_state('sensor.voron_v0_sensor', 'OK') else None }}
+
+#  The following will allow you to control the power of devices configured in the "[power]" sections of moonraker
+#  Make sure to change the `Printer` name below to the device name on your configuration
+#
+switch:
+  - platform: rest
+    name: Voron_V0_power
+    resource: "http://192.168.178.56:7125/machine/device_power/device?device=Printer"
+    body_on: '{"action": "on"}'
+    body_off: '{"action": "off"}'
+    headers:
+      Content-Type: 'application/json'
+    is_on_template: >-
+      {{ 'result' in value_json and (value_json.result.values() | list | first == "on") }}
+
+#  MJPEG camera can be exposed to HA
+#
+camera:
+  - platform: mjpeg
+    name: Voron_V0_camera
+    still_image_url: http://192.168.178.56/webcam/?action=snapshot
+    mjpeg_url: http://192.168.178.56/webcam/?action=stream
