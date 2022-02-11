@@ -2,9 +2,10 @@
 #  Credit to GitHub users @Kruppes and @pedrolamas
 #  expanded by @tispokes
 camera:
-  - platform: mjpeg
+  - platform: generic
     still_image_url: http://192.168.178.66/webcam/?action=snapshot
-    mjpeg_url: http://192.168.178.66/webcam/?action=stream
+    stream_source: http://192.168.178.66/webcam/?action=stream
+    framerate: 10
 
 sensor:
   - platform: rest
