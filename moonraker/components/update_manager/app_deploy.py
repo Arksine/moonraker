@@ -78,6 +78,7 @@ class AppDeploy(BaseDeploy):
             self._verify_path(config, 'env', self.executable)
             self.venv_args = config.get('venv_args', None)
 
+        self.info_tags: List[str] = config.getlist("info_tags", [])
         self.is_service = config.getboolean("is_system_service", True)
         storage = self._load_storage()
         self.need_channel_update = storage.get('need_channel_upate', False)
@@ -193,7 +194,8 @@ class AppDeploy(BaseDeploy):
             'debug_enabled': self.debug,
             'need_channel_update': self.need_channel_update,
             'is_valid': self._is_valid,
-            'configured_type': self.type
+            'configured_type': self.type,
+            'info_tags': self.info_tags
         }
 
     def get_persistent_data(self) -> Dict[str, Any]:

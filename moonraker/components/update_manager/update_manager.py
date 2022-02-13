@@ -1289,6 +1289,7 @@ class WebClientDeploy(BaseDeploy):
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
         self.type = config.get('type')
         self.channel = "stable" if self.type == "web" else "beta"
+        self.info_tags: List[str] = config.getlist("info_tags", [])
         self.persistent_files: List[str] = []
         pfiles = config.getlist('persistent_files', None)
         if pfiles is not None:
@@ -1436,7 +1437,8 @@ class WebClientDeploy(BaseDeploy):
             'version': self.version,
             'remote_version': self.remote_version,
             'configured_type': self.type,
-            'channel': self.channel
+            'channel': self.channel,
+            'info_tags': self.info_tags
         }
 
 def load_component(config: ConfigHelper) -> UpdateManager:
