@@ -475,11 +475,11 @@ class MoonrakerDatabase:
                             cursor.put(self._encode_value(value[key]))
                         new_keys.remove(key)
                         remaining = cursor.next()
-            for k in new_keys:
-                val = value[k]
+            for key in new_keys:
+                val = value[key]
                 ret = txn.put(key.encode(), self._encode_value(val))
                 if not ret:
-                    logging.info(f"Error inserting key '{k}' "
+                    logging.info(f"Error inserting key '{key}' "
                                  f"in namespace '{namespace}'")
 
     def ns_length(self, namespace: str) -> Future[int]:
