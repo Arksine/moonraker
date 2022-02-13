@@ -1039,6 +1039,16 @@ persistent_files:
 refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
+info_tags:
+#   Optional information tags about this application that are reported to
+#   clients as a list of strings. Each tag should be separated by a new line.
+#   For example:
+#       info_tags:
+#           desc=My Client App
+#           action=webcam_restart
+#   Clients my use these tags to perform additonal actions or display
+#   information, see your client documentation for details on configuration.
+#   The default is an empty list.
 ```
 
 This second example is for "applications".  These may be git repositories
@@ -1105,6 +1115,16 @@ is_system_service: True
 refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
+info_tags:
+#   Optional information tags about this application that are reported to
+#   clients as a list of strings. Each tag should be separated by a new line.
+#   For example:
+#       info_tags:
+#           desc=Special Application
+#           klipper_restart
+#   Clients my use these tags to perform additonal actions or display
+#   information, see your client documentation for details on configuration.
+#   The default is an empty list.
 ```
 
 ### `[mqtt]`

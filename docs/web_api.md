@@ -2470,6 +2470,7 @@ Status information for each update package.  Note that `mainsail`
 and `fluidd` are present as clients configured in `moonraker.conf`
 ```json
 {
+    "busy": false,
     "github_rate_limit": 60,
     "github_requests_remaining": 57,
     "github_limit_reset_time": 1615836932,
@@ -2484,77 +2485,90 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             ]
         },
         "moonraker": {
-            "type": "zip_beta",
-            "channel": "beta",
+            "channel": "dev",
+            "debug_enabled": true,
             "need_channel_update": false,
-            "pristine": true,
-            "remote_alias": "origin",
-            "branch": "master",
-            "owner": "Arksine",
-			"repo_name": "moonraker",
-            "version": "v0.4.1-45",
-            "remote_version": "v0.4.1-45",
-            "full_version_string": "v0.4.1-45-g7e230c1c",
-            "current_hash": "7e230c1c77fa406741ab99fb9156951c4e5c9cb4",
-            "remote_hash": "7e230c1c77fa406741ab99fb9156951c4e5c9cb4",
-            "is_dirty": false,
-            "detached": false,
-            "commits_behind": [],
             "is_valid": true,
-            "debug_enabled": true
+            "configured_type": "git_repo",
+            "info_tags": [],
+            "detected_type": "git_repo",
+            "remote_alias": "arksine",
+            "branch": "master",
+            "owner": "?",
+            "repo_name": "moonraker",
+            "version": "v0.7.1-364",
+            "remote_version": "v0.7.1-364",
+            "current_hash": "ecfad5cff15fff1d82cb9bdc64d6b548ed53dfaf",
+            "remote_hash": "ecfad5cff15fff1d82cb9bdc64d6b548ed53dfaf",
+            "is_dirty": false,
+            "detached": true,
+            "commits_behind": [],
+            "git_messages": [],
+            "full_version_string": "v0.7.1-364-gecfad5c",
+            "pristine": true
         },
         "mainsail": {
             "name": "mainsail",
             "owner": "meteyou",
-            "version": "v1.3.0",
-            "remote_version": "v1.4.0"
+            "version": "v2.1.1",
+            "remote_version": "v2.1.1",
+            "configured_type": "web",
+            "channel": "stable",
+            "info_tags": [
+                "desc=Mainsail Web Client",
+                "action=some_action"
+            ]
         },
         "fluidd": {
             "name": "fluidd",
             "owner": "cadriel",
-            "version": "v1.6.1",
-            "remote_version": "v1.10.0"
+            "version": "?",
+            "remote_version": "v1.16.2",
+            "configured_type": "web_beta",
+            "channel": "beta",
+            "info_tags": []
         },
         "klipper": {
-            "type": "zip_beta",
-            "channel": "beta",
+            "channel": "dev",
+            "debug_enabled": true,
             "need_channel_update": false,
-            "pristine": true,
+            "is_valid": true,
+            "configured_type": "git_repo",
+            "info_tags": [],
+            "detected_type": "git_repo",
             "remote_alias": "origin",
             "branch": "master",
             "owner": "Klipper3d",
-			"repo_name": "klipper",
-            "version": "v0.9.1-317",
-            "remote_version": "v0.9.1-324",
-            "full_version_string": "v0.9.1-324-gd77928b1",
-            "current_hash": "d77928b17ba6b32189033b3d6decdb5bcc7c342c",
-            "remote_hash": "22753f3b389e3f21a6047bac70abc42b6cf4a7dc",
+            "repo_name": "klipper",
+            "version": "v0.10.0-1",
+            "remote_version": "v0.10.0-41",
+            "current_hash": "4c8d24ae03eadf3fc5a28efb1209ce810251d02d",
+            "remote_hash": "e3cbe7ea3663a8cd10207a9aecc4e5458aeb1f1f",
             "is_dirty": false,
             "detached": false,
             "commits_behind": [
                 {
-                    "sha": "22753f3b389e3f21a6047bac70abc42b6cf4a7dc",
+                    "sha": "e3cbe7ea3663a8cd10207a9aecc4e5458aeb1f1f",
                     "author": "Kevin O'Connor",
-                    "date": "1615830538",
-                    "subject": "tmc: Only check for tmc2130 reset via CS_ACTUAL if IHOLD > 0",
-                    "message": "Signed-off-by: Kevin O'Connor <kevin@koconnor.net>",
+                    "date": "1644534721",
+                    "subject": "stm32: Clear SPE flag on a change to SPI CR1 register",
+                    "message": "The stm32 specs indicate that the SPE bit must be cleared before\nchanging the CPHA or CPOL bits.\n\nReported by @cbc02009 and @bigtreetech.\n\nSigned-off-by: Kevin O'Connor <kevin@koconnor.net>",
                     "tag": null
                 },
                 {
-                    "sha": "b4437f8eeeaddf60f893ceaeaf4d9ed06d57eeae",
-                    "author": "Michael Kurz",
-                    "date": "1615823429",
-                    "subject": "bme280: Add support for BMP280 and BME680 sensors (#4040)",
-                    "message": "This adds support for BMP280 and BME680 sensor ICs,\r\nalong with fixing calibration data readout for BME280.\r\n\r\nGas sensor readout for the BME680 is just the raw compensated value.\r\nTo get actual meaningful values, more research is needed.\r\n\r\nSigned-off-by: Michael Kurz <michi.kurz@gmail.com>",
+                    "sha": "99d55185a21703611b862f6ce4b80bba70a9c4b5",
+                    "author": "Kevin O'Connor",
+                    "date": "1644532075",
+                    "subject": "stm32: Wait for transmission to complete before returning from spi_transfer()",
+                    "message": "It's possible for the SCLK pin to still be updating even after the\nlast byte of data has been read from the receive pin.  (In particular\nin spi mode 0 and 1.)  Exiting early from spi_transfer() in this case\ncould result in the CS pin being raised before the final updates to\nSCLK pin.\n\nAdd an additional wait at the end of spi_transfer() to avoid this\nissue.\n\nSigned-off-by: Kevin O'Connor <kevin@koconnor.net>",
                     "tag": null
-                }
+                },
             ],
             "git_messages": [],
-            "is_valid": true,
-            "debug_enabled": true
+            "full_version_string": "v0.10.0-1-g4c8d24ae-shallow",
+            "pristine": true
         }
-    },
-    "busy": false
+    }
 }
 ```
 Below is an explanation for each field:
@@ -2617,13 +2631,23 @@ as applications have the following fields:
   providing output (for example, it may become non-responsive and time out),
   so it is possible for this field to be an empty list when the repo is
   invalid.
+- `info_tags`: These are tags defined in the `[update_manager client_name]`
+  configuration for each client. Client developers my define what tags,
+  if any, users will configure.  They can choose to use those tags to display
+  information or perform an additional action after an update if necessary.
 
 Web clients have the following fields:
 
+- `channel`: channel to fetch updates from
+- `configured_type`: will be `web` or `web_beta`
 - `name`: name of the configured client
 - `owner`: the owner of the client
 - `version`:  version of the installed client.
 - `remote_version`:  version of the latest release published to GitHub
+- `info_tags`: These are tags defined in the `[update_manager client_name]`
+  configuration for each client. Client developers my define what tags,
+  if any, users will configure.  They can choose to use those tags to display
+  information or perform an additional action after an update if necessary.
 
 The `system` package has the following fields:
 
