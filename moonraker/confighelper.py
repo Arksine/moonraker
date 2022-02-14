@@ -80,8 +80,9 @@ class ConfigHelper:
 
     def get_hash(self) -> hashlib._Hash:
         hash = hashlib.sha256()
-        for option in self.config[self.section]:
+        for option, val in self.config[self.section].items():
             hash.update(option.encode())
+            hash.update(val.encode())
         return hash
 
     def get_prefix_sections(self, prefix: str) -> List[str]:
