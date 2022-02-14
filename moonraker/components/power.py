@@ -951,7 +951,7 @@ class SmartThings(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config, default_port=443, default_protocol="https")
         self.device: str = config.get("device", "")
-        self.token: str = config.get("token", "")
+        self.token: str = config.gettemplate("token").render()
 
     async def _send_smartthings_command(self,
                                         command: str
