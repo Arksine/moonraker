@@ -334,7 +334,7 @@ The following configuration options are available for all power device types:
 type:
 #   The type of device.  Can be either gpio, klipper_device, rf,
 #   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
-#   or mqtt.
+#   smartthings, or mqtt.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -883,11 +883,11 @@ query_after_command: False
 ```
 ####  SmartThings (HTTP)
 
-!!! Important SmartThings Developer API Topics
-* See [Getting a Bearer Token](
-https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/)
-* See [Getting a list of devices]( 
-https://developer-preview.smartthings.com/api/public#operation/getDevices)
+!!! Important
+    SmartThings Developer API Topics:
+
+    * See [Getting a Bearer Token](https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/)
+    * See [Getting a list of devices](https://developer-preview.smartthings.com/api/public#operation/getDevices)
 
 The following options are available for `smartthings` device types:
 
@@ -898,8 +898,10 @@ address: api.smartthings.com
 protocol: https
 port: 443
 token:
-#   A bearer token used for request authorization. This parameter must be provided.
-device: 
+#   A token used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details. This paramter
+#   must be provided.
+device:
 #   The Device guid of the switch to control. This parameter must be provided.
 ```
 
