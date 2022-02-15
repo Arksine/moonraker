@@ -877,7 +877,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
         fpath: Optional[str] = item.get('path', None)
         if root is not None and fpath is not None:
             path_parts = fpath.split("/")
-            fpath = "/".join([url_escape(p) for p in path_parts])
+            fpath = "/".join([url_escape(p, plus=False) for p in path_parts])
             proto = self.request.protocol
             if not isinstance(proto, str):
                 proto = "http"
