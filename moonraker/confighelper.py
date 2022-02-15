@@ -378,7 +378,7 @@ class ConfigHelper:
                 f"Configuration File Not Found: '{cfg_file_path}''")
         try:
             sup_cfg = configparser.ConfigParser(interpolation=None)
-            sup_cfg.read(cfg_file_path)
+            sup_cfg.read_file(open(cfg_file_path))
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
         sections = sup_cfg.sections()
@@ -416,7 +416,7 @@ def get_configuration(server: Server,
         app_args['config_file']))
     config = configparser.ConfigParser(interpolation=None)
     try:
-        config.read(cfg_file_path)
+        config.read_file(open(cfg_file_path))
     except Exception as e:
         if not os.path.isfile(cfg_file_path):
             raise ConfigError(
