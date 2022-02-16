@@ -48,7 +48,7 @@ class OctoprintCompat:
             'flipH': config.getboolean('flipH', False),
             'flipV': config.getboolean('flipV', False),
             'rotate90': config.getboolean('rotate90', False),
-            'streamUrl': config.getboolean('streamUrl', '/webcam/?action=stream'),
+            'streamUrl': config.get('streamUrl', '/webcam/?action=stream'),
             'webcamEnabled': config.getboolean('webcamEnabled', True),
         }
 
