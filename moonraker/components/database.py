@@ -203,10 +203,11 @@ class MoonrakerDatabase:
         if len(key_list) > 1:
             record = self._get_record(namespace, key_list[0], force=True)
             if not isinstance(record, dict):
+                prev_type = type(record)
                 record = {}
                 logging.info(
-                    f"Warning: Key {key_list[0]} contains a value of type"
-                    f" {type(record)}. Overwriting with an object.")
+                    f"Warning: Key {key_list[0]} contains a value of type "
+                    f"{prev_type}. Overwriting with an object.")
             item: Dict[str, Any] = reduce(
                 getitem_with_default, key_list[1:-1], record)
             item[key_list[-1]] = value
