@@ -8,8 +8,8 @@ such as a configuration change or a reinstallation.
   default values.
 
   Default values:
-
-  | --- | --- |
+  | Setting | Default value |
+  |---------|---------------|
   | flipH | False |
   | flipV | False |
   | rotate90 | False |
