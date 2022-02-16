@@ -355,7 +355,10 @@ class MoonrakerDatabase:
                            namespace: str,
                            records: Dict[str, Any]
                            ) -> None:
-        db = self._get_db(namespace)
+        if namespace not in self.namespaces:
+            self.namespaces[namespace] = self.lmdb_env.open_db(
+                namespace.encode())
+        db = self.namespaces[namespace]
         with self.lmdb_env.begin(write=True, buffers=True, db=db) as txn:
             for key, val in records.items():
                 ret = txn.put(key.encode(), self._encode_value(val))
