@@ -15,7 +15,7 @@ from io import BytesIO
 from functools import reduce
 from threading import Lock as ThreadLock
 import lmdb
-from utils import SentinelClass
+from utils import SentinelClass, ServerError
 
 # Annotation imports
 from typing import (
@@ -64,6 +64,9 @@ RECORD_DECODE_FUNCS = {
 SENTINEL = SentinelClass.get_instance()
 
 def getitem_with_default(item: Dict, field: Any) -> Any:
+    if not isinstance(item, Dict):
+        raise ServerError(
+            f"Cannot reduce a value of type {type(item)}")
     if field not in item:
         item[field] = {}
     return item[field]
@@ -210,6 +213,12 @@ class MoonrakerDatabase:
                     f"{prev_type}. Overwriting with an object.")
             item: Dict[str, Any] = reduce(
                 getitem_with_default, key_list[1:-1], record)
+            if not isinstance(item, dict):
+                rpt_key = ".".join(key_list[:-1])
+                raise self.server.error(
+                    f"Item at key '{rpt_key}' in namespace '{namespace}'is "
+                    "not a dictionary object, cannot insert"
+                )
             item[key_list[-1]] = value
         if not self._insert_record(namespace, key_list[0], record):
             logging.info(
@@ -233,7 +242,10 @@ class MoonrakerDatabase:
             if isinstance(record, dict) and isinstance(value, dict):
                 record.update(value)
             else:
-                assert value is not None
+                if value is None:
+                    raise self.server.error(
+                        f"Item at key '{key}', namespace '{namespace}': "
+                        "Cannot assign a record level null value")
                 record = value
         else:
             try:
@@ -244,6 +256,12 @@ class MoonrakerDatabase:
                 raise self.server.error(
                     f"Key '{key}' in namespace '{namespace}' not found",
                     404)
+            if not isinstance(item, dict) or key_list[-1] not in item:
+                rpt_key = ".".join(key_list[:-1])
+                raise self.server.error(
+                    f"Item at key '{rpt_key}' in namespace '{namespace}'is "
+                    "not a dictionary object, cannot update"
+                )
             if isinstance(item[key_list[-1]], dict) \
                     and isinstance(value, dict):
                 item[key_list[-1]].update(value)
