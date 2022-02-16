@@ -304,7 +304,7 @@ class PrusaSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         aliases = {
             'PrusaSlicer': r"PrusaSlicer\s(.*)\son",
-            'SuperSlicer': r"SuperSlicer\s(.*)\son",
+            'SuperSlicer': r"SuperSlicer[^\s]*\s(.*)\son",
             'SliCR-3D': r"SliCR-3D\s(.*)\son"
         }
         for name, expr in aliases.items():
@@ -417,10 +417,12 @@ class Slic3rPE(PrusaSlicer):
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         return None
 
-class Slic3r(Slic3rPE):
+class Slic3r(PrusaSlicer):
+    self.version: str = ""
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
-        match = re.search(r"Slic3r\s(\d.*)\son", data)
+        match = re.search(r"Slic3r[^\s]*\s(\d.*)\son", data)
         if match:
+            self.version = match.group(1)
             return {
                 'slicer': "Slic3r",
                 'slicer_version': match.group(1)
@@ -428,6 +430,8 @@ class Slic3r(Slic3rPE):
         return None
 
     def parse_filament_total(self) -> Optional[float]:
+        if len(self.version) > 3 && self.version[0] == '2':
+            return PrusaSlicer.parse_filament_total(self);
         filament = _regex_find_first(
             r";\sfilament\_length\_m\s=\s(\d+\.\d*)", self.footer_data)
         if filament is not None:
@@ -435,10 +439,19 @@ class Slic3r(Slic3rPE):
         return filament
 
     def parse_filament_weight_total(self) -> Optional[float]:
+        if len(self.version) > 3 && self.version[0] == '2':
+            return PrusaSlicer.parse_filament_weight_total(self);
         return _regex_find_first(
             r";\sfilament\smass\_g\s=\s(\d+\.\d*)", self.footer_data)
 
     def parse_estimated_time(self) -> Optional[float]:
+        if len(self.version) > 3 && self.version[0] == '2':
+            return PrusaSlicer.parse_estimated_time(self);
+        return None
+    
+    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
+        if len(self.version) > 3 && self.version[0] == '2':
+            return PrusaSlicer.parse_thumbnails(self);
         return None
 
 class Cura(BaseSlicer):
