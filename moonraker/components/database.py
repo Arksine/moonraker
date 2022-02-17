@@ -380,6 +380,10 @@ class MoonrakerDatabase:
                          dest_keys: List[str]
                          ) -> None:
         db = self._get_db(namespace)
+        if len(source_keys) != len(dest_keys):
+            raise self.server.error(
+                "Source key list and destination key list must "
+                "be of the same length")
         with self.lmdb_env.begin(write=True, db=db) as txn:
             for source, dest in zip(source_keys, dest_keys):
                 val = txn.pop(source.encode())
