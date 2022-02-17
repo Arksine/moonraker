@@ -10,11 +10,11 @@ such as a configuration change or a reinstallation.
   Default values:
   | Setting | Default value |
   |---------|---------------|
-  | flipH | False |
-  | flipV | False |
-  | rotate90 | False |
-  | streamUrl | /webcam/?action=stream |
-  | webcamEnabled | True |
+  | flip_h | False |
+  | flip_v | False |
+  | rotate_90 | False |
+  | stream_url | /webcam/?action=stream |
+  | webcam_enabled | True |
 
 ### January 22th 2022
 - The `color_order` option in the `[wled]` section has been deprecated.

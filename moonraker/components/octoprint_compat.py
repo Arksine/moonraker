@@ -45,11 +45,11 @@ class OctoprintCompat:
 
         # Get webcam settings from config
         self.webcam: Dict[str, Any] = {
-            'flipH': config.getboolean('flipH', False),
-            'flipV': config.getboolean('flipV', False),
-            'rotate90': config.getboolean('rotate90', False),
-            'streamUrl': config.get('streamUrl', '/webcam/?action=stream'),
-            'webcamEnabled': config.getboolean('webcamEnabled', True),
+            'flipH': config.getboolean('flip_h', False),
+            'flipV': config.getboolean('flip_v', False),
+            'rotate90': config.getboolean('rotate_90', False),
+            'streamUrl': config.get('stream_url', '/webcam/?action=stream'),
+            'webcamEnabled': config.getboolean('webcam_enabled', True),
         }
 
         # Local variables
