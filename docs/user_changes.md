@@ -2,6 +2,20 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### February 16th 2022
+- Webcam settings can now be defined in the `moonraker.conf` file, under
+  the `[octoprint_compat]` section. The default values are being used as
+  default values.
+
+  Default values:
+  | Setting | Default value |
+  |---------|---------------|
+  | flip_h | False |
+  | flip_v | False |
+  | rotate_90 | False |
+  | stream_url | /webcam/?action=stream |
+  | webcam_enabled | True |
+
 ### January 22th 2022
 - The `color_order` option in the `[wled]` section has been deprecated.
   This is configured in wled directly. This is not a breaking change,

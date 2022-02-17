@@ -245,6 +245,21 @@ enable_ufp: True
 #   files will be uploaded in UFP format.  When set to False Cura will
 #   upload files in .gcode format.  This setting has no impact on other
 #   slicers.  The default is True.
+
+flip_h: False
+#   Set the webcam horizontal flip.  The default is False.
+flip_h: False
+#   Set the webcam vertical flip.  The default is False.
+rotate_90: False
+#   Set the webcam rotation by 90 degrees.  The default is False.
+stream_url: /webcam/?action=stream
+#   The URL to use for streaming the webcam.  It can be set to an absolute
+#   URL if needed. In order to get the webcam to work in Cura through
+#   an Octoprint connection, you can set this value to
+#   http://<octoprint ip>/webcam/?action=stream.  The default value is
+#   /webcam/?action=stream.
+webcam_enabled: True
+#   Enables the webcam.  The default is True.
 ```
 
 !!! Tip

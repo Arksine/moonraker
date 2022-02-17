@@ -43,6 +43,15 @@ class OctoprintCompat:
             'software_version')
         self.enable_ufp: bool = config.getboolean('enable_ufp', True)
 
+        # Get webcam settings from config
+        self.webcam: Dict[str, Any] = {
+            'flipH': config.getboolean('flip_h', False),
+            'flipV': config.getboolean('flip_v', False),
+            'rotate90': config.getboolean('rotate_90', False),
+            'streamUrl': config.get('stream_url', '/webcam/?action=stream'),
+            'webcamEnabled': config.getboolean('webcam_enabled', True),
+        }
+
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
         self.heaters: Dict[str, Dict[str, Any]] = {}
@@ -216,9 +225,6 @@ class OctoprintCompat:
                             ) -> Dict[str, Any]:
         """
         Used to parse Octoprint capabilities
-
-        Hardcode capabilities to be basically there and use default
-        fluid/mainsail webcam path.
         """
         settings = {
             'plugins': {},
@@ -226,15 +232,7 @@ class OctoprintCompat:
                 'sdSupport': False,
                 'temperatureGraph': False
             },
-            # TODO: Get webcam settings from config file to allow user
-            #       to customise this.
-            'webcam': {
-                'flipH': False,
-                'flipV': False,
-                'rotate90': False,
-                'streamUrl': '/webcam/?action=stream',
-                'webcamEnabled': True,
-            },
+            'webcam': self.webcam,
         }
         if self.enable_ufp:
             settings['plugins'] = {
