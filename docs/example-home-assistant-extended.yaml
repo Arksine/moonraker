@@ -1,0 +1,106 @@
+#  Example Home Assistant configuration file for a Artillery Sidewinder X1
+#  Credit to GitHub users @Kruppes and @pedrolamas
+#  extended by @tispokes
+camera:
+  - platform: generic
+    still_image_url: http://192.168.178.66/webcam/?action=snapshot
+    stream_source: http://192.168.178.66/webcam/?action=stream
+    framerate: 10
+
+sensor:
+  - platform: rest
+    name: SWX1_sensor
+    resource: "http://192.168.178.66:7125/printer/objects/query?heater_bed&extruder&print_stats&toolhead&display_status&virtual_sdcard"
+    json_attributes_path: "$.result.status"
+    json_attributes:
+      - heater_bed
+      - extruder
+      - print_stats
+      - toolhead
+      - display_status
+      - virtual_sdcard
+    value_template: >-
+      {{ "OK" if ("result" in value_json) else "offline" }}
+    #  Adding an API key is only necessary while using the [authorization] component
+    #  and if Home Assistant is not a trusted client
+    headers:
+      x-api-key: 123456789abcdefghijklmno
+      
+  - platform: template
+    sensors:
+      swx1_state:
+        unique_id: sensor.swx1_state
+        friendly_name: "Status"
+        icon_template: mdi:printer-3d
+        value_template: >-
+          {{ states.sensor.swx1_sensor.attributes['print_stats']['state'] if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_current_print:
+        unique_id: sensor.swx1_current_print
+        friendly_name: >-
+          {{ "Printed" if states.sensor.swx1_sensor.attributes['display_status']['progress'] == 1 else "Printing..." }}
+        icon_template: mdi:video-3d
+        value_template: >-
+          {{ states.sensor.swx1_sensor.attributes['print_stats']['filename'].split(".")[0] if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_current_progress:
+        unique_id: sensor.swx1_current_progress
+        friendly_name: "Progress"
+        unit_of_measurement: '%'
+        icon_template: mdi:file-percent
+        value_template: >-
+          {{ (states.sensor.swx1_sensor.attributes['display_status']['progress'] * 100) | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_print_time:
+        unique_id: sensor.swx1_print_time
+        friendly_name: "T-elapsed"
+        icon_template: mdi:clock-start
+        value_template: >-
+          {{ states.sensor.swx1_sensor.attributes['print_stats']['print_duration'] | timestamp_custom("%H:%M:%S", 0) if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_time_remaining:
+        unique_id: sensor.swx1_time_remaining
+        friendly_name: "T-remaining"
+        icon_template: mdi:clock-end
+        value_template: >-
+          {{ (((states.sensor.swx1_sensor.attributes['print_stats']['print_duration'] / states.sensor.swx1_sensor.attributes['display_status']['progress'] - states.sensor.swx1_sensor.attributes['print_stats']['print_duration']) if states.sensor.swx1_sensor.attributes['display_status']['progress'] > 0 else 0) | timestamp_custom('%H:%M:%S', 0)) if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_eta:
+        unique_id: sensor.swx1_eta
+        friendly_name: "T-ETA"
+        icon_template: mdi:clock-outline
+        value_template: >-
+          {{ (as_timestamp(now()) + 2 * 60 * 60 + ((states.sensor.swx1_sensor.attributes['print_stats']['print_duration'] / states.sensor.swx1_sensor.attributes['display_status']['progress'] - states.sensor.swx1_sensor.attributes['print_stats']['print_duration']) if states.sensor.swx1_sensor.attributes['display_status']['progress'] > 0 else 0)) | timestamp_custom("%H:%M:%S", 0) if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_nozzletemp:
+        unique_id: sensor.swx1_nozzletemp
+        friendly_name: >-
+          Nozzle
+          {{ ["(shall ", (states.sensor.swx1_sensor.attributes['extruder']['target'] | float | round(1)), "°C)"] | join if states.sensor.swx1_sensor.attributes['display_status']['progress'] < 1 }}
+        icon_template: >-
+          {{ "mdi:printer-3d-nozzle-heat" if states.sensor.swx1_sensor.attributes['extruder']['target'] > 0 else "mdi:printer-3d-nozzle-heat-outline" }}
+        value_template: >-
+          {{ states.sensor.swx1_sensor.attributes['extruder']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
+
+      swx1_bedtemp:
+        unique_id: sensor.swx1_bedtemp
+        friendly_name: >-
+          Bed
+          {{ ["(shall ", (states.sensor.swx1_sensor.attributes['heater_bed']['target'] | float | round(1)), "°C)"] | join if states.sensor.swx1_sensor.attributes['display_status']['progress'] < 1 }}
+        icon_template: >-
+          {{ "mdi:radiator" if states.sensor.swx1_sensor.attributes['extruder']['target'] > 0 else "mdi:radiator-off" }}
+        value_template: >-
+          {{ states.sensor.swx1_sensor.attributes['heater_bed']['temperature'] | float | round(1) if is_state('sensor.swx1_sensor', 'OK') else None }}
+#  The following will allow you to control the power of devices configured in the "[power]" sections of moonraker
+#  Make sure to change the `Printer` name below to the device name on your configuration
+#
+switch:
+  - platform: rest
+    name: SWX1_power
+    resource: "http://192.168.178.66:7125/machine/device_power/device?device=SWX1"
+    body_on: '{"action": "on"}'
+    body_off: '{"action": "off"}'
+    headers:
+      Content-Type: 'application/json'
+    is_on_template: >-
+      {{ 'result' in value_json and (value_json.result.values() | list | first == "on") }}
