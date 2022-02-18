@@ -484,7 +484,7 @@ class MoonrakerDatabase:
                       value: Mapping[str, DBRecord]
                       ) -> None:
         if not value:
-            return
+            raise self.server.error("Cannot sync to an empty value")
         db = self._get_db(namespace)
         new_keys = set(value.keys())
         with self.lmdb_env.begin(write=True, buffers=True, db=db) as txn:
