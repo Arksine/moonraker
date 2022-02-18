@@ -562,6 +562,7 @@ class MoonrakerDatabase:
                           namespace: str,
                           key: Union[List[str], str]
                           ) -> bool:
+        self._get_db(namespace)
         try:
             key_list = self._process_key(key)
             record = self._get_record(namespace, key_list[0])
