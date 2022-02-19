@@ -1,11 +1,12 @@
 from __future__ import annotations
 import json
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from tornado.httputil import HTTPHeaders
 from tornado.escape import url_escape
 from typing import Dict, Any, Optional
 
 class HttpClient:
+    error = HTTPError
     def __init__(self,
                  type: str = "http",
                  port: int = 7010
@@ -30,16 +31,16 @@ class HttpClient:
         method = method.upper()
         body: Optional[str] = "" if method == "POST" else None
         if args:
-            if method == "GET":
+            if method in ["GET", "DELETE"]:
                 parts = []
                 for key, val in args.items():
                     if isinstance(val, list):
                         val = ",".join(val)
                     if val:
-                        parts.append(f"{key}={val}")
+                        parts.append(f"{url_escape(key)}={url_escape(val)}")
                     else:
-                        parts.append(key)
-                qs = url_escape("&".join(parts))
+                        parts.append(url_escape(key))
+                qs = "&".join(parts)
                 url += "?" + qs
             else:
                 body = json.dumps(args)
