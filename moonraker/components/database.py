@@ -711,10 +711,12 @@ class MoonrakerDatabase:
         key: Any
         valid_types: Tuple[type, ...]
         if action != "GET":
-            if namespace in self.protected_namespaces and \
-                    not self.enable_debug:
+            if (
+                namespace in self.protected_namespaces and
+                not self.enable_debug
+            ):
                 raise self.server.error(
-                    f"Write access to namespaces '{namespace}'"
+                    f"Write access to namespace '{namespace}'"
                     " is forbidden", 403)
             key = web_request.get("key")
             valid_types = (list, str)
