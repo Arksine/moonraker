@@ -333,9 +333,11 @@ class MoonrakerDatabase:
             ns = self._get_record(namespace, key_list[0])
             val = reduce(operator.getitem,  # type: ignore
                          key_list[1:], ns)
-        except Exception:
+        except Exception as e:
             if not isinstance(default, SentinelClass):
                 return default
+            if isinstance(e, self.server.error):
+                raise
             raise self.server.error(
                 f"Key '{key}' in namespace '{namespace}' not found", 404)
         return val
