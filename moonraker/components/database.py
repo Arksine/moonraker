@@ -500,7 +500,8 @@ class MoonrakerDatabase:
                     else:
                         decoded = self._decode_value(bval)
                         if decoded != value[key]:
-                            cursor.put(self._encode_value(value[key]))
+                            new_val = self._encode_value(value[key])
+                            txn.put(key.encode(), new_val)
                         new_keys.remove(key)
                         remaining = cursor.next()
             for key in new_keys:
