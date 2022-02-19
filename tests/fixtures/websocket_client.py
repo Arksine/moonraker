@@ -24,6 +24,7 @@ class WebsocketError(Exception):
         self.code = code
 
 class WebsocketClient:
+    error = WebsocketError
     def __init__(self,
                  type: str = "ws",
                  port: int = 7010
