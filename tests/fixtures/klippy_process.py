@@ -32,7 +32,7 @@ class KlippyProcess:
         cmd = f"{self.base_cmd} {args}"
         cmd_parts = shlex.split(cmd)
         self.proc = subprocess.Popen(cmd_parts)
-        for _ in range(25):
+        for _ in range(250):
             if self.pty_path.exists():
                 try:
                     self.fd = os.open(
