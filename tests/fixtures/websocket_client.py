@@ -86,7 +86,7 @@ class WebsocketClient:
         req_id: Optional[int] = resp.get("id")
         method: Optional[str] = resp.get("method")
         if method is not None:
-            if req_id is not None:
+            if req_id is None:
                 params = resp.get("params", [])
                 if not isinstance(params, list):
                     pytest.fail("jsonrpc notification params"
