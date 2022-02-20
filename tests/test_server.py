@@ -93,7 +93,7 @@ class TestInstantiation:
 
     def test_pending_tasks(self, base_server: Server):
         loop = base_server.get_event_loop().aioloop
-        assert len(loop._ready) == 0
+        assert len(asyncio.all_tasks(loop)) == 0
 
     def test_klippy_info(self, base_server: Server):
         assert base_server.get_klippy_info() == {}
@@ -212,7 +212,7 @@ class TestCoreServer:
 
     def test_pending_tasks(self, core_server: Server):
         loop = core_server.get_event_loop().aioloop
-        assert len(loop._ready) == 0
+        assert len(asyncio.all_tasks(loop)) == 0
 
     def test_register_component_fail(self, core_server: Server):
         with pytest.raises(ServerError):
