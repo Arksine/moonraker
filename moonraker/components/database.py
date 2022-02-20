@@ -597,7 +597,7 @@ class MoonrakerDatabase:
         elif namespace not in self.protected_namespaces:
             self.protected_namespaces.add(namespace)
             self.insert_item("moonraker", "database.protected_namespaces",
-                             list(self.protected_namespaces))
+                             sorted(self.protected_namespaces))
 
     def wrap_namespace(self,
                        namespace: str,
