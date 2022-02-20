@@ -58,33 +58,20 @@ async def test_klippy_shutdown(ready_server: Server, klippy: KlippyProcess):
     assert fut.result() == "shutdown"
 
 @pytest.mark.asyncio
-async def test_klippy_disconnect(ready_server: Server, klippy: KlippyProcess):
-    evtloop = ready_server.get_event_loop()
-    fut = evtloop.create_future()
-
-    def on_disconnect():
-        if not fut.done():
-            fut.set_result("disconnect")
-    ready_server.register_event_handler("server:klippy_disconnect",
-                                        on_disconnect)
-    klippy.stop()
-    await asyncio.wait_for(fut, 2.)
-    assert fut.result() == "disconnect"
-
-@pytest.mark.asyncio
 async def test_klippy_reconnect(ready_server: Server, klippy: KlippyProcess):
     evtloop = ready_server.get_event_loop()
-    fut = evtloop.create_future()
+    futs = [evtloop.create_future() for _ in range(2)]
+    events = {
+        "server:klippy_disconnect": lambda: futs[0].set_result("disconnect"),
+        "server:klippy_ready": lambda: futs[1].set_result("ready")
+    }
+    for name, func in events.items():
+        ready_server.register_event_handler(name, func)
+    klippy.restart()
+    ret = await asyncio.wait_for(asyncio.gather(*futs), 6.)
+    assert ret == ["disconnect", "ready"]
 
-    def on_reconnect():
-        if not fut.done():
-            fut.set_result("test")
-    ready_server.register_event_handler("server:klippy_ready",
-                                        on_reconnect)
-    klippy.send_gcode("RESTART")
-    await asyncio.wait_for(fut, 4.)
-    assert fut.result() == "test"
-
+@pytest.mark.run_paths(klippy_uds="fake_uds")
 @pytest.mark.asyncio
 async def test_no_klippy_connection_error(full_server: Server):
     await full_server.start_server()
@@ -152,6 +139,7 @@ async def test_wait_connect_fail(base_server: Server):
     ret = await base_server.klippy_connection.wait_connected()
     assert ret is False
 
+@pytest.mark.run_paths(klippy_uds="fake_uds")
 @pytest.mark.asyncio
 async def test_no_uds(base_server: Server):
     attempts = [1, 2, 3]
@@ -163,6 +151,7 @@ async def test_no_uds(base_server: Server):
     ret = await base_server.klippy_connection._do_connect()
     assert ret is False
 
+@pytest.mark.run_paths(klippy_uds="fake_uds")
 @pytest.mark.asyncio
 async def test_no_uds_access(base_server: Server,
                              path_args: Dict[str, pathlib.Path]):

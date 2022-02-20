@@ -476,7 +476,7 @@ class TestBackupConfig:
 
     def test_backup_config_success(self, path_args: Dict[str, pathlib.Path]):
         cfg_path = path_args["moonraker.conf"]
-        bkp_dest = cfg_path.parent.joinpath(".moonraker.conf.bkp")
+        bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
         if bkp_dest.exists():
             pytest.fail("Backup Already Exists")
         confighelper.backup_config(str(cfg_path))
@@ -484,7 +484,7 @@ class TestBackupConfig:
 
     def test_backup_skip(self, path_args: Dict[str, pathlib.Path]):
         cfg_path = path_args["moonraker.conf"]
-        bkp_dest = cfg_path.parent.joinpath(".moonraker.conf.bkp")
+        bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
         if not bkp_dest.exists():
             pytest.fail("Backup Not Present")
         stat = bkp_dest.stat()
@@ -493,6 +493,6 @@ class TestBackupConfig:
 
     def test_find_backup(self, path_args: Dict[str, pathlib.Path]):
         cfg_path = path_args["moonraker.conf"]
-        bkp_dest = cfg_path.parent.joinpath(".moonraker.conf.bkp")
+        bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
         bkp = confighelper.find_config_backup(str(cfg_path))
         assert bkp == str(bkp_dest)
