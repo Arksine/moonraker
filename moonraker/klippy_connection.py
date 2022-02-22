@@ -100,6 +100,14 @@ class KlippyConnection:
             pass
         return self.is_connected()
 
+    async def wait_started(self, timeout: float = 20.) -> bool:
+        if self.connection_task is None or not self.is_connected():
+            return False
+        if not self.connection_task.done():
+            await asyncio.wait_for(
+                asyncio.shield(self.connection_task), timeout=timeout)
+        return self.is_connected()
+
     async def _read_stream(self, reader: asyncio.StreamReader) -> None:
         errors_remaining: int = 10
         while not reader.at_eof():

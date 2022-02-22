@@ -107,23 +107,24 @@ class KlippyAPI(Subscribable):
         # WARNING: Do not call this method from within the following
         # event handlers:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
-        # Doing so will result in a deadlock
+        # Doing so will result in "wait_started" blocking for the specifed
+        # timeout (default 20s) and returning False.
         # XXX - validate that file is on disk
         if filename[0] == '/':
             filename = filename[1:]
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
-        await self.klippy.wait_connected()
+        await self.klippy.wait_started()
         return await self.run_gcode(script)
 
     async def do_restart(self, gc: str) -> str:
         # WARNING: Do not call this method from within the following
         # event handlers:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
-        # Doing so will result in a deadlock
-        # XXX - validate that file is on disk
-        await self.klippy.wait_connected()
+        # Doing so will result in "wait_started" blocking for the specifed
+        # timeout (default 20s) and returning False.
+        await self.klippy.wait_started()
         try:
             result = await self.run_gcode(gc)
         except self.server.error as e:
