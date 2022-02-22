@@ -13,6 +13,7 @@ from typing import Iterator, Dict, AsyncIterator, Any
 from moonraker import Server
 from eventloop import EventLoop
 import utils
+import dbtool
 from fixtures import KlippyProcess, HttpClient, WebsocketClient
 
 ASSETS = pathlib.Path(__file__).parent.joinpath("assets")
@@ -133,7 +134,7 @@ def path_args(request: pytest.FixtureRequest,
         "moonraker_conf": "base_server.conf",
         "secrets": "secrets.ini",
         "printer_cfg": "base_printer.cfg",
-        "klippy_uds": None
+        "klippy_uds": None,
     }
     if path_marker is not None:
         paths.update(path_marker.kwargs)
@@ -171,6 +172,11 @@ def path_args(request: pytest.FixtureRequest,
         bkp_source = ASSETS.joinpath("moonraker/base_server.conf")
         bkp_dest = cfg_path.joinpath(paths["moonraker_bkp"])
         interpolate_config(bkp_source, bkp_dest, session_args)
+    if "database" in paths:
+        db_source = ASSETS.joinpath(f"moonraker/{paths['database']}")
+        db_dest = session_args["database_path"]
+        db_args = {"input": str(db_source), "destination": db_dest}
+        dbtool.restore(db_args)
     yield session_args
     log = session_args.pop("moonraker.log", None)
     if log is not None and log.is_file():
