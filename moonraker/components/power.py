@@ -90,7 +90,7 @@ class PrinterPower:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_klippy_shutdown)
         self.server.register_event_handler(
-            "file_manager:upload_queued", self._handle_upload_queued)
+            "job_queue:job_queue_changed", self._handle_job_queued)
         self.server.register_notification("power:power_changed")
 
     async def _check_klippy_printing(self) -> bool:
@@ -133,14 +133,18 @@ class PrinterPower:
         for dev in self.devices.values():
             dev.process_klippy_shutdown()
 
-    async def _handle_upload_queued(self, filename: str) -> None:
+    async def _handle_job_queued(self, queue_info: Dict[str, Any]) -> None:
+        if queue_info["action"] != "jobs_added":
+            return
         for name, dev in self.devices.items():
-            if dev.has_on_when_queued():
-                if dev.get_state() == "on":
-                    # device already on
-                    continue
+            if dev.should_turn_on_when_queued():
+                queue: List[Dict[str, Any]]
+                queue = queue_info.get("updated_queue", [])
+                fname = "unknown"
+                if len(queue):
+                    fname = queue[0].get("filename", "unknown")
                 logging.debug(
-                    f"File '{filename}' queued, powering on device [{name}]")
+                    f"Job '{fname}' queued, powering on device [{name}]")
                 await self._process_request(dev, "on")
 
     async def _handle_list_devices(self,
@@ -278,7 +282,10 @@ class PowerDevice:
                 raise config.error("Option 'restart_delay' must be above 0.0")
         self.bound_service: Optional[str] = config.get('bound_service', None)
         self.need_scheduled_restart = False
-        self.on_when_queued = config.getboolean('on_when_upload_queued', False)
+        self.on_when_queued = config.getboolean('on_when_job_queued', False)
+        if config.has_option('on_when_upload_queued'):
+            self.on_when_queued = config.getboolean('on_when_upload_queued',
+                                                    False, deprecate=True)
 
     def _is_bound_to_klipper(self):
         return (
@@ -358,8 +365,8 @@ class PowerDevice:
         power: PrinterPower = self.server.lookup_component("power")
         power.set_device_power(self.name, "off")
 
-    def has_on_when_queued(self) -> bool:
-        return self.on_when_queued
+    def should_turn_on_when_queued(self) -> bool:
+        return self.on_when_queued and self.state == "off"
 
     def initialize(self) -> Optional[Coroutine]:
         if self.bound_service is None:

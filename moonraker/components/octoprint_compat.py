@@ -389,11 +389,6 @@ class OctoprintCompat:
                     job_queue: JobQueue = self.server.lookup_component(
                         'job_queue')
                     await job_queue.queue_job(filename, check_exists=False)
-                    # Fire the file_manager's upload_queued event for
-                    # compatibility.  We assume that this endpoint is
-                    # requests by Cura after a file has been uploaded.
-                    self.server.send_event("file_manager:upload_queued",
-                                           filename)
                     logging.debug(f"Job '{filename}' queued via Octoprint API")
                 else:
                     raise self.server.error("Conflict", 409)

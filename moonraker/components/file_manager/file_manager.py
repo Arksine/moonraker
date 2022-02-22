@@ -546,9 +546,6 @@ class FileManager:
 
         await self.notify_sync_lock.wait(300.)
         self.notify_sync_lock = None
-        if queued:
-            self.server.send_event("file_manager:upload_queued",
-                                   upload_info['filename'])
         return {
             'item': {
                 'path': upload_info['filename'],
