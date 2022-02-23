@@ -117,8 +117,12 @@ class NotifierInstance:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
         self.server = config.get_server()
         self.name = name_parts[1]
+
+        if len(config.get('url', '')) < 2:
+            raise config.error(f"Invalid url for: {config.get_name()}")
+
         self.url: str = config.get('url')
-        self.events: List[str] = config.get('events').split(",")
+        self.events: List[str] = config.get('events', '').split(",")
 
     def get_name(self) -> str:
         return self.name
