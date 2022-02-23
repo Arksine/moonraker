@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import apprise
-from apprise import Apprise
 import logging
 
 # Annotation imports
@@ -16,6 +15,7 @@ from typing import (
     Type,
     Optional,
     Dict,
+    Any,
 )
 
 if TYPE_CHECKING:
@@ -28,52 +28,64 @@ if TYPE_CHECKING:
 class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.apprise = apprise.Apprise()
         self.notifiers: Dict[str, NotifierInstance] = {}
         prefix_sections = config.get_prefix_sections("notifier")
+
+        completed_event = NotifierEvent(
+            "completed",
+            "job_state:completed",
+            config)
+
+        started_event = NotifierEvent(
+            "started",
+            "job_state:started",
+            config)
+
         for section in prefix_sections:
             cfg = config[section]
             notifier_class: Optional[Type[NotifierInstance]]
             try:
                 notifier = NotifierInstance(cfg)
+                started_event.register_notifier(notifier)
+                completed_event.register_notifier(notifier)
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
                 self.server.add_warning(msg)
                 continue
             logging.info(f"Loaded notifier: '{notifier.get_name()}'")
             self.notifiers[notifier.get_name()] = notifier
-            self.apprise = notifier.add_to_notifier(self.apprise)
 
-        self.server.register_event_handler(
-            "job_state:started", self._on_job_started)
-        self.server.register_event_handler(
-            "job_state:complete", self._on_job_complete)
 
-    async def notify(self, body="test"):
-        logging.info(f"Sending notification to thing")
-        await self.apprise.async_notify(
-            title='Some good jokes.',
-            body='Hey guys, check out these!'
-        )
+class NotifierEvent:
+    def __init__(self, identifier: str, event_name: str, config: ConfigHelper):
+        self.identifier = identifier
+        self.event_name = event_name
+        self.server = config.get_server()
+        self.apprise = apprise.Apprise()
+        self.notifiers = Dict[str, NotifierInstance] = {}
 
-    async def _on_job_started(self,
-                              prev_stats: Dict[str, Any],
-                              new_stats: Dict[str, Any]
-                              ) -> None:
-        try:
-            logging.info(f"Job started event triggered'")
-            await self.notify("Started")
-        except self.server.error as e:
-            logging.info(f"Error subscribing to print_stats")
+        self.server.register_event_handler(self.event_name, self._handle)
 
-    async def _on_job_complete(self,
-                               prev_stats: Dict[str, Any],
-                               new_stats: Dict[str, Any]) -> None:
+    def register_notifier(self, notifier: NotifierInstance):
+        self.notifiers[notifier.get_name()] = notifier
+        self.apprise.add(notifier.url)
+
+    async def _handle(self,
+                      prev_stats: Dict[str, Any],
+                      new_stats: Dict[str, Any]
+                      ) -> None:
         try:
             logging.info(f"Job completed event triggered'")
             await self.notify("Completed")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
+
+    async def notify(self, body="test"):
+        logging.info(f"Sending notification to thing")
+        await self.apprise.async_notify(
+            title='Some good jokes.',
+            body=body
+        )
 
 
 class NotifierInstance:
@@ -88,11 +100,6 @@ class NotifierInstance:
 
     def get_name(self) -> str:
         return self.name
-
-    def add_to_notifier(self, appr: Apprise) -> Apprise:
-        appr.add(self.url)
-
-        return appr
 
 
 def load_component(config: ConfigHelper) -> Notifier:
