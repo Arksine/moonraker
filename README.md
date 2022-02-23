@@ -14,7 +14,7 @@ Documentation for users and developers can be found on
 Note that Moonraker does not come bundled with a client, you will need to
 install one.  The following clients are currently available:
 
-- [Mainsail](https://github.com/mainsail-crew/mainsail) by Meteyou
+- [Mainsail](https://github.com/mainsail-crew/mainsail) by [Mainsail-Crew](https://github.com/mainsail-crew)
 - [Fluidd](https://github.com/fluidd-core/fluidd) by Cadriel
 - [KlipperScreen](https://github.com/jordanruthe/KlipperScreen) by jordanruthe
 - [mooncord](https://github.com/eliteSchwein/mooncord) by eliteSchwein
@@ -23,7 +23,7 @@ install one.  The following clients are currently available:
 
 Moonraker is available pre-installed with the following Raspberry Pi images:
 
-- [MainsailOS](https://github.com/raymondh2/MainsailOS) by Ray
+- [MainsailOS](https://github.com/mainsail-crew/MainsailOS) by [Mainsail-Crew](https://github.com/mainsail-crew)
   - Includes Klipper, Moonraker, and Mainsail
 - [FluiddPi](https://github.com/fluidd-core/FluiddPi) by Cadriel
   - Includes Klipper, Moonraker, and Fluidd
