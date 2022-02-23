@@ -475,7 +475,9 @@ An object containing various fields that report server state.
         "Unparsed config section [fake_section] detected.  This may be the result of a component that failed to load.  In the future this will result in a startup error."
     ],
     "websocket_count": 2,
-    "moonraker_version": "v0.7.1-105-ge4f103c"
+    "moonraker_version": "v0.7.1-105-ge4f103c",
+    "api_version": [1, 0, 0],
+    "api_version_string": "1.0.0"
   }
 ```
 !!! warning
@@ -922,13 +924,45 @@ Returns: Information about the host system in the following format:
         "virtualization": {
             "virt_type": "none",
             "virt_identifier": "none"
+        },
+        "python": {
+            "version": [
+                3,
+                7,
+                3,
+                "final",
+                0
+            ],
+            "version_string": "3.7.3 (default, Jan 22 2021, 20:04:44)  [GCC 8.3.0]"
+        },
+        "network": {
+            "wlan0": {
+                "mac_address": "<redacted_mac>",
+                "ip_addresses": [
+                    {
+                        "family": "ipv4",
+                        "address": "192.168.1.127",
+                        "is_link_local": false
+                    },
+                    {
+                        "family": "ipv6",
+                        "address": "<redacted_ipv6>",
+                        "is_link_local": false
+                    },
+                    {
+                        "family": "ipv6",
+                        "address": "fe80::<redacted>",
+                        "is_link_local": true
+                    }
+                ]
+            }
         }
     }
 }
 ```
 
 !!! note
-   If no SD Card is detected the `sd_info` field will contain an empty object.
+    If no SD Card is detected the `sd_info` field will contain an empty object.
 
 #### Shutdown the Operating System
 HTTP request:
