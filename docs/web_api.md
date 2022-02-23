@@ -2509,7 +2509,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
         },
         "mainsail": {
             "name": "mainsail",
-            "owner": "meteyou",
+            "owner": "mainsail-crew",
             "version": "v2.1.1",
             "remote_version": "v2.1.1",
             "configured_type": "web",
