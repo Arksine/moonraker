@@ -98,7 +98,7 @@ class NotifierEvent:
             logging.info(f"'{self.event_name}' event triggered'")
             await self.notify(self.event_name)
         except self.server.error as e:
-            logging.info(f"Error subscribing to print_stats")
+            logging.info(f"Error while notifiying '{self.event_name}'")
 
     async def notify(self, body="test"):
         logging.info(
