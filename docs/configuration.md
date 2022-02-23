@@ -1639,6 +1639,48 @@ token: {secrets.home_assistant.token}
 domain: switch
 ```
 
+
+### `[notifier]`
+Enables the notification service. Multiple "notifiers" may be configured,
+each with their own section, ie: `[notifier my_discord_server]`, `[notifier my_phone]`.
+
+All notifiers require an url for a service to be set up. Moonraker uses [Apprise](https://github.com/caronc/apprise) internally.
+You can find the available services and their corresponding urls here: https://github.com/caronc/apprise/wiki.
+
+```ini
+# moonraker.conf
+
+[notifier telegram]
+url: tgram://{bottoken}/{ChatID}
+#   The url for your notifier. This URL accepts Jinja2 templates, so you can use [secrets] if you want.
+events: *
+#   The events this notifier should trigger to. '*' means all events.
+#   You can use multiple events, comma seperated.
+#   Valid events:
+#      started
+#      completed
+#      error
+#      cancelled
+body: "Your printer status has changed to {event_name}"
+#   The body of the notification. This option accepts Jinja2 templates.
+#   You can use {event_name} to print the current event trigger name. And {event_args} for
+#   the arguments that came with it.
+title:
+#   The optional title of the notification. Just as the body, this option accepts Jinja2 templates.
+
+```
+
+#### An example:
+```ini
+# moonraker.conf
+
+[notifier print_start]
+url: tgram://{bottoken}/{ChatID}
+events: started
+body: Your printer started printing '{event_args[1].filename}'
+
+```
+
 ## Jinja2 Templates
 
 Some Moonraker configuration options make use of Jinja2 Templates.  For

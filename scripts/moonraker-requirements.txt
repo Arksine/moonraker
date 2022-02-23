@@ -13,3 +13,4 @@ zeroconf==0.37.0
 preprocess-cancellation==0.1.6
 jinja2==3.0.3
 dbus-next==0.2.3
+apprise==0.9.7
