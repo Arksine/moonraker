@@ -44,17 +44,23 @@ class Notifier:
             self.apprise = notifier.add_to_notifier(self.apprise)
 
         self.server.register_event_handler(
-            "server:klippy_started", self._handle_started)
+            "job_state:started", self._on_job_started)
+        self.server.register_event_handler(
+            "job_state:complete", self._on_job_complete)
 
     def notify(self, body="test"):
         logging.info(f"Sending notification to thing")
         self.apprise.async_notify(body)
 
-    async def _handle_started(self, state: str) -> None:
-        if state != "ready":
-            return
+    async def _on_job_started(self, state: str) -> None:
         try:
             self.notify("Started")
+        except self.server.error as e:
+            logging.info(f"Error subscribing to print_stats")
+
+    async def _on_job_complete(self, state: str) -> None:
+        try:
+            self.notify("Completed")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
