@@ -358,11 +358,11 @@ off_when_shutdown: False
 off_when_shutdown_delay: 0
 #   If "off_when_shutdown" is set, this option specifies the amount of time
 #   (in seconds) to wait before turning the device off. Default is 0 seconds.
-on_when_upload_queued: False
-#   If set to True the device will power on if the file manager
-#   queues an upload while the device is off.  This allows for an automated
-#   "upload, power on, and print" approach directly from the slicer, see
-#   the configuration example below for details. The default is False.
+on_when_job_queued: False
+#   If set to True the device will power on if a job is queued while the
+#   device is off.  This allows for an automated "upload, power on, and
+#   print" approach directly from the slicer, see the configuration example
+#   below for details. The default is False.
 locked_while_printing: False
 #   If True, locks the device so that the power cannot be changed while the
 #   printer is printing. This is useful to avert an accidental shutdown to
@@ -968,9 +968,11 @@ gcode:
 
 #### Power on G-Code Uploads
 
-The following is an example configuration that would fully automate
-the process of powering on a printer and loading a print from a
-Slicer upload with the "start" flag enabled.
+To power on a device after an upload, `queue_gcode_uploads: True` must
+be set in the `[file_manager]`, `load_on_startup: True` must be set in
+`[job_queue]` and `one_when_job_queued: True` must be set in `[power dev_name]`,
+where "dev_name" the the name of your power device.  For example:
+
 
 ```ini
 # moonraker.conf
@@ -980,8 +982,8 @@ Slicer upload with the "start" flag enabled.
 [file_manager]
 queue_gcode_uploads: True
 # Set the config_path and log_path options to the correct locations
-config_path:
-log_path:
+#config_path:
+#log_path:
 
 # Configure the Job Queue to start a queued print when Klipper reports as
 # ready.
@@ -990,14 +992,14 @@ load_on_startup: True
 # Configure the job_transition_delay and job_transition_gcode options
 # if desired.  Note that they do no apply to prints loaded on startup.
 
-# Configure the "power" device to turn on when uploads are queued.
+# Configure the "power" device to turn on when jobs are queued.
 [power printer]
-type: gpio
-pin: gpio26
-initial_state: off
-# Power the printer on when the file manager queues an upload
-on_when_upload_queued: True
-bound_service: klipper
+on_when_job_queued: True
+# configure the type and any type specific options.  This example
+# uses a gpio
+#type: gpio
+#pin: gpio26
+#initial_state: off
 ```
 
 With the above configuration options set, an upload with the "start"
@@ -1105,8 +1107,11 @@ info_tags:
 This second example is for "applications".  These may be git repositories
 or zipped distributions.
 
-Note that git repos must have at least one tag for Moonraker
-to identify its version.
+!!! Note
+    Git repos must have at least one tag for Moonraker to identify its
+    version.  The tag may be lightweight or annotated.  The tag must be in
+    semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
+    integer values.  For example, a repos first tag might be `v0.0.1`.
 
 ```ini
 # moonraker.conf

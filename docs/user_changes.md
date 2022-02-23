@@ -2,6 +2,14 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### Feburary 22nd 2022
+- The `on_when_upload_queued` option for [power] devices has been
+  deprecated in favor of `on_when_job_queued`.  As the new option
+  name implies, this option will power on the device when any new
+  job is queued, not only when its sourced from an upload.  The
+  `on_when_upload_queued` option will be treated as an alias to
+  `on_when_job_queued` until its removal.
+
 ### February 16th 2022
 - Webcam settings can now be defined in the `moonraker.conf` file, under
   the `[octoprint_compat]` section. The default values are being used as
