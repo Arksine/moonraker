@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import apprise
 from apprise import Apprise
+import logging
 
 # Annotation imports
 from typing import (
@@ -42,10 +43,19 @@ class Notifier:
             self.notifiers[notifier.get_name()] = notifier
             self.apprise = notifier.add_to_notifier(self.apprise)
 
+        self.server.register_event_handler(
+            "server:klippy_started", self._handle_started)
+
     def notify(self, body="test"):
         self.apprise.async_notify(body)
 
-
+    async def _handle_started(self, state: str) -> None:
+        if state != "ready":
+            return
+        try:
+            self.notify("Started")
+        except self.server.error as e:
+            logging.info(f"Error subscribing to print_stats")
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:
