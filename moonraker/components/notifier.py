@@ -16,6 +16,7 @@ from typing import (
     Optional,
     Dict,
     Any,
+    List,
 )
 
 if TYPE_CHECKING:
@@ -41,7 +42,8 @@ class Notifier:
                 notifier = NotifierInstance(cfg)
 
                 for event in self.events:
-                    self.events[event].register_notifier(notifier)
+                    if event in notifier.events or "*" in notifier.events:
+                        self.events[event].register_notifier(notifier)
 
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
@@ -103,7 +105,7 @@ class NotifierInstance:
         self.server = config.get_server()
         self.name = name_parts[1]
         self.url: str = config.get('url')
-        self.events: str = "init"
+        self.events: List[str] = config.get('events').split(",")
 
     def get_name(self) -> str:
         return self.name
