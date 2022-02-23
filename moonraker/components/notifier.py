@@ -62,7 +62,7 @@ class NotifierEvent:
         self.event_name = event_name
         self.server = config.get_server()
         self.apprise = apprise.Apprise()
-        self.notifiers = Dict[str, NotifierInstance] = {}
+        self.notifiers: Dict[str, NotifierInstance] = {}
 
         self.server.register_event_handler(self.event_name, self._handle)
 
