@@ -45,8 +45,6 @@ class Notifier:
     def notify(self, body="test"):
         self.apprise.async_notify(body)
 
-    def load_component(config: ConfigHelper) -> Notifier:
-        return Notifier(config)
 
 
 class NotifierInstance:
@@ -66,3 +64,7 @@ class NotifierInstance:
         appr.add(self.url)
 
         return appr
+
+
+def load_component(config: ConfigHelper) -> Notifier:
+    return Notifier(config)
