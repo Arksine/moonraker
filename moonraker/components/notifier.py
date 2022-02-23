@@ -45,11 +45,12 @@ class Notifier:
                     if event in notifier.events or "*" in notifier.events:
                         self.events[event].register_notifier(notifier)
 
+                logging.info(f"Registered notifier: '{notifier.get_name()}'")
+
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
                 self.server.add_warning(msg)
                 continue
-            logging.info(f"Loaded notifier: '{notifier.get_name()}'")
             self.notifiers[notifier.get_name()] = notifier
 
     def register_events(self, config: ConfigHelper):
@@ -94,13 +95,15 @@ class NotifierEvent:
                       new_stats: Dict[str, Any]
                       ) -> None:
         try:
-            logging.info(f"Job completed event triggered'")
+            logging.info(f"'{self.event_name}' event triggered'")
             await self.notify(self.event_name)
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
     async def notify(self, body="test"):
-        logging.info(f"Sending notification to thing")
+        logging.info(
+            f"Notifying '{self.event_name}' to {len(self.notifiers.keys())} n"
+        )
         await self.apprise.async_notify(
             title='Moonraker',
             body=body
