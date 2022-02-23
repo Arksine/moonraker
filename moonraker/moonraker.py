@@ -7,14 +7,6 @@
 
 from __future__ import annotations
 import sys
-if sys.version_info < (3, 7):
-    msg = (
-        "Moonraker requires Python 3.7 or above.  "
-        "Detected Version: %s\n"
-    )
-    sys.stdout.write(msg % (sys.version,))
-    sys.stderr.write(msg % (sys.version,))
-    exit(1)
 import argparse
 import importlib
 import os
