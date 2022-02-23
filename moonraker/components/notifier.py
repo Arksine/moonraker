@@ -40,6 +40,7 @@ class Notifier:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
                 self.server.add_warning(msg)
                 continue
+            logging.info(f"Loaded notifier: '{notifier.get_name()}'")
             self.notifiers[notifier.get_name()] = notifier
             self.apprise = notifier.add_to_notifier(self.apprise)
 
@@ -54,12 +55,14 @@ class Notifier:
 
     async def _on_job_started(self, state: str) -> None:
         try:
+            logging.info(f"Job started event triggered'")
             self.notify("Started")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
     async def _on_job_complete(self, state: str) -> None:
         try:
+            logging.info(f"Job completed event triggered'")
             self.notify("Completed")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
