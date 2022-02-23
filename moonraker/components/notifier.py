@@ -29,31 +29,38 @@ class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.notifiers: Dict[str, NotifierInstance] = {}
+        self.events: Dict[str, NotifierEvent] = {}
         prefix_sections = config.get_prefix_sections("notifier")
 
-        completed_event = NotifierEvent(
-            "completed",
-            "job_state:completed",
-            config)
-
-        started_event = NotifierEvent(
-            "started",
-            "job_state:started",
-            config)
+        self.register_events(config)
 
         for section in prefix_sections:
             cfg = config[section]
             notifier_class: Optional[Type[NotifierInstance]]
             try:
                 notifier = NotifierInstance(cfg)
-                started_event.register_notifier(notifier)
-                completed_event.register_notifier(notifier)
+
+                for event in self.events:
+                    self.events[event].register_notifier(notifier)
+
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
                 self.server.add_warning(msg)
                 continue
             logging.info(f"Loaded notifier: '{notifier.get_name()}'")
             self.notifiers[notifier.get_name()] = notifier
+
+    def register_events(self, config: ConfigHelper):
+
+        self.events["completed"] = NotifierEvent(
+            "completed",
+            "job_state:completed",
+            config)
+
+        self.events["started"] = NotifierEvent(
+            "started",
+            "job_state:started",
+            config)
 
 
 class NotifierEvent:
@@ -76,14 +83,14 @@ class NotifierEvent:
                       ) -> None:
         try:
             logging.info(f"Job completed event triggered'")
-            await self.notify("Completed")
+            await self.notify(self.event_name)
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
     async def notify(self, body="test"):
         logging.info(f"Sending notification to thing")
         await self.apprise.async_notify(
-            title='Some good jokes.',
+            title='Moonraker',
             body=body
         )
 
