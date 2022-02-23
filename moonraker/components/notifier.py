@@ -51,12 +51,15 @@ class Notifier:
 
     async def notify(self, body="test"):
         logging.info(f"Sending notification to thing")
-        await self.apprise.async_notify(body)
+        await self.apprise.async_notify(
+            title='Some good jokes.',
+            body='Hey guys, check out these!'
+        )
 
     async def _on_job_started(self,
-                        prev_stats: Dict[str, Any],
-                        new_stats: Dict[str, Any]
-                        ) -> None:
+                              prev_stats: Dict[str, Any],
+                              new_stats: Dict[str, Any]
+                              ) -> None:
         try:
             logging.info(f"Job started event triggered'")
             await self.notify("Started")
@@ -64,13 +67,14 @@ class Notifier:
             logging.info(f"Error subscribing to print_stats")
 
     async def _on_job_complete(self,
-                         prev_stats: Dict[str, Any],
-                         new_stats: Dict[str, Any]) -> None:
+                               prev_stats: Dict[str, Any],
+                               new_stats: Dict[str, Any]) -> None:
         try:
             logging.info(f"Job completed event triggered'")
             await self.notify("Completed")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
+
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:
