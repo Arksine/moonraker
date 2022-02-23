@@ -42,6 +42,12 @@ class Notifier:
             self.notifiers[notifier.get_name()] = notifier
             self.apprise = notifier.add_to_notifier(self.apprise)
 
+    def notify(self, body="test"):
+        self.apprise.async_notify(body)
+
+    def load_component(config: ConfigHelper) -> Notifier:
+        return Notifier(config)
+
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:
