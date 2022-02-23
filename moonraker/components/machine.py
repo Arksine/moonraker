@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import sys
 import os
 import re
 import json
@@ -60,6 +61,10 @@ class Machine:
         dist_info['release_info'] = distro.distro_release_info()
         self.inside_container = False
         self.system_info: Dict[str, Any] = {
+            'python': {
+                "version": sys.version_info,
+                "version_string": sys.version.replace("\n", " ")
+            },
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
             'distribution': dist_info,
