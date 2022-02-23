@@ -6,7 +6,7 @@ import socket
 import pathlib
 from collections import namedtuple
 
-from moonraker import CORE_COMPONENTS, Server
+from moonraker import CORE_COMPONENTS, Server, API_VERSION
 from moonraker import main as servermain
 from eventloop import EventLoop
 from utils import ServerError
@@ -90,6 +90,10 @@ class TestInstantiation:
             'software_version': "moonraker-pytest"
         }
         assert base_server.get_app_args() == args
+
+    def test_api_version(self, base_server: Server):
+        ver = base_server.get_api_version()
+        assert ver == API_VERSION
 
     def test_pending_tasks(self, base_server: Server):
         loop = base_server.get_event_loop().aioloop
@@ -436,7 +440,9 @@ class TestEndpoints:
             'warnings': [],
             'websocket_count': 0,
             'moonraker_version': "moonraker-pytest",
-            'missing_klippy_requirements': []
+            'missing_klippy_requirements': [],
+            'api_version': list(API_VERSION),
+            'api_version_string': ".".join(str(v) for v in API_VERSION)
         }
         assert ret["result"] == expected
 
@@ -463,7 +469,9 @@ class TestEndpoints:
             'warnings': [],
             'websocket_count': 1,
             'moonraker_version': "moonraker-pytest",
-            'missing_klippy_requirements': []
+            'missing_klippy_requirements': [],
+            'api_version': list(API_VERSION),
+            'api_version_string': ".".join(str(v) for v in API_VERSION)
         }
         assert ret == expected
 
