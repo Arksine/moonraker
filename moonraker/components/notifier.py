@@ -53,14 +53,19 @@ class Notifier:
         logging.info(f"Sending notification to thing")
         self.apprise.async_notify(body)
 
-    async def _on_job_started(self, state: str) -> None:
+    async def _on_job_started(self,
+                        prev_stats: Dict[str, Any],
+                        new_stats: Dict[str, Any]
+                        ) -> None:
         try:
             logging.info(f"Job started event triggered'")
             self.notify("Started")
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
 
-    async def _on_job_complete(self, state: str) -> None:
+    async def _on_job_complete(self,
+                         prev_stats: Dict[str, Any],
+                         new_stats: Dict[str, Any]) -> None:
         try:
             logging.info(f"Job completed event triggered'")
             self.notify("Completed")
