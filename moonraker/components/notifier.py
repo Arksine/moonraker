@@ -47,6 +47,7 @@ class Notifier:
             "server:klippy_started", self._handle_started)
 
     def notify(self, body="test"):
+        logging.info(f"Sending notification to thing")
         self.apprise.async_notify(body)
 
     async def _handle_started(self, state: str) -> None:
