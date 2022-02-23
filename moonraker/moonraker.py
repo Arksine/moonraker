@@ -41,6 +41,7 @@ from typing import (
     Coroutine,
     Dict,
     List,
+    Tuple,
     Union,
     TypeVar,
 )
@@ -49,6 +50,8 @@ if TYPE_CHECKING:
     from components.file_manager.file_manager import FileManager
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
+
+API_VERSION = (1, 0, 0)
 
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
@@ -125,6 +128,9 @@ class Server:
 
     def get_event_loop(self) -> EventLoop:
         return self.event_loop
+
+    def get_api_version(self) -> Tuple[int, int, int]:
+        return API_VERSION
 
     def is_running(self) -> bool:
         return self.server_running
@@ -398,7 +404,9 @@ class Server:
             'warnings': self.warnings,
             'websocket_count': wsm.get_count(),
             'moonraker_version': self.app_args['software_version'],
-            'missing_klippy_requirements': mreqs
+            'missing_klippy_requirements': mreqs,
+            'api_version': API_VERSION,
+            'api_version_string': ".".join([str(v) for v in API_VERSION])
         }
 
     async def _handle_config_request(self,
@@ -420,6 +428,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         app_args['log_file'] = os.path.normpath(
             os.path.expanduser(cmd_line_args.logfile))
     app_args['software_version'] = version
+    app_args['python_version'] = sys.version.replace("\n", " ")
     ql, file_logger, warning = utils.setup_logging(app_args)
     if warning is not None:
         app_args['log_warning'] = warning
