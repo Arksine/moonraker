@@ -1593,7 +1593,7 @@ Example json file:
         "username": "mqtt_user",
         "password": "my_mqtt_password"
     },
-    "home_assistant" {
+    "home_assistant": {
       "token": "long_token_string"
     }
 }
