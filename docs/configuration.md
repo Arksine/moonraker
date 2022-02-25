@@ -123,9 +123,13 @@ database_path: ~/.moonraker_database
 #   Moonraker (such as the "config_path" or the location where gcode
 #   files are stored).  If the folder does not exist an attempt will be made
 #   to create it.  The default is ~/.moonraker_database.
-enable_database_debug: False
-#   For developer use only.  End users should leave this option set to False.
 ```
+
+!!! Note
+    Previously the `enable_database_debug` option was available for internal
+    development to test changes to write protected namespaces.  This option
+    been deprecated and disabled.
+
 ### `[data_store]`
 
 The `data_store` section provides configuration for Moonraker's volatile
