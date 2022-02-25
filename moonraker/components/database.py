@@ -78,7 +78,6 @@ class MoonrakerDatabase:
         self.eventloop = self.server.get_event_loop()
         self.namespaces: Dict[str, object] = {}
         self.thread_lock = ThreadLock()
-        self.enable_debug = config.getboolean("enable_database_debug", False)
         self.database_path = os.path.expanduser(config.get(
             'database_path', "~/.moonraker_database"))
         if not os.path.isdir(self.database_path):
@@ -137,18 +136,16 @@ class MoonrakerDatabase:
         self.forbidden_namespaces = set(self.get_item(
             "moonraker", "database.forbidden_namespaces",
             []).result())
-        # Track debug access and unsafe shutdowns
-        debug_counter: int = self.get_item(
-            "moonraker", "database.debug_counter", 0).result()
-        if self.enable_debug:
-            debug_counter += 1
-            self.insert_item("moonraker", "database.debug_counter",
-                             debug_counter)
+        # Remove stale debug counter
+        config.getboolean("enable_database_debug", False, deprecate=True)
+        try:
+            self.delete_item("moonraker", "database.debug_counter")
+        except Exception:
+            pass
+        # Track unsafe shutdowns
         unsafe_shutdowns: int = self.get_item(
             "moonraker", "database.unsafe_shutdowns", 0).result()
         msg = f"Unsafe Shutdown Count: {unsafe_shutdowns}"
-        if debug_counter:
-            msg += f"; Database Debug Count: {debug_counter}"
         self.server.add_log_rollover_item("database", msg)
 
         # Increment unsafe shutdown counter.  This will be reset if
@@ -714,10 +711,7 @@ class MoonrakerDatabase:
         key: Any
         valid_types: Tuple[type, ...]
         if action != "GET":
-            if (
-                namespace in self.protected_namespaces and
-                not self.enable_debug
-            ):
+            if namespace in self.protected_namespaces:
                 raise self.server.error(
                     f"Write access to namespace '{namespace}'"
                     " is forbidden", 403)
