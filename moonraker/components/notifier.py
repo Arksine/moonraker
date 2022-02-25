@@ -17,6 +17,7 @@ from typing import (
     Dict,
     Any,
     List,
+    Union,
 )
 
 if TYPE_CHECKING:
@@ -112,6 +113,14 @@ class NotifierInstance:
         self.server = config.get_server()
         self.name = name_parts[1]
         self.apprise = apprise.Apprise()
+        self.warned = False
+
+        self.attach_requires_file_system_check = True
+        self.attach = config.get("attach", None)
+        if self.attach is None or \
+            (self.attach.startswith("http://") or
+             self.attach.startswith("https://")):
+            self.attach_requires_file_system_check = False
 
         url_template = config.gettemplate('url')
         self.url = url_template.render()
@@ -139,9 +148,23 @@ class NotifierInstance:
             event_name if self.body is None else self.body.render(context)
         )
 
+        # Verify the attachment
+        if self.attach_requires_file_system_check and self.attach is not None:
+            fm = self.server.lookup_component("file_manager")
+            if not fm.can_access_path(self.attach):
+                if not self.warned:
+                    self.server.add_warning(
+                        f"Attachment of notifier '{self.name}' is not "
+                        "valid. The location of the "
+                        "attachment is not "
+                        "accessible.")
+                    self.warned = True
+                self.attach = None
+
         await self.apprise.async_notify(
             rendered_body.strip(),
-            rendered_title.strip()
+            rendered_title.strip(),
+            attach=self.attach
         )
 
     def get_name(self) -> str:
