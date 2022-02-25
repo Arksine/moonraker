@@ -1686,7 +1686,7 @@ Enables the notification service. Multiple "notifiers" may be configured,
 each with their own section, ie: `[notifier my_discord_server]`, `[notifier my_phone]`.
 
 All notifiers require an url for a service to be set up. Moonraker uses [Apprise](https://github.com/caronc/apprise) internally.
-You can find the available services and their corresponding urls here: https://github.com/caronc/apprise/wiki.
+You can find the available services and their corresponding urls here: [https://github.com/caronc/apprise/wiki](https://github.com/caronc/apprise/wiki).
 
 ```ini
 # moonraker.conf
@@ -1708,7 +1708,10 @@ body: "Your printer status has changed to {event_name}"
 #   the arguments that came with it.
 title:
 #   The optional title of the notification. Just as the body, this option accepts Jinja2 templates.
-
+attach:
+#   An optional attachment. Can be an url of a webcam for example. Note: this isn't available for all
+#   notification services. You can check if it's supported on the Apprise Wiki. Be aware that links in
+#   your internal network can only be viewed within your network.
 ```
 
 #### An example:
@@ -1720,6 +1723,17 @@ url: tgram://{bottoken}/{ChatID}
 events: started
 body: Your printer started printing '{event_args[1].filename}'
 
+[notifier print_completed]
+url: tgram://{bottoken}/{ChatID}
+events: completed
+body: Your printer completed printing '{event_args[1].filename}'
+attach: http://192.168.1.100/webcam/?action=snapshot
+
+[notifier print_error]
+url: tgram://{bottoken}/{ChatID}
+events: error
+body: {event_args[1].message}
+attach: http://192.168.1.100/webcam/?action=snapshot
 ```
 
 ## Jinja2 Templates
