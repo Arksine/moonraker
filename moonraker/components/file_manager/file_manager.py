@@ -275,6 +275,16 @@ class FileManager:
         file_path = os.path.join(root_dir, filename)
         return os.path.exists(file_path)
 
+    def can_access_path(self, path: StrOrPath) -> bool:
+        if isinstance(path, str):
+            path = pathlib.Path(path)
+        path = path.expanduser().resolve()
+        for registered in self.file_paths.values():
+            reg_root_path = pathlib.Path(registered).resolve()
+            if reg_root_path in path.parents:
+                return True
+        return False
+
     def upload_queue_enabled(self) -> bool:
         return self.queue_gcodes
 
