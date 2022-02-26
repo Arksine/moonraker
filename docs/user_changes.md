@@ -72,7 +72,7 @@ such as a configuration change or a reinstallation.
   by Moonraker for the typical user.
 
 ### March 4th 2021
-- To enable Octoprint compatibility with slicer uploads it is now
+- To enable OctoPrint compatibility with slicer uploads it is now
   required to add `[octoprint_compat]` to `moonraker.conf`.  After
   making this change it is necessary to restart the Moonraker service
   so the module is loaded.

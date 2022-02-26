@@ -201,7 +201,7 @@ by a `callback` is wrapped in a dict:
 It is only necessary to set this to false if you need to return a body that
 does not match this result.  For example, the `[octoprint_compat]` component
 uses this functionality to return results in a format that match what
-Octoprint itself would return.
+OctoPrint itself would return.
 
 #### *Server.register_event_handler(event, callback)*
 

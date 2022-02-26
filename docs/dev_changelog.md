@@ -181,7 +181,7 @@
   metadata from gcode files.
 - Clean up API registration.  All endpoints are now registered by Klippy
   host modules outside of static files and `/api/version`, which is used for
-  compatibility with Octoprint's legacy file upload API.
+  compatibility with OctoPrint's file upload API.
 - The server now runs in its own process.  Communication between the Host and
   the server is done over a duplex pipe.  Currently this results in a second
   log file being generated specifically for the server at

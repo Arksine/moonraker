@@ -34,7 +34,7 @@ The following projects deploy Moonraker via Docker:
 
 - [prind](https://github.com/mkuf/prind) by mkuf
   - A suite of containers which allow you to run Klipper in
-    Docker.  Includes support for Octoprint and Moonraker.
+    Docker.  Includes support for OctoPrint and Moonraker.
 
 ### Changes
 

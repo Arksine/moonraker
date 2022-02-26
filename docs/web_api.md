@@ -1638,7 +1638,7 @@ Arguments available only for the `gcodes` root:
 
 - `print`: If set to "true", Klippy will attempt to start the print after
   uploading.  Note that this value should be a string type, not boolean. This
-  provides compatibility with Octoprint's legacy upload API.
+  provides compatibility with OctoPrint's upload API.
 
 JSON-RPC request: Not Available
 
@@ -3028,10 +3028,10 @@ An object containing power state for each requested device:
 }
 ```
 
-### Octoprint API emulation
-Partial support of Octoprint API is implemented with the purpose of
+### OctoPrint API emulation
+Partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
-Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
+Currently we support Slic3r derivatives and Cura with Cura-OctoPrint.
 
 #### Version information
 HTTP request:
@@ -3042,12 +3042,12 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing simulated Octoprint version information
+An object containing simulated OctoPrint version information
 ```json
 {
     "server": "1.5.0",
     "api": "0.1",
-    "text": "Octoprint (Moonraker v0.3.1-12)"
+    "text": "OctoPrint (Moonraker v0.3.1-12)"
 }
 ```
 
@@ -3060,7 +3060,7 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing simulated Octoprint server status
+An object containing simulated OctoPrint server status
 ```json
 {
     "server": "1.5.0",
@@ -3077,7 +3077,7 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing stubbed Octoprint login/user verification
+An object containing stubbed OctoPrint login/user verification
 ```json
 {
     "_is_external_client": false,
@@ -3101,9 +3101,9 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing stubbed Octoprint settings.
+An object containing stubbed OctoPrint settings.
 The webcam route is hardcoded to Fluidd/Mainsail default path.
-We say we have the UFP plugin installed so that Cura-Octoprint will
+We say we have the UFP plugin installed so that Cura-OctoPrint will
 upload in the preferred UFP format.
 ```json
 {
@@ -3133,7 +3133,7 @@ upload in the preferred UFP format.
 }
 ```
 
-#### Octoprint File Upload
+#### OctoPrint File Upload
 HTTP request:
 ```http
 POST /api/files/local
@@ -3151,7 +3151,7 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing stubbed Octoprint Job status
+An object containing stubbed OctoPrint Job status
 ```json
 {
     "job": {
@@ -3180,7 +3180,7 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing Octoprint Printer status
+An object containing OctoPrint Printer status
 ```json
 {
     "temperature": {
@@ -3239,7 +3239,7 @@ JSON-RPC request: Not Available
 
 Returns:
 
-An object containing simulates Octoprint Printer profile
+An object containing simulates OctoPrint Printer profile
 ```json
 {
     "profiles": {

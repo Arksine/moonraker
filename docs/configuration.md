@@ -262,9 +262,9 @@ force_logins: False
 ```
 
 ### `[octoprint_compat]`
-Enables partial support of Octoprint API is implemented with the purpose of
+Enables partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
-Currently we support Slic3r derivatives and Cura with Cura-Octoprint.
+Currently we support Slic3r derivatives and Cura with Cura-OctoPrint.
 
 ```ini
 # moonraker.conf
@@ -286,7 +286,7 @@ rotate_90: False
 stream_url: /webcam/?action=stream
 #   The URL to use for streaming the webcam.  It can be set to an absolute
 #   URL if needed. In order to get the webcam to work in Cura through
-#   an Octoprint connection, you can set this value to
+#   an OctoPrint connection, you can set this value to
 #   http://<octoprint ip>/webcam/?action=stream.  The default value is
 #   /webcam/?action=stream.
 webcam_enabled: True
