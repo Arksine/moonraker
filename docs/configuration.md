@@ -1638,6 +1638,15 @@ password: {secrets.mqtt_credentials.password}
 enable_moonraker_api: True
 ```
 
+!!! warning
+    The purpose of the `[secrets]` module is to keep credentials and
+    other sensitive information out of configuration files and Moonraker's
+    log.  These items are stored in plain text, it is wise to use
+    unique credentials. Never leave a Moonraker client application open
+    unattended in an untrusted location, as it would be possible for a
+    malicious actor to reconfigure moonraker to send items stored in the
+    secrets file to themselves via `mqtt`, `notifer`, etc.
+
 Home Assistant Switch Example:
 
 ```ini
