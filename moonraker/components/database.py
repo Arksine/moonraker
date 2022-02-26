@@ -158,6 +158,9 @@ class MoonrakerDatabase:
             "/server/database/item", ["GET", "POST", "DELETE"],
             self._handle_item_request)
 
+    def get_database_path(self) -> str:
+        return self.database_path
+
     def _run_command(self,
                      command_func: Callable[..., _T],
                      *args
