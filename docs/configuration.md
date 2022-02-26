@@ -119,6 +119,23 @@ provider: systemd_dbus
     Alternatively it may be possible to enable the `systemd-logind` service,
     consult with your distro's documentation.
 
+#### Reboot / Shutdown from Klipper
+
+It is possible to call the `shutdown_machine` and `reboot_machine`
+remote methods from a gcode macro in Klipper.  For example:
+
+```ini
+# printer.cfg
+
+[gcode_macro SHUTDOWN]
+gcode:
+  {action_call_remote_method("shutdown_machine")}
+
+[gcode_macro REBOOT]
+gcode:
+  {action_call_remote_method("reboot_machine")}
+```
+
 ### `[database]`
 
 The `database` section provides configuration for Moonraker's lmdb database.
