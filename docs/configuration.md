@@ -75,7 +75,17 @@ enable_object_processing: False
 #   The default is False.
 ```
 
-!!! Note
+!!! Warning
+    Moonraker currently supports two paths with read/write access, the
+    `config_path` configured in the `file_manager` and the `virtual_sdcard` path
+    configured through Klipper in `printer.cfg`. These paths are monitored for
+    changes, thus they must not overlap. Likewise, these paths may not be a
+    parent or child of folders containing sensitive files such as the `database`,
+    Moonraker's source, or Klipper's source.  If either of the above conditions
+    are present Moonraker will generate a warning and revoke access to the
+    offending path.
+
+!!! Tip
     It is also possible to enable object processing directly in the slicer.
     See the [preprocess-cancellation](https://github.com/kageurufu/cancelobject-preprocessor)
     documentation for details.
