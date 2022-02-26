@@ -1,4 +1,4 @@
-# Octoprint API compatibility
+# OctoPrint API compatibility
 #
 # Copyright (C) 2021 Nickolas Grigoriadis <nagrigoriadis@gmail.com>
 #
@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 OCTO_VERSION = '1.5.0'
 
 
-class OctoprintCompat:
+class OctoPrintCompat:
     """
     Minimal implementation of the REST API as described here:
     https://docs.octoprint.org/en/master/api/index.html
 
-    So that Cura Octoprint plugin will function for:
+    So that Cura OctoPrint plugin will function for:
     * Handshake
     * Upload gcode/ufp
     * Webcam config
@@ -224,7 +224,7 @@ class OctoprintCompat:
                             web_request: WebRequest
                             ) -> Dict[str, Any]:
         """
-        Used to parse Octoprint capabilities
+        Used to parse OctoPrint capabilities
         """
         settings = {
             'plugins': {},
@@ -382,19 +382,19 @@ class OctoprintCompat:
                 except self.server.error:
                     started = False
                 else:
-                    logging.debug(f"Job '{filename}' started via Octoprint API")
+                    logging.debug(f"Job '{filename}' started via OctoPrint API")
                     started = True
             if not started:
                 if fmgr.upload_queue_enabled():
                     job_queue: JobQueue = self.server.lookup_component(
                         'job_queue')
                     await job_queue.queue_job(filename, check_exists=False)
-                    logging.debug(f"Job '{filename}' queued via Octoprint API")
+                    logging.debug(f"Job '{filename}' queued via OctoPrint API")
                 else:
                     raise self.server.error("Conflict", 409)
         else:
             raise self.server.error(f"Unsupported Command: {command}")
 
 
-def load_component(config: ConfigHelper) -> OctoprintCompat:
-    return OctoprintCompat(config)
+def load_component(config: ConfigHelper) -> OctoPrintCompat:
+    return OctoPrintCompat(config)
