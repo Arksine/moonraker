@@ -399,11 +399,12 @@ locked_while_printing: False
 #   printer is printing. This is useful to avert an accidental shutdown to
 #   the printer's power.  The default is False.
 restart_klipper_when_powered: False
-#   If set to True, Moonraker will issue a "FIRMWARE_RESTART" to Klipper
-#   after the device has been powered on.  Note: If it isn't possible to
+#   If set to True, Moonraker will schedule a "FIRMWARE_RESTART" to command
+#   after the device has been powered on. If it isn't possible to immediately
 #   schedule a firmware restart (ie: Klippy is disconnected), the restart
 #   will be postponed until Klippy reconnects and reports that startup is
-#   complete.  In this scenario, if Klippy reports that it is "ready", the
+#   complete.  Prior to scheduling the restart command the power device will
+#   always check Klippy's state.  If Klippy reports that it is "ready", the
 #   FIRMWARE_RESTART will be aborted as unnecessary.
 #   The default is False.
 restart_delay: 1.
