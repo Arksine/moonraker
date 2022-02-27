@@ -111,10 +111,7 @@ class PrinterPower:
         failed_devs: List[PowerDevice] = []
         while cur_time < endtime:
             for dev in query_devs:
-                ret = dev.initialize()
-                if ret is not None:
-                    await ret
-                if dev.get_state() == "error":
+                if not await dev.initialize():
                     failed_devs.append(dev)
             if not failed_devs:
                 logging.debug("All power devices initialized")
@@ -211,9 +208,10 @@ class PrinterPower:
         if name in self.devices:
             raise self.server.error(
                 f"Device [{name}] already configured")
-        ret = device.initialize()
-        if ret is not None:
-            await ret
+        if not await device.initialize():
+            self.server.add_warning(
+                f"Failed to initialize power device: {device.get_name()}")
+            return
         self.devices[name] = device
 
     async def close(self) -> None:
@@ -245,9 +243,12 @@ class PowerDevice:
         self.klipper_restart = config.getboolean(
             'restart_klipper_when_powered', False)
         if self.klipper_restart:
-            self.restart_delay = config.getfloat('restart_delay', 1.)
-            if self.restart_delay < .000001:
-                raise config.error("Option 'restart_delay' must be above 0.0")
+            self.restart_delay = config.getfloat(
+                'restart_delay', 1., above=.000001
+            )
+            self.server.register_event_handler(
+                "server:klippy_started", self._schedule_firmware_restart
+            )
         self.bound_service: Optional[str] = config.get('bound_service', None)
         self.need_scheduled_restart = False
         self.on_when_queued = config.getboolean('on_when_job_queued', False)
@@ -261,13 +262,6 @@ class PowerDevice:
             {'print_stats': None}, default={})
         pstate = result.get('print_stats', {}).get('state', "").lower()
         return pstate == "printing"
-
-    def _is_bound_to_klipper(self):
-        return (
-            self.bound_service is not None and
-            self.bound_service.startswith("klipper") and
-            not self.bound_service.startswith("klipper_mcu")
-        )
 
     def _schedule_firmware_restart(self, state: str = "") -> None:
         if not self.need_scheduled_restart:
@@ -285,9 +279,6 @@ class PowerDevice:
     def get_name(self) -> str:
         return self.name
 
-    def get_state(self) -> str:
-        return self.state
-
     def get_device_info(self) -> Dict[str, Any]:
         return {
             'device': self.name,
@@ -295,9 +286,6 @@ class PowerDevice:
             'locked_while_printing': self.locked_while_printing,
             'type': self.type
         }
-
-    def get_locked_while_printing(self) -> bool:
-        return self.locked_while_printing
 
     def notify_power_changed(self) -> None:
         dev_info = self.get_device_info()
@@ -317,7 +305,7 @@ class PowerDevice:
                 # the startup state, schedule the restart in the
                 # "klippy_started" event callback.
                 return
-            self._schedule_firmware_restart()
+            self._schedule_firmware_restart(klippy_state)
 
     def process_klippy_shutdown(self) -> None:
         if not self.off_when_shutdown:
@@ -343,9 +331,9 @@ class PowerDevice:
     def should_turn_on_when_queued(self) -> bool:
         return self.on_when_queued and self.state == "off"
 
-    def initialize(self) -> Optional[Coroutine]:
+    def _setup_bound_service(self) -> None:
         if self.bound_service is None:
-            return None
+            return
         if self.bound_service.startswith("moonraker"):
             raise self.server.error(
                 f"Cannot bind to '{self.bound_service}' "
@@ -356,17 +344,25 @@ class PowerDevice:
         if self.bound_service not in avail_svcs:
             raise self.server.error(
                 f"Bound Service {self.bound_service} is not available")
-        if self._is_bound_to_klipper() and self.klipper_restart:
-            # Schedule the Firmware Restart after Klipper reconnects
-            logging.info(f"Power Device '{self.name}' bound to "
-                         f"klipper service '{self.bound_service}'")
-            self.server.register_event_handler(
-                "server:klippy_started",
-                self._schedule_firmware_restart
-            )
+        logging.info(f"Power Device '{self.name}' bound to "
+                     f"service '{self.bound_service}'")
+
+    def init_state(self) -> Optional[Coroutine]:
         return None
 
+    async def initialize(self) -> bool:
+        self._setup_bound_service()
+        ret = self.init_state()
+        if ret is not None:
+            await ret
+        return self.state != "error"
+
     async def process_request(self, req: str) -> str:
+        if self.state == "init" and self.request_lock.locked():
+            # return immediately if the device is initializing,
+            # otherwise its possible for this to block indefinitely
+            # while the device holds the lock
+            return self.state
         async with self.request_lock:
             base_state: str = self.state
             ret = self.refresh_status()
@@ -423,9 +419,8 @@ class HTTPDevice(PowerDevice):
             "password", default_password).render()
         self.protocol = config.get("protocol", default_protocol)
 
-    async def initialize(self) -> None:
+    async def init_state(self) -> None:
         async with self.request_lock:
-            super().initialize()
             await self.refresh_status()
 
     async def _send_http_command(self,
@@ -493,8 +488,7 @@ class GpioDevice(PowerDevice):
             initial_val = int(self.initial_state)
         self.gpio_out = config.getgpioout('pin', initial_value=initial_val)
 
-    def initialize(self) -> None:
-        super().initialize()
+    def init_state(self) -> None:
         self.set_power("on" if self.initial_state else "off")
 
     def refresh_status(self) -> None:
@@ -825,9 +819,8 @@ class TPLinkSmartPlug(PowerDevice):
             res += chr(val)
         return res
 
-    async def initialize(self) -> None:
+    async def init_state(self) -> None:
         async with self.request_lock:
-            super().initialize()
             await self.refresh_status()
 
     async def refresh_status(self) -> None:
