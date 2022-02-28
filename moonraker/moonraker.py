@@ -18,7 +18,6 @@ import signal
 import confighelper
 import utils
 import asyncio
-from tornado.httpclient import AsyncHTTPClient
 from eventloop import EventLoop
 from app import MoonrakerApp
 from klippy_connection import KlippyConnection
@@ -48,15 +47,10 @@ API_VERSION = (1, 0, 1)
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
-    'job_state', 'job_queue'
+    'job_state', 'job_queue', 'http_client'
 ]
 
 SENTINEL = SentinelClass.get_instance()
-
-# Configure the http client to use the pycurl based implementation
-AsyncHTTPClient.configure(
-    "tornado.curl_httpclient.CurlAsyncHTTPClient",
-    defaults=dict(user_agent="Moonraker"))
 
 class Server:
     error = ServerError
