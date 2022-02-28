@@ -1699,7 +1699,7 @@ events: *
 #   You can use multiple events, comma seperated.
 #   Valid events:
 #      started
-#      completed
+#      complete
 #      error
 #      cancelled
 body: "Your printer status has changed to {event_name}"

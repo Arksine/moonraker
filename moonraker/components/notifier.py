@@ -59,9 +59,9 @@ class Notifier:
             "job_state:started",
             config)
 
-        self.events["completed"] = NotifierEvent(
-            "completed",
-            "job_state:completed",
+        self.events["complete"] = NotifierEvent(
+            "complete",
+            "job_state:complete",
             config)
 
         self.events["error"] = NotifierEvent(
