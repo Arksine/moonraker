@@ -218,6 +218,16 @@ cd ~/moonraker/scripts
 sudo service moonraker restart
 ```
 
+!!! tip
+    If you still get warnings after installing the PolKit rules, run the
+    install script with no options to make sure that all new dependencies
+    are installed.
+
+    ```shell
+    cd ~/moonraker/scripts
+    ./install-moonraker.sh
+    ```
+
 2) Configure Moonraker to use the legacy backend implementations for
    the `machine` and/or `update_manager` components, ie:
 
