@@ -11,7 +11,6 @@ import struct
 import socket
 import asyncio
 import time
-from tornado.httpclient import AsyncHTTPClient
 from tornado.escape import json_decode
 
 # Annotation imports
@@ -24,6 +23,7 @@ from typing import (
     Dict,
     Coroutine,
     Union,
+    cast
 )
 
 if TYPE_CHECKING:
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from . import klippy_apis
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
+    from .http_client import HttpClient
     APIComp = klippy_apis.KlippyAPI
 
 class PrinterPower:
@@ -411,7 +412,7 @@ class HTTPDevice(PowerDevice):
                  default_protocol: str = "http"
                  ) -> None:
         super().__init__(config)
-        self.client = AsyncHTTPClient()
+        self.client: HttpClient = self.server.lookup_component("http_client")
         self.addr: str = config.get("address")
         self.port = config.getint("port", default_port)
         self.user = config.load_template("user", default_user).render()
@@ -428,18 +429,13 @@ class HTTPDevice(PowerDevice):
                                  command: str,
                                  retries: int = 3
                                  ) -> Dict[str, Any]:
-        for i in range(retries):
-            try:
-                response = await self.client.fetch(
-                    url, connect_timeout=5., request_timeout=20.)
-                data = json_decode(response.body)
-            except Exception as e:
-                if i == retries - 1:
-                    msg = f"Error sending '{self.type}' command: {command}"
-                    raise self.server.error(msg) from e
-                await asyncio.sleep(1.0)
-            else:
-                break
+        url = self.client.escape_url(url)
+        response = await self.client.get(
+            url, request_timeout=20., attempts=retries,
+            retry_pause_time=1., enable_cache=False)
+        response.raise_for_status(
+            f"Error sending '{self.type}' command: {command}")
+        data = cast(dict, response.json())
         return data
 
     async def _send_power_request(self, state: str) -> str:
@@ -955,14 +951,18 @@ class SmartThings(HTTPDevice):
     async def _send_smartthings_command(self,
                                         command: str
                                         ) -> Dict[str, Any]:
-
+        body: Optional[List[Dict[str, Any]]] = None
         if (command == "on" or command == "off"):
             method = "POST"
             url = (f"{self.protocol}://{self.addr}"
                    f"/v1/devices/{self.device}/commands")
-            body = (f'[{{"component":"main", '
-                    '"capability":"switch", '
-                    f'"command": "{command}"}}]')
+            body = [
+                {
+                    "component": "main",
+                    "capability": "switch",
+                    "command": command
+                }
+            ]
         elif command == "info":
             method = "GET"
             url = (f"{self.protocol}://{self.addr}/v1/devices/{self.device}/"
@@ -972,22 +972,16 @@ class SmartThings(HTTPDevice):
                 f"Invalid SmartThings command: {command}")
 
         headers = {
-            'Authorization': f'Bearer {self.token}',
-            'Content-Type': 'application/json'
+            'Authorization': f'Bearer {self.token}'
         }
-
-        try:
-            if method == "POST":
-                response = await self.client.fetch(
-                    url, method=method, headers=headers, body=body)
-            elif method == "GET":
-                response = await self.client.fetch(
-                    url, method=method, headers=headers)
-            data: Dict[str, Any] = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending SmartThings command: {command}"
-            logging.exception(msg)
-            raise self.server.error(msg)
+        url = self.client.escape_url(url)
+        response = await self.client.request(
+            method, url, body=body, headers=headers,
+            enable_cache=False
+        )
+        msg = f"Error sending SmartThings command: {command}"
+        response.raise_for_status(msg)
+        data = cast(dict, response.json())
         return data
 
     async def _send_status_request(self) -> str:
@@ -1038,13 +1032,10 @@ class HomeAssistant(HTTPDevice):
 
     async def _send_homeassistant_command(self,
                                           command: str
-                                          ) -> Dict[Union[str, int], Any]:
-        if command == "on":
-            out_cmd = f"api/services/{self.domain}/turn_on"
-            body = {"entity_id": self.device}
-            method = "POST"
-        elif command == "off":
-            out_cmd = f"api/services/{self.domain}/turn_off"
+                                          ) -> Dict[str, Any]:
+        body: Optional[Dict[str, Any]] = None
+        if command in ["on", "off"]:
+            out_cmd = f"api/services/{self.domain}/turn_{command}"
             body = {"entity_id": self.device}
             method = "POST"
         elif command == "info":
@@ -1055,21 +1046,18 @@ class HomeAssistant(HTTPDevice):
                 f"Invalid homeassistant command: {command}")
         url = f"{self.protocol}://{self.addr}:{self.port}/{out_cmd}"
         headers = {
-            'Authorization': f'Bearer {self.token}',
-            'Content-Type': 'application/json'
+            'Authorization': f'Bearer {self.token}'
         }
-        try:
-            if (method == "POST"):
-                response = await self.client.fetch(
-                    url, method="POST", body=json.dumps(body), headers=headers)
-            else:
-                response = await self.client.fetch(
-                    url, method="GET", headers=headers)
-            data: Dict[Union[str, int], Any] = json_decode(response.body)
-        except Exception:
-            msg = f"Error sending homeassistant command: {command}"
-            logging.exception(msg)
-            raise self.server.error(msg)
+        data: Dict[str, Any] = {}
+        url = self.client.escape_url(url)
+        response = await self.client.request(
+            method, url, body=body, headers=headers,
+            enable_cache=False
+        )
+        msg = f"Error sending homeassistant command: {command}"
+        response.raise_for_status(msg)
+        if method == "GET":
+            data = cast(dict, response.json())
         return data
 
     async def _send_status_request(self) -> str:
