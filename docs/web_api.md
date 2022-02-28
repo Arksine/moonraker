@@ -130,9 +130,10 @@ JSON-RPC response:
 ```
 Some errors may not return a request ID, such as an improperly formatted request.
 
-The `test/client` folder includes a basic test interface with example usage for
-most of the requests below.  It also includes a basic JSON-RPC implementation
-that uses promises to return responses and errors (see json-rpc.js).
+The [moontest](https://www.github.com/arksine/moontest) repo includes a basic
+test interface with example usage for most of the requests below.  It also
+includes a basic JSON-RPC implementation that uses promises to return responses
+and errors (see json-rpc.js).
 
 ### Jinja2 Template API Calls
 
