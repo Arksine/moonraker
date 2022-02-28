@@ -21,6 +21,11 @@ from typing import (
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
 
+DOC_URL = (
+    "https://moonraker.readthedocs.io/en/latest/"
+    "installation/#policykit-permissions"
+)
+
 class DbusManager:
     Variant = dbus_next.Variant
     DbusError = dbus_next.errors.DBusError
@@ -57,7 +62,8 @@ class DbusManager:
                 "org.freedesktop.PolicyKit1.Authority")
         except self.DbusError:
             self.server.add_warning(
-                "Unable to find DBus PolicyKit Interface")
+                "Unable to find DBus PolKit Interface, this suggests PolKit "
+                "is not installed on your OS.")
 
     async def check_permission(self,
                                action: str,
@@ -69,23 +75,25 @@ class DbusManager:
             ret = await self.polkit.call_check_authorization(  # type: ignore
                 self.polkit_subject, action, {}, 0, "")
         except Exception as e:
+            self._check_warned()
             self.server.add_warning(
-                f"Error checking authorization for action [{action}]: {e}"
-                ", This may indicate that PolicyKit is not installed, "
-                f"{err_msg}")
+                f"Error checking authorization for action [{action}]: {e}. "
+                "This suggests that a dependency is not installed or "
+                f"up to date. {err_msg}.")
             return False
         if not ret[0]:
-            if not self.warned:
-                self.server.add_warning(
-                    "Missing PolicyKit permisions detected. See the "
-                    "PolicyKit Permissions section of the install "
-                    "documentation at https://moonraker.readthedocs.io/ "
-                    "for details.")
-                self.warned = True
+            self._check_warned()
             self.server.add_warning(
                 "Moonraker not authorized for PolicyKit action: "
                 f"[{action}], {err_msg}")
         return ret[0]
+
+    def _check_warned(self):
+        if not self.warned:
+            self.server.add_warning(
+                f"PolKit warnings detected. See {DOC_URL} for instructions "
+                "on how to resolve.")
+            self.warned = True
 
     async def get_interface(self,
                             bus_name: str,
