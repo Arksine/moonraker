@@ -602,6 +602,13 @@ class CommandHelper:
         self.notify_update_response(
             f"Downloading {self.cur_update_app}: {totals} [{progress}%]")
 
+    async def create_tempdir(self, suffix=None, prefix=None):
+        def _createdir(sfx, pfx):
+            return tempfile.TemporaryDirectory(suffix=sfx, prefix=pfx)
+
+        eventloop = self.server.get_event_loop()
+        return await eventloop.run_in_thread(_createdir, suffix, prefix)
+
 class PackageDeploy(BaseDeploy):
     def __init__(self,
                  config: ConfigHelper,
@@ -1218,9 +1225,9 @@ class WebClientDeploy(BaseDeploy):
             f"Updating Web Client {self.name}...")
         self.cmd_helper.notify_update_response(
             f"Downloading Client: {self.name}")
-        with tempfile.TemporaryDirectory(
-                suffix=self.name, prefix="client") as tempdirname:
-            tempdir = pathlib.Path(tempdirname)
+        td = await self.cmd_helper.create_tempdir(self.name, "client")
+        try:
+            tempdir = pathlib.Path(td.name)
             temp_download_file = tempdir.joinpath(f"{self.name}.zip")
             temp_persist_dir = tempdir.joinpath(self.name)
             client = self.cmd_helper.get_http_client()
@@ -1232,6 +1239,8 @@ class WebClientDeploy(BaseDeploy):
             await event_loop.run_in_thread(
                 self._extract_release, temp_persist_dir,
                 temp_download_file)
+        finally:
+            await event_loop.run_in_thread(td.cleanup)
         self.version = self.remote_version
         version_path = self.path.joinpath(".version")
         if not version_path.exists():

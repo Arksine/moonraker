@@ -11,7 +11,6 @@ import json
 import shutil
 import re
 import time
-import tempfile
 import zipfile
 from .app_deploy import AppDeploy
 from utils import verify_source
@@ -378,9 +377,9 @@ class ZipDeploy(AppDeploy):
         npm_hash = await self._get_file_hash(self.npm_pkg_json)
         dl_url, content_type, size = self.release_download_info
         self.notify_status("Starting Download...")
-        with tempfile.TemporaryDirectory(
-                suffix=self.name, prefix="app") as tempdirname:
-            tempdir = pathlib.Path(tempdirname)
+        td = await self.cmd_helper.create_tempdir(self.name, "app")
+        try:
+            tempdir = pathlib.Path(td.name)
             temp_download_file = tempdir.joinpath(f"{self.name}.zip")
             client = self.cmd_helper.get_http_client()
             await client.download_file(
@@ -391,6 +390,8 @@ class ZipDeploy(AppDeploy):
             event_loop = self.server.get_event_loop()
             await event_loop.run_in_thread(
                 self._extract_release, temp_download_file)
+        finally:
+            await event_loop.run_in_thread(td.cleanup)
         await self._update_dependencies(npm_hash, force=force_dep_update)
         await self._update_repo_state()
         await self.restart_service()
