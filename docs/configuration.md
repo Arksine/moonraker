@@ -1725,9 +1725,9 @@ url: tgram://{bottoken}/{ChatID}
 events: started
 body: Your printer started printing '{event_args[1].filename}'
 
-[notifier print_completed]
+[notifier print_complete]
 url: tgram://{bottoken}/{ChatID}
-events: completed
+events: complete
 body: Your printer completed printing '{event_args[1].filename}'
 attach: http://192.168.1.100/webcam/?action=snapshot
 
