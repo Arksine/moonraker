@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from klippy_connection import KlippyConnection as Klippy
     from components.file_manager.file_manager import FileManager
+    from io import BufferedReader
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
     AuthComp = Optional[components.authorization.Authorization]
@@ -778,7 +779,8 @@ class FileRequestHandler(AuthorizedFileHandler):
         start: Optional[int] = None,
         end: Optional[int] = None
     ) -> AsyncGenerator[bytes, None]:
-        with open(abspath, "rb") as file:
+        file: BufferedReader = await evt_loop.run_in_thread(open, abspath, "rb")
+        try:
             if start is not None:
                 file.seek(start)
             if end is not None:
@@ -798,6 +800,8 @@ class FileRequestHandler(AuthorizedFileHandler):
                     if remaining is not None:
                         assert remaining == 0
                     return
+        finally:
+            await evt_loop.run_in_thread(file.close)
 
     @classmethod
     def _get_cached_version(cls, abs_path: str) -> Optional[str]:
