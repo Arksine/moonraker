@@ -75,6 +75,16 @@ class Notifier:
             "job_state:cancelled",
             config)
 
+        self.events["paused"] = NotifierEvent(
+            "paused",
+            "job_state:paused",
+            config)
+
+        self.events["resumed"] = NotifierEvent(
+            "resumed",
+            "job_state:resumed",
+            config)
+
 
 class NotifierEvent:
     def __init__(self, identifier: str, event_name: str, config: ConfigHelper):
