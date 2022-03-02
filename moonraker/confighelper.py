@@ -371,6 +371,17 @@ class ConfigHelper:
             return template.create_template(val.strip(), is_async)
         return val
 
+    def read_supplemental_dict(self, obj: Dict[str, Any]) -> ConfigHelper:
+        if not obj:
+            raise ConfigError(f"Cannot ready Empty Dict")
+        try:
+            sup_cfg = configparser.ConfigParser(interpolation=None)
+            sup_cfg.read_dict(obj)
+        except Exception:
+            raise ConfigError("Error Reading Object")
+        sections = sup_cfg.sections()
+        return ConfigHelper(self.server, sup_cfg, sections[0], sections)
+
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
         if not os.path.isfile(cfg_file_path):
