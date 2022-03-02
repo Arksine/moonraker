@@ -1702,6 +1702,8 @@ events: *
 #      complete
 #      error
 #      cancelled
+#      paused
+#      resumed
 body: "Your printer status has changed to {event_name}"
 #   The body of the notification. This option accepts Jinja2 templates.
 #   You can use {event_name} to print the current event trigger name. And {event_args} for
