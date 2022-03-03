@@ -270,7 +270,7 @@ class Machine:
                     cpu_desc_match = re.search(r"model name\s+:\s+(.+)", item)
                     if cpu_desc_match is not None:
                         cpu_info['cpu_desc'] = cpu_desc_match.group(1).strip()
-                        continue
+                        break
                 hw_match = re.search(r"Hardware\s+:\s+(.+)", cpu_items[-1])
                 if hw_match is not None:
                     cpu_info['hardware_desc'] = hw_match.group(1).strip()
