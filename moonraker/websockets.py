@@ -392,9 +392,19 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.queue_busy: bool = False
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
         self.last_pong_time: float = self.event_loop.get_loop_time()
+        self._connected_time: float = 0.
+
+    @property
+    def hostname(self) -> str:
+        return self.request.host_name
+
+    @property
+    def start_time(self) -> float:
+        return self._connected_time
 
     def open(self, *args, **kwargs) -> None:
         self.set_nodelay(True)
+        self._connected_time = self.event_loop.get_loop_time()
         agent = self.request.headers.get("User-Agent", "")
         is_proxy = False
         if (
@@ -404,7 +414,8 @@ class WebSocket(WebSocketHandler, Subscribable):
             is_proxy = True
         logging.info(f"Websocket Opened: ID: {self.uid}, "
                      f"Proxied: {is_proxy}, "
-                     f"User Agent: {agent}")
+                     f"User Agent: {agent}, "
+                     f"Host Name: {self.hostname}")
         self.wsm.add_websocket(self)
 
     def on_message(self, message: Union[bytes, str]) -> None:
