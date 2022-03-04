@@ -252,8 +252,8 @@ class FileManager:
                 check_passed = False
         return check_passed
 
-    def get_sd_directory(self) -> str:
-        return self.file_paths.get('gcodes', "")
+    def get_directory(self, root: str = "gcodes") -> str:
+        return self.file_paths.get(root, "")
 
     def get_registered_dirs(self) -> List[str]:
         return list(self.file_paths.keys())
