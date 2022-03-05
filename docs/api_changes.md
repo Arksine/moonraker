@@ -1,6 +1,14 @@
 ##
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### March 4th 2022
+- Moonraker API Version 1.0.1
+- The `server.websocket.id` endpoint has been deprecated. It is
+  recommended to use `server.connection.idenitfy` method to identify
+  your client.  This method returns a `connection_id` which is
+  the websocket's unique id.  See
+  [the documentation](web_api.md#identify-connection) for details.
+
 ### May 8th 2021
 - The `file_manager` has been refactored to support system file
   file events through `inotify`.  Only mutable `roots` are monitored,

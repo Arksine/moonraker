@@ -169,6 +169,75 @@ on_release:
 
 ### Printer Administration
 
+#### Identify Connection
+This method provides a way for persistent clients to identify
+themselves to Moonraker.  This information may be used by Moonraker
+perform an action or present information based on if a specific
+client is connected.  Currently this method is only available
+to websocket connections.
+
+HTTP request: `Not Available`
+
+JSON-RPC request (Websocket Only):
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.connection.idenity",
+    "params": {
+        "client_name": "moontest",
+        "version": "0.0.1",
+        "type": "web",
+        "url": "http://github.com/arksine/moontest"
+    },
+    "id": 4656
+}
+```
+
+All parameters are required. Below is an explanation of each parameter.
+
+- `client_name`: The name of your client, such as `Mainsail`, `Fluidd`,
+  `KlipperScreen`, `MoonCord`, etc.
+- `version`: The current version of the connected client
+- `type`:  Application type. May be one of `web`, `mobile`, `desktop`,
+  `display`, `bot`, or `other`.  These should be self explanatory, use
+  `other` if your client does not fit any of the prescribed options.
+- `url`: The url for your client's homepage
+
+Returns:
+
+The connection's unique identifer.
+```json
+{
+    "connection_id": 1730367696
+}
+```
+
+#### Get Websocket ID
+
+!!! Warning
+    This method is deprecated.  Please use the
+    [identify endpoint](#identify-connection) to retreive the
+    Websocket's UID
+
+HTTP request: `Not Available`
+
+JSON-RPC request (Websocket Only):
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.websocket.id",
+    "id": 4656
+}
+```
+Returns:
+
+The connected websocket's unique identifer.
+```json
+{
+    "websocket_id": 1730367696
+}
+```
+
 #### Get Klippy host information
 
 HTTP Request:
@@ -691,26 +760,6 @@ Returns:
 is returns, the server will restart.  Any existing connection
 will be disconnected.  A restart will result in the creation
 of a new server instance where the configuration is reloaded.
-
-#### Get Websocket ID
-HTTP request: `Not Available`
-
-JSON-RPC request:
-```json
-{
-    "jsonrpc": "2.0",
-    "method": "server.websocket.id",
-    "id": 4656
-}
-```
-Returns:
-
-The connected websocket's unique identifer.
-```json
-{
-    "websocket_id": 1730367696
-}
-```
 
 ### GCode APIs
 

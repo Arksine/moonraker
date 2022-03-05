@@ -46,4 +46,4 @@ Users:\
 [user_changes.md](https://moonraker.readthedocs.io/en/latest/user_changes/) - Febuary 22nd 2022
 
 Developers:\
-[api_changes.md](https://moonraker.readthedocs.io/en/latest/api_changes/) - March 15th 2021
+[api_changes.md](https://moonraker.readthedocs.io/en/latest/api_changes/) - March 4th 2022
