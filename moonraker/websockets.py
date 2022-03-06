@@ -366,6 +366,7 @@ class WebsocketManager(APITransport):
             f"Websocket {ws.uid} Client Identified - "
             f"Name: {name}, Version: {version}, Type: {client_type}"
         )
+        self.server.send_event("websockets:websocket_identified", ws)
         return {'connection_id': ws.uid}
 
     def has_websocket(self, ws_id: int) -> bool:
@@ -401,12 +402,14 @@ class WebsocketManager(APITransport):
 
     def add_websocket(self, ws: WebSocket) -> None:
         self.websockets[ws.uid] = ws
+        self.server.send_event("websockets:websocked_added", ws)
         logging.debug(f"New Websocket Added: {ws.uid}")
 
     def remove_websocket(self, ws: WebSocket) -> None:
         old_ws = self.websockets.pop(ws.uid, None)
         if old_ws is not None:
             self.klippy.remove_subscription(old_ws)
+            self.server.send_event("websockets:websocket_removed", ws)
             logging.debug(f"Websocket Removed: {ws.uid}")
         if self.closed_event is not None and not self.websockets:
             self.closed_event.set()
@@ -442,7 +445,7 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.event_loop = self.server.get_event_loop()
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.rpc = self.wsm.rpc
-        self.uid = id(self)
+        self._uid = id(self)
         self.is_closed: bool = False
         self.ip_addr: str = self.request.remote_ip
         self.queue_busy: bool = False
@@ -450,6 +453,10 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.last_pong_time: float = self.event_loop.get_loop_time()
         self._connected_time: float = 0.
         self._client_data: Dict[str, str] = {}
+
+    @property
+    def uid(self) -> int:
+        return self._uid
 
     @property
     def hostname(self) -> str:
