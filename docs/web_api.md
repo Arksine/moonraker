@@ -182,7 +182,7 @@ JSON-RPC request (Websocket Only):
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "server.connection.idenity",
+    "method": "server.connection.identify",
     "params": {
         "client_name": "moontest",
         "version": "0.0.1",
