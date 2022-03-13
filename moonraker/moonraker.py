@@ -42,12 +42,12 @@ if TYPE_CHECKING:
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
 
-API_VERSION = (1, 0, 1)
+API_VERSION = (1, 0, 2)
 
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
-    'job_state', 'job_queue', 'http_client'
+    'job_state', 'job_queue', 'http_client', 'announcements'
 ]
 
 SENTINEL = SentinelClass.get_instance()
