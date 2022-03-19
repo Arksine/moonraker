@@ -62,16 +62,13 @@ class KlippyAPI(Subscribable):
             "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
 
     async def _gcode_pause(self, web_request: WebRequest) -> str:
-        self.server.send_event("klippy_apis:pause_requested")
-        return await self._send_klippy_request("pause_resume/pause", {})
+        return await self.pause_print()
 
     async def _gcode_resume(self, web_request: WebRequest) -> str:
-        self.server.send_event("klippy_apis:resume_requested")
-        return await self._send_klippy_request("pause_resume/resume", {})
+        return await self.resume_print()
 
     async def _gcode_cancel(self, web_request: WebRequest) -> str:
-        self.server.send_event("klippy_apis:cancel_requested")
-        return await self._send_klippy_request("pause_resume/cancel", {})
+        return await self.cancel_print()
 
     async def _gcode_start_print(self, web_request: WebRequest) -> str:
         filename: str = web_request.get_str('filename')
@@ -120,6 +117,27 @@ class KlippyAPI(Subscribable):
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         await self.klippy.wait_started()
         return await self.run_gcode(script)
+
+    async def pause_print(
+        self, default: Union[SentinelClass, _T] = SENTINEL
+    ) -> Union[_T, str]:
+        self.server.send_event("klippy_apis:pause_requested")
+        return await self._send_klippy_request(
+            "pause_resume/pause", {}, default)
+
+    async def resume_print(
+        self, default: Union[SentinelClass, _T] = SENTINEL
+    ) -> Union[_T, str]:
+        self.server.send_event("klippy_apis:resume_requested")
+        return await self._send_klippy_request(
+            "pause_resume/resume", {}, default)
+
+    async def cancel_print(
+        self, default: Union[SentinelClass, _T] = SENTINEL
+    ) -> Union[_T, str]:
+        self.server.send_event("klippy_apis:cancel_requested")
+        return await self._send_klippy_request(
+            "pause_resume/cancel", {}, default)
 
     async def do_restart(self, gc: str) -> str:
         # WARNING: Do not call this method from within the following
