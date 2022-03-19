@@ -36,6 +36,7 @@ STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 CPU_STAT_PATH = "/proc/stat"
+MEM_AVAIL_PATH = "/proc/meminfo"
 STAT_UPDATE_TIME = 1.
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
@@ -75,6 +76,7 @@ class ProcStats:
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
         self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
+        self.meminfo_file = pathlib.Path(MEM_AVAIL_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
@@ -90,6 +92,7 @@ class ProcStats:
         self.last_net_stats: Dict[str, Dict[str, Any]] = {}
         self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
         self.cpu_usage: Dict[str, float] = {}
+        self.memory_usage: Dict[str, int] = {}
         self.stat_callbacks: List[STAT_CALLBACK] = []
 
     async def component_init(self) -> None:
@@ -116,6 +119,7 @@ class ProcStats:
             'network': self.last_net_stats,
             'system_cpu_usage': self.cpu_usage,
             'system_uptime': time.clock_gettime(time.CLOCK_BOOTTIME),
+            'system_memory': self.memory_usage,
             'websocket_connections': websocket_count
         }
 
@@ -136,8 +140,9 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
-        cpu_temp, mem, mem_units, net = await self.event_loop.run_in_thread(
-            self._read_system_files)
+        cpu_temp, mem, mem_units, net = (
+            await self.event_loop.run_in_thread(self._read_system_files)
+        )
         for dev in net:
             bytes_sec = 0.
             if dev in self.last_net_stats:
@@ -162,6 +167,7 @@ class ProcStats:
             'cpu_temp': cpu_temp,
             'network': net,
             'system_cpu_usage': self.cpu_usage,
+            'system_memory': self.memory_usage,
             'websocket_connections': websocket_count
         })
         if not self.update_sequence % THROTTLE_CHECK_INTERVAL:
@@ -204,6 +210,7 @@ class ProcStats:
         temp = self._get_cpu_temperature()
         net_stats = self._get_net_stats()
         self._update_cpu_stats()
+        self._update_system_memory()
         return temp, mem, units, net_stats
 
     def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
@@ -240,6 +247,20 @@ class ProcStats:
             return net_stats
         except Exception:
             return {}
+
+    def _update_system_memory(self) -> None:
+        mem_stats: Dict[str, Any] = {}
+        try:
+            ret = self.meminfo_file.read_text()
+            total_match = re.search(r"MemTotal:\s+(\d+)", ret)
+            avail_match = re.search(r"MemAvailable:\s+(\d+)", ret)
+            if total_match is not None and avail_match is not None:
+                mem_stats["total"] = int(total_match.group(1))
+                mem_stats["available"] = int(avail_match.group(1))
+                mem_stats["used"] = mem_stats["total"] - mem_stats["available"]
+            self.memory_usage.update(mem_stats)
+        except Exception:
+            pass
 
     def _update_cpu_stats(self) -> None:
         try:
