@@ -30,7 +30,6 @@ from typing import (
 if TYPE_CHECKING:
     from app import MoonrakerApp
     from websockets import WebRequest, Subscribable
-    from components.data_store import DataStore
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
     FlexCallback = Callable[..., Optional[Coroutine]]
@@ -417,9 +416,9 @@ class KlippyConnection:
         else:
             if rpc_method == "gcode/script":
                 script = web_request.get_str('script', "")
-                data_store: DataStore
-                data_store = self.server.lookup_component('data_store')
-                data_store.store_gcode_command(script)
+                if script:
+                    self.server.send_event(
+                        "klippy_connection:gcode_received", script)
             return await self._request_standard(web_request)
 
     async def _request_subscripton(self,

@@ -50,6 +50,9 @@ class DataStore:
             "server:gcode_response", self._update_gcode_store)
         self.server.register_event_handler(
             "server:klippy_ready", self._init_sensors)
+        self.server.register_event_handler(
+            "klippy_connection:gcode_received", self._store_gcode_command
+        )
 
         # Register endpoints
         self.server.register_endpoint(
@@ -145,7 +148,7 @@ class DataStore:
         self.gcode_queue.append(
             {'message': response, 'time': curtime, 'type': "response"})
 
-    def store_gcode_command(self, script: str) -> None:
+    def _store_gcode_command(self, script: str) -> None:
         curtime = time.time()
         for cmd in script.split('\n'):
             cmd = cmd.strip()
