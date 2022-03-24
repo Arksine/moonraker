@@ -41,14 +41,6 @@ class Announcements:
             self._handle_update_timer
         )
         self.request_lock = asyncio.Lock()
-        dev_path = config.get("dev_path", None)
-        if dev_path is not None:
-            res_path = pathlib.Path(dev_path).expanduser().resolve()
-            if not res_path.is_dir():
-                raise config.error(
-                    f"[announcements] - No folder at path '{dev_path}'")
-            logging.info(f"Annoucments dev path enabled - {res_path}")
-
         self.subscriptions: Dict[str, RssFeed] = {
             "moonraker": RssFeed(config, "moonraker", self.entry_mgr),
             "klipper": RssFeed(config, "klipper", self.entry_mgr)
