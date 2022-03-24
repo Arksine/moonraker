@@ -868,9 +868,9 @@ class Tasmota(HTTPDevice):
                                     password: Optional[str] = None
                                     ) -> Dict[str, Any]:
         if command in ["on", "off"]:
-            out_cmd = f"Power{self.output_id}%20{command}"
+            out_cmd = f"Power{self.output_id} {command}"
             if self.timer != "" and command == "off":
-                out_cmd = f"Backlog%20Delay%20{self.timer}0%3B%20{out_cmd}"
+                out_cmd = f"Backlog Delay {self.timer}0; {out_cmd}"
         elif command == "info":
             out_cmd = f"Power{self.output_id}"
         else:
