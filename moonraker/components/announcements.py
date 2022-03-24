@@ -254,6 +254,7 @@ class RssFeed:
         self.asset_url = f"{MOONLIGHT_URL}/assets/{self.xml_file}"
         self.warned: bool = False
         self.last_modified: int = 0
+        self.etag: Optional[str] = None
         self.dev_xml_path: Optional[pathlib.Path] = None
         dev_mode = config.getboolean("dev_mode", False)
         if dev_mode:
@@ -262,10 +263,9 @@ class RssFeed:
             self.dev_xml_path = res_path.joinpath(self.xml_file)
 
     async def initialize(self) -> None:
-        etag: Optional[str] = await self.moon_db.get(
-            f"announcements.{self.name}.etag", None)
-        if etag is not None:
-            self.client.register_cached_url(self.asset_url, etag)
+        self.etag = await self.moon_db.get(
+            f"announcements.{self.name}.etag", None
+        )
 
     async def update_entries(self) -> bool:
         if self.dev_xml_path is None:
@@ -278,7 +278,11 @@ class RssFeed:
 
     async def _fetch_moonlight(self) -> str:
         headers = {"Accept": "application/xml"}
-        resp = await self.client.get(self.asset_url, headers)
+        if self.etag is not None:
+            headers["If-None-Match"] = self.etag
+        resp = await self.client.get(
+            self.asset_url, headers, enable_cache=False
+        )
         if resp.has_error():
             msg = f"Failed to update subscription '{self.name}': {resp.error}"
             logging.info(msg)
@@ -290,9 +294,11 @@ class RssFeed:
             logging.debug(f"Content at {self.xml_file} not modified")
             return ""
         # update etag
-        if "etag" in resp.headers:
-            etag = resp.headers["etag"]
-            self.moon_db[f"announcements.{self.name}.etag"] = etag
+        self.etag = resp.etag
+        if self.etag is not None:
+            self.moon_db[f"announcements.{self.name}.etag"] = resp.etag
+        else:
+            self.moon_db.pop(f"announcements.{self.name}.etag", None)
         return resp.text
 
     async def _fetch_local_folder(self) -> str:
