@@ -2517,6 +2517,196 @@ The current state of the job queue:
 }
 ```
 
+### Announcement APIs
+The following endpoints are available to manage announcements.  See
+[the appendix](#announcements) for details on how
+announcements work and recommendations for your implementation.
+
+#### List announcements
+Retreives a list of current announcements. The `include_dismissed`
+argument is optional and defaults to `true`.  If set to `false`
+dismissed entries will be omitted from the return value.
+
+HTTP request:
+```http
+GET /server/announcements/list?include_dismissed=false
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.list",
+    "params": {
+        "include_dismissed": false
+    },
+    "id": 4654
+}
+```
+
+Returns:
+
+The current list of announcements, in descending order (newest to oldest)
+sorted by `date`:
+
+```json
+{
+    "entries": [
+        {
+            "entry_id": "arksine/moonlight/issue/3",
+            "url": "https://github.com/Arksine/moonlight/issues/3",
+            "title": "Test announcement 3",
+            "description": "Test Description [with a link](https://moonraker.readthedocs.io).",
+            "priority": "normal",
+            "date": 1647459219,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        },
+        {
+            "entry_id": "arksine/moonlight/issue/2",
+            "url": "https://github.com/Arksine/moonlight/issues/2",
+            "title": "Announcement Test Two",
+            "description": "This is a high priority announcement. This line is included in the description.",
+            "priority": "high",
+            "date": 1646855579,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        },
+        {
+            "entry_id": "arksine/moonlight/issue/1",
+            "url": "https://github.com/Arksine/moonlight/issues/1",
+            "title": "Announcement Test One",
+            "description": "This is the description.  Anything here should appear in the announcement, up to 512 characters.",
+            "priority": "normal",
+            "date": 1646854678,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        },
+        {
+            "entry_id": "arksine/moonraker/issue/349",
+            "url": "https://github.com/Arksine/moonraker/issues/349",
+            "title": "PolicyKit warnings; unable to manage services, restart system, or update packages",
+            "description": "This announcement is an effort to get ahead of a coming change that will certainly result in issues.  PR #346  has been merged, and with it are some changes to Moonraker's default behavior.",
+            "priority": "normal",
+            "date": 1643392406,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonraker"
+        }
+    ]
+}
+```
+
+#### Update announcements
+Requests that Moonraker check for announcement updates.  This is generally
+not required in production, as Moonraker will automatically check for
+updates every 30 minutes.  However, during development this endpoint is
+useful to force an update when it is necessary to perform integration
+tests.
+
+HTTP request:
+```http
+POST /server/announcements/update
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.update",
+    "id": 4654
+}
+```
+
+Returns:
+
+The current list of announcements, in descending order (newest to oldest)
+sorted by `date`, and a `modified` field that contains a boolean value
+indicating if the update resulted in a change:
+
+```json
+{
+    "entries": [
+        {
+            "entry_id": "arksine/moonraker/issue/349",
+            "url": "https://github.com/Arksine/moonraker/issues/349",
+            "title": "PolicyKit warnings; unable to manage services, restart system, or update packages",
+            "description": "This announcement is an effort to get ahead of a coming change that will certainly result in issues.  PR #346  has been merged, and with it are some changes to Moonraker's default behavior.",
+            "priority": "normal",
+            "date": 1643392406,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonraker"
+        },
+        {
+            "entry_id": "arksine/moonlight/issue/1",
+            "url": "https://github.com/Arksine/moonlight/issues/1",
+            "title": "Announcement Test One",
+            "description": "This is the description.  Anything here should appear in the announcement, up to 512 characters.",
+            "priority": "normal",
+            "date": 1646854678,
+            "dismissed": true,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        },
+        {
+            "entry_id": "arksine/moonlight/issue/2",
+            "url": "https://github.com/Arksine/moonlight/issues/2",
+            "title": "Announcement Test Two",
+            "description": "This is a high priority announcement. This line is included in the description.",
+            "priority": "high",
+            "date": 1646855579,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        },
+        {
+            "entry_id": "arksine/moonlight/issue/3",
+            "url": "https://github.com/Arksine/moonlight/issues/3",
+            "title": "Test announcement 3",
+            "description": "Test Description [with a link](https://moonraker.readthedocs.io).",
+            "priority": "normal",
+            "date": 1647459219,
+            "dismissed": false,
+            "source": "moonlight",
+            "feed": "Moonlight"
+        }
+    ],
+    "modified": false
+}
+```
+
+#### Dismiss an announcement
+Sets the dismiss flag of an announcement to `true`.  The `entry_id`
+field is required.  The `entry_id` contains forward slashes so remember
+to escape the ID if including it in the query string of an HTTP request.
+
+HTTP request:
+```http
+GET /server/announcements/list?entry_id=arksine%2Fmoonlight%2Fissue%2F1
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.list",
+    "params": {
+        "entry_id": "arksine/moonlight/issue/1"
+    },
+    "id": 4654
+}
+```
+
+Returns:
+
+The `entry_id` of the dismissed entry:
+
+```json
+{
+    "entry_id": "arksine/moonlight/issue/1"
+}
+```
 
 ### Update Manager APIs
 The following endpoints are available when the `[update_manager]` component has
@@ -3990,6 +4180,80 @@ fields:
   that includes details about the event.  If no aux parameter is specified
   in the configuration this will be a `null` value.
 
+#### Announcement update event
+
+Moonraker will emit the `notify_announcement_update` notification when
+a announcement entries are addded or removed:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_announcement_update",
+    "params": [
+        {
+            "entries": [
+                {
+                    "entry_id": "arksine/moonlight/issue/3",
+                    "url": "https://github.com/Arksine/moonlight/issues/3",
+                    "title": "Test announcement 3",
+                    "description": "Test Description [with a link](https://moonraker.readthedocs.io).",
+                    "priority": "normal",
+                    "date": 1647459219,
+                    "dismissed": false,
+                    "source": "moonlight",
+                    "feed": "Moonlight"
+                },
+                {
+                    "entry_id": "arksine/moonlight/issue/2",
+                    "url": "https://github.com/Arksine/moonlight/issues/2",
+                    "title": "Announcement Test Two",
+                    "description": "This is a high priority announcement. This line is included in the description.",
+                    "priority": "high",
+                    "date": 1646855579,
+                    "dismissed": false,
+                    "source": "moonlight",
+                    "feed": "Moonlight"
+                },
+                {
+                    "entry_id": "arksine/moonraker/issue/349",
+                    "url": "https://github.com/Arksine/moonraker/issues/349",
+                    "title": "PolicyKit warnings; unable to manage services, restart system, or update packages",
+                    "description": "This announcement is an effort to get ahead of a coming change that will certainly result in issues.  PR #346  has been merged, and with it are some changes to Moonraker's default behavior.",
+                    "priority": "normal",
+                    "date": 1643392406,
+                    "dismissed": false,
+                    "source": "moonlight",
+                    "feed": "Moonraker"
+                }
+            ]
+        }
+    ]
+}
+```
+
+The `params` array will contain an object with all current announcement entries.
+This object is identical to that returned by the
+[list announcements](#list-announcements) endpoint.
+
+#### Announcement dismissed event
+Moonraker will emit the `notify_announcement_dismissed` notification when
+a dismissed announcement is detected:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_announcement_dismissed",
+    "params": [
+        {
+            "entry_id": "arksine/moonlight/issue/3"
+        }
+    ]
+}
+```
+
+The `params` array will contain an object with the `entry_id` of the dismissed
+announcement.
+
 ### Appendix
 
 #### Websocket setup
@@ -4182,3 +4446,256 @@ for (let resp of result.gcode_store) {
   // Do something with date and resp.message ...
 }
 ```
+
+#### Announcements
+
+Moonraker announcements are effectively push notifications that
+can be used to notify users of important information related the
+development and status of software in the Klipper ecosystem.  This
+section will provide an overview of how the announcement system
+works, how to set up a dev environment, and provide recommendations
+on client implementation.
+
+##### How announcements work
+
+Moonraker announcements are GitHub issues tagged with the `announcement`
+label.  GitHub repos may registered with
+[moonlight](https://github.com/arksine/moonlight), which is responsible
+for generating RSS feeds from GitHub issues using GitHub's REST API. These
+RSS feeds are hosted on GitHub Pages, for example Moonraker's feed may be found
+[here](https://arksine.github.io/moonlight/assets/moonraker.xml). By
+centralizing GitHub API queries in `moonlight` we are able to poll multiple
+repos without running into API rate limit issues. Moonlight has has a workflow
+that checks all registered repos for new announcements every 30 minutes.  In
+theory it would be able to check for announcements in up to 500 repos before
+exceeding GitHub's API rate limit.
+
+Moonraker's `[announcements]` component will always check the `klipper` and
+`moonraker` RSS feeds.  It is possible to configure additional RSS feeds by
+adding them to the `subscriptions` option.  The component will poll configured
+feeds every 30 minutes, resulting in maximum of 1 hour for new announcements
+to reach all users.
+
+When new issues are tagged with `announcement` these entries will be parsed
+and added to the RSS feeds.  When the issue is closed they will be removed from
+the corresponding feed.  Moonlight will fetch up to 20 announcements for each
+feed, if a repo goes over this limit older announcements will be removed.
+
+!!! Note
+    It is also possible for Moonraker to generate announcements itself.  For
+    example, if a Moonraker component needs user feedback it may generate an
+    announcement and notify all connected clients.   From a client's
+    perspective there is no need to treat announcements differently than
+    any other announcement.
+
+##### Setting up the dev environment
+
+Moonraker provides configuration to parse announcements from a local folder
+so that it is possible to manually add and remove entries, allowing client
+developers to perform integration tests:
+
+```ini
+# moonraker.conf
+
+[announcements]
+dev_mode: True
+```
+
+With `dev_mode` enabled, Moonraker will look for`moonraker.xml` and
+`klipper.xml` in the following folder:
+```shell
+~/moonraker/.devel/announcement_xml
+```
+
+If moonraker is not installed in the home folder then substitute `~`
+for the parent folder location.  This folder is in a hardcoded location
+to so as not to expose users to vulnerabilites associated with parsing XML.
+
+It is possible to configure Moonraker to search for your own feeds:
+
+```ini
+# moonraker.conf
+
+[announcements]
+subscription:
+  my_project
+dev_mode: True
+```
+
+The above configuration would look for `my_project.xml` in addition to
+`klipper.xml` and `moonraker.xml`.  The developer may manually create
+the xml feeds or they may clone `moonlight` and leverage its script
+to generate a feed from issues created on their test repo.  When local
+feeds have been modified one may call the [update announcements API](#update-announcements) to have Moonraker fetch the updates and add/remove
+entries.
+
+##### RSS file structure
+
+Moonlight generates RSS feeds in XML format.  Below is an example generated
+from moonlight's own issue tracker:
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<rss version="2.0" xmlns:moonlight="https://arksine.github.io/moonlight">
+    <channel>
+        <title>arksine/moonlight</title>
+        <link>https://github.com/Arksine/moonlight</link>
+        <description>RSS Announcements for Moonraker</description>
+        <pubDate>Tue, 22 Mar 2022 23:19:04 GMT</pubDate>
+        <moonlight:configHash>f2912192bf0d09cf18d8b8af22b2d3501627043e5afa3ebff0e45e4794937901</moonlight:configHash>
+        <item>
+            <title>Test annoucement 3</title>
+            <link>https://github.com/Arksine/moonlight/issues/3</link>
+            <description>Test Description [with a link](https://moonraker.readthedocs.io).</description>
+            <pubDate>Wed, 16 Mar 2022 19:33:39 GMT</pubDate>
+            <category>normal</category>
+            <guid>arksine/moonlight/issue/3</guid>
+        </item>
+        <item>
+            <title>Announcement Test Two</title>
+            <link>https://github.com/Arksine/moonlight/issues/2</link>
+            <description>This is a high priority announcement. This line is included in the description.</description>
+            <pubDate>Wed, 09 Mar 2022 19:52:59 GMT</pubDate>
+            <category>high</category>
+            <guid>arksine/moonlight/issue/2</guid>
+        </item>
+        <item>
+            <title>Announcement Test One</title>
+            <link>https://github.com/Arksine/moonlight/issues/1</link>
+            <description>This is the description.  Anything here should appear in the announcement, up to 512 characters.</description>
+            <pubDate>Wed, 09 Mar 2022 19:37:58 GMT</pubDate>
+            <category>normal</category>
+            <guid>arksine/moonlight/issue/1</guid>
+        </item>
+    </channel>
+</rss>
+```
+
+Each xml file may contain only one `<rss>` element, and each `<rss>` element
+may contain only one channel.  All items must be present aside from
+`moonlight:configHash`, which is used by the workflow to detect changes to
+moonlight's configuration.  Most elements are self explanatory, developers will
+be most interested in adding and removing `<item>` elements, as these are
+the basis for entries in Moonraker's announcement database.
+
+##### Generating announcements from your own repo
+
+As mentioned previously, its possible to clone moonlight and use its rss
+script to generate announcements from issues in your repo:
+
+```shell
+cd ~
+git clone https://github.com/arksine/moonlight
+cd moonlight
+virtualenv -p /usr/bin/python3 .venv
+source .venv/bin/activate
+pip install httpx[http2]
+deactivate
+```
+
+To add your repo edit `~/moonlight/src/config.json`:
+```json
+{
+    "moonraker": {
+        "repo_owner": "Arksine",
+        "repo_name": "moonraker",
+        "description": "API Host For Klipper",
+        "authorized_creators": ["Arksine"]
+    },
+    "klipper": {
+        "repo_owner": "Klipper3d",
+        "repo_name": "klipper",
+        "description": "A 3D Printer Firmware",
+        "authorized_creators": ["KevinOConnor"]
+    },
+    // Add your test repo info here.  It should contain
+    // fields matching those in "moonraker" and "klipper"
+    // shown above.
+}
+```
+
+Once your repo is added, create one or more issues on your GitHub
+repo tagged with the `announcement` label.  Add the `critical` label to
+one if you wish to test high priority announcements.  You may need to
+create these labels in your repo before they can be added.
+
+Now we can use moonlight to generate the xml files:
+```shell
+cd ~/moonlight
+source .venv/bin/activate
+src/update_rss.py
+deactivate
+```
+
+After the script has run it will generate the configured RSS feeds
+and store them in `~/moonlight/assets`.  If using this method it may
+be useful to create a symbolic link to it in Moonraker's devel folder:
+
+```shell
+cd ~/moonraker
+mkdir .devel
+cd .devel
+ln -s ~/moonlight/assets announcement_xml
+```
+
+If you haven't done so, configure Moonraker to subscribe to your feed
+and restart the Moonraker service.  Otherwise you may call the
+[announcement update](#update-announcements) API to have Moonraker
+parse the announcements from your test feed.
+
+
+##### Implementation details and recommendations
+
+When Moonraker detects a change to one or more feeds it will fire the
+[announcement update](#announcement-update-event) notification.  It is also
+possible to [query the API for announcements](#list-announcements).  Both
+the notification and the API return a list of announcement entries, where
+each entry is an object containing the following fields:
+
+- `entry_id`: A unique ID derived for each entry.  Typically this is in the
+  form of `{owner}/{repo}/issue/{issue number}`.
+- `url`: The url to the full announcement.  This is generally a link to
+  an issue on GitHub.
+- `title`: Announcement title, will match the title of the issue on GitHub.
+- `description`: The first paragraph of the announcement.  Anything over
+  512 characters will be truncated.
+- `priority`: Can be `normal` or `high`.  It is recommended that clients
+  immediately alert the user when one or more `high` priority announcments
+  are present.  Issued tagged with the `critical` label will be assigned
+  a `high` priority.
+- `date`:  The announcement creation date in unix time.
+- `dismissed`: If set to `true` this announcement has been previously
+  dismissed
+- `source`: The source from which the announcement was generated.  Can
+  be `moonlight` or `internal`.
+- `feed`: The RSS feed for moonlight announcements.  For example, this
+  could be `Moonraker` or `Klipper`.  If the announcement was generated
+  internally this should match the name of the component that generated
+  the announcement.
+
+When a client first connects to Moonraker it is recommended that the
+[list announcements](#list-announcements) API is called to retreive
+the current list of entries.  A client may then watch for the
+[announcement update](#announcement-update-event) and
+[announcement dismissed](#announcement-dismissed-event) notifications
+and update the UI accordingly.
+
+Client devs should decide how they want to present announcements to users.  They could be treated as any other notification, for example a client
+may have a notification icon that shows the current number of unread
+announcements.  Clients can mark an announcement as `read` by calling
+the [dismiss announcement](#dismiss-an-announcement) API.  Any announcement
+entry with `dismissed = true` should be considered read.
+
+When a `high priority` announcement is detected it is recommended that
+clients present the announcement in a format that is immediately visible
+to the user.  That said, it may be wise to allow users to opt out of
+this behavior via configuration.
+
+!!! Note
+    If an announcement is dismissed, closed, then reopened the
+    `dismissed` flag will reset to false.  This is expected behavior
+    as announcements are pruned from the database when they are no
+    longer present in feeds.  It isn't valid for repo maintaners
+    to re-open a closed announcement.  That said, its fine to close
+    and re-open issues during development and testing using repos
+    that are not yet registered with moonlight.
