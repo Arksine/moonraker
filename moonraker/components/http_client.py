@@ -147,9 +147,10 @@ class HttpClient:
                 if resp.code == 304:
                     err = None
                     if cached is None:
-                        logging.info(
-                            "Request returned 304, however no cached "
-                            "item was found")
+                        if enable_cache:
+                            logging.info(
+                                "Request returned 304, however no cached "
+                                "item was found")
                         result = b""
                     else:
                         logging.debug(f"Request returned from cache: {url}")
