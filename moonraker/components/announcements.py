@@ -77,6 +77,9 @@ class Announcements:
         self.server.register_notification(
             "announcements:entries_updated", "announcement_update"
         )
+        self.server.register_notification(
+            "announcements:dismiss_wake", "announcement_wake"
+        )
 
     async def component_init(self) -> None:
         db: MoonrakerDatabase = self.server.lookup_component("database")
@@ -114,7 +117,8 @@ class Announcements:
     ) -> Dict[str, Any]:
         async with self.request_lock:
             entry_id: str = web_request.get_str("entry_id")
-            await self.entry_mgr.dismiss_entry(entry_id)
+            wake_time: Optional[int] = web_request.get_int("wake_time", None)
+            await self.entry_mgr.dismiss_entry(entry_id, wake_time)
             return {
                 "entry_id": entry_id
             }
@@ -220,6 +224,8 @@ class Announcements:
             "priority": priority,
             "date": date.timestamp(),
             "dismissed": False,
+            "date_dismissed": None,
+            "dismiss_wake": None,
             "source": "internal",
             "feed": feed
         }
@@ -234,6 +240,9 @@ class Announcements:
                 "announcements:entries_updated", {"entries": entries}
             )
 
+    def close(self):
+        self.entry_mgr.close()
+
 class EntryManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -243,13 +252,30 @@ class EntryManager:
         self.announce_db = database.wrap_namespace("announcements")
         self.entry_id_map: Dict[str, str] = {}
         self.next_key = 0
+        self.dismiss_handles: Dict[str, asyncio.TimerHandle] = {}
 
     async def initialize(self) -> None:
         last_key = ""
+        eventloop = self.server.get_event_loop()
+        curtime = datetime.datetime.utcnow().timestamp()
         for key, entry in await self.announce_db.items():
             last_key = key
             aid = entry["entry_id"]
             self.entry_id_map[aid] = key
+            if entry["dismissed"]:
+                wake_time: Optional[float] = entry.get("dismiss_wake")
+                if wake_time is not None:
+                    time_diff = wake_time - curtime
+                    if time_diff - 10. < 0.:
+                        # announcement is near or past wake time
+                        entry["dismissed"] = False
+                        entry["date_dismissed"] = None
+                        entry["dismiss_wake"] = None
+                        self.announce_db[key] = entry
+                    else:
+                        self.dismiss_handles[key] = eventloop.delay_callback(
+                            time_diff, self._wake_dismissed, key
+                        )
         if last_key:
             self.next_key = int(last_key, 16) + 1
 
@@ -278,18 +304,44 @@ class EntryManager:
             raise self.server.error(f"No key matching entry id: {entry_id}")
         return self.announce_db.pop(key, None)
 
-    async def dismiss_entry(self, entry_id: str) -> None:
+    async def dismiss_entry(
+        self, entry_id: str, wake_time: Optional[int] = None
+    ) -> None:
         key = self.entry_id_map.get(entry_id)
         if key is None:
             raise self.server.error(f"No key matching entry id: {entry_id}")
-        is_dismissed = await self.announce_db[f"{key}.dismissed"]
+        entry = await self.announce_db[key]
+        is_dismissed = entry["dismissed"]
         if is_dismissed:
             return
-        await self.announce_db.insert(f"{key}.dismissed", True)
+        entry["dismissed"] = True
         eventloop = self.server.get_event_loop()
+        curtime = datetime.datetime.utcnow().timestamp()
+        entry["date_dismissed"] = curtime
+        if wake_time is not None:
+            entry["dismiss_wake"] = curtime + wake_time
+            self.dismiss_handles[key] = eventloop.delay_callback(
+                wake_time, self._wake_dismissed, key
+            )
+        self.announce_db[key] = entry
         eventloop.delay_callback(
             .05, self.server.send_event, "announcements:dismissed",
             {"entry_id": entry_id}
+        )
+
+    async def _wake_dismissed(self, key: str) -> None:
+        self.dismiss_handles.pop(key, None)
+        entry = await self.announce_db.get(key, None)
+        if entry is None:
+            return
+        if not entry["dismissed"]:
+            return
+        entry["dismissed"] = False
+        entry["date_dismissed"] = None
+        entry["dismiss_wake"] = None
+        self.announce_db[key] = entry
+        self.server.send_event(
+            "announcements:dismiss_wake", {"entry_id": entry["entry_id"]}
         )
 
     def prune_by_prefix(self, prefix: str, valid_ids: List[str]) -> bool:
@@ -318,6 +370,10 @@ class EntryManager:
             self.announce_db.delete_batch(del_keys)
             return True
         return False
+
+    def close(self):
+        for handle in self.dismiss_handles.values():
+            handle.cancel()
 
 class RssFeed:
     def __init__(
@@ -441,6 +497,8 @@ class RssFeed:
                 "priority": item.findtext("category"),
                 "date": dt.timestamp(),
                 "dismissed": False,
+                "date_dismissed": None,
+                "dismiss_wake": None,
                 "source": "moonlight",
                 "feed": self.name.capitalize()
             }
