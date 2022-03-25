@@ -332,7 +332,6 @@ class RssFeed:
         self.moon_db = database.wrap_namespace("moonraker")
         self.xml_file = f"{self.name}.xml"
         self.asset_url = f"{MOONLIGHT_URL}/assets/{self.xml_file}"
-        self.warned: bool = False
         self.last_modified: int = 0
         self.etag: Optional[str] = None
         self.dev_xml_path: Optional[pathlib.Path] = None
@@ -364,11 +363,9 @@ class RssFeed:
             self.asset_url, headers, enable_cache=False
         )
         if resp.has_error():
-            msg = f"Failed to update subscription '{self.name}': {resp.error}"
-            logging.info(msg)
-            if not self.warned:
-                self.warned = True
-                self.server.add_warning(msg)
+            logging.info(
+                f"Failed to update subscription '{self.name}': {resp.error}"
+            )
             return ""
         if resp.status_code == 304:
             logging.debug(f"Content at {self.xml_file} not modified")
@@ -385,10 +382,7 @@ class RssFeed:
         if self.dev_xml_path is None:
             return ""
         if not self.dev_xml_path.is_file():
-            msg = f"No file at path {self.dev_xml_path}"
-            if not self.warned:
-                self.warned = True
-                self.server.add_warning(msg)
+            logging.info(f"No file at path {self.dev_xml_path}")
             return ""
         mtime = self.dev_xml_path.stat().st_mtime_ns
         if mtime <= self.last_modified:
@@ -399,10 +393,7 @@ class RssFeed:
             xml_data = await eventloop.run_in_thread(
                 self.dev_xml_path.read_text)
         except Exception:
-            msg = f"Unable read xml file {self.dev_xml_path}"
-            if not self.warned:
-                self.warned = True
-                self.server.add_warning(msg)
+            logging.exception(f"Unable read xml file {self.dev_xml_path}")
             return ""
         self.last_modified = mtime
         return xml_data
