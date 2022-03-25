@@ -2546,10 +2546,11 @@ JSON-RPC request:
 Returns:
 
 The current list of announcements, in descending order (newest to oldest)
-sorted by `date`:
+sorted by `date` and a list of feeds Moonraker is currently subscribed to:
 
 ```json
 {
+    {
     "entries": [
         {
             "entry_id": "arksine/moonlight/issue/3",
@@ -2559,8 +2560,10 @@ sorted by `date`:
             "priority": "normal",
             "date": 1647459219,
             "dismissed": false,
+            "date_dismissed": null,
+            "dismiss_wake": null,
             "source": "moonlight",
-            "feed": "Moonlight"
+            "feed": "moonlight"
         },
         {
             "entry_id": "arksine/moonlight/issue/2",
@@ -2570,8 +2573,10 @@ sorted by `date`:
             "priority": "high",
             "date": 1646855579,
             "dismissed": false,
+            "date_dismissed": null,
+            "dismiss_wake": null,
             "source": "moonlight",
-            "feed": "Moonlight"
+            "feed": "moonlight"
         },
         {
             "entry_id": "arksine/moonlight/issue/1",
@@ -2581,8 +2586,10 @@ sorted by `date`:
             "priority": "normal",
             "date": 1646854678,
             "dismissed": false,
+            "date_dismissed": null,
+            "dismiss_wake": null,
             "source": "moonlight",
-            "feed": "Moonlight"
+            "feed": "moonlight"
         },
         {
             "entry_id": "arksine/moonraker/issue/349",
@@ -2595,7 +2602,13 @@ sorted by `date`:
             "source": "moonlight",
             "feed": "Moonraker"
         }
+    ],
+    "feeds": [
+        "moonraker",
+        "klipper",
+        "moonlight"
     ]
+}
 }
 ```
 
@@ -2684,19 +2697,29 @@ to escape the ID if including it in the query string of an HTTP request.
 
 HTTP request:
 ```http
-GET /server/announcements/list?entry_id=arksine%2Fmoonlight%2Fissue%2F1
+POST /server/announcements/dismiss?entry_id=arksine%2Fmoonlight%2Fissue%2F1&wake_time=600
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "server.announcements.list",
+    "method": "server.announcements.dismiss",
     "params": {
-        "entry_id": "arksine/moonlight/issue/1"
+        "entry_id": "arksine/moonlight/issue/1",
+        "wake_time": 600
     },
     "id": 4654
 }
 ```
+
+Parameters:
+
+- `entry_id`:  The entry identifier.  This field may contain forward slashes so
+  it should be url escaped when placed in the query string of an http request.
+  This parameter is required.
+- `wake_time`:  The time, in seconds, in which the entry's `dismissed` state
+  will revert to false.  This parameter is optional, if omitted the entry will
+  be dismissed indefinitely.
 
 Returns:
 
@@ -2705,6 +2728,80 @@ The `entry_id` of the dismissed entry:
 ```json
 {
     "entry_id": "arksine/moonlight/issue/1"
+}
+```
+
+#### Add an announcement feed
+Specifies a new feed for Moonraker's `announcements` component to query
+in addition to `moonraker`, `klipper`, and feeds configured in
+`moonraker.conf`.
+
+HTTP request:
+```http
+POST /server/announcements/feed?name=my_feed
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.post_feed",
+    "params": {
+        "name": "my_feed"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`:  The name of the new feed.  This parameter is required.
+
+Returns:
+
+The name of the new feed and the action taken.  The `action` will be `added`
+if a new feed added, or `skipped` if the feed already exists.
+
+```json
+{
+    "feed": "my_feed",
+    "action": "added"
+}
+```
+
+#### Remove an announcement feed
+Removes a subscribed feed.  Only feeds previously subscribed to using
+the [add feed](#add-an-announcement-feed) API may be removed. Feeds
+configured in `moonraker.conf` may not be removed.
+
+HTTP request:
+```http
+DELETE /server/announcements/feed?name=my_feed
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.delete_feed",
+    "params": {
+        "name": "my_feed"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`:  The name of the new feed to remove.  This parameter is required.
+
+Returns:
+
+The name of the new feed and the action taken.  The `action` will be
+`removed` if the operation was successful.
+
+```json
+{
+    "feed": "my_feed",
+    "action": "removed"
 }
 ```
 
@@ -4200,8 +4297,10 @@ a announcement entries are addded or removed:
                     "priority": "normal",
                     "date": 1647459219,
                     "dismissed": false,
+                    "date_dismissed": null,
+                    "dismiss_wake": null,
                     "source": "moonlight",
-                    "feed": "Moonlight"
+                    "feed": "moonlight"
                 },
                 {
                     "entry_id": "arksine/moonlight/issue/2",
@@ -4211,9 +4310,11 @@ a announcement entries are addded or removed:
                     "priority": "high",
                     "date": 1646855579,
                     "dismissed": false,
+                    "date_dismissed": null,
+                    "dismiss_wake": null,
                     "source": "moonlight",
-                    "feed": "Moonlight"
-                },
+                    "feed": "moonlight"
+                }
                 {
                     "entry_id": "arksine/moonraker/issue/349",
                     "url": "https://github.com/Arksine/moonraker/issues/349",
@@ -4253,6 +4354,25 @@ a dismissed announcement is detected:
 
 The `params` array will contain an object with the `entry_id` of the dismissed
 announcement.
+
+#### Announcement wake event
+Moonraker will emit the `notify_announcement_wake` notification when
+a specified `wake_time` for a dismissed announcement has expired.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_announcement_wake",
+    "params": [
+        {
+            "entry_id": "arksine/moonlight/issue/1"
+        }
+    ]
+}
+```
+
+The `params` array will contain an object with the `entry_id` of the
+announcement that is no longer dismissed.
 
 ### Appendix
 
@@ -4666,6 +4786,12 @@ each entry is an object containing the following fields:
 - `date`:  The announcement creation date in unix time.
 - `dismissed`: If set to `true` this announcement has been previously
   dismissed
+- `date_dismissed`: The date the announcement was dismissed in unix time.
+  If the announcement has not been dismissed this value is `null`.
+- `dismiss_wake`: If the announcement was dismissed with a `wake_time`
+  specified this is the time (in unix time) at which the `dismissed`
+  state will revert.  If the announcement is not dismissed or dismissed
+  indefinitely this value will be `null`.
 - `source`: The source from which the announcement was generated.  Can
   be `moonlight` or `internal`.
 - `feed`: The RSS feed for moonlight announcements.  For example, this
