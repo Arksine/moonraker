@@ -364,7 +364,7 @@ class EntryManager:
         entries = await self.list_entries()
         del_keys: List[str] = []
         for entry in entries:
-            if entry["feed"] == feed:
+            if entry["feed"].lower() == feed:
                 key = self.entry_id_map.pop(entry["entry_id"], None)
                 if key is not None:
                     del_keys.append(key)
@@ -507,7 +507,7 @@ class RssFeed:
                 "date_dismissed": None,
                 "dismiss_wake": None,
                 "source": "moonlight",
-                "feed": self.name.capitalize()
+                "feed": self.name
             }
             changed = True
             self.entry_mgr.add_entry(entry)
