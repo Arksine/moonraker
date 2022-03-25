@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import datetime
-from importlib.resources import path
 import pathlib
 import asyncio
 import logging
@@ -35,6 +34,7 @@ etree.register_namespace("moonlight", MOONLIGHT_URL)
 class Announcements:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.config = config
         self.entry_mgr = EntryManager(config)
         self.eventloop = self.server.get_event_loop()
         self.update_timer = self.eventloop.register_timer(
@@ -45,11 +45,14 @@ class Announcements:
             "moonraker": RssFeed(config, "moonraker", self.entry_mgr),
             "klipper": RssFeed(config, "klipper", self.entry_mgr)
         }
+        self.stored_feeds: List[str] = []
         sub_list: List[str] = config.getlist("subscriptions", [])
+        self.configured_feeds: List[str] = ["moonraker", "klipper"]
         for sub in sub_list:
             sub = sub.lower()
             if sub in self.subscriptions:
                 continue
+            self.configured_feeds.append(sub)
             self.subscriptions[sub] = RssFeed(config, sub, self.entry_mgr)
 
         self.server.register_endpoint(
@@ -64,6 +67,10 @@ class Announcements:
             "/server/announcements/update", ["POST"],
             self._handle_update_request
         )
+        self.server.register_endpoint(
+            "/server/announcements/feed", ["POST", "DELETE"],
+            self._handle_feed_request
+        )
         self.server.register_notification(
             "announcements:dismissed", "announcement_dismissed"
         )
@@ -72,6 +79,16 @@ class Announcements:
         )
 
     async def component_init(self) -> None:
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        stored_feeds: List[str] = await db.get_item(
+            "moonraker", "announcements.stored_feeds", []
+        )
+        self.stored_feeds = stored_feeds
+        for name in stored_feeds:
+            if name in self.subscriptions:
+                continue
+            feed = RssFeed(self.config, name, self.entry_mgr)
+            self.subscriptions[name] = feed
         async with self.request_lock:
             await self.entry_mgr.initialize()
             for sub in self.subscriptions.values():
@@ -109,7 +126,8 @@ class Announcements:
             incl_dsm = web_request.get_boolean("include_dismissed", True)
             entries = await self.entry_mgr.list_entries(incl_dsm)
             return {
-                "entries": entries
+                "entries": entries,
+                "feeds": list(self.subscriptions.keys())
             }
 
     async def _handle_update_request(
@@ -139,6 +157,55 @@ class Announcements:
                 "entries": entries,
                 "modified": changed
             }
+
+    async def _handle_feed_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        action = web_request.get_action()
+        name: str = web_request.get("name")
+        name = name.lower()
+        changed: bool = False
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        result = "skipped"
+        if action == "POST":
+            if name not in self.subscriptions:
+                feed = RssFeed(self.config, name, self.entry_mgr)
+                self.subscriptions[name] = feed
+                await feed.initialize()
+                changed = await feed.update_entries()
+                self.stored_feeds.append(name)
+                db.insert_item(
+                    "moonraker", "announcements.stored_feeds", self.stored_feeds
+                )
+                result = "added"
+        elif action == "DELETE":
+            if name not in self.stored_feeds:
+                raise self.server.error(f"Feed '{name}' not stored")
+            if name in self.configured_feeds:
+                raise self.server.error(
+                    f"Feed '{name}' exists in the configuration, cannot remove"
+                )
+            self.stored_feeds.remove(name)
+            db.insert_item(
+                "moonraker", "announcements.stored_feeds", self.stored_feeds
+            )
+            if name in self.subscriptions:
+                del self.subscriptions[name]
+                changed = await self.entry_mgr.prune_by_feed(name)
+                logging.info(f"Removed Announcement Feed: {name}")
+                result = "removed"
+            else:
+                raise self.server.error(f"Feed does not exist: {name}")
+        if changed:
+            entries = await self.entry_mgr.list_entries()
+            self.eventloop.delay_callback(
+                .05, self.server.send_event, "announcements:entries_updated",
+                {"entries": entries}
+            )
+        return {
+            "feed": name,
+            "action": result
+        }
 
     def add_internal_announcement(
         self, title: str, desc: str, url: str, priority: str, feed: str
@@ -234,6 +301,19 @@ class EntryManager:
             key = self.entry_id_map.pop(entry_id, None)
             if key is not None:
                 del_keys.append(key)
+        if del_keys:
+            self.announce_db.delete_batch(del_keys)
+            return True
+        return False
+
+    async def prune_by_feed(self, feed: str) -> bool:
+        entries = await self.list_entries()
+        del_keys: List[str] = []
+        for entry in entries:
+            if entry["feed"] == feed:
+                key = self.entry_id_map.pop(entry["entry_id"], None)
+                if key is not None:
+                    del_keys.append(key)
         if del_keys:
             self.announce_db.delete_batch(del_keys)
             return True
