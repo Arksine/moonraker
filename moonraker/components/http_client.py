@@ -32,10 +32,7 @@ if TYPE_CHECKING:
     from io import BufferedWriter
     StrOrPath = Union[str, pathlib.Path]
 
-# Configure the http client to use the pycurl based implementation
-AsyncHTTPClient.configure(
-    "tornado.curl_httpclient.CurlAsyncHTTPClient",
-    defaults=dict(user_agent="Moonraker"))
+AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
 
 GITHUB_PREFIX = "https://api.github.com/"
 
