@@ -34,16 +34,16 @@ etree.register_namespace("moonlight", MOONLIGHT_URL)
 class Announcements:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.config = config
         self.entry_mgr = EntryManager(config)
         self.eventloop = self.server.get_event_loop()
         self.update_timer = self.eventloop.register_timer(
             self._handle_update_timer
         )
         self.request_lock = asyncio.Lock()
+        self.dev_mode = config.getboolean("dev_mode", False)
         self.subscriptions: Dict[str, RssFeed] = {
-            "moonraker": RssFeed(config, "moonraker", self.entry_mgr),
-            "klipper": RssFeed(config, "klipper", self.entry_mgr)
+            "moonraker": RssFeed("moonraker", self.entry_mgr, self.dev_mode),
+            "klipper": RssFeed("klipper", self.entry_mgr, self.dev_mode)
         }
         self.stored_feeds: List[str] = []
         sub_list: List[str] = config.getlist("subscriptions", [])
@@ -53,7 +53,9 @@ class Announcements:
             if sub in self.subscriptions:
                 continue
             self.configured_feeds.append(sub)
-            self.subscriptions[sub] = RssFeed(config, sub, self.entry_mgr)
+            self.subscriptions[sub] = RssFeed(
+                sub, self.entry_mgr, self.dev_mode
+            )
 
         self.server.register_endpoint(
             "/server/announcements/list", ["GET"],
@@ -90,7 +92,7 @@ class Announcements:
         for name in stored_feeds:
             if name in self.subscriptions:
                 continue
-            feed = RssFeed(self.config, name, self.entry_mgr)
+            feed = RssFeed(name, self.entry_mgr, self.dev_mode)
             self.subscriptions[name] = feed
         async with self.request_lock:
             await self.entry_mgr.initialize()
@@ -173,7 +175,7 @@ class Announcements:
         result = "skipped"
         if action == "POST":
             if name not in self.subscriptions:
-                feed = RssFeed(self.config, name, self.entry_mgr)
+                feed = RssFeed(name, self.entry_mgr, self.dev_mode)
                 self.subscriptions[name] = feed
                 await feed.initialize()
                 changed = await feed.update_entries()
@@ -377,29 +379,27 @@ class EntryManager:
 
 class RssFeed:
     def __init__(
-        self, config: ConfigHelper, name: str, entry_mgr: EntryManager
+        self, name: str, entry_mgr: EntryManager, dev_mode: bool
     ) -> None:
-        self.server = config.get_server()
+        self.server = entry_mgr.server
         self.name = name
         self.entry_mgr = entry_mgr
         self.client: HttpClient = self.server.lookup_component("http_client")
-        database: MoonrakerDatabase
-        database = self.server.lookup_component("database")
-        self.moon_db = database.wrap_namespace("moonraker")
+        self.database: MoonrakerDatabase
+        self.database = self.server.lookup_component("database")
         self.xml_file = f"{self.name}.xml"
         self.asset_url = f"{MOONLIGHT_URL}/assets/{self.xml_file}"
         self.last_modified: int = 0
         self.etag: Optional[str] = None
         self.dev_xml_path: Optional[pathlib.Path] = None
-        dev_mode = config.getboolean("dev_mode", False)
         if dev_mode:
             res_dir = pathlib.Path(__file__).parent.parent.parent.resolve()
             res_path = res_dir.joinpath(".devel/announcement_xml")
             self.dev_xml_path = res_path.joinpath(self.xml_file)
 
     async def initialize(self) -> None:
-        self.etag = await self.moon_db.get(
-            f"announcements.{self.name}.etag", None
+        self.etag = await self.database.get_item(
+            "moonraker", f"announcements.{self.name}.etag", None
         )
 
     async def update_entries(self) -> bool:
@@ -428,10 +428,17 @@ class RssFeed:
             return ""
         # update etag
         self.etag = resp.etag
-        if self.etag is not None:
-            self.moon_db[f"announcements.{self.name}.etag"] = resp.etag
-        else:
-            self.moon_db.pop(f"announcements.{self.name}.etag", None)
+        try:
+            if self.etag is not None:
+                self.database.insert_item(
+                    "moonraker", f"announcements.{self.name}.etag", resp.etag
+                )
+            else:
+                self.database.delete_item(
+                    "moonraker", f"announcements.{self.name}.etag",
+                )
+        except self.server.error:
+            pass
         return resp.text
 
     async def _fetch_local_folder(self) -> str:
