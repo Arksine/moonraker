@@ -302,8 +302,7 @@ class UpdateManager:
                                           ) -> str:
         async with self.cmd_request_lock:
             app_name = ""
-            self.cmd_helper.set_update_info('full', id(web_request),
-                                            full_complete=False)
+            self.cmd_helper.set_update_info('full', id(web_request))
             self.cmd_helper.notify_update_response(
                 "Preparing full software update...")
             try:
@@ -489,6 +488,7 @@ class CommandHelper:
         # Update In Progress Tracking
         self.cur_update_app: Optional[str] = None
         self.cur_update_id: Optional[int] = None
+        self.full_update: bool = False
         self.full_complete: bool = False
 
     def get_server(self) -> Server:
@@ -506,20 +506,21 @@ class CommandHelper:
     def is_debug_enabled(self) -> bool:
         return self.debug_enabled
 
-    def set_update_info(self,
-                        app: str,
-                        uid: int,
-                        full_complete: bool = True
-                        ) -> None:
+    def set_update_info(self, app: str, uid: int) -> None:
         self.cur_update_app = app
         self.cur_update_id = uid
-        self.full_complete = full_complete
+        self.full_update = app == "full"
+        self.full_complete = not self.full_update
+
+    def is_full_update(self) -> bool:
+        return self.full_update
 
     def set_full_complete(self, complete: bool = False):
         self.full_complete = complete
 
     def clear_update_info(self) -> None:
         self.cur_update_app = self.cur_update_id = None
+        self.full_update = False
         self.full_complete = False
 
     def is_app_updating(self, app_name: str) -> bool:
@@ -570,7 +571,9 @@ class CommandHelper:
         resp = resp.strip()
         if isinstance(resp, bytes):
             resp = resp.decode()
-        done = is_complete and self.full_complete
+        done = is_complete
+        if self.full_update:
+            done &= self.full_complete
         notification = {
             'message': resp,
             'application': self.cur_update_app,
