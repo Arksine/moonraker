@@ -27,6 +27,7 @@ from typing import (
     Any,
     Awaitable,
     Optional,
+    Set,
     Tuple,
     Type,
     Union,
@@ -324,10 +325,13 @@ class UpdateManager:
                 kupdater = self.updaters.get('klipper')
                 if isinstance(kupdater, AppDeploy):
                     self.klippy_identified_evt = asyncio.Event()
-                    klippy_updated = True
+                    check_restart = True
                     if not await self._check_need_reinstall(app_name):
-                        klippy_updated = await kupdater.update()
-                    if klippy_updated:
+                        check_restart = await kupdater.update()
+                    if self.cmd_helper.needs_service_restart(app_name):
+                        await kupdater.restart_service()
+                        check_restart = True
+                    if check_restart:
                         self.cmd_helper.notify_update_response(
                             "Waiting for Klippy to reconnect (this may take"
                             " up to 2 minutes)...")
@@ -344,8 +348,11 @@ class UpdateManager:
 
                 # Update Moonraker
                 app_name = 'moonraker'
+                moon_updater = cast(AppDeploy, self.updaters["moonraker"])
                 if not await self._check_need_reinstall(app_name):
-                    await self.updaters['moonraker'].update()
+                    await moon_updater.update()
+                if self.cmd_helper.needs_service_restart(app_name):
+                    await moon_updater.restart_service()
                 self.cmd_helper.set_full_complete(True)
                 self.cmd_helper.notify_update_response(
                     "Full Update Complete", is_complete=True)
@@ -490,6 +497,7 @@ class CommandHelper:
         self.cur_update_id: Optional[int] = None
         self.full_update: bool = False
         self.full_complete: bool = False
+        self.pending_service_restarts: Set[str] = set()
 
     def get_server(self) -> Server:
         return self.server
@@ -511,9 +519,17 @@ class CommandHelper:
         self.cur_update_id = uid
         self.full_update = app == "full"
         self.full_complete = not self.full_update
+        self.pending_service_restarts.clear()
 
     def is_full_update(self) -> bool:
         return self.full_update
+
+    def add_pending_restart(self, svc_name: str) -> None:
+        self.pending_service_restarts.add(svc_name)
+
+    def remove_pending_restart(self, svc_name: str) -> None:
+        if svc_name in self.pending_service_restarts:
+            self.pending_service_restarts.remove(svc_name)
 
     def set_full_complete(self, complete: bool = False):
         self.full_complete = complete
@@ -522,6 +538,10 @@ class CommandHelper:
         self.cur_update_app = self.cur_update_id = None
         self.full_update = False
         self.full_complete = False
+        self.pending_service_restarts.clear()
+
+    def needs_service_restart(self, svc_name: str) -> bool:
+        return svc_name in self.pending_service_restarts
 
     def is_app_updating(self, app_name: str) -> bool:
         return self.cur_update_app == app_name

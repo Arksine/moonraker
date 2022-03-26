@@ -9,6 +9,7 @@ import pathlib
 import shutil
 import hashlib
 import json
+import logging
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -79,8 +80,29 @@ class AppDeploy(BaseDeploy):
             self.venv_args = config.get('venv_args', None)
 
         self.info_tags: List[str] = config.getlist("info_tags", [])
-        self.is_service = config.getboolean("is_system_service", True)
-
+        self.managed_services: List[str] = []
+        svc_default = []
+        if config.getboolean("is_system_service", True):
+            svc_default.append(self.name)
+        svc_choices = [self.name, "klipper", "moonraker"]
+        services: List[str] = config.getlist(
+            "managed_services", svc_default, separator=None
+        )
+        for svc in services:
+            if svc not in svc_choices:
+                raw = " ".join(services)
+                self.server.add_warning(
+                    f"[{config.get_name()}]: Option 'restart_action: {raw}' "
+                    f"contains an invalid value '{svc}'.  All values must be "
+                    f"one of the following choices: {svc_choices}"
+                )
+                break
+        for svc in svc_choices:
+            if svc in services and svc not in self.managed_services:
+                self.managed_services.append(svc)
+        logging.debug(
+            f"Extension {self.name} managed services: {self.managed_services}"
+        )
         # We need to fetch all potential options for an Application.  Not
         # all options apply to each subtype, however we can't limit the
         # options in children if we want to switch between channels and
@@ -167,25 +189,30 @@ class AppDeploy(BaseDeploy):
         raise NotImplementedError
 
     async def restart_service(self):
-        if not self.is_service:
-            self.notify_status(
-                "Application not configured as service, skipping restart")
+        if not self.managed_services:
             return
-        if self.name == "moonraker":
-            # Launch restart async so the request can return
-            # before the server restarts
-            event_loop = self.server.get_event_loop()
-            event_loop.delay_callback(.1, self._do_restart)
-        else:
-            await self._do_restart()
+        is_full = self.cmd_helper.is_full_update()
+        for svc in self.managed_services:
+            if is_full and svc != self.name:
+                self.notify_status(f"Service {svc} restart postponed...")
+                self.cmd_helper.add_pending_restart(svc)
+                continue
+            self.cmd_helper.remove_pending_restart(svc)
+            self.notify_status(f"Restarting service {svc}...")
+            if svc == "moonraker":
+                # Launch restart async so the request can return
+                # before the server restarts
+                event_loop = self.server.get_event_loop()
+                event_loop.delay_callback(.1, self._do_restart, svc)
+            else:
+                await self._do_restart(svc)
 
-    async def _do_restart(self) -> None:
-        self.notify_status("Restarting Service...")
+    async def _do_restart(self, svc_name: str) -> None:
         machine: Machine = self.server.lookup_component("machine")
         try:
-            await machine.do_service_action("restart", self.name)
+            await machine.do_service_action("restart", svc_name)
         except Exception:
-            if self.name == "moonraker":
+            if svc_name == "moonraker":
                 # We will always get an error when restarting moonraker
                 # from within the child process, so ignore it
                 return
