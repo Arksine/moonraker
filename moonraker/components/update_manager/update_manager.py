@@ -9,13 +9,13 @@ import asyncio
 import os
 import pathlib
 import logging
-import sys
 import shutil
 import zipfile
 import time
 import tempfile
 import re
 from thirdparty.packagekit import enums as PkEnum
+from . import base_config
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
@@ -51,13 +51,6 @@ if TYPE_CHECKING:
     from dbus_next.aio import ProxyInterface
     JsonType = Union[List[Any], Dict[str, Any]]
 
-MOONRAKER_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "../../.."))
-SUPPLEMENTAL_CFG_PATH = os.path.join(
-    os.path.dirname(__file__), "update_manager.conf")
-KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
-KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
-
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL = 3600.
 # Perform auto refresh no later than 4am
@@ -73,46 +66,30 @@ class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.app_config = config.read_supplemental_config(
-            SUPPLEMENTAL_CFG_PATH)
-        auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
         self.channel = config.get('channel', "dev")
         if self.channel not in ["dev", "beta"]:
             raise config.error(
                 f"Unsupported channel '{self.channel}' in section"
                 " [update_manager]")
+        self.app_config = base_config.get_base_configuration(
+            config, self.channel
+        )
+        auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
         self.cmd_helper = CommandHelper(config)
         self.updaters: Dict[str, BaseDeploy] = {}
         if config.getboolean('enable_system_updates', True):
             self.updaters['system'] = PackageDeploy(config, self.cmd_helper)
-        db: DBComp = self.server.lookup_component('database')
-        kpath = db.get_item("moonraker", "update_manager.klipper_path",
-                            KLIPPER_DEFAULT_PATH).result()
-        kenv_path = db.get_item("moonraker", "update_manager.klipper_exec",
-                                KLIPPER_DEFAULT_EXEC).result()
-        self.updaters['moonraker'] = get_deploy_class(MOONRAKER_PATH)(
-            self.app_config[f"update_manager moonraker"], self.cmd_helper,
-            {
-                'channel': self.channel,
-                'path': MOONRAKER_PATH,
-                'executable': sys.executable
-            }
-        )
+        mcfg = self.app_config["moonraker"]
+        kcfg = self.app_config["klipper"]
+        mclass = get_deploy_class(mcfg.get("path"))
+        self.updaters['moonraker'] = mclass(mcfg, self.cmd_helper)
+        kclass = BaseDeploy
         if (
-            os.path.exists(kpath) and
-            os.path.exists(kenv_path)
+            os.path.exists(kcfg.get("path")) and
+            os.path.exists(kcfg.get("env"))
         ):
-            self.updaters['klipper'] = get_deploy_class(kpath)(
-                self.app_config[f"update_manager klipper"], self.cmd_helper,
-                {
-                    'channel': self.channel,
-                    'path': kpath,
-                    'executable': kenv_path
-                }
-            )
-        else:
-            self.updaters['klipper'] = BaseDeploy(
-                self.app_config[f"update_manager klipper"], self.cmd_helper)
+            kclass = get_deploy_class(kcfg.get("path"))
+        self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
 
         # TODO: The below check may be removed when invalid config options
         # raise a config error.
@@ -135,8 +112,8 @@ class UpdateManager:
                 self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
             elif client_type in ["git_repo", "zip", "zip_beta"]:
                 path = os.path.expanduser(cfg.get('path'))
-                self.updaters[name] = get_deploy_class(path)(
-                    cfg, self.cmd_helper)
+                dclass = get_deploy_class(path)
+                self.updaters[name] = dclass(cfg, self.cmd_helper)
             else:
                 raise config.error(
                     f"Invalid type '{client_type}' for section [{section}]")
@@ -215,14 +192,12 @@ class UpdateManager:
         db: DBComp = self.server.lookup_component('database')
         db.insert_item("moonraker", "update_manager.klipper_path", kpath)
         db.insert_item("moonraker", "update_manager.klipper_exec", executable)
+        kcfg = self.app_config["klipper"]
+        kcfg.set_option("path", kpath)
+        kcfg.set_option("env", executable)
         need_notification = not isinstance(kupdater, AppDeploy)
-        self.updaters['klipper'] = get_deploy_class(kpath)(
-            self.app_config[f"update_manager klipper"], self.cmd_helper,
-            {
-                'channel': self.channel,
-                'path': kpath,
-                'executable': executable
-            })
+        kclass = get_deploy_class(kpath)
+        self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
         async with self.cmd_request_lock:
             umdb = self.cmd_helper.get_umdb()
             await umdb.pop('klipper', None)

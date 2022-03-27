@@ -35,12 +35,8 @@ RINFO_KEYS = [
 ]
 
 class ZipDeploy(AppDeploy):
-    def __init__(self,
-                 config: ConfigHelper,
-                 cmd_helper: CommandHelper,
-                 app_params: Optional[Dict[str, Any]] = None
-                 ) -> None:
-        super().__init__(config, cmd_helper, app_params)
+    def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
+        super().__init__(config, cmd_helper)
         self.official_repo: str = "?"
         self.owner: str = "?"
         # Extract repo from origin for validation
@@ -60,7 +56,7 @@ class ZipDeploy(AppDeploy):
 
     @staticmethod
     async def from_application(app: AppDeploy) -> ZipDeploy:
-        new_app = ZipDeploy(app.config, app.cmd_helper, app.app_params)
+        new_app = ZipDeploy(app.config, app.cmd_helper)
         await new_app.reinstall()
         return new_app
 

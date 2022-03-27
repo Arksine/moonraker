@@ -8,7 +8,6 @@ from __future__ import annotations
 import pathlib
 import shutil
 import hashlib
-import json
 import logging
 from .base_deploy import BaseDeploy
 
@@ -28,7 +27,7 @@ if TYPE_CHECKING:
 
 CHANNEL_TO_TYPE = {
     "stable": "zip",
-    "beta": "zip_beta",
+    "beta": "git_repo",
     "dev": "git_repo"
 }
 TYPE_TO_CHANNEL = {
@@ -38,29 +37,17 @@ TYPE_TO_CHANNEL = {
 }
 
 class AppDeploy(BaseDeploy):
-    def __init__(self,
-                 config: ConfigHelper,
-                 cmd_helper: CommandHelper,
-                 app_params: Optional[Dict[str, Any]]
-                 ) -> None:
+    def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
+        super().__init__(config, cmd_helper, prefix="Application")
         self.config = config
-        self.app_params = app_params
-        cfg_hash = self._calc_config_hash()
-        super().__init__(config, cmd_helper, prefix="Application",
-                         cfg_hash=cfg_hash)
         self.debug = self.cmd_helper.is_debug_enabled()
-        if app_params is not None:
-            self.channel: str = app_params['channel']
-            self.path: pathlib.Path = pathlib.Path(
-                app_params['path']).expanduser().resolve()
-            executable: Optional[str] = app_params['executable']
-            self.type = CHANNEL_TO_TYPE[self.channel]
-        else:
-            self.type = config.get('type')
-            self.channel = TYPE_TO_CHANNEL[self.type]
-            self.path = pathlib.Path(
-                config.get('path')).expanduser().resolve()
-            executable = config.get('env', None)
+        self.type = config.get('type')
+        self.channel = config.get(
+            "channel", TYPE_TO_CHANNEL[self.type]
+        )
+        self.path = pathlib.Path(
+            config.get('path')).expanduser().resolve()
+        executable = config.get('env', None)
         if self.channel not in CHANNEL_TO_TYPE.keys():
             raise config.error(
                 f"Invalid Channel '{self.channel}' for config "
@@ -135,15 +122,6 @@ class AppDeploy(BaseDeploy):
         self.need_channel_update = storage.get('need_channel_upate', False)
         self._is_valid = storage.get('is_valid', False)
         return storage
-
-    def _calc_config_hash(self) -> str:
-        cfg_hash = self.config.get_hash()
-        if self.app_params is None:
-            return cfg_hash.hexdigest()
-        else:
-            app_bytes = json.dumps(self.app_params).encode()
-            cfg_hash.update(app_bytes)
-            return cfg_hash.hexdigest()
 
     def _verify_path(self,
                      config: ConfigHelper,

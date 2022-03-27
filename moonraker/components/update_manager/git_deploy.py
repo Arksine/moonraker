@@ -28,12 +28,8 @@ if TYPE_CHECKING:
     from .update_manager import CommandHelper
 
 class GitDeploy(AppDeploy):
-    def __init__(self,
-                 config: ConfigHelper,
-                 cmd_helper: CommandHelper,
-                 app_params: Optional[Dict[str, Any]] = None
-                 ) -> None:
-        super().__init__(config, cmd_helper, app_params)
+    def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
+        super().__init__(config, cmd_helper)
         self.repo = GitRepo(cmd_helper, self.path, self.name,
                             self.origin, self.moved_origin)
         if self.type != 'git_repo':
@@ -41,7 +37,7 @@ class GitDeploy(AppDeploy):
 
     @staticmethod
     async def from_application(app: AppDeploy) -> GitDeploy:
-        new_app = GitDeploy(app.config, app.cmd_helper, app.app_params)
+        new_app = GitDeploy(app.config, app.cmd_helper)
         await new_app.reinstall()
         return new_app
 
