@@ -72,6 +72,9 @@ class ConfigHelper:
     def has_option(self, option: str) -> bool:
         return self.config.has_option(self.section, option)
 
+    def set_option(self, option: str, value: str) -> None:
+        self.config[self.section][option] = value
+
     def get_name(self) -> str:
         return self.section
 
