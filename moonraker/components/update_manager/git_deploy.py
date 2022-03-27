@@ -205,9 +205,14 @@ GIT_ENV_VARS = {
     'GIT_HTTP_LOW_SPEED_TIME ': "20"
 }
 GIT_MAX_LOG_CNT = 100
-GIT_LOG_FMT = \
+GIT_LOG_FMT = (
     "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
+)
 GIT_OBJ_ERR = "fatal: loose object"
+GIT_REF_FMT = (
+    "'%(if)%(*objecttype)%(then)%(*objecttype) (*objectname)"
+    "%(else)%(objecttype) %(objectname)%(end) %(refname)'"
+)
 
 class GitRepo:
     def __init__(self,
@@ -634,23 +639,19 @@ class GitRepo:
     async def get_tagged_commits(self) -> Dict[str, Any]:
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self._run_git_cmd(f"show-ref --tags -d")
+            resp = await self._run_git_cmd(
+                "for-each-ref --count=10 --sort='-creatordate' "
+                f"--format={GIT_REF_FMT} 'refs/tags'")
             tagged_commits: Dict[str, Any] = {}
-            tags = [tag.strip() for tag in resp.split('\n') if tag.strip()]
-            for tag in tags:
-                sha, ref = tag.split(' ', 1)
-                ref = ref.split('/')[-1]
-                if ref[-3:] == "^{}":
-                    # Dereference this commit and overwrite any existing tag
-                    ref = ref[:-3]
-                    tagged_commits[ref] = sha
-                elif ref not in tagged_commits:
-                    # This could be a lightweight tag pointing to a commit.  If
-                    # it is an annotated tag it will be overwritten by the
-                    # dereferenced tag
-                    tagged_commits[ref] = sha
+            for line in resp.split('\n'):
+                parts = line.strip().split()
+                if len(parts) != 3 or parts[0] != "commit":
+                    continue
+                sha, ref = parts[1:]
+                tag = ref.split('/')[-1]
+                tagged_commits[sha] = tag
             # Return tagged commits as SHA keys mapped to tag values
-            return {v: k for k, v in tagged_commits.items()}
+            return tagged_commits
 
     def get_repo_status(self) -> Dict[str, Any]:
         return {
