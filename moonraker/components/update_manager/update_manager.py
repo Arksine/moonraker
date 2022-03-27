@@ -90,6 +90,14 @@ class UpdateManager:
                             KLIPPER_DEFAULT_PATH).result()
         kenv_path = db.get_item("moonraker", "update_manager.klipper_exec",
                                 KLIPPER_DEFAULT_EXEC).result()
+        self.updaters['moonraker'] = get_deploy_class(MOONRAKER_PATH)(
+            self.app_config[f"update_manager moonraker"], self.cmd_helper,
+            {
+                'channel': self.channel,
+                'path': MOONRAKER_PATH,
+                'executable': sys.executable
+            }
+        )
         if (
             os.path.exists(kpath) and
             os.path.exists(kenv_path)
@@ -100,17 +108,11 @@ class UpdateManager:
                     'channel': self.channel,
                     'path': kpath,
                     'executable': kenv_path
-                })
+                }
+            )
         else:
             self.updaters['klipper'] = BaseDeploy(
                 self.app_config[f"update_manager klipper"], self.cmd_helper)
-        self.updaters['moonraker'] = get_deploy_class(MOONRAKER_PATH)(
-            self.app_config[f"update_manager moonraker"], self.cmd_helper,
-            {
-                'channel': self.channel,
-                'path': MOONRAKER_PATH,
-                'executable': sys.executable
-            })
 
         # TODO: The below check may be removed when invalid config options
         # raise a config error.
