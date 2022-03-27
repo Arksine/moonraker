@@ -2309,13 +2309,13 @@ POST /server/job_queue/job?filenames=job1.gcode,job2.gcode,subdir/job3.gocde
 
 ```http
 POST /server/job_queue/job
-Content-Type: applicaton/json
+Content-Type: application/json
 
 {
     "filenames": [
         "job1.gcode",
         "job2.gcode",
-        "subdir/job3.gocde",
+        "subdir/job3.gcode"
     ]
 }
 ```
@@ -2329,7 +2329,7 @@ JSON-RPC request:
         "filenames": [
             "job1.gcode",
             "job2.gcode",
-            "subir/job3.gocde",
+            "subir/job3.gcode"
         ]
     },
     "id": 4654
@@ -3552,7 +3552,7 @@ An object containing OctoPrint Printer status
 HTTP request:
 ```http
 POST /api/printer/command
-Content-Type: applicaton/json
+Content-Type: application/json
 
 {
     "commands": ["G28"]
