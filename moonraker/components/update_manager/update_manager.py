@@ -1117,7 +1117,20 @@ class WebClientDeploy(BaseDeploy):
         self.owner = self.repo.split("/", 1)[0]
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
         self.type = config.get('type')
-        self.channel = "stable" if self.type == "web" else "beta"
+        def_channel = "stable"
+        if self.type == "web_beta":
+            def_channel = "beta"
+            self.server.add_warning(
+                f"Config Section [{config.get_name()}], option 'type': "
+                "web_beta', value 'web_beta' is deprecated.  Set 'type' to "
+                "web and 'channel' to 'beta'")
+            self.type = "zip"
+        self.channel = config.get("channel", def_channel)
+        if self.channel not in ["stable", "beta"]:
+            raise config.error(
+                f"Invalid Channel '{self.channel}' for config "
+                f"section [{config.get_name()}], type: {self.type}. "
+                f"Must be one of the following: stable, beta")
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.persistent_files: List[str] = []
         pfiles = config.getlist('persistent_files', None)
