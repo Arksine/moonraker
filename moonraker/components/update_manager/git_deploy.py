@@ -30,8 +30,10 @@ if TYPE_CHECKING:
 class GitDeploy(AppDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
         super().__init__(config, cmd_helper)
-        self.repo = GitRepo(cmd_helper, self.path, self.name,
-                            self.origin, self.moved_origin)
+        self.repo = GitRepo(
+            cmd_helper, self.path, self.name, self.origin,
+            self.moved_origin, self.channel
+        )
         if self.type != 'git_repo':
             self.need_channel_update = True
 
@@ -215,12 +217,14 @@ GIT_REF_FMT = (
 )
 
 class GitRepo:
+    tag_r = re.compile(r"(v?\d+\.\d+\.\d+(-(alpha|beta)(\.\d+)?)?)(-\d+)?")
     def __init__(self,
                  cmd_helper: CommandHelper,
                  git_path: pathlib.Path,
                  alias: str,
                  origin_url: str,
-                 moved_origin_url: Optional[str]
+                 moved_origin_url: Optional[str],
+                 channel: str
                  ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -246,6 +250,7 @@ class GitRepo:
         self.git_operation_lock = asyncio.Lock()
         self.fetch_timeout_handle: Optional[asyncio.Handle] = None
         self.fetch_input_recd: bool = False
+        self.is_beta = channel == "beta"
 
     def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
@@ -336,30 +341,6 @@ class GitRepo:
                     continue
                 self.branches.append(branch)
 
-            self.current_commit = await self.rev_parse("HEAD")
-            self.upstream_commit = await self.rev_parse(
-                f"{self.git_remote}/{self.git_branch}")
-            current_version = await self.describe(
-                "--always --tags --long --dirty")
-            self.full_version_string = current_version.strip()
-            upstream_version = await self.describe(
-                f"{self.git_remote}/{self.git_branch} "
-                "--always --tags --long")
-
-            # Get the latest tag as a fallback for shallow clones
-            tag: Optional[str] = None
-            try:
-                tagged_hash = await self.rev_list("--tags --max-count=1")
-                tag = await self.describe(f"--tags {tagged_hash}")
-            except Exception:
-                pass
-            else:
-                tag_match = re.match(r"v\d+\.\d+\.\d+", tag)
-                if tag_match is not None:
-                    tag = tag_match.group()
-                else:
-                    tag = None
-
             # Parse GitHub Owner from URL
             owner_match = re.match(r"https?://[^/]+/([^/]+)", self.upstream_url)
             self.git_owner = "?"
@@ -371,28 +352,15 @@ class GitRepo:
             self.git_repo_name = "?"
             if repo_match is not None:
                 self.git_repo_name = repo_match.group(1)
-
-            # check if Repository is dirty
-            self.dirty = current_version.endswith("dirty")
-
-            # Parse Version Info
-            versions: List[str] = []
-            for ver in [current_version, upstream_version]:
-                tag_version = "?"
-                ver_match = re.match(r"v\d+\.\d+\.\d+-\d+", ver)
-                if ver_match:
-                    tag_version = ver_match.group()
-                elif tag is not None:
-                    if len(versions) == 0:
-                        count = await self.rev_list(f"{tag}..HEAD --count")
-                        full_ver = f"{tag}-{count}-g{ver}-shallow"
-                        self.full_version_string = full_ver
-                    else:
-                        count = await self.rev_list(
-                            f"{tag}..{self.upstream_commit} --count")
-                    tag_version = f"{tag}-{count}"
-                versions.append(tag_version)
-            self.current_version, self.upstream_version = versions
+            self.current_commit = await self.rev_parse("HEAD")
+            git_desc = await self.describe(
+                "--always --tags --long --dirty")
+            self.full_version_string = git_desc.strip()
+            self.dirty = git_desc.endswith("dirty")
+            if self.is_beta:
+                await self._get_beta_versions(git_desc)
+            else:
+                await self._get_dev_versions(git_desc)
 
             # Get Commits Behind
             self.commits_behind = []
@@ -418,6 +386,64 @@ class GitRepo:
         finally:
             self.init_evt.set()
             self.init_evt = None
+
+    async def _get_dev_versions(self, current_version: str) -> None:
+        self.upstream_commit = await self.rev_parse(
+            f"{self.git_remote}/{self.git_branch}")
+        upstream_version = await self.describe(
+            f"{self.git_remote}/{self.git_branch} "
+            "--always --tags --long")
+        # Get the latest tag as a fallback for shallow clones
+        commit, tag = await self._parse_latest_tag()
+        # Parse Version Info
+        versions: List[str] = []
+        for ver in [current_version, upstream_version]:
+            tag_version = "?"
+            ver_match = self.tag_r.match(ver)
+            if ver_match:
+                tag_version = ver_match.group()
+            elif tag != "?":
+                if len(versions) == 0:
+                    count = await self.rev_list(f"{tag}..HEAD --count")
+                    full_ver = f"{tag}-{count}-g{ver}-shallow"
+                    self.full_version_string = full_ver
+                else:
+                    count = await self.rev_list(
+                        f"{tag}..{self.upstream_commit} --count")
+                tag_version = f"{tag}-{count}"
+            versions.append(tag_version)
+        self.current_version, self.upstream_version = versions
+
+    async def _get_beta_versions(self, current_version: str) -> None:
+        upstream_commit, upstream_tag = await self._parse_latest_tag()
+        ver_match = self.tag_r.match(current_version)
+        if ver_match:
+            current_version = ver_match.group(1)
+        elif upstream_tag != "?":
+            count = await self.rev_list(f"{upstream_tag}..HEAD --count")
+            full_ver = f"{upstream_tag}-{count}-g{current_version}-shallow"
+            self.full_version_string = full_ver
+            current_version = upstream_tag
+        self.upstream_commit = upstream_commit
+        if current_version == upstream_tag:
+            self.upstream_commit = self.current_commit
+        self.current_version = current_version
+        self.upstream_version = upstream_tag
+
+    async def _parse_latest_tag(self) -> Tuple[str, str]:
+        commit = tag = "?"
+        try:
+            commit = await self.rev_list("--tags --max-count=1")
+            tag = await self.describe(f"--tags {commit}")
+        except Exception:
+            pass
+        else:
+            tag_match = self.tag_r.match(tag)
+            if tag_match is not None:
+                tag = tag_match.group(1)
+            else:
+                tag = "?"
+        return commit, tag
 
     async def wait_for_init(self) -> None:
         if self.init_evt is not None:
@@ -543,7 +569,9 @@ class GitRepo:
                 "detached HEAD")
         cmd = "pull --progress"
         if self.cmd_helper.is_debug_enabled():
-            cmd = "pull --progress --rebase"
+            cmd = f"{cmd} --rebase"
+        if self.is_beta:
+            cmd = f"{cmd} {self.git_remote} {self.upstream_commit}"
         async with self.git_operation_lock:
             await self._run_git_cmd_async(cmd)
 
@@ -587,8 +615,12 @@ class GitRepo:
     async def checkout(self, branch: Optional[str] = None) -> None:
         self._verify_repo()
         async with self.git_operation_lock:
-            branch = branch or f"{self.git_remote}/{self.git_branch}"
-            await self._run_git_cmd(f"checkout {branch} -q")
+            if branch is None:
+                if self.is_beta:
+                    branch = self.upstream_commit
+                else:
+                    branch = f"{self.git_remote}/{self.git_branch}"
+            await self._run_git_cmd(f"checkout -q {branch}")
 
     async def run_fsck(self) -> None:
         async with self.git_operation_lock:
@@ -621,9 +653,12 @@ class GitRepo:
         if self.is_current():
             return []
         async with self.git_operation_lock:
-            branch = f"{self.git_remote}/{self.git_branch}"
+            if self.is_beta:
+                ref = self.upstream_commit
+            else:
+                ref = f"{self.git_remote}/{self.git_branch}"
             resp = await self._run_git_cmd(
-                f"log {self.current_commit}..{branch} "
+                f"log {self.current_commit}..{ref} "
                 f"--format={GIT_LOG_FMT} --max-count={GIT_MAX_LOG_CNT}")
             commits_behind: List[Dict[str, Any]] = []
             for log_entry in resp.split('\x1E'):
