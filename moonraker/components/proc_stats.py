@@ -36,6 +36,7 @@ STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 CPU_STAT_PATH = "/proc/stat"
+UPTIME_STAT_PATH = "/proc/uptime"
 STAT_UPDATE_TIME = 1.
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
@@ -75,6 +76,7 @@ class ProcStats:
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
         self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
+        self.sys_uptime_file = pathlib.Path(UPTIME_STAT_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
@@ -90,6 +92,7 @@ class ProcStats:
         self.last_net_stats: Dict[str, Dict[str, Any]] = {}
         self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
         self.cpu_usage: Dict[str, float] = {}
+        self.sys_uptime: float = 0.00
         self.stat_callbacks: List[STAT_CALLBACK] = []
 
     async def component_init(self) -> None:
@@ -115,6 +118,7 @@ class ProcStats:
             'cpu_temp': cpu_temp,
             'network': self.last_net_stats,
             'system_cpu_usage': self.cpu_usage,
+            'system_uptime': self.sys_uptime,
             'websocket_connections': websocket_count
         }
 
@@ -161,6 +165,7 @@ class ProcStats:
             'cpu_temp': cpu_temp,
             'network': net,
             'system_cpu_usage': self.cpu_usage,
+            'system_uptime': self.sys_uptime,
             'websocket_connections': websocket_count
         })
         if not self.update_sequence % THROTTLE_CHECK_INTERVAL:
@@ -203,6 +208,7 @@ class ProcStats:
         temp = self._get_cpu_temperature()
         net_stats = self._get_net_stats()
         self._update_cpu_stats()
+        self._get_sys_uptime()
         return temp, mem, units, net_stats
 
     def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
@@ -259,6 +265,13 @@ class ProcStats:
                         100 * (cpu_used / cpu_delta), 2)
                 self.cpu_usage = cpu_usage
                 self.last_cpu_stats[name] = (cpu_sum, cpu_idle)
+        except Exception:
+            pass
+
+    def _get_sys_uptime(self) -> None:
+        try:
+            ret = self.sys_uptime_file.read_text().split()
+            self.sys_uptime = float(ret[0])
         except Exception:
             pass
 
