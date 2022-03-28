@@ -37,6 +37,7 @@ RINFO_KEYS = [
 class ZipDeploy(AppDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
         super().__init__(config, cmd_helper)
+        self.need_channel_update = self.type != "zip"
         self.official_repo: str = "?"
         self.owner: str = "?"
         # Extract repo from origin for validation
@@ -62,7 +63,6 @@ class ZipDeploy(AppDeploy):
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
-        self.detected_type: str = storage.get('detected_type', "?")
         self.source_checksum: str = storage.get("source_checksum", "?")
         self.pristine = storage.get('pristine', False)
         self.verified = storage.get('verified', False)
@@ -81,7 +81,6 @@ class ZipDeploy(AppDeploy):
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
         storage.update({
-            'detected_type': self.detected_type,
             'source_checksum': self.source_checksum,
             'pristine': self.pristine,
             'verified': self.verified,
@@ -135,15 +134,10 @@ class ZipDeploy(AppDeploy):
         for key in RINFO_KEYS:
             if key not in release_info:
                 self._add_error(f"Missing release info item: {key}")
-        self.detected_type = "?"
-        self.need_channel_update = self.channel == "dev"
         if 'channel' in release_info:
             local_channel = release_info['channel']
             if self.channel == "stable" and local_channel == "beta":
                 self.need_channel_update = True
-            self.detected_type = "zip"
-            if local_channel == "beta":
-                self.detected_type = "zip_beta"
         self.full_version = release_info.get('long_version', "?")
         self.short_version = self._get_tag_version(
             release_info.get('git_version', ""))
@@ -419,7 +413,7 @@ class ZipDeploy(AppDeploy):
         # client functionality.  In the future it would be
         # good to report values that are specifc
         status.update({
-            'detected_type': self.detected_type,
+            'detected_type': "zip",
             'remote_alias': "origin",
             'branch': "master",
             'owner': self.owner,

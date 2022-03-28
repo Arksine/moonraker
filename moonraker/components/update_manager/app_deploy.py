@@ -25,10 +25,9 @@ if TYPE_CHECKING:
     from .update_manager import CommandHelper
     from ..machine import Machine
 
-CHANNEL_TO_TYPE = {
-    "stable": "zip",
-    "beta": "git_repo",
-    "dev": "git_repo"
+SUPPORTED_CHANNELS = {
+    "zip": ["stable", "beta"],
+    "git_repo": ["dev", "beta"]
 }
 TYPE_TO_CHANNEL = {
     "zip": "stable",
@@ -41,17 +40,30 @@ class AppDeploy(BaseDeploy):
         super().__init__(config, cmd_helper, prefix="Application")
         self.config = config
         self.debug = self.cmd_helper.is_debug_enabled()
-        self.type = config.get('type')
+        type_choices = list(TYPE_TO_CHANNEL.keys())
+        self.type = config.get('type').lower()
+        if self.type not in type_choices:
+            raise config.error(
+                f"Config Error: Section [{config.get_name()}], Option "
+                f"'type: {self.type}': value must be one "
+                f"of the following choices: {type_choices}"
+            )
         self.channel = config.get(
             "channel", TYPE_TO_CHANNEL[self.type]
         )
+        if self.type == "zip_beta":
+            self.server.add_warning(
+                f"Config Section [{config.get_name()}], Option 'type: "
+                "zip_beta', value 'zip_beta' is deprecated.  Set 'type' "
+                "to zip and 'channel' to 'beta'")
+            self.type = "zip"
         self.path = pathlib.Path(
             config.get('path')).expanduser().resolve()
         executable = config.get('env', None)
-        if self.channel not in CHANNEL_TO_TYPE.keys():
+        if self.channel not in SUPPORTED_CHANNELS[self.type]:
             raise config.error(
                 f"Invalid Channel '{self.channel}' for config "
-                f"section [{config.get_name()}]")
+                f"section [{config.get_name()}], type: {self.type}")
         self._verify_path(config, 'path', self.path)
         self.executable: Optional[pathlib.Path] = None
         self.pip_exe: Optional[pathlib.Path] = None
