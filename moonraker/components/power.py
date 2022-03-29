@@ -977,7 +977,7 @@ class SmartThings(HTTPDevice):
         url = self.client.escape_url(url)
         response = await self.client.request(
             method, url, body=body, headers=headers,
-            enable_cache=False
+            attempts=3, enable_cache=False
         )
         msg = f"Error sending SmartThings command: {command}"
         response.raise_for_status(msg)
@@ -1052,7 +1052,7 @@ class HomeAssistant(HTTPDevice):
         url = self.client.escape_url(url)
         response = await self.client.request(
             method, url, body=body, headers=headers,
-            enable_cache=False
+            attempts=3, enable_cache=False
         )
         msg = f"Error sending homeassistant command: {command}"
         response.raise_for_status(msg)
