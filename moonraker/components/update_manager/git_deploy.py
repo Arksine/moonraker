@@ -142,7 +142,7 @@ class GitDeploy(AppDeploy):
 
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
-        storage.update(self.repo.get_persisent_data())
+        storage.update(self.repo.get_persistent_data())
         return storage
 
     async def _pull_repo(self) -> None:
@@ -251,6 +251,10 @@ class GitRepo:
         self.fetch_timeout_handle: Optional[asyncio.Handle] = None
         self.fetch_input_recd: bool = False
         self.is_beta = channel == "beta"
+        self.bound_repo = None
+        if self.is_beta and self.alias == "klipper":
+            # Bind Klipper Updates Moonraker
+            self.bound_repo = "moonraker"
 
     def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
@@ -270,8 +274,9 @@ class GitRepo:
         self.git_messages: List[str] = storage.get('git_messages', [])
         self.commits_behind: List[Dict[str, Any]] = storage.get(
             'commits_behind', [])
+        self.tag_data: Dict[str, Any] = storage.get('tag_data', {})
 
-    def get_persisent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> Dict[str, Any]:
         return {
             'repo_valid': self.valid_git_repo,
             'git_owner': self.git_owner,
@@ -288,7 +293,8 @@ class GitRepo:
             'dirty': self.dirty,
             'head_detached': self.head_detached,
             'git_messages': self.git_messages,
-            'commits_behind': self.commits_behind
+            'commits_behind': self.commits_behind,
+            'tag_data': self.tag_data
         }
 
     async def initialize(self, need_fetch: bool = True) -> None:
@@ -357,7 +363,8 @@ class GitRepo:
                 "--always --tags --long --dirty")
             self.full_version_string = git_desc.strip()
             self.dirty = git_desc.endswith("dirty")
-            if self.is_beta:
+            self.tag_data = {}
+            if self.is_beta and self.bound_repo is None:
                 await self._get_beta_versions(git_desc)
             else:
                 await self._get_dev_versions(git_desc)
@@ -413,22 +420,71 @@ class GitRepo:
                 tag_version = f"{tag}-{count}"
             versions.append(tag_version)
         self.current_version, self.upstream_version = versions
+        if self.bound_repo is not None:
+            await self._get_bound_versions(self.current_version)
 
     async def _get_beta_versions(self, current_version: str) -> None:
         upstream_commit, upstream_tag = await self._parse_latest_tag()
         ver_match = self.tag_r.match(current_version)
+        current_tag = "?"
         if ver_match:
-            current_version = ver_match.group(1)
+            current_tag = ver_match.group(1)
         elif upstream_tag != "?":
             count = await self.rev_list(f"{upstream_tag}..HEAD --count")
             full_ver = f"{upstream_tag}-{count}-g{current_version}-shallow"
             self.full_version_string = full_ver
-            current_version = upstream_tag
+            current_tag = upstream_tag
         self.upstream_commit = upstream_commit
-        if current_version == upstream_tag:
+        if current_tag == upstream_tag:
             self.upstream_commit = self.current_commit
-        self.current_version = current_version
+        self.current_version = current_tag
         self.upstream_version = upstream_tag
+        # Check the tag for annotations
+        self.tag_data = await self.get_tag_data(upstream_tag)
+        if self.tag_data:
+            # TODO: need to force a repo update by resetting its refresh time?
+            logging.debug(
+                f"Git Repo {self.alias}: Found Tag Annotation: {self.tag_data}"
+            )
+
+    async def _get_bound_versions(self, current_version: str) -> None:
+        if self.bound_repo is None:
+            return
+        umdb = self.cmd_helper.get_umdb()
+        key = f"{self.bound_repo}.tag_data"
+        tag_data: Dict[str, Any] = await umdb.get(key, {})
+        if tag_data.get("repo", "") != self.alias:
+            logging.info(
+                f"Git Repo {self.alias}: Invalid bound tag data: "
+                f"{tag_data}"
+            )
+            return
+        if tag_data["branch"] != self.git_branch:
+            logging.info(f"Git Repo {self.alias}: Repo not on bound branch")
+            return
+        bound_vlist: List[int] = tag_data["version_as_list"]
+        current_vlist = self._convert_semver(current_version)
+        if self.full_version_string.endswith("shallow"):
+            # We need to recalculate the commit count for shallow clones
+            if current_vlist[:4] == bound_vlist[:4]:
+                commit = tag_data["commit"]
+                tag = current_version.split("-")[0]
+                try:
+                    resp = await self.rev_list(f"{tag}..{commit} --count")
+                    count = int(resp)
+                except Exception:
+                    count = 0
+                bound_vlist[4] == count
+        if current_vlist < bound_vlist:
+            bound_ver_match = self.tag_r.match(tag_data["version"])
+            if bound_ver_match is not None:
+                self.upstream_commit = tag_data["commit"]
+                self.upstream_version = bound_ver_match.group()
+        else:
+            # The repo is currently ahead of the bound tag/commmit,
+            # so pin the version
+            self.upstream_commit = self.current_commit
+            self.upstream_version = self.current_version
 
     async def _parse_latest_tag(self) -> Tuple[str, str]:
         commit = tag = "?"
@@ -518,7 +574,10 @@ class GitRepo:
             f"Upstream Version: {self.upstream_version}\n"
             f"Is Dirty: {self.dirty}\n"
             f"Is Detached: {self.head_detached}\n"
-            f"Commits Behind: {len(self.commits_behind)}")
+            f"Commits Behind: {len(self.commits_behind)}\n"
+            f"Tag Data: {self.tag_data}\n"
+            f"Bound Repo: {self.bound_repo}"
+        )
 
     def report_invalids(self, primary_branch: str) -> List[str]:
         invalids: List[str] = []
@@ -559,7 +618,6 @@ class GitRepo:
         async with self.git_operation_lock:
             await self._run_git_cmd_async(
                 f"fetch {self.git_remote} --prune --progress")
-
 
     async def pull(self) -> None:
         self._verify_repo()
@@ -688,6 +746,28 @@ class GitRepo:
             # Return tagged commits as SHA keys mapped to tag values
             return tagged_commits
 
+    async def get_tag_data(self, tag: str) -> Dict[str, Any]:
+        self._verify_repo()
+        async with self.git_operation_lock:
+            cmd = f"tag -l --format='%(contents)' {tag}"
+            resp = (await self._run_git_cmd(cmd)).strip()
+            req_fields = ["repo", "branch", "version", "commit"]
+            tag_data: Dict[str, Any] = {}
+            for line in resp.split("\n"):
+                parts = line.strip().split(":", 1)
+                if len(parts) != 2:
+                    continue
+                field, value = parts
+                field = field.strip()
+                if field not in req_fields:
+                    continue
+                tag_data[field] = value.strip()
+            if len(tag_data) != len(req_fields):
+                return {}
+            vlist = self._convert_semver(tag_data["version"])
+            tag_data["version_as_list"] = vlist
+            return tag_data
+
     def get_repo_status(self) -> Dict[str, Any]:
         return {
             'detected_type': "git_repo",
@@ -719,6 +799,22 @@ class GitRepo:
 
     def is_current(self) -> bool:
         return self.current_commit == self.upstream_commit
+
+    def _convert_semver(self, version: str) -> List[int]:
+        ver_match = self.tag_r.match(version)
+        if ver_match is None:
+            return []
+        try:
+            tag = ver_match.group(1)
+            core = tag.split("-")[0]
+            if core[0] == "v":
+                core = core[1:]
+            base_ver = [int(part) for part in core.split(".")]
+            base_ver.append({"alpha": 0, "beta": 1}.get(ver_match.group(3), 2))
+            base_ver.append(int(ver_match.group(5)[1:]))
+        except Exception:
+            return []
+        return base_ver
 
     async def _check_lock_file_exists(self, remove: bool = False) -> bool:
         lock_path = self.git_path.joinpath(".git/index.lock")
