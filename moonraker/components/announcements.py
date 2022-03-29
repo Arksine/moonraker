@@ -416,7 +416,8 @@ class RssFeed:
         if self.etag is not None:
             headers["If-None-Match"] = self.etag
         resp = await self.client.get(
-            self.asset_url, headers, enable_cache=False
+            self.asset_url, headers, attempts=5,
+            retry_pause_time=.5, enable_cache=False,
         )
         if resp.has_error():
             logging.info(
