@@ -118,6 +118,9 @@ class Server:
     def get_api_version(self) -> Tuple[int, int, int]:
         return API_VERSION
 
+    def get_warnings(self) -> List[str]:
+        return self.warnings
+
     def is_running(self) -> bool:
         return self.server_running
 
