@@ -734,6 +734,9 @@ class Authorization:
                 "X-CRSF-Token, Authorization, X-Access-Token, "
                 "X-Api-Key")
 
+    def cors_enabled(self) -> bool:
+        return self.cors_domains is not None
+
     def close(self) -> None:
         self.prune_timer.stop()
 
