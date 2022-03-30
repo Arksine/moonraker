@@ -1,0 +1,180 @@
+<html>
+   <head>
+        <title>Moonraker {{ version }}</title>
+        <style>
+            body {
+                background-color: rgb(48, 48, 48);
+                color: rgb(230, 230, 230);
+                font-family: Arial, Helvetica, sans-serif;
+                margin: 0px;
+            }
+            .nav-bar {
+                width: 100%;
+                overflow: hidden;
+            }
+            .nav-bar a {
+                float: right;
+                text-align: center;
+                padding: .5em .75em;
+                font-size: 1.2em;
+                text-decoration: none;
+                color: rgb(230, 230, 230);
+            }
+            .intro {
+                font-size: 1.1em;
+                margin-top: 7rem;
+                margin-left: auto;
+                margin-right: auto;
+                width: 60%;
+            }
+            .intro h1 {
+                font-size: 2.2rem;
+                text-align: center;
+            }
+            .status {
+                display: flex;
+                margin-top: 2rem;
+                margin-left: auto;
+                margin-right: auto;
+                width: 80%;
+                align-items: baseline;
+                justify-content: center;
+                column-gap: 1.5rem;
+                row-gap: 1.5rem;
+                flex-wrap: wrap;
+            }
+            .container {
+                background:none;
+                border: 0px;
+                border-radius: .75rem;
+                width: 25rem;
+            }
+            .container h1 {
+                background-color: #225353;
+                text-align: center;
+                line-height: 2.2rem;
+                font-size: 1.1rem;
+                height: 2.2rem;
+                margin: 0;
+                border-top-left-radius: .75rem;
+                border-top-right-radius: .75rem;
+            }
+            .container .content{
+                background-color: #1a1a1a;
+                border-bottom-left-radius: .75rem;
+                border-bottom-right-radius: .75rem;
+                padding: .5rem;
+            }
+            .container .entry {
+                display: inline-block;
+                width: 100%;
+            }
+            .container .entry:not(:last-child) {
+                margin-bottom: .4rem;
+            }
+            .container .value {
+                float: right;
+                display: inline;
+            }
+            .container ul {
+                margin: 0px;
+                padding-left: 1rem;
+            }
+            .container li:not(:last-child) {
+                margin-bottom: .4rem;
+            }
+            .messages {
+                margin-top: 2rem;
+                width: 51.5rem;
+                padding: .5rem;
+            }
+            .warning h1 {
+                animation: glow 1s ease-in-out infinite alternate;
+            }
+
+            @keyframes glow {
+                from {
+                    background-color: #225353;
+                }
+                to {
+                    background-color: rgb(160, 64, 8);
+                }
+            }
+        </style>
+   </head>
+   <body>
+       <main>
+            <div class="nav-bar">
+                <a href="https://github.com/Arksine/moonraker">GitHub</a>
+                <a href="https://moonraker.readthedocs.io">Documentation</a>
+            </div>
+            <div class="intro">
+                <h1>Welcome to Moonraker</h1>
+                <p>You may have intended
+                to navigate to one of Moonraker's front ends, if so check
+                that you entered the correct port in the address bar.
+                </p>
+            </div>
+            <div class="status">
+                <div class="container">
+                    <h1>Authorization</h1>
+                    <div class="content">
+                        <div class="entry">
+                            Request IP:
+                            <div class="value">{{ ip_address }}</div>
+                        </div>
+                        <div class="entry">
+                            Trusted:
+                            <div class="value">{{ authorized}}</div>
+                        </div>
+                        <div class="entry">
+                            CORS Enabled:
+                            <div class="value">{{ cors_enabled }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="container">
+                    <h1>Status</h1>
+                    <div class="content">
+                        <div class="entry">
+                            Version:
+                            <div class="value">{{ version }}</div>
+                        </div>
+                        <div class="entry">
+                            Websocket Count:
+                            <div class="value">{{ ws_count }}</div>
+                        </div>
+                        <div class="entry">
+                            Klipper State:
+                            <div class="value">{{ klippy_state }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% if summary %}
+                    <div class="container messages">
+                        <h1>Summary</h1>
+                        <div class="content">
+                            <ul>
+                            {% for item in summary %}
+                                <li>{{ item }}</li>
+                            {% end %}
+                            </ul>
+                        </div>
+                    </div>
+                {% end %}
+                {% if warnings %}
+                    <div class="container messages warning">
+                        <h1>Warnings</h1>
+                        <div class="content">
+                            <ul>
+                            {% for warn in warnings %}
+                                <li>{{ warn }}</li>
+                            {% end %}
+                            </ul>
+                        </div>
+                    </div>
+                {% end %}
+            </div>
+       </main>
+   </body>
+ </html>
