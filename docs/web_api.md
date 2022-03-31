@@ -1182,6 +1182,7 @@ An object in the following format:
         "cpu2": 1.02,
         "cpu3": 1
     },
+    "system_uptime": 2876970.38089603,
     "websocket_connections": 4
 }
 ```
