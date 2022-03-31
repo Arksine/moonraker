@@ -106,17 +106,25 @@ class UpdateManager:
             cfg = config[section]
             name = section.split()[-1]
             if name in self.updaters:
-                raise config.error(f"Client repo {name} already added")
-            client_type = cfg.get("type")
-            if client_type in ["web", "web_beta"]:
-                self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
-            elif client_type in ["git_repo", "zip", "zip_beta"]:
-                path = os.path.expanduser(cfg.get('path'))
-                dclass = get_deploy_class(path)
-                self.updaters[name] = dclass(cfg, self.cmd_helper)
-            else:
-                raise config.error(
-                    f"Invalid type '{client_type}' for section [{section}]")
+                self.server.add_warning(
+                    f"[update_manager]: Extension {name} already added"
+                )
+                continue
+            try:
+                client_type = cfg.get("type")
+                if client_type in ["web", "web_beta"]:
+                    self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
+                elif client_type in ["git_repo", "zip", "zip_beta"]:
+                    path = os.path.expanduser(cfg.get('path'))
+                    dclass = get_deploy_class(path)
+                    self.updaters[name] = dclass(cfg, self.cmd_helper)
+                else:
+                    self.server.add_warning(
+                        f"Invalid type '{client_type}' for section [{section}]")
+            except Exception as e:
+                self.server.add_warning(
+                    f"[update_manager]: Failed to load extension {name}: {e}"
+                )
 
         self.cmd_request_lock = asyncio.Lock()
         self.klippy_identified_evt: Optional[asyncio.Event] = None
