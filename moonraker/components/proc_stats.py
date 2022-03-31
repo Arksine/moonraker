@@ -115,6 +115,7 @@ class ProcStats:
             'cpu_temp': cpu_temp,
             'network': self.last_net_stats,
             'system_cpu_usage': self.cpu_usage,
+            'system_uptime': time.clock_gettime(time.CLOCK_BOOTTIME),
             'websocket_connections': websocket_count
         }
 
