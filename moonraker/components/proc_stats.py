@@ -36,7 +36,6 @@ STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 CPU_STAT_PATH = "/proc/stat"
-UPTIME_STAT_PATH = "/proc/uptime"
 STAT_UPDATE_TIME = 1.
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
@@ -76,7 +75,6 @@ class ProcStats:
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
         self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
-        self.sys_uptime_file = pathlib.Path(UPTIME_STAT_PATH)
         self.server.register_endpoint(
             "/machine/proc_stats", ["GET"], self._handle_stat_request)
         self.server.register_event_handler(
@@ -270,8 +268,7 @@ class ProcStats:
 
     def _get_sys_uptime(self) -> None:
         try:
-            ret = self.sys_uptime_file.read_text().split()
-            self.sys_uptime = float(ret[0])
+            self.sys_uptime = time.clock_gettime(time.CLOCK_BOOTTIME)
         except Exception:
             pass
 
