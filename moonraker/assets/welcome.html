@@ -43,13 +43,13 @@
                 row-gap: 1.5rem;
                 flex-wrap: wrap;
             }
-            .container {
+            .card {
                 background:none;
                 border: 0px;
                 border-radius: .75rem;
                 width: 25rem;
             }
-            .container h1 {
+            .card h1 {
                 background-color: #225353;
                 text-align: center;
                 line-height: 2.2rem;
@@ -59,34 +59,35 @@
                 border-top-left-radius: .75rem;
                 border-top-right-radius: .75rem;
             }
-            .container .content{
+            .card .content{
                 background-color: #1a1a1a;
                 border-bottom-left-radius: .75rem;
                 border-bottom-right-radius: .75rem;
                 padding: .5rem;
             }
-            .container .entry {
+            .card .entry {
                 display: inline-block;
                 width: 100%;
             }
-            .container .entry:not(:last-child) {
+            .card .entry:not(:last-child) {
                 margin-bottom: .4rem;
             }
-            .container .value {
+            .card .value {
                 float: right;
                 display: inline;
-            }
-            .container ul {
-                margin: 0px;
-                padding-left: 1rem;
-            }
-            .container li:not(:last-child) {
-                margin-bottom: .4rem;
             }
             .messages {
                 margin-top: 2rem;
                 width: 51.5rem;
                 padding: .5rem;
+            }
+            .messages .item {
+                padding: .5rem;
+                background: #242424;
+                border-radius: .4rem;
+            }
+            .messages .item:not(:last-child) {
+                margin-bottom: .5rem;
             }
             .warning h1 {
                 animation: glow 1s ease-in-out infinite alternate;
@@ -116,7 +117,7 @@
                 </p>
             </div>
             <div class="status">
-                <div class="container">
+                <article class="card">
                     <h1>Authorization</h1>
                     <div class="content">
                         <div class="entry">
@@ -132,8 +133,8 @@
                             <div class="value">{{ cors_enabled }}</div>
                         </div>
                     </div>
-                </div>
-                <div class="container">
+                </article>
+                <article class="card">
                     <h1>Status</h1>
                     <div class="content">
                         <div class="entry">
@@ -149,30 +150,27 @@
                             <div class="value">{{ klippy_state }}</div>
                         </div>
                     </div>
-                </div>
+                </article>
                 {% if summary %}
-                    <div class="container messages">
+                    <article class="card messages">
                         <h1>Summary</h1>
                         <div class="content">
-                            <ul>
                             {% for item in summary %}
-                                <li>{{ item }}</li>
+                                <article class="item">{{ item }}</article>
                             {% end %}
-                            </ul>
                         </div>
-                    </div>
+                    </article>
                 {% end %}
+
                 {% if warnings %}
-                    <div class="container messages warning">
+                    <article class="card messages warning">
                         <h1>Warnings</h1>
                         <div class="content">
-                            <ul>
                             {% for warn in warnings %}
-                                <li>{{ warn }}</li>
+                                <article class="item">{{ warn }}</article>
                             {% end %}
-                            </ul>
                         </div>
-                    </div>
+                    </article>
                 {% end %}
             </div>
        </main>
