@@ -86,8 +86,30 @@
                 background: #242424;
                 border-radius: .4rem;
             }
+            .messages .announcement {
+                cursor: pointer;
+            }
             .messages .item:not(:last-child) {
                 margin-bottom: .5rem;
+            }
+            .messages .item a {
+                font-size: 1.2rem;
+                margin: 0;
+                font-weight: 600;
+                padding: 0rem;
+                margin-bottom: .1rem;
+                text-decoration: None;
+                color: rgb(230, 230, 230);
+            }
+            .messages .item:hover {
+                background-color: #3f3f3f;
+            }
+            .messages .item:hover a,
+            .messages .item a:hover {
+                color: rgb(235, 199, 0);
+            }
+            .messages .item p {
+                font-size: 1rem;
             }
             .warning h1 {
                 animation: glow 1s ease-in-out infinite alternate;
@@ -102,6 +124,24 @@
                 }
             }
         </style>
+        <script>
+            function setClickable(id) {
+                const item = document.querySelector(`#${id}`);
+                const primary_link = item.querySelector("a");
+                const clickable = Array.from(item.querySelectorAll(".clickable"));
+                clickable.forEach((element) => {
+                    element.addEventListener("click", (evt) => {
+                        evt.stopPropagation();
+                    })
+                });
+                function onItemClicked(evt) {
+                    const noTextSelected = !window.getSelection().toString();
+                    if (noTextSelected)
+                        primary_link.click();
+                }
+                item.addEventListener("click", onItemClicked);
+            }
+        </script>
    </head>
    <body>
        <main>
@@ -161,7 +201,24 @@
                         </div>
                     </article>
                 {% end %}
-
+                {% if announcements %}
+                <article class="card messages">
+                    <h1>Announcements</h1>
+                    <div class="content">
+                        {% for item in announcements %}
+                            {% set id = "announcement-" + item["entry_id"].replace("/", "-") %}
+                            <article class="item announcement" id="{{ id }}">
+                                {% set url = item["url"] %}
+                                <a href="{{ url }}" class="clickable">{{ item["title"] }}</a>
+                                <p>{{ item["description"] }}</p>
+                            </article>
+                            <script>
+                                setClickable("{{ id }}");
+                            </script>
+                        {% end %}
+                    </div>
+                </article>
+                {% end %}
                 {% if warnings %}
                     <article class="card messages warning">
                         <h1>Warnings</h1>
