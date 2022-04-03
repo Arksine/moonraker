@@ -234,13 +234,22 @@ class Announcements:
         self.entry_mgr.add_entry(entry)
         return entry
 
-    async def remove_internal_announcment(self, entry_id: str) -> None:
+    async def remove_announcement(self, entry_id: str) -> None:
         ret = await self.entry_mgr.remove_entry(entry_id)
         if ret is not None:
             entries = await self.entry_mgr.list_entries()
             self.server.send_event(
                 "announcements:entries_updated", {"entries": entries}
             )
+    async def dismiss_announcement(
+        self, entry_id, wake_time: Optional[int] = None
+    ) -> None:
+        await self.entry_mgr.dismiss_entry(entry_id, wake_time)
+
+    async def get_announcements(
+        self, include_dismissed: bool = False
+    ) -> List[Dict[str, Any]]:
+        return await self.entry_mgr.list_entries(include_dismissed)
 
     def close(self):
         self.entry_mgr.close()
