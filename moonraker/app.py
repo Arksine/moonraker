@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from klippy_connection import KlippyConnection as Klippy
     from components.file_manager.file_manager import FileManager
+    from components.announcements import Announcements
     from io import BufferedReader
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
@@ -199,7 +200,8 @@ class MoonrakerApp:
             'server': self.server,
             'default_handler_class': AuthorizedErrorHandler,
             'default_handler_args': {},
-            'log_function': self.log_request
+            'log_function': self.log_request,
+            'compiled_template_cache': False,
         }
 
         # Set up HTTP only requests
@@ -940,7 +942,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
 
-    def get(self) -> None:
+    async def get(self) -> None:
         summary: List[str] = []
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
@@ -999,6 +1001,8 @@ class WelcomeHandler(tornado.web.RequestHandler):
                 "that the klipper service has successfully started and that "
                 "its unix is enabled."
             )
+        ancomp: Announcements
+        ancomp = self.server.lookup_component("announcements")
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         context: Dict[str, Any] = {
             "ip_address": self.request.remote_ip,
@@ -1008,7 +1012,8 @@ class WelcomeHandler(tornado.web.RequestHandler):
             "ws_count": wsm.get_count(),
             "klippy_state": kstate,
             "warnings": self.server.get_warnings(),
-            "summary": summary
+            "summary": summary,
+            "announcements": await ancomp.get_announcements()
         }
         self.render("welcome.html", **context)
 
