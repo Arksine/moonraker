@@ -1108,37 +1108,59 @@ enable_packagekit: True
 #   updates will be processed via PackageKit over D-Bus.  When set to False
 #   the "apt cli" fallback will be used.  The default is True.
 channel: dev
-#   The update channel applied to Klipper and Moonraker.  May be 'dev'
-#   which will fetch updates using git, or 'beta' which will fetch
-#   zipped beta releases.  Note that this channel does not apply to
-#   client updates, a client's update channel is determined by its
-#   'type' option.  When this option is changed the next "update" will
-#   swap channels, any untracked files in the application's path will be
-#   removed during this process.  The default is dev.
+#   The update channel applied to Klipper and Moonraker.  May dev or
+#   beta.  The dev channel will update to the latest commit pushed
+#   to the repo, whereas the beta channel will update to the lastest
+#   commit tagged by Moonraker.  The beta channel will see less frequent
+#   updates and should be more stable.  Users on the beta channel will have
+#   more opportunity to review breaking changes before choosing to update.
+#   The default is dev.
 ```
 
-#### Client Configuration
-This allows client programs such as Fluidd, KlipperScreen, and Mainsail to be
-updated in addition to klipper, moonraker, and the system os. Repos that have
-been modified or cloned from unofficial sources are not supported.
+#### Extension Configuration
+The update manager may be configured manage additional software, hencefore
+referred to as "extensions".  In general terms, an extension may be defined
+as a piece of software hosted on GitHub.  The update manager breaks this
+down into 3 basic types:
 
-Moonraker supports updates for "application" based clients and "web" based
-clients. Each are detailed separately below.
+- `web`: A front end such as Mainsail or Fluidd.  Updates are deployed via
+  zip files created for GitHub releases.
+- `git_repo`:  Used to manage extensions that do not fall into the "web" type.
+  Updates are deployed directly via git.  Typical usage scenarios are to
+  manage extensions installed a service such as KliperScreen, repos containing
+  configuration, and unofficial 3rd party extensions for Klipper and Moonraker.
+  See the note below in reference to unofficial extensions.
+- `zip`:  This can be used to mananged various extensions like the `git_repo`
+  type, however its updates are deployed via zipped GitHub releases.
+
+!!! Note
+    To benefit the community Moonraker facilitates updates for 3rd party
+    "Klippy Extras" and "Moonraker Components".  While many of these
+    extensions are well developed and tested, users should always be
+    careful when using such extensions.  Moonraker and Klipper provide
+    no official support for such extensions, thus users experiencing an
+    issue should not create bug reports on the Klipper or Moonraker issue
+    trackers without first reproducing the issue with all unofficial
+    extensions disabled.
+
+#####  Web type (front-end) configuration
 
 ```ini
 # moonraker.conf
 
-[update_manager client_name]
+[update_manager extension_name]
 type: web
-#   The client type.  For web clients this should be 'web', or 'web_beta'.
-#   The 'web_beta' type will enable updates for releases tagged with
-#   "prerelease" on GitHub.  This parameter must be provided.
+#   The management type.  This should always be "web" for browser based
+#   front ends. This parameter must be provided.
+channel: stable
+#   May be stable or beta.  When beta is specified "pre-release"
+#   updates are available.
 repo:
-#   This is the GitHub repo of the client, in the format of user/client.
+#   This is the GitHub repo of the front end, in the format of owner/repo_name.
 #   For example, this could be set to fluidd-core/fluidd to update Fluidd or
 #   mainsail-crew/mainsail to update Mainsail.  This parameter must be provided.
 path:
-#   The path to the client's files on disk.  This parameter must be provided.
+#   The path to the front end's files on disk.  This parameter must be provided.
 persistent_files:
 #   A list of newline separated file names that should persist between
 #   updates.  This is useful for static configuration files, or perhaps
@@ -1147,19 +1169,18 @@ refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
 info_tags:
-#   Optional information tags about this application that are reported to
-#   clients as a list of strings. Each tag should be separated by a new line.
-#   For example:
+#   Optional information tags about this extensions that are reported via
+#   Moonraker's API as a list of strings. Each tag should be separated by
+#   a new line. For example:
 #       info_tags:
 #           desc=My Client App
 #           action=webcam_restart
-#   Clients my use these tags to perform additonal actions or display
-#   information, see your client documentation for details on configuration.
+#   Front ends may use these tags to perform additonal actions or display
+#   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
 ```
 
-This second example is for "applications".  These may be git repositories
-or zipped distributions.
+##### All other extensions
 
 !!! Note
     Git repos must have at least one tag for Moonraker to identify its
@@ -1170,13 +1191,22 @@ or zipped distributions.
 ```ini
 # moonraker.conf
 
-# service_name must be the name of the systemd service
-[update_manager service_name]
+# When defining a service, the "extension_name" must be the name of the
+# systemd service
+[update_manager extension_name]
 type: git_repo
-#   Can be git_repo, zip, or zip_beta.  See your the client's documentation
-#   for recommendations on which value to use.  Generally a git_repo is
-#   an applications "dev" channel, zip_beta is its "beta" channel, and zip
-#   is its "stable" channel.  This parameter must be provided.
+#   Can be git_repo or zip.  This value is set depending on how an extension
+#   chooses to deploy updates, see its documentation for details  This
+#   parameter must be provided.
+channel: dev
+#   The update channel.  The available value differs depending on the
+#   "type" option.
+#      type: git_repo - May be dev or beta.  The dev channel will update to
+#                       the latest pushed commit, whereas the beta channel
+#                       will update to the latest tagged commit.
+#      type: zip      - May be be stable or beta.  When beta is specified
+#                       "pre-release" updates are available.
+#   The default is dev.
 path:
 #   The absolute path to the client's files on disk. This parameter must be
 #   provided.
@@ -1192,11 +1222,11 @@ primary_branch:
 #   option allows clients to specify 'main', or their own unique name, as
 #   the branch used for repo validity checks.  The default is master.
 env:
-#   The path to the client's virtual environment executable on disk.  For
+#   The path to the extension's virtual environment executable on disk.  For
 #   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
 #   The default is no env, which disables updating python packages.
 requirements:
-#  This is the location in the repository to the client's virtual environment
+#  This is the location in the repository to the extension's python
 #  requirements file. This location is relative to the root of the repository.
 #  This parameter must be provided if the "env" option is set, otherwise it
 #  should be omitted.
@@ -1213,27 +1243,45 @@ enable_node_updates:
 host_repo:
 #   The GitHub repo in which zipped releases are hosted.  Note that this does
 #   not need to match the repository in the "origin" option, as it is possible
-#   to use a central GitHub repository to host multiple client builds.  As
+#   to use a central GitHub repository to host multiple extension builds.  As
 #   an example, Moonraker's repo hosts builds for both Moonraker and Klipper.
 #   This option defaults to the repo extracted from the "origin" option,
 #   however if the origin is not hosted on GitHub then this parameter must
 #   be provided.
 is_system_service: True
-#   If set to true the update manager will attempt to use systemctl to restart
-#   the service after an update has completed.  This can be set to flase for
-#   repos that are not installed as a service.  The default is True.
+#   This should be set to False for repos that are not installed as a service
+#   or do not need to restart a service after updates. This option sets the
+#   default value for the "managed_services" option.  When set to False,
+#   "managed_services" defaults to an empty list.  When set to True,
+#   "managed_services" defaults to a list containing a single item, a service
+#   matching the "extension_name" provided in the section header. The default
+#   is True.
+#   NOTE: In the future this option will be deprecated.  In preparation
+#   for this, extensions that are installed as service, such as "KlipperScreen"
+#   should ignore this option and set the "managed_services" option.
+managed_services:
+#   A list of one or more systemd services that must be restarted after an
+#   update is complete.  Multiple services must be separated by whitespace.
+#   Currently this option is restricted to the following values:
+#       <name>    - The name configured in the extension's section header.
+#                   If the section header is [update_manager KlipperScreen]
+#                   then KlipperScreen would be a valid value.
+#       klipper   - The klipper service will be restarted after an update
+#       moonraker - The moonraker service will be restarted after an update
+#   When this option is specified it overrides the "is_system_service" option.
+#   Thus it is not required to specify both, only one or the other.  The
+#   default depends on "is_system_service" as explained above.
 refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
 info_tags:
-#   Optional information tags about this application that are reported to
-#   clients as a list of strings. Each tag should be separated by a new line.
+#   Optional information tags about this application that will be reported
+#   front ends as a list of strings. Each tag should be separated by a new line.
 #   For example:
 #       info_tags:
 #           desc=Special Application
-#           klipper_restart
-#   Clients my use these tags to perform additonal actions or display
-#   information, see your client documentation for details on configuration.
+#   Front ends my use these tags to perform additonal actions or display
+#   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
 ```
 
