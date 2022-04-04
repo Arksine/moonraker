@@ -79,10 +79,14 @@ class ConfigHelper:
         return self.section
 
     def get_options(self) -> Dict[str, str]:
+        if not self.config.has_section(self.section):
+            return {}
         return dict(self.config[self.section])
 
     def get_hash(self) -> hashlib._Hash:
         hash = hashlib.sha256()
+        if not self.config.has_section(self.section):
+            return hash
         for option, val in self.config[self.section].items():
             hash.update(option.encode())
             hash.update(val.encode())
@@ -92,8 +96,6 @@ class ConfigHelper:
         return [s for s in self.sections() if s.startswith(prefix)]
 
     def getsection(self, section: str) -> ConfigHelper:
-        if section not in self.config:
-            raise ConfigError(f"No section [{section}] in config")
         return ConfigHelper(self.server, self.config, section,
                             self.orig_sections, self.parsed)
 
@@ -109,11 +111,9 @@ class ConfigHelper:
                     ) -> _T:
         try:
             val = func(self.section, option)
-        except configparser.NoOptionError:
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             if isinstance(default, SentinelClass):
-                raise ConfigError(
-                    f"No option found ({option}) in section [{self.section}]"
-                ) from None
+                raise ConfigError(str(e)) from None
             val = default
         except Exception:
             raise ConfigError(

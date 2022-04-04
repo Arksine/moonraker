@@ -228,8 +228,7 @@ class Server:
             return self.components[component_name]
         try:
             module = importlib.import_module("components." + component_name)
-            if component_name in config:
-                config = config[component_name]
+            config = config[component_name]
             load_func = getattr(module, "load_component")
             component = load_func(config)
         except Exception:
