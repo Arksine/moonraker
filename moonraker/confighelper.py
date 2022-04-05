@@ -47,11 +47,13 @@ class ConfigHelper:
                  server: Server,
                  config: configparser.ConfigParser,
                  section: str,
+                 orig_sects: List[str],
                  parsed: Dict[str, Dict[str, ConfigVal]] = {}
                  ) -> None:
         self.server = server
         self.config = config
         self.section = section
+        self.orig_sections = orig_sects
         self.parsed = parsed
         if self.section not in self.parsed:
             self.parsed[self.section] = {}
@@ -94,7 +96,8 @@ class ConfigHelper:
         return [s for s in self.sections() if s.startswith(prefix)]
 
     def getsection(self, section: str) -> ConfigHelper:
-        return ConfigHelper(self.server, self.config, section, self.parsed)
+        return ConfigHelper(self.server, self.config, section,
+                            self.orig_sections, self.parsed)
 
     def _get_option(self,
                     func: Callable[..., Any],
@@ -123,14 +126,16 @@ class ConfigHelper:
                     "deprecated, see the configuration documention "
                     "at https://moonraker.readthedocs.io")
             self._check_option(option, val, above, below, minval, maxval)
-        if (
-            val is None or
-            isinstance(val, (int, float, bool, str, dict, list))
-        ):
-            self.parsed[self.section][option] = val
-        else:
-            # If the item cannot be encoded to json serialize to a string
-            self.parsed[self.section][option] = str(val)
+        if self.section in self.orig_sections:
+            # Only track sections included in the original config
+            if (
+                val is None or
+                isinstance(val, (int, float, bool, str, dict, list))
+            ):
+                self.parsed[self.section][option] = val
+            else:
+                # If the item cannot be encoded to json serialize to a string
+                self.parsed[self.section][option] = str(val)
         return val
 
     def _check_option(self,
@@ -378,7 +383,7 @@ class ConfigHelper:
         except Exception:
             raise ConfigError("Error Reading Object")
         sections = sup_cfg.sections()
-        return ConfigHelper(self.server, sup_cfg, sections[0])
+        return ConfigHelper(self.server, sup_cfg, sections[0], sections)
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
@@ -391,7 +396,7 @@ class ConfigHelper:
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
         sections = sup_cfg.sections()
-        return ConfigHelper(self.server, sup_cfg, sections[0])
+        return ConfigHelper(self.server, sup_cfg, sections[0], sections)
 
     def write_config(self, file_obj: IO[str]) -> None:
         self.config.write(file_obj)
@@ -400,7 +405,7 @@ class ConfigHelper:
         return dict(self.parsed)
 
     def validate_config(self) -> None:
-        for sect in self.config.sections():
+        for sect in self.orig_sections:
             if sect not in self.parsed:
                 self.server.add_warning(
                     f"Unparsed config section [{sect}] detected.  This "
@@ -438,7 +443,7 @@ def get_configuration(server: Server,
     if not config.has_section('server'):
         raise ConfigError("No section [server] in config")
     orig_sections = config.sections()
-    return ConfigHelper(server, config, 'server')
+    return ConfigHelper(server, config, 'server', orig_sections)
 
 def backup_config(cfg_path: str) -> None:
     cfg = pathlib.Path(cfg_path).expanduser().resolve()
