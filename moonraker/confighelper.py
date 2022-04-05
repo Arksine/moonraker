@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
 SENTINEL = SentinelClass.get_instance()
+DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
 
 class ConfigError(Exception):
     pass
@@ -47,11 +48,13 @@ class ConfigHelper:
                  server: Server,
                  config: configparser.ConfigParser,
                  section: str,
-                 parsed: Dict[str, Dict[str, ConfigVal]] = {}
+                 parsed: Dict[str, Dict[str, ConfigVal]] = {},
+                 fallback_section: Optional[str] = None
                  ) -> None:
         self.server = server
         self.config = config
         self.section = section
+        self.fallback_section: Optional[str] = fallback_section
         self.parsed = parsed
         if self.section not in self.parsed:
             self.parsed[self.section] = {}
@@ -77,11 +80,16 @@ class ConfigHelper:
         return self.section
 
     def get_options(self) -> Dict[str, str]:
+        if self.section not in self.config:
+            return {}
         return dict(self.config[self.section])
 
     def get_hash(self) -> hashlib._Hash:
         hash = hashlib.sha256()
-        for option, val in self.config[self.section].items():
+        section = self.section
+        if self.section not in self.config:
+            return hash
+        for option, val in self.config[section].items():
             hash.update(option.encode())
             hash.update(val.encode())
         return hash
@@ -89,10 +97,12 @@ class ConfigHelper:
     def get_prefix_sections(self, prefix: str) -> List[str]:
         return [s for s in self.sections() if s.startswith(prefix)]
 
-    def getsection(self, section: str) -> ConfigHelper:
-        if section not in self.config:
-            raise ConfigError(f"No section [{section}] in config")
-        return ConfigHelper(self.server, self.config, section, self.parsed)
+    def getsection(
+        self, section: str, fallback: Optional[str] = None
+    ) -> ConfigHelper:
+        return ConfigHelper(
+            self.server, self.config, section, self.parsed, fallback
+        )
 
     def _get_option(self,
                     func: Callable[..., Any],
@@ -104,14 +114,21 @@ class ConfigHelper:
                     maxval: Optional[Union[int, float]] = None,
                     deprecate: bool = False
                     ) -> _T:
+        section = self.section
+        warn_fallback = False
+        if (
+            self.section not in self.config and
+            self.fallback_section is not None
+        ):
+            section = self.fallback_section
+            warn_fallback = True
         try:
-            val = func(self.section, option)
-        except configparser.NoOptionError:
+            val = func(section, option)
+        except (configparser.NoOptionError, configparser.NoSectionError) as e:
             if isinstance(default, SentinelClass):
-                raise ConfigError(
-                    f"No option found ({option}) in section [{self.section}]"
-                ) from None
+                raise ConfigError(str(e)) from None
             val = default
+            section = self.section
         except Exception:
             raise ConfigError(
                 f"Error parsing option ({option}) from "
@@ -119,19 +136,25 @@ class ConfigHelper:
         else:
             if deprecate:
                 self.server.add_warning(
-                    f"[{self.section}]: Option '{option}' in is "
+                    f"[{self.section}]: Option '{option}' is "
                     "deprecated, see the configuration documention "
-                    "at https://moonraker.readthedocs.io")
+                    f"at {DOCS_URL}/configuration")
+            if warn_fallback:
+                self.server.add_warning(
+                    f"[{section}]: Option '{option}' has been moved "
+                    f"to section [{self.section}].  Please correct your "
+                    f"configuration, see {DOCS_URL}/configuration for "
+                    f"detailed documentation."
+                )
             self._check_option(option, val, above, below, minval, maxval)
-        # Only track sections included in the original config
         if (
             val is None or
             isinstance(val, (int, float, bool, str, dict, list))
         ):
-            self.parsed[self.section][option] = val
+            self.parsed[section][option] = val
         else:
             # If the item cannot be encoded to json serialize to a string
-            self.parsed[self.section][option] = str(val)
+            self.parsed[section][option] = str(val)
         return val
 
     def _check_option(self,
