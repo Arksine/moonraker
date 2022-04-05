@@ -2,14 +2,6 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
-### April 4th 2022
-- It is no longer valid to configure core components in the
-  `[server]` section.  If you receive a warning please refer
-  to the [configuration documentation](https://moonraker.readthedocs.io/en/latest/configuration/)
-  and move the options to their correct section.  This is most
-  likely to affect options that have moved from the `[server]`
-  section to the `[file_manager]` and `[data_store]` sections.
-
 ### Feburary 22nd 2022
 - The `on_when_upload_queued` option for [power] devices has been
   deprecated in favor of `on_when_job_queued`.  As the new option
