@@ -162,7 +162,7 @@ class InternalTransport(APITransport):
         # Request arguments can be suppplied either through a dict object
         # or via keyword arugments
         args = request_arguments or kwargs
-        return await func(WebRequest(ep, args, action))
+        return await func(WebRequest(ep, dict(args), action))
 
 class MoonrakerApp:
     def __init__(self, config: ConfigHelper) -> None:
