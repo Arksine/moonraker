@@ -8,8 +8,6 @@ from __future__ import annotations
 import configparser
 import os
 import hashlib
-import shutil
-import filecmp
 import pathlib
 import re
 import logging
@@ -34,6 +32,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from components.gpio import GpioFactory, GpioOutputPin
     from components.template import TemplateFactory, JinjaTemplate
+    from io import TextIOWrapper
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
@@ -453,6 +452,30 @@ class ConfigHelper:
                         "failed to load.  In the future this will result "
                         "in a startup error.")
 
+    def create_backup(self):
+        cfg_path = self.server.get_app_args()["config_file"]
+        cfg = pathlib.Path(cfg_path).expanduser().resolve()
+        backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
+        backup_fp: Optional[TextIOWrapper] = None
+        try:
+            if backup.exists():
+                cfg_mtime: int = 0
+                for cfg_fname in set(self.file_section_map.keys()):
+                    cfg = pathlib.Path(cfg_fname)
+                    cfg_mtime = max(cfg_mtime, cfg.stat().st_mtime_ns)
+                backup_mtime = backup.stat().st_mtime_ns
+                if backup_mtime >= cfg_mtime:
+                    # Backup already exists and is current
+                    return
+            backup_fp = backup.open("w")
+            self.config.write(backup_fp)
+            logging.info(f"Backing up last working configuration to '{backup}'")
+        except Exception:
+            logging.exception("Failed to create a backup")
+        finally:
+            if backup_fp is not None:
+                backup_fp.close()
+
 def get_configuration(
     server: Server, app_args: Dict[str, Any]
 ) -> ConfigHelper:
@@ -514,18 +537,6 @@ def parse_config_file(
                 )
             config_files.extend(paths)
     return file_sections
-
-def backup_config(cfg_path: str) -> None:
-    cfg = pathlib.Path(cfg_path).expanduser().resolve()
-    backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
-    try:
-        if backup.exists() and filecmp.cmp(cfg, backup):
-            # Backup already exists and is current
-            return
-        shutil.copy2(cfg, backup)
-        logging.info(f"Backing up last working configuration to '{backup}'")
-    except Exception:
-        logging.exception("Failed to create a backup")
 
 def find_config_backup(cfg_path: str) -> Optional[str]:
     cfg = pathlib.Path(cfg_path).expanduser().resolve()

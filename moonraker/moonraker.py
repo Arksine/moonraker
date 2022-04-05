@@ -160,9 +160,7 @@ class Server:
             await asyncio.gather(*optional_comps)
 
         if not self.warnings:
-            cfg_file = self.app_args['config_file']
-            await self.event_loop.run_in_thread(
-                confighelper.backup_config, cfg_file)
+            await self.event_loop.run_in_thread(self.config.create_backup)
 
         if start_server:
             await self.start_server()
