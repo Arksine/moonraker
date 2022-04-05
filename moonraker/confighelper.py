@@ -48,7 +48,7 @@ class ConfigHelper:
                  server: Server,
                  config: configparser.ConfigParser,
                  section: str,
-                 parsed: Dict[str, Dict[str, ConfigVal]] = {},
+                 parsed: Dict[str, Dict[str, ConfigVal]],
                  fallback_section: Optional[str] = None
                  ) -> None:
         self.server = server
@@ -402,7 +402,7 @@ class ConfigHelper:
         except Exception:
             raise ConfigError("Error Reading Object")
         sections = sup_cfg.sections()
-        return ConfigHelper(self.server, sup_cfg, sections[0])
+        return ConfigHelper(self.server, sup_cfg, sections[0], {})
 
     def read_supplemental_config(self, file_name: str) -> ConfigHelper:
         cfg_file_path = os.path.normpath(os.path.expanduser(file_name))
@@ -415,7 +415,7 @@ class ConfigHelper:
         except Exception:
             raise ConfigError(f"Error Reading Config: '{cfg_file_path}'")
         sections = sup_cfg.sections()
-        return ConfigHelper(self.server, sup_cfg, sections[0])
+        return ConfigHelper(self.server, sup_cfg, sections[0], {})
 
     def write_config(self, file_obj: IO[str]) -> None:
         self.config.write(file_obj)
@@ -461,7 +461,7 @@ def get_configuration(server: Server,
         raise ConfigError(f"Error Reading Config: '{cfg_file_path}'") from e
     if not config.has_section('server'):
         raise ConfigError("No section [server] in config")
-    return ConfigHelper(server, config, 'server')
+    return ConfigHelper(server, config, 'server', {})
 
 def backup_config(cfg_path: str) -> None:
     cfg = pathlib.Path(cfg_path).expanduser().resolve()
