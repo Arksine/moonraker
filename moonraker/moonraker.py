@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
 
-API_VERSION = (1, 0, 3)
+API_VERSION = (1, 0, 4)
 
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
