@@ -1808,6 +1808,31 @@ body: {event_args[1].message}
 attach: http://192.168.1.100/webcam/?action=snapshot
 ```
 
+## Include directives
+
+It is possible to include configuration from other files via include
+directives.  Include directives in Moonraker are specified identically
+to those in Klipper, ie: `[include relative_path]`.  The `relative_path`
+is a path relative to the configuration file's parent, and may include
+wildcards.  For example:
+
+```ini
+# moonraker.conf
+
+[include my_extra_config.conf]
+
+[include subfolder/*.conf]
+
+```
+
+If a section is duplicated in an included file the options from both
+sections will be merged, with the latest file parsed taking precedence.
+When wildcards are specified all matches are parsed in alphabetical
+order.  If includes are nested (ie: an included file specifies an
+`[include]` directive), those includes will be parsed after all matches
+of the previous include.
+
+
 ## Jinja2 Templates
 
 Some Moonraker configuration options make use of Jinja2 Templates.  For

@@ -2,6 +2,12 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### April 6th 2022
+- The ability to configure core components in the `[server]`section
+  is now deprecated.  When legacy items are detected in `[server]` a
+  warning will be generated.  It is crucially important to move configuration
+  to the correct section as in the future it will be a hard requirement.
+
 ### Feburary 22nd 2022
 - The `on_when_upload_queued` option for [power] devices has been
   deprecated in favor of `on_when_job_queued`.  As the new option

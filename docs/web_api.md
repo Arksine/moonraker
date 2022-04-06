@@ -588,55 +588,161 @@ included.
 
 ```json
 {
-    "config": {
-        "server": {
-            "host": "0.0.0.0",
-            "port": 7125,
-            "klippy_uds_address": "/tmp/klippy_uds",
-            "max_upload_size": 210,
-            "enable_debug_logging": true,
-            "database_path": "~/.moonraker_database",
-            "config_path": "~/printer_config",
-            "temperature_store_size": 100,
-            "gcode_store_size": 50
+    {
+        "config": {
+            "server": {
+                "host": "0.0.0.0",
+                "port": 7125,
+                "ssl_port": 7130,
+                "enable_debug_logging": true,
+                "enable_asyncio_debug": false,
+                "klippy_uds_address": "/tmp/klippy_uds",
+                "max_upload_size": 210,
+                "ssl_certificate_path": null,
+                "ssl_key_path": null
+            },
+            "dbus_manager": {},
+            "database": {
+                "database_path": "~/.moonraker_database",
+                "enable_database_debug": false
+            },
+            "file_manager": {
+                "enable_object_processing": true,
+                "queue_gcode_uploads": true,
+                "config_path": "~/printer_config",
+                "log_path": "~/logs"
+            },
+            "klippy_apis": {},
+            "machine": {
+                "provider": "systemd_dbus"
+            },
+            "shell_command": {},
+            "data_store": {
+                "temperature_store_size": 1200,
+                "gcode_store_size": 1000
+            },
+            "proc_stats": {},
+            "job_state": {},
+            "job_queue": {
+                "load_on_startup": true,
+                "automatic_transition": false,
+                "job_transition_delay": 2,
+                "job_transition_gcode": "\nM118 Transitioning to next job..."
+            },
+            "http_client": {},
+            "announcements": {
+                "dev_mode": false,
+                "subscriptions": []
+            },
+            "authorization": {
+                "login_timeout": 90,
+                "force_logins": false,
+                "cors_domains": [
+                    "*.home",
+                    "http://my.mainsail.xyz",
+                    "http://app.fluidd.xyz",
+                    "*://localhost:*"
+                ],
+                "trusted_clients": [
+                    "192.168.1.0/24"
+                ]
+            },
+            "zeroconf": {},
+            "octoprint_compat": {
+                "enable_ufp": true,
+                "flip_h": false,
+                "flip_v": false,
+                "rotate_90": false,
+                "stream_url": "/webcam/?action=stream",
+                "webcam_enabled": true
+            },
+            "history": {},
+            "secrets": {
+                "secrets_path": "~/moonraker_secrets.ini"
+            },
+            "mqtt": {
+                "address": "eric-work.home",
+                "port": 1883,
+                "username": "{secrets.mqtt_credentials.username}",
+                "password_file": null,
+                "password": "{secrets.mqtt_credentials.password}",
+                "mqtt_protocol": "v3.1.1",
+                "instance_name": "pi-debugger",
+                "default_qos": 0,
+                "status_objects": {
+                    "webhooks": null,
+                    "toolhead": "position,print_time",
+                    "idle_timeout": "state",
+                    "gcode_macro M118": null
+                },
+                "api_qos": 0,
+                "enable_moonraker_api": true
+            },
+            "template": {}
         },
-        "authorization": {
-            "api_key_file": "~/.moonraker_api_key",
-            "enabled": true,
-            "cors_domains": "\nhttp://my.mainsail.xyz\nhttp://app.fluidd.xyz",
-            "trusted_clients": "\n192.168.1.0/24"
+        "orig": {
+            "DEFAULT": {},
+            "server": {
+                "enable_debug_logging": "True",
+                "max_upload_size": "210"
+            },
+            "file_manager": {
+                "config_path": "~/printer_config",
+                "log_path": "~/logs",
+                "queue_gcode_uploads": "True",
+                "enable_object_processing": "True"
+            },
+            "machine": {
+                "provider": "systemd_dbus"
+            },
+            "announcements": {},
+            "job_queue": {
+                "job_transition_delay": "2.",
+                "job_transition_gcode": "\nM118 Transitioning to next job...",
+                "load_on_startup": "True"
+            },
+            "authorization": {
+                "trusted_clients": "\n192.168.1.0/24",
+                "cors_domains": "\n*.home\nhttp://my.mainsail.xyz\nhttp://app.fluidd.xyz\n*://localhost:*"
+            },
+            "zeroconf": {},
+            "octoprint_compat": {},
+            "history": {},
+            "secrets": {
+                "secrets_path": "~/moonraker_secrets.ini"
+            },
+            "mqtt": {
+                "address": "eric-work.home",
+                "port": "1883",
+                "username": "{secrets.mqtt_credentials.username}",
+                "password": "{secrets.mqtt_credentials.password}",
+                "enable_moonraker_api": "True",
+                "status_objects": "\nwebhooks\ntoolhead=position,print_time\nidle_timeout=state\ngcode_macro M118"
+            }
         },
-        "system_args": {},
-        "history": {},
-        "octoprint_compat": {},
-        "update_manager": {
-            "enable_auto_refresh": true,
-            "distro": "debian",
-            "enable_repo_debug": true,
-            "client_repo": null
-        },
-        "update_manager static debian moonraker": {},
-        "update_manager client mainsail": {
-            "type": "web",
-            "repo": "mainsail-crew/mainsail",
-            "path": "~/mainsail",
-            "persistent_files": null
-        },
-        "update_manager client fluidd": {
-            "type": "web",
-            "repo": "fluidd-core/fluidd",
-            "path": "~/fluidd",
-            "persistent_files": null
-        },
-        "power green_led": {
-            "type": "gpio",
-            "locked_while_printing": false,
-            "off_when_shutdown": false,
-            "restart_klipper_when_powered": false,
-            "pin": "gpiochip0/gpio26",
-            "initial_state": false
-        },
-        "update_manager static debian klipper": {}
+        "files": [
+            {
+                "filename": "moonraker.conf",
+                "sections": [
+                    "server",
+                    "file_manager",
+                    "machine",
+                    "announcements",
+                    "job_queue",
+                    "authorization",
+                    "zeroconf",
+                    "octoprint_compat",
+                    "history",
+                    "secrets"
+                ]
+            },
+            {
+                "filename": "include/extras.conf",
+                "sections": [
+                    "mqtt"
+                ]
+            }
+        ]
     }
 }
 ```
