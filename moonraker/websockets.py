@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     RPCCallback = Callable[..., Coroutine]
     AuthComp = Optional[components.authorization.Authorization]
 
-CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "other"]
+CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 SENTINEL = SentinelClass.get_instance()
 
 class Subscribable:
@@ -452,7 +452,12 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
         self.last_pong_time: float = self.event_loop.get_loop_time()
         self._connected_time: float = 0.
-        self._client_data: Dict[str, str] = {}
+        self._client_data: Dict[str, str] = {
+            "name": "unknown",
+            "version": "",
+            "type": "",
+            "url": ""
+        }
 
     @property
     def uid(self) -> int:
