@@ -6,6 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+import pathlib
 import sys
 import argparse
 import importlib
@@ -130,10 +131,13 @@ class Server:
     def _parse_config(self) -> confighelper.ConfigHelper:
         config = confighelper.get_configuration(self, self.app_args)
         # log config file
+        cfg_files = "\n".join(config.get_config_files())
         strio = io.StringIO()
         config.write_config(strio)
         cfg_item = f"\n{'#'*20} Moonraker Configuration {'#'*20}\n\n"
         cfg_item += strio.getvalue()
+        cfg_item += "#"*65
+        cfg_item += f"\nAll Configuration Files:\n{cfg_files}\n"
         cfg_item += "#"*65
         strio.close()
         self.add_log_rollover_item('config', cfg_item)
@@ -400,8 +404,21 @@ class Server:
     async def _handle_config_request(self,
                                      web_request: WebRequest
                                      ) -> Dict[str, Any]:
+        cfg_file_list: List[Dict[str, Any]] = []
+        cfg_parent = pathlib.Path(
+            self.app_args["config_file"]
+        ).expanduser().resolve().parent
+        for fname, sections in self.config.get_file_sections().items():
+            path = pathlib.Path(fname)
+            try:
+                rel_path = str(path.relative_to(str(cfg_parent)))
+            except ValueError:
+                rel_path = fname
+            cfg_file_list.append({"filename": rel_path, "sections": sections})
         return {
-            'config': self.config.get_parsed_config()
+            'config': self.config.get_parsed_config(),
+            'orig': self.config.get_orig_config(),
+            'files': cfg_file_list
         }
 
 def main(cmd_line_args: argparse.Namespace) -> None:

@@ -433,6 +433,17 @@ class ConfigHelper:
     def get_parsed_config(self) -> Dict[str, Dict[str, ConfigVal]]:
         return dict(self.parsed)
 
+    def get_orig_config(self) -> Dict[str, Dict[str, str]]:
+        return {
+            key: dict(val) for key, val in self.config.items()
+        }
+
+    def get_file_sections(self) -> Dict[str, List[str]]:
+        return dict(self.file_section_map)
+
+    def get_config_files(self) -> List[str]:
+        return list(self.file_section_map.keys())
+
     def validate_config(self) -> None:
         for sect in self.config.sections():
             if sect not in self.parsed:
