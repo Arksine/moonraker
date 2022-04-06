@@ -448,8 +448,8 @@ def main(cmd_line_args: argparse.Namespace) -> None:
             server.load_components()
         except confighelper.ConfigError as e:
             backup_cfg = confighelper.find_config_backup(cfg_file)
+            logging.exception("Server Config Error")
             if alt_config_loaded or backup_cfg is None:
-                logging.exception("Server Config Error")
                 estatus = 1
                 break
             app_args['config_file'] = backup_cfg
