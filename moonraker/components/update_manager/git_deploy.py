@@ -148,13 +148,18 @@ class GitDeploy(AppDeploy):
     async def _pull_repo(self) -> None:
         self.notify_status("Updating Repo...")
         try:
+            await self.repo.fetch()
             if self.repo.is_detached():
-                await self.repo.fetch()
                 await self.repo.checkout()
+            elif await self.repo.check_diverged():
+                self.notify_status(
+                    "Repo has diverged, attempting git reset"
+                )
+                await self.repo.reset()
             else:
                 await self.repo.pull()
         except Exception:
-            raise self.log_exc("Error running 'git pull'")
+            raise self.log_exc("Error updating git repo")
 
     async def _update_dependencies(self,
                                    inst_hash: Optional[str],
@@ -275,6 +280,7 @@ class GitRepo:
         self.commits_behind: List[Dict[str, Any]] = storage.get(
             'commits_behind', [])
         self.tag_data: Dict[str, Any] = storage.get('tag_data', {})
+        self.diverged: bool = storage.get("diverged", False)
 
     def get_persistent_data(self) -> Dict[str, Any]:
         return {
@@ -294,7 +300,8 @@ class GitRepo:
             'head_detached': self.head_detached,
             'git_messages': self.git_messages,
             'commits_behind': self.commits_behind,
-            'tag_data': self.tag_data
+            'tag_data': self.tag_data,
+            'diverged': self.diverged
         }
 
     async def initialize(self, need_fetch: bool = True) -> None:
@@ -335,6 +342,7 @@ class GitRepo:
 
             if need_fetch:
                 await self.fetch()
+            self.diverged = await self.check_diverged()
 
             # Populate list of current branches
             blist = await self.list_branches()
@@ -559,6 +567,21 @@ class GitRepo:
             self.valid_git_repo = True
             return True
 
+    async def check_diverged(self) -> bool:
+        self._verify_repo(check_remote=True)
+        async with self.git_operation_lock:
+            if self.head_detached:
+                return False
+            cmd = (
+                "merge-base --is-ancestor HEAD "
+                f"{self.git_remote}/{self.git_branch}"
+            )
+            try:
+                await self._run_git_cmd(cmd, retries=1)
+            except self.cmd_helper.scmd_error:
+                return True
+            return False
+
     def log_repo_info(self) -> None:
         logging.info(
             f"Git Repo {self.alias} Detected:\n"
@@ -576,7 +599,8 @@ class GitRepo:
             f"Is Detached: {self.head_detached}\n"
             f"Commits Behind: {len(self.commits_behind)}\n"
             f"Tag Data: {self.tag_data}\n"
-            f"Bound Repo: {self.bound_repo}"
+            f"Bound Repo: {self.bound_repo}\n"
+            f"Diverged: {self.diverged}"
         )
 
     def report_invalids(self, primary_branch: str) -> List[str]:
@@ -593,6 +617,8 @@ class GitRepo:
                 f"{self.git_remote}/{self.git_branch}")
         if self.head_detached:
             invalids.append("Detached HEAD detected")
+        if self.diverged:
+            invalids.append("Repo has diverged from remote")
         return invalids
 
     def _verify_repo(self, check_remote: bool = False) -> None:
@@ -608,16 +634,21 @@ class GitRepo:
         if self.git_remote == "?" or self.git_branch == "?":
             raise self.server.error("Cannot reset, unknown remote/branch")
         async with self.git_operation_lock:
-            await self._run_git_cmd("clean -d -f", retries=2)
-            await self._run_git_cmd(
-                f"reset --hard {self.git_remote}/{self.git_branch}",
-                retries=2)
+            reset_cmd = f"reset --hard {self.git_remote}/{self.git_branch}"
+            if self.is_beta:
+                reset_cmd = f"reset --hard {self.upstream_commit}"
+            await self._run_git_cmd(reset_cmd, retries=2)
 
     async def fetch(self) -> None:
         self._verify_repo(check_remote=True)
         async with self.git_operation_lock:
             await self._run_git_cmd_async(
                 f"fetch {self.git_remote} --prune --progress")
+
+    async def clean(self) -> None:
+        self._verify_repo()
+        async with self.git_operation_lock:
+            await self._run_git_cmd("clean -d -f", retries=2)
 
     async def pull(self) -> None:
         self._verify_repo()
