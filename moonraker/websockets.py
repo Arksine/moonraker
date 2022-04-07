@@ -20,6 +20,7 @@ from typing import (
     Optional,
     Callable,
     Coroutine,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -323,7 +324,7 @@ class WebsocketManager(APITransport):
             notify_name = event_name.split(':')[-1]
 
         def notify_handler(*args):
-            self.notify_websockets(notify_name, *args)
+            self.notify_websockets(notify_name, args)
         self.server.register_event_handler(
             event_name, notify_handler)
 
@@ -450,12 +451,15 @@ class WebsocketManager(APITransport):
 
     def notify_websockets(self,
                           name: str,
-                          data: Any = SENTINEL
+                          data: Union[List, Tuple] = [],
+                          mask: List[int] = []
                           ) -> None:
         msg: Dict[str, Any] = {'jsonrpc': "2.0", 'method': "notify_" + name}
-        if data != SENTINEL:
-            msg['params'] = [data]
+        if data:
+            msg['params'] = data
         for ws in list(self.websockets.values()):
+            if ws.uid in mask:
+                continue
             ws.queue_message(msg)
 
     def get_count(self) -> int:
@@ -597,6 +601,9 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.pending_responses[id(fut)] = fut
         self.queue_message(msg)
         return fut
+
+    def send_notification(self, name: str, data: List) -> None:
+        self.wsm.notify_websockets(name, data, [self._uid])
 
     def resolve_pending_response(
         self, response_id: int, result: Any
