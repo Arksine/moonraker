@@ -231,13 +231,15 @@ class JsonRPC:
             return
         result = obj.get("result")
         if result is None:
+            name = conn.client_data["name"]
             error = obj.get("error")
-            msg = f"Invalid RPC Response: {obj}"
-            code = 500
+            msg = f"Invalid Response: {obj}"
+            code = -32600
             if isinstance(error, dict):
                 msg = error.get("message", msg)
                 code = error.get("code", code)
-            ret = ServerError(msg, code)
+            msg = f"{name} rpc error: {code} {msg}"
+            ret = ServerError(msg, 418)
         else:
             ret = result
         conn.resolve_pending_response(response_id, ret)
@@ -256,9 +258,12 @@ class JsonRPC:
                 result = await method(*args, **kwargs)
         except TypeError as e:
             return self.build_error(
-                -32603, f"Invalid params:\n{e}", req_id, True)
+                -32602, f"Invalid params:\n{e}", req_id, True)
         except ServerError as e:
-            return self.build_error(e.status_code, str(e), req_id, True)
+            code = e.status_code
+            if code == 404:
+                code = -32601
+            return self.build_error(code, str(e), req_id, True)
         except Exception as e:
             return self.build_error(-31000, str(e), req_id, True)
 
