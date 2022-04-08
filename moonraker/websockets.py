@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from app import APIDefinition
     from klippy_connection import KlippyConnection as Klippy
+    from .components.extensions import ExtensionManager
     import components.authorization
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
@@ -397,6 +398,14 @@ class WebsocketManager(APITransport):
             "type": client_type,
             "url": url
         }
+        if client_type == "agent":
+            extensions: ExtensionManager
+            extensions = self.server.lookup_component("extensions")
+            try:
+                extensions.register_agent(ws)
+            except ServerError:
+                ws.client_data["type"] = ""
+                raise
         logging.info(
             f"Websocket {ws.uid} Client Identified - "
             f"Name: {name}, Version: {version}, Type: {client_type}"
@@ -629,6 +638,10 @@ class WebSocket(WebSocketHandler, Subscribable):
                      f"Close Code: {self.close_code}, "
                      f"Close Reason: {self.close_reason}, "
                      f"Pong Time Elapsed: {pong_elapsed:.2f}")
+        if self._client_data["type"] == "agent":
+            extensions: ExtensionManager
+            extensions = self.server.lookup_component("extensions")
+            extensions.remove_agent(self)
         self.wsm.remove_websocket(self)
 
     def check_origin(self, origin: str) -> bool:
