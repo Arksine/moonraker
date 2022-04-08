@@ -232,8 +232,14 @@ class KlippyConnection:
                 "Unable to get Unix Socket, cant fetch peer credentials"
             )
             return
-        data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-        pid, uid, gid = struct.unpack("@LLL", data)
+        try:
+            data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+            pid, uid, gid = struct.unpack("@LLL", data)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("Failed to get Klippy Credentials")
+            return
         self._peer_cred = {
             "process_id": pid,
             "user_id": uid,
