@@ -2,7 +2,7 @@
 This document describes Moonraker's full configuration.  As this file
 references configuration for both Klipper (`printer.cfg`) and Moonraker
 (`moonraker.conf`), each example contains a commment indicating which
-configuration file is being refrenenced. A basic
+configuration file is being referenced. A basic
 [sample configuration](./moonraker.conf) in the `docs` directory.
 
 ## Core Components
