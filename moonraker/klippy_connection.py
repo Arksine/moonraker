@@ -13,6 +13,8 @@ import json
 import getpass
 import confighelper
 import asyncio
+import socket
+import struct
 from utils import ServerError
 
 # Annotation imports
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from websockets import WebRequest, Subscribable
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
+    from asyncio.trsock import TransportSocket
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 INIT_TIME = .25
@@ -54,6 +57,7 @@ class KlippyConnection:
         self._klippy_info: Dict[str, Any] = {}
         self.init_list: List[str] = []
         self._missing_reqs: Set[str] = set()
+        self._peer_cred: Dict[str, int] = {}
         self.init_attempts: int = 0
         self._state: str = "disconnected"
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
@@ -86,6 +90,10 @@ class KlippyConnection:
     @property
     def missing_requirements(self) -> List[str]:
         return list(self._missing_reqs)
+
+    @property
+    def peer_credentials(self) -> Dict[str, int]:
+        return dict(self._peer_cred)
 
     async def wait_connected(self) -> bool:
         if (
@@ -212,8 +220,28 @@ class KlippyConnection:
                     continue
                 logging.info("Klippy Connection Established")
                 self.writer = writer
+                self._get_peer_credentials(writer)
             self.event_loop.create_task(self._read_stream(reader))
             return await self._init_klippy_connection()
+
+    def _get_peer_credentials(self, writer: asyncio.StreamWriter) -> None:
+        sock: TransportSocket
+        sock = writer.get_extra_info("socket", None)
+        if sock is None:
+            logging.debug(
+                "Unable to get Unix Socket, cant fetch peer credentials"
+            )
+            return
+        data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        pid, uid, gid = struct.unpack("@LLL", data)
+        self._peer_cred = {
+            "process_id": pid,
+            "user_id": uid,
+            "group_id": gid
+        }
+        logging.debug(
+            f"Klippy Connection: Received Peer Credentials: {self._peer_cred}"
+        )
 
     async def _init_klippy_connection(self) -> bool:
         self.init_list = []
@@ -489,6 +517,7 @@ class KlippyConnection:
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
         self.subscriptions = {}
+        self._peer_cred = {}
         self._missing_reqs.clear()
         logging.info("Klippy Connection Removed")
         await self.server.send_event("server:klippy_disconnect")
