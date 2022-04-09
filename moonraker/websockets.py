@@ -380,6 +380,10 @@ class WebsocketManager(APITransport):
                                ws: WebSocket,
                                **kwargs
                                ) -> Dict[str, int]:
+        if ws.identified:
+            raise self.server.error(
+                f"Connection already identified: {ws.client_data}"
+            )
         try:
             name = str(kwargs["client_name"])
             version = str(kwargs["version"])
@@ -500,6 +504,7 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
         self.last_pong_time: float = self.event_loop.get_loop_time()
         self._connected_time: float = 0.
+        self._identified: bool = False
         self._client_data: Dict[str, str] = {
             "name": "unknown",
             "version": "",
@@ -520,12 +525,17 @@ class WebSocket(WebSocketHandler, Subscribable):
         return self._connected_time
 
     @property
+    def identified(self) -> bool:
+        return self._identified
+
+    @property
     def client_data(self) -> Dict[str, str]:
         return self._client_data
 
     @client_data.setter
     def client_data(self, data: Dict[str, str]) -> None:
         self._client_data = data
+        self._identified = True
 
     def open(self, *args, **kwargs) -> None:
         self.set_nodelay(True)
