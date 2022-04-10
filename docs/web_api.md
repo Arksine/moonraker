@@ -174,7 +174,8 @@ This method provides a way for persistent clients to identify
 themselves to Moonraker.  This information may be used by Moonraker
 perform an action or present information based on if a specific
 client is connected.  Currently this method is only available
-to websocket connections.
+to websocket connections.  This endpoint should only be called
+once per session, repeated calls will result in an error.
 
 HTTP request: `Not Available`
 
@@ -199,9 +200,16 @@ All parameters are required. Below is an explanation of each parameter.
   `KlipperScreen`, `MoonCord`, etc.
 - `version`: The current version of the connected client
 - `type`:  Application type. May be one of `web`, `mobile`, `desktop`,
-  `display`, `bot`, or `other`.  These should be self explanatory, use
-  `other` if your client does not fit any of the prescribed options.
+  `display`, `bot`, `agent` or `other`.  These should be self explanatory,
+  use `other` if your client does not fit any of the prescribed options.
 - `url`: The url for your client's homepage
+
+!!! Note
+    When identifying as an `agent`, only one instance should be connected
+    to moonraker at a time.  If multiple agents of the same `client_name`
+    attempt to identify themselves this endpoint will return an error.
+    See the [extension APIs](#extension-apis) for more information about
+    `agents`.
 
 Returns:
 
@@ -4013,6 +4021,133 @@ The subscribed topic and its payload:
 If the payload is json encodable it will be returned as an object or array.
 Otherwise it will be a string.
 
+### Extension APIs
+
+Moonraker currently has limited support for 3rd party extensions.  These
+extensions must create a websocket connect and [identify](#identify-connection)
+themselves as an `agent`.  Agents may host their own JSON-RPC methods
+that other clients may call.  Agents may also emit events that are
+broadcast to all other websocket connections.
+
+#### List Extensions
+
+Returns a list of all available extensions.  Currently Moonraker can only
+be officially extended through connected `agents`.
+
+HTTP request:
+```http
+GET /server/extensions/list
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"server.extensions.list",
+    "id": 4564
+}
+```
+
+Returns:
+
+A list of connected agents, where each item is an object containing the
+agent's identity:
+
+```json
+{
+    "agents": [
+        {
+            "name": "moonagent",
+            "version": "0.0.1",
+            "type": "agent",
+            "url": "https://github.com/arksine/moontest"
+        }
+    ]
+}
+```
+
+#### Call an extension method
+
+This API may be used to call a method on a connected agent.  The
+request effectively relays a JSON-RPC request from a client
+to the agent.
+
+HTTP request:
+```http
+POST /server/extensions/request
+Content-Type: application/json
+
+{
+    "agent": "moonagent",
+    "method": "moontest.hello_world",
+    "arguments": {"argone": true, "argtwo": 9000}
+}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"server.extensions.request",
+    "params":{
+        "agent": "moonagent",
+        "method": "moontest.hello_world",
+        "arguments": {"argone": true, "argtwo": 9000}
+    },
+    "id": 4564
+}
+```
+
+Parameters:
+
+- `agent`: The name of the agent.  This parameter is required.
+- `method`: The name of the method to call on the agent.  Agents determine
+  the method names they expose.  This parameter is required.
+- `arguments`:  This parameter is optional, depending on if the method
+  being called takes parameters.  This should be either an array of positional
+  arguments or an object of keyword arguments.
+
+Returns:
+
+The result returned by the JSON-RPC call to the agent.  This can be any JSON
+value as determined by the agent.
+
+#### Send an agent event
+
+!!! Note
+    This API is only available to websocket connections that have
+    identified themselves as an `agent` type.
+
+HTTP Request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"connection.send_event",
+    "params":{
+        "event": "my_event",
+        "data": {"my_arg": "optional data"}
+    }
+}
+```
+
+Parameters:
+- `event`:  The name of the event.  This may be any name as
+  determined by the agent, with the exception of the reserved
+  names noted below.
+- `data`: Optional supplemental data sent with the event.  This
+  can be any JSON value.
+
+
+!!! Note
+    The `connected` and `disconnected` events are reserved for use
+    by Moonraker.
+
+Returns:
+
+`ok` if an `id` was present in the request, otherwise no response is
+returned.  Once received, Moonraker will broadcast this event via
+the [agent event notification](#agent-events) to all other connections.
+
 ### Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0
 notifications.  These notifications are sent to all connected clients
@@ -4480,6 +4615,36 @@ a specified `wake_time` for a dismissed announcement has expired.
 
 The `params` array will contain an object with the `entry_id` of the
 announcement that is no longer dismissed.
+
+
+#### Agent Events
+Moonraker will emit the `notify_agent_event` notification when it
+an agent event is recevied.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_agent_event",
+    "params": [
+        {
+            "agent": "moonagent",
+            "event": "connected",
+            "data": {
+                "name": "moonagent",
+                "version": "0.0.1",
+                "type": "agent",
+                "url": "https://github.com/arksine/moontest"
+            }
+        }
+    ]
+}
+```
+
+When an agent connects, all connections will recieve a `connected` event
+for that agent, with its identity info in the `data` field.  When an agent
+disconnects clients will receive a `disconnected` event with the data field
+omitted.  All other events are determined by the agent, where each event may
+or may not include optional `data`.
 
 ### Appendix
 
