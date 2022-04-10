@@ -189,7 +189,8 @@ class History:
             'total_print_time': 0.,
             'total_filament_used': 0.,
             'longest_job': 0.,
-            'longest_print': 0.
+            'longest_print': 0.,
+            'spool_length': 330000.
         }
         database: DBComp = self.server.lookup_component("database")
         await database.insert_item(
