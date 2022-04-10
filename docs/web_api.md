@@ -11,7 +11,7 @@ Websocket, please see the Appendix at the end of this document.
 Moonraker's HTTP API could best be described as "RESTish".  Attempts are
 made to conform to REST standards, however the dynamic nature of
 Moonraker's API registration along with the desire to keep consistency
-between mulitple API protocols results in an HTTP API that does not
+between multiple API protocols results in an HTTP API that does not
 completely adhere to the standard.
 
 Moonraker is capable of parsing request arguments from the both the body
@@ -21,7 +21,7 @@ with body arguments taking precedence over query arguments.  Thus
 if the same argument is supplied both in the body and in the
 query string the body argument would be used. It is left up to the client
 developer to decide exactly how they want to provide arguments, however
-future API documention will make recommendations.  As of March 1st 2021
+future API documentation will make recommendations.  As of March 1st 2021
 this document exclusively illustrates arguments via the query string.
 
 All successful HTTP requests will return a json encoded object in the form of:
@@ -62,7 +62,7 @@ arguments.  The query string with type hints might look like:
 ?seconds:int=120&enabled:bool=true
 ```
 A query string that takes a `value` argument with which we want to
-assing an object, `{foo: 21.5, bar: "hello"}` might look like:
+pass an object, `{foo: 21.5, bar: "hello"}` might look like:
 ```
 ?value:json=%7B%22foo%22%3A21.5%2C%22bar%22%3A%22hello%22%7D
 ```
@@ -213,7 +213,7 @@ All parameters are required. Below is an explanation of each parameter.
 
 Returns:
 
-The connection's unique identifer.
+The connection's unique identifier.
 ```json
 {
     "connection_id": 1730367696
@@ -224,7 +224,7 @@ The connection's unique identifer.
 
 !!! Warning
     This method is deprecated.  Please use the
-    [identify endpoint](#identify-connection) to retreive the
+    [identify endpoint](#identify-connection) to retrieve the
     Websocket's UID
 
 HTTP request: `Not Available`
@@ -239,7 +239,7 @@ JSON-RPC request (Websocket Only):
 ```
 Returns:
 
-The connected websocket's unique identifer.
+The connected websocket's unique identifier.
 ```json
 {
     "websocket_id": 1730367696
@@ -1308,7 +1308,7 @@ will return up to 30 samples, each sample with the following fields:
 CPU usage of the Moonraker process.
 - `memory`: Integer value representing the current amount of memory
 allocated in RAM (resident set size).
-- `mem_units`: A string indentifying the units of the value in the
+- `mem_units`: A string identifying the units of the value in the
 `memory` field.  This is typically "kB", but not guaranteed.
 
 If the system running Moonraker supports `vcgencmd` then Moonraker
@@ -1718,7 +1718,7 @@ Returns:  Information about the moved file or directory
 
 #### Copy a file or directory
 Copies a file or directory from one location to another.  A successful copy has
-the pre-requesites as a move with one exception, a copy may complete if the
+the prerequisites as a move with one exception, a copy may complete if the
 source file or directory is loaded by the `virtual_sdcard`.  As with the move
 API, the `source` and `dest` should have the root prefixed to the path.
 
@@ -1744,7 +1744,7 @@ Returns: Information about the copied file or directory
 {
     "item": {
         "root": "gcodes",
-        "path": "test4/Voron_v2_350_aferburner_Filament Cover_0.2mm_ABS.gcode"
+        "path": "test4/Voron_v2_350_afterburner_Filament Cover_0.2mm_ABS.gcode"
     },
     "action": "create_file"
 }
@@ -2108,7 +2108,7 @@ Returns:
 A temporary token that may be added to a request's query string for access
 to any API endpoint.  The query string should be added in the form of:
 ```
-?token={base32_ramdom_token}
+?token={base32_random_token}
 ```
 
 #### Get the Current API Key
@@ -2136,12 +2136,12 @@ the API key change is applied immediately, all subsequent HTTP requests
 from untrusted clients must use the new key.
 
 ### Database APIs
-The following endpoints provide access to Moonraker's ldbm database.  The
+The following endpoints provide access to Moonraker's lmdb database.  The
 database is divided into `namespaces`.  Each client may define its own
 namespace to store information.  From the client's point of view, a
 namespace is an `object`.  Items in the database are accessed by providing
-a namespace and a key.  A key may be specifed as string, where a "." is a
-delimeter, to access nested fields. Alternatively the key may be specified
+a namespace and a key.  A key may be specified as string, where a "." is a
+delimiter, to access nested fields. Alternatively the key may be specified
 as an array of strings, where each string references a nested field.
 This is useful for scenarios where your namespace contains keys that include
 a "." character.
@@ -2321,8 +2321,8 @@ deleted item.
 
 ### Job Queue APIs
 
-The following enpoints may be used to manage Moonraker's job queue.
-Note that Moonraker's Job Queue is impelemented as a FIFO queue and it may
+The following endpoints may be used to manage Moonraker's job queue.
+Note that Moonraker's Job Queue is implemented as a FIFO queue and it may
 contain multiple references to the same job.
 
 !!! Note
@@ -2405,7 +2405,7 @@ Below is a description of the returned fields:
 
 Adds a job, or an array of jobs, to the end of the job queue.  The same
 filename may be specified multiple times to queue a job that repeats.
-When multiple jobs are specfied they will be enqued in the order they
+When multiple jobs are specified they will be enqueued in the order they
 are received.
 
 !!! Note
@@ -2414,7 +2414,7 @@ are received.
 
 HTTP request:
 ```http
-POST /server/job_queue/job?filenames=job1.gcode,job2.gcode,subdir/job3.gocde
+POST /server/job_queue/job?filenames=job1.gcode,job2.gcode,subdir/job3.gcode
 ```
 
 !!! Note
@@ -2444,7 +2444,7 @@ JSON-RPC request:
         "filenames": [
             "job1.gcode",
             "job2.gcode",
-            "subir/job3.gcode"
+            "subdir/job3.gcode"
         ]
     },
     "id": 4654
@@ -2638,7 +2638,7 @@ The following endpoints are available to manage announcements.  See
 announcements work and recommendations for your implementation.
 
 #### List announcements
-Retreives a list of current announcements. The `include_dismissed`
+Retrieves a list of current announcements. The `include_dismissed`
 argument is optional and defaults to `true`.  If set to `false`
 dismissed entries will be omitted from the return value.
 
@@ -3062,7 +3062,7 @@ Below is an explanation for each field:
 - `busy`: set to true if an update is in progress.  Moonraker will not
   allow concurrent updates.
 - `github_rate_limit`: the maximum number of github API requests
-  the user currently is allowed.  An unathenticated user typically has 60
+  the user currently is allowed.  An unauthenticated user typically has 60
   requests per hour.
 - `github_requests_remaining`: the number of API request the user
   currently has remaining.
@@ -3073,7 +3073,7 @@ The `moonraker`, `klipper` packages, along with and clients configured
 as applications have the following fields:
 
 - `configured_type`: the application type configured by the user
-- `detected_type`:  the applicaiton type as detected by Moonraker.
+- `detected_type`:  the application type as detected by Moonraker.
 - `channel`:  the currently configured update channel.  For Moonraker
   and Klipper this is set in the `[update_manager]` configuration.
   For clients the channel is determined by the configured type
@@ -3214,7 +3214,7 @@ If one more more `[update_manager client client_name]` sections have
 been configured this endpoint can be used to install the most recently
 published release of the client.  If an update is requested while a
 print is in progress then this request will return an error.  The
-`name` argument is requred, it's value should match the `client_name`
+`name` argument is required, it's value should match the `client_name`
 of the configured section.
 
 HTTP request:
@@ -3258,7 +3258,7 @@ Returns:
 `ok` when complete
 
 #### Recover a corrupt repo
-On ocassion a git command may fail resulting in a repo in a
+On occasion a git command may fail resulting in a repo in a
 dirty or invalid state.  When this happens it is possible
 to recover.  The `name` argument must specify the name of
 the repo to recover, it must be of a git repo type. There are two
@@ -3592,7 +3592,7 @@ POST /api/files/local
 ```
 JSON-RPC request: Not Available
 
-Alias for Moonrakers [file upload API](#file-upload).
+Alias for Moonraker's [file upload API](#file-upload).
 
 #### Get Job status
 HTTP request:
@@ -3710,7 +3710,7 @@ An object containing simulates OctoPrint Printer profile
 ```
 
 ### History APIs
-The APIs below are avilable when the `[history]` component has been configured.
+The APIs below are available when the `[history]` component has been configured.
 
 #### Get job list
 HTTP request:
@@ -3743,7 +3743,7 @@ All arguments are optional. Arguments are as follows:
 
 Returns:
 
-An array of requsted historical jobs:
+An array of requested historical jobs:
 ```json
 {
     "count": 1,
@@ -3934,7 +3934,7 @@ JSON-RPC request:
 }
 ```
 Only the `topic` parameter is required.  Below is an explanation for
-each paramater:
+each parameter:
 
 - `topic`: The topic to publish.
 - `payload`: Payload to send with the topic.  May be a boolean, float,
@@ -3945,7 +3945,7 @@ each paramater:
   from 0 to 2.  If omitted the system configured default is used.
 - `retain`: If set to `true` the MQTT broker will retain the payload of this
   request.  Note that only the mostly recently tagged payload is retained.
-  When other clients first subscribe to the topic they immediately recieve the
+  When other clients first subscribe to the topic they immediately receive the
   retained message.  The default is `false`.
 - `timeout`: A float value in seconds.  By default requests with QoS levels of
   1 or 2 will block until the Broker acknowledges confirmation.  This option
@@ -4271,7 +4271,7 @@ for example when a user configures a different gcode file path
 in Klipper.
 
 #### Update Manager Response
-The update manager will send asyncronous messages to the client during an
+The update manager will send asynchronous messages to the client during an
 update:
 ```json
 {
@@ -4294,7 +4294,7 @@ The fields reported in the response are as follows:
   or "client".
 - The `proc_id` field contains a unique id associated with the current update
   process.  This id is generated for each update request.
-- The `message` field contains an asyncronous message sent during the update
+- The `message` field contains an asynchronous message sent during the update
   process.
 - The `complete` field is set to true on the final message sent during an
   update, indicating that the update completed successfully.  Otherwise it
@@ -4469,7 +4469,7 @@ The object sent with the notification contains the following fields:
     - `state_changed`: The queue state has changed
     - `jobs_added`: One or more jobs were added to the queue
     - `jobs_removed`: One or more jobs were removed from the queue
-    - `job_loaded`:  A job was popped off the queue and successfull started
+    - `job_loaded`:  A job was popped off the queue and successfully started
 - `updated_queue`:  If the queue itself is changed this will be a list
    containing each item in the queue.  If the queue has not changed this will
    be `null`.
@@ -4511,7 +4511,7 @@ fields:
     - `received_time`: The time the event was detected according to asyncio's
       monotonic clock.  Note that this is not in "unix time".
     - `render_time`: The time the template was rendered (began execution)
-      according to asyncio's montonic clock.  It is possible execution of
+      according to asyncio's monotonic clock.  It is possible execution of
       an event may be delayed well beyond the `received_time`.
     - `pressed`: A boolean value to indicate if the button is currently pressed.
 - `aux`: This is an optional field where the button may specify any json
@@ -4522,7 +4522,7 @@ fields:
 #### Announcement update event
 
 Moonraker will emit the `notify_announcement_update` notification when
-a announcement entries are addded or removed:
+a announcement entries are added or removed:
 
 ```json
 {
@@ -4619,7 +4619,7 @@ announcement that is no longer dismissed.
 
 #### Agent Events
 Moonraker will emit the `notify_agent_event` notification when it
-an agent event is recevied.
+an agent event is received.
 
 ```json
 {
@@ -4640,7 +4640,7 @@ an agent event is recevied.
 }
 ```
 
-When an agent connects, all connections will recieve a `connected` event
+When an agent connects, all connections will receive a `connected` event
 for that agent, with its identity info in the `data` field.  When an agent
 disconnects clients will receive a `disconnected` event with the data field
 omitted.  All other events are determined by the agent, where each event may
@@ -4663,7 +4663,7 @@ var s = new WebSocket("ws://" + location.host + "/websocket");
 ws://host:port/websocket?token={32 character base32 string}
 ```
 
-The following startup sequence is recommened for clients which make use of
+The following startup sequence is recommended for clients which make use of
 the websocket:
 
 1. Attempt to connect to `/websocket` until successful using a timer-like
@@ -4754,7 +4754,7 @@ via polling.
 
     If metadata extraction failed then this request will return an error.
     Some metadata fields are only populated for specific slicers, and
-    unsupported slicers will only return the size and modifed date.
+    unsupported slicers will only return the size and modified date.
 
 - There are multiple ways to calculate the ETA, this example will use
   file progress, as it is possible calculate the ETA with or without
@@ -4829,7 +4829,7 @@ function process_mesh(result) {
 
 #### Converting to Unix Time
 Some of Moonraker's APIs return a date represented in Unix time.
-Most languanges have functionality built in to convert Unix
+Most languages have functionality built in to convert Unix
 time to a workable object or string.  For example, in JavaScript
 one might do something like the following:
 ```javascript
@@ -4901,7 +4901,7 @@ With `dev_mode` enabled, Moonraker will look for`moonraker.xml` and
 
 If moonraker is not installed in the home folder then substitute `~`
 for the parent folder location.  This folder is in a hardcoded location
-to so as not to expose users to vulnerabilites associated with parsing XML.
+to so as not to expose users to vulnerabilities associated with parsing XML.
 
 It is possible to configure Moonraker to search for your own feeds:
 
@@ -4936,7 +4936,7 @@ from moonlight's own issue tracker:
         <pubDate>Tue, 22 Mar 2022 23:19:04 GMT</pubDate>
         <moonlight:configHash>f2912192bf0d09cf18d8b8af22b2d3501627043e5afa3ebff0e45e4794937901</moonlight:configHash>
         <item>
-            <title>Test annoucement 3</title>
+            <title>Test announcement 3</title>
             <link>https://github.com/Arksine/moonlight/issues/3</link>
             <description>Test Description [with a link](https://moonraker.readthedocs.io).</description>
             <pubDate>Wed, 16 Mar 2022 19:33:39 GMT</pubDate>
