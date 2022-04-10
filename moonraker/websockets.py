@@ -16,9 +16,11 @@ from utils import ServerError, SentinelClass
 from typing import (
     TYPE_CHECKING,
     Any,
+    Awaitable,
     Optional,
     Callable,
     Coroutine,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -29,6 +31,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from app import APIDefinition
     from klippy_connection import KlippyConnection as Klippy
+    from .components.extensions import ExtensionManager
     import components.authorization
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
@@ -38,7 +41,7 @@ if TYPE_CHECKING:
     RPCCallback = Callable[..., Coroutine]
     AuthComp = Optional[components.authorization.Authorization]
 
-CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "other"]
+CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 SENTINEL = SentinelClass.get_instance()
 
 class Subscribable:
@@ -165,71 +168,97 @@ class JsonRPC:
                        ) -> Optional[str]:
         response: Any = None
         try:
-            request: Union[Dict[str, Any], List[dict]] = json.loads(data)
+            obj: Union[Dict[str, Any], List[dict]] = json.loads(data)
         except Exception:
             msg = f"{self.transport} data not json: {data}"
             logging.exception(msg)
             response = self.build_error(-32700, "Parse error")
             return json.dumps(response)
-        logging.debug(f"{self.transport} Request::{data}")
-        if isinstance(request, list):
+        logging.debug(f"{self.transport} Received::{data}")
+        if isinstance(obj, list):
             response = []
-            for req in request:
-                resp = await self.process_request(req, conn)
+            for item in obj:
+                resp = await self.process_object(item, conn)
                 if resp is not None:
                     response.append(resp)
             if not response:
                 response = None
         else:
-            response = await self.process_request(request, conn)
+            response = await self.process_object(obj, conn)
         if response is not None:
             response = json.dumps(response)
             logging.debug(f"{self.transport} Response::{response}")
         return response
 
-    async def process_request(self,
-                              request: Dict[str, Any],
-                              conn: Optional[WebSocket]
-                              ) -> Optional[Dict[str, Any]]:
-        req_id: Optional[int] = request.get('id', None)
-        rpc_version: str = request.get('jsonrpc', "")
-        method_name = request.get('method', None)
-        if rpc_version != "2.0" or not isinstance(method_name, str):
+    async def process_object(self,
+                             obj: Dict[str, Any],
+                             conn: Optional[WebSocket]
+                             ) -> Optional[Dict[str, Any]]:
+        req_id: Optional[int] = obj.get('id', None)
+        rpc_version: str = obj.get('jsonrpc', "")
+        if rpc_version != "2.0":
+            return self.build_error(-32600, "Invalid Request", req_id)
+        method_name = obj.get('method', SENTINEL)
+        if method_name is SENTINEL:
+            self.process_response(obj, conn)
+            return None
+        if not isinstance(method_name, str):
             return self.build_error(-32600, "Invalid Request", req_id)
         method = self.methods.get(method_name, None)
         if method is None:
             return self.build_error(-32601, "Method not found", req_id)
-        if 'params' in request:
-            params = request['params']
-            if isinstance(params, list):
-                response = await self.execute_method(
-                    method, req_id, conn, *params)
-            elif isinstance(params, dict):
-                response = await self.execute_method(
-                    method, req_id, conn, **params)
-            else:
-                return self.build_error(-32600, "Invalid Request", req_id)
-        else:
-            response = await self.execute_method(method, req_id, conn)
+        params: Dict[str, Any] = {}
+        if 'params' in obj:
+            params = obj['params']
+            if not isinstance(params, dict):
+                return self.build_error(
+                    -32602, f"Invalid params:", req_id, True)
+        response = await self.execute_method(method, req_id, conn, params)
         return response
 
+    def process_response(
+        self, obj: Dict[str, Any], conn: Optional[WebSocket]
+    ) -> None:
+        if conn is None:
+            logging.debug(f"RPC Response to non-socket request: {obj}")
+            return
+        response_id = obj.get("id")
+        if response_id is None:
+            logging.debug(f"RPC Response with null ID: {obj}")
+            return
+        result = obj.get("result")
+        if result is None:
+            name = conn.client_data["name"]
+            error = obj.get("error")
+            msg = f"Invalid Response: {obj}"
+            code = -32600
+            if isinstance(error, dict):
+                msg = error.get("message", msg)
+                code = error.get("code", code)
+            msg = f"{name} rpc error: {code} {msg}"
+            ret = ServerError(msg, 418)
+        else:
+            ret = result
+        conn.resolve_pending_response(response_id, ret)
+
     async def execute_method(self,
-                             method: RPCCallback,
+                             callback: RPCCallback,
                              req_id: Optional[int],
                              conn: Optional[WebSocket],
-                             *args,
-                             **kwargs
+                             params: Dict[str, Any]
                              ) -> Optional[Dict[str, Any]]:
+        if conn is not None:
+            params["_socket_"] = conn
         try:
-            if conn is not None:
-                result = await method(conn, *args, **kwargs)
-            else:
-                result = await method(*args, **kwargs)
+            result = await callback(params)
         except TypeError as e:
             return self.build_error(
-                -32603, f"Invalid params:\n{e}", req_id, True)
+                -32602, f"Invalid params:\n{e}", req_id, True)
         except ServerError as e:
-            return self.build_error(e.status_code, str(e), req_id, True)
+            code = e.status_code
+            if code == 404:
+                code = -32601
+            return self.build_error(code, str(e), req_id, True)
         except Exception as e:
             return self.build_error(-31000, str(e), req_id, True)
 
@@ -289,7 +318,7 @@ class WebsocketManager(APITransport):
             notify_name = event_name.split(':')[-1]
 
         def notify_handler(*args):
-            self.notify_websockets(notify_name, *args)
+            self.notify_websockets(notify_name, args)
         self.server.register_event_handler(
             event_name, notify_handler)
 
@@ -315,9 +344,10 @@ class WebsocketManager(APITransport):
             self.rpc.remove_method(jrpc_method)
 
     def _generate_callback(self, endpoint: str) -> RPCCallback:
-        async def func(ws: WebSocket, **kwargs) -> Any:
+        async def func(args: Dict[str, Any]) -> Any:
+            ws: WebSocket = args.pop("_socket_")
             result = await self.klippy.request(
-                WebRequest(endpoint, kwargs, conn=ws, ip_addr=ws.ip_addr,
+                WebRequest(endpoint, args, conn=ws, ip_addr=ws.ip_addr,
                            user=ws.current_user))
             return result
         return func
@@ -327,28 +357,29 @@ class WebsocketManager(APITransport):
                                  request_method: str,
                                  callback: Callable[[WebRequest], Coroutine]
                                  ) -> RPCCallback:
-        async def func(ws: WebSocket, **kwargs) -> Any:
+        async def func(args: Dict[str, Any]) -> Any:
+            ws: WebSocket = args.pop("_socket_")
             result = await callback(
-                WebRequest(endpoint, kwargs, request_method, ws,
+                WebRequest(endpoint, args, request_method, ws,
                            ip_addr=ws.ip_addr, user=ws.current_user))
             return result
         return func
 
-    async def _handle_id_request(self,
-                                 ws: WebSocket,
-                                 **kwargs
-                                 ) -> Dict[str, int]:
+    async def _handle_id_request(self, args: Dict[str, Any]) -> Dict[str, int]:
+        ws: WebSocket = args["_socket_"]
         return {'websocket_id': ws.uid}
 
-    async def _handle_identify(self,
-                               ws: WebSocket,
-                               **kwargs
-                               ) -> Dict[str, int]:
+    async def _handle_identify(self, args: Dict[str, Any]) -> Dict[str, int]:
+        ws: WebSocket = args["_socket_"]
+        if ws.identified:
+            raise self.server.error(
+                f"Connection already identified: {ws.client_data}"
+            )
         try:
-            name = str(kwargs["client_name"])
-            version = str(kwargs["version"])
-            client_type: str = str(kwargs["type"]).lower()
-            url = str(kwargs["url"])
+            name = str(args["client_name"])
+            version = str(args["version"])
+            client_type: str = str(args["type"]).lower()
+            url = str(args["url"])
         except KeyError as e:
             missing_key = str(e).split(":")[-1].strip()
             raise self.server.error(
@@ -362,6 +393,14 @@ class WebsocketManager(APITransport):
             "type": client_type,
             "url": url
         }
+        if client_type == "agent":
+            extensions: ExtensionManager
+            extensions = self.server.lookup_component("extensions")
+            try:
+                extensions.register_agent(ws)
+            except ServerError:
+                ws.client_data["type"] = ""
+                raise
         logging.info(
             f"Websocket {ws.uid} Client Identified - "
             f"Name: {name}, Version: {version}, Type: {client_type}"
@@ -416,12 +455,15 @@ class WebsocketManager(APITransport):
 
     def notify_websockets(self,
                           name: str,
-                          data: Any = SENTINEL
+                          data: Union[List, Tuple] = [],
+                          mask: List[int] = []
                           ) -> None:
         msg: Dict[str, Any] = {'jsonrpc': "2.0", 'method': "notify_" + name}
-        if data != SENTINEL:
-            msg['params'] = [data]
+        if data:
+            msg['params'] = data
         for ws in list(self.websockets.values()):
+            if ws.uid in mask:
+                continue
             ws.queue_message(msg)
 
     def get_count(self) -> int:
@@ -449,10 +491,17 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.is_closed: bool = False
         self.ip_addr: str = self.request.remote_ip
         self.queue_busy: bool = False
+        self.pending_responses: Dict[int, asyncio.Future] = {}
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
         self.last_pong_time: float = self.event_loop.get_loop_time()
         self._connected_time: float = 0.
-        self._client_data: Dict[str, str] = {}
+        self._identified: bool = False
+        self._client_data: Dict[str, str] = {
+            "name": "unknown",
+            "version": "",
+            "type": "",
+            "url": ""
+        }
 
     @property
     def uid(self) -> int:
@@ -467,12 +516,17 @@ class WebSocket(WebSocketHandler, Subscribable):
         return self._connected_time
 
     @property
+    def identified(self) -> bool:
+        return self._identified
+
+    @property
     def client_data(self) -> Dict[str, str]:
         return self._client_data
 
     @client_data.setter
     def client_data(self, data: Dict[str, str]) -> None:
         self._client_data = data
+        self._identified = True
 
     def open(self, *args, **kwargs) -> None:
         self.set_nodelay(True)
@@ -541,15 +595,54 @@ class WebSocket(WebSocketHandler, Subscribable):
             'method': "notify_status_update",
             'params': [status, eventtime]})
 
+    def call_method(
+        self,
+        method: str,
+        params: Optional[Union[List, Dict[str, Any]]] = None
+    ) -> Awaitable:
+        fut = self.event_loop.create_future()
+        msg = {
+            'jsonrpc': "2.0",
+            'method': method,
+            'id': id(fut)
+        }
+        if params is not None:
+            msg["params"] = params
+        self.pending_responses[id(fut)] = fut
+        self.queue_message(msg)
+        return fut
+
+    def send_notification(self, name: str, data: List) -> None:
+        self.wsm.notify_websockets(name, data, [self._uid])
+
+    def resolve_pending_response(
+        self, response_id: int, result: Any
+    ) -> bool:
+        fut = self.pending_responses.pop(response_id, None)
+        if fut is None:
+            return False
+        if isinstance(result, ServerError):
+            fut.set_exception(result)
+        else:
+            fut.set_result(result)
+        return True
+
     def on_close(self) -> None:
         self.is_closed = True
         self.message_buf = []
         now = self.event_loop.get_loop_time()
         pong_elapsed = now - self.last_pong_time
+        for resp in self.pending_responses.values():
+            resp.set_exception(ServerError("Client Socket Disconnected", 500))
+        self.pending_responses = {}
         logging.info(f"Websocket Closed: ID: {self.uid} "
                      f"Close Code: {self.close_code}, "
                      f"Close Reason: {self.close_reason}, "
                      f"Pong Time Elapsed: {pong_elapsed:.2f}")
+        if self._client_data["type"] == "agent":
+            extensions: ExtensionManager
+            extensions = self.server.lookup_component("extensions")
+            extensions.remove_agent(self)
         self.wsm.remove_websocket(self)
 
     def check_origin(self, origin: str) -> bool:
