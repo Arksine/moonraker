@@ -599,18 +599,16 @@ class MQTTClient(APITransport, Subscribable):
                                  request_method: str,
                                  callback: Callable[[WebRequest], Coroutine]
                                  ) -> RPCCallback:
-        async def func(**kwargs) -> Any:
-            self._check_timestamp(kwargs)
-            result = await callback(
-                WebRequest(endpoint, kwargs, request_method))
+        async def func(args: Dict[str, Any]) -> Any:
+            self._check_timestamp(args)
+            result = await callback(WebRequest(endpoint, args, request_method))
             return result
         return func
 
     def _generate_remote_callback(self, endpoint: str) -> RPCCallback:
-        async def func(**kwargs) -> Any:
-            self._check_timestamp(kwargs)
-            result = await self.klippy.request(
-                WebRequest(endpoint, kwargs))
+        async def func(args: Dict[str, Any]) -> Any:
+            self._check_timestamp(args)
+            result = await self.klippy.request(WebRequest(endpoint, args))
             return result
         return func
 
