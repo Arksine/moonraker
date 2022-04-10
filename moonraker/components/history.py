@@ -207,7 +207,7 @@ class History:
             spool_length: float = float(web_request.get_str("length"))
         except ValueError:
             raise self.server.error(
-                "Supplied spool length is not an integer or float")
+                "Given spool length is not an integer or float")
         self.job_totals["spool_length"] = spool_length
         database: DBComp = self.server.lookup_component("database")
         await database.insert_item(
