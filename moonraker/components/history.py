@@ -347,7 +347,10 @@ class History:
             self.job_totals['longest_job'], job.get('total_duration'))
         self.job_totals['longest_print'] = max(
             self.job_totals['longest_print'], job.get('print_duration'))
-        self.job_totals['spool_length'] -= job.get('filament_used')
+        try:
+            self.job_totals['spool_length'] -= job.get('filament_used')
+        except KeyError:
+            pass
         database: DBComp = self.server.lookup_component("database")
         database.insert_item(
             "moonraker", "history.job_totals", self.job_totals)
