@@ -3894,6 +3894,44 @@ An array of deleted job ids
 ]
 ```
 
+#### Set spool length
+Sets the spool length value in "job totals" to specified value
+
+HTTP request:
+```http
+POST /server/history/set_spool_length?length=<length>
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.history.set_spool_length",
+    "params":{
+        "length": "{length}"
+    },
+    "id": 3468
+}
+
+Returns:
+
+The totals prior to setting the spool length:
+
+```json
+{
+    "last_totals": {
+        "total_jobs": 3,
+        "total_time": 11748.077333278954,
+        "total_print_time": 11348.794790096988,
+        "total_filament_used": 11615.718840001999,
+        "longest_job": 11665.191012736992,
+        "longest_print": 11348.794790096988,
+        "spool_length": 296813.289168275342
+    }
+}
+```
+
+The length argument is required to be in milimeters.
+
 ### MQTT APIs
 
 The following API is available when `[mqtt]` has been configured.
