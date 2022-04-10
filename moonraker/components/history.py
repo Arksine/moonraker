@@ -32,7 +32,6 @@ class History:
             'file_manager')
         self.request_lock = Lock()
         database: DBComp = self.server.lookup_component("database")
-        self.spool_length: int = config.getint("spool_length", 330)
         self.job_totals: Dict[str, float] = database.get_item(
             "moonraker", "history.job_totals",
             {
@@ -42,7 +41,7 @@ class History:
                 'total_filament_used': 0.,
                 'longest_job': 0.,
                 'longest_print': 0.,
-                'spool_length': self.spool_length
+                'spool_length': 330000.
             }).result()
 
         self.server.register_event_handler(
@@ -71,8 +70,8 @@ class History:
             "/server/history/reset_totals", ['POST'],
             self._handle_job_total_reset)
         self.server.register_endpoint(
-            "/server/history/reset_spool_usage", ['GET'],
-            self._handle_job_reset_spool_usage
+            "/server/history/set_spool_length", ['POST'],
+            self._handle_job_set_spool_length
         )
 
         database.register_local_namespace(HIST_NAMESPACE)
@@ -197,19 +196,24 @@ class History:
             "moonraker", "history.job_totals", self.job_totals)
         return {'last_totals': last_totals}
 
-    async def _handle_job_reset_spool_usage(self,
-                                      web_request: WebRequest,
-                                      ) -> Dict[str, Dict[str, float]]:
+    async def _handle_job_set_spool_length(self,
+                                           web_request: WebRequest,
+                                           ) -> Dict[str, Dict[str, float]]:
         if self.current_job is not None:
             raise self.server.error(
                 "Job in progress, cannot reset spool usage")
         last_totals = dict(self.job_totals)
-        self.job_totals = last_totals
-        self.job_totals["spool_length"] = self.spool_length
+        try:
+            spool_length: float = float(web_request.get_str("length"))
+        except ValueError:
+            raise self.server.error(
+                "Supplied spool length is not an integer or float")
+        self.job_totals["spool_length"] = spool_length
         database: DBComp = self.server.lookup_component("database")
         await database.insert_item(
             "moonraker", "history.job_totals", self.job_totals)
         return {'last_totals': last_totals}
+
     def _on_job_started(self,
                         prev_stats: Dict[str, Any],
                         new_stats: Dict[str, Any]
