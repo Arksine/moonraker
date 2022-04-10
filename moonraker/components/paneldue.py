@@ -12,6 +12,7 @@ import json
 import errno
 import logging
 import asyncio
+import re
 from collections import deque
 from utils import ServerError
 
@@ -38,11 +39,13 @@ if TYPE_CHECKING:
 MIN_EST_TIME = 10.
 INITIALIZE_TIMEOUT = 10.
 
+
 class PanelDueError(ServerError):
     pass
 
 
 RESTART_GCODES = ["RESTART", "FIRMWARE_RESTART"]
+
 
 class SerialConnection:
     def __init__(self,
@@ -165,6 +168,7 @@ class SerialConnection:
                 return
         self.send_busy = False
 
+
 class PanelDue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -204,21 +208,19 @@ class PanelDue:
         self.confirmed_gcode: str = ""
         self.mbox_sequence: int = 0
         self.available_macros: Dict[str, str] = {}
+        self.confirmed_macros: Dict[str, str] = {}
         self.confirmed_macros = {
             "RESTART": "RESTART",
             "FIRMWARE_RESTART": "FIRMWARE_RESTART"}
         macros = config.getlist('macros', None)
         if macros is not None:
-            # The macro's configuration name is the key, whereas the full
-            # command is the value
-            self.available_macros = {m.split()[0]: m for m in macros}
+            self.available_macros = self._parse_macro_configline(macros)
         conf_macros = config.getlist('confirmed_macros', None)
         if conf_macros is not None:
-            # The macro's configuration name is the key, whereas the full
-            # command is the value
-            self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
+            # The macro's configuration name is the value, whereas the full
+            # command is the key
+            self.confirmed_macros = self._parse_macro_configline(conf_macros)
         self.available_macros.update(self.confirmed_macros)
-
         self.non_trivial_keys = config.getlist('non_trivial_keys',
                                                ["Klipper state"])
         self.ser_conn = SerialConnection(config, self)
@@ -394,8 +396,25 @@ class PanelDue:
         else:
             script = line
         # Execute the gcode.  Check for special RRF gcodes that
-        # require special handling
-        parts = script.split()
+        # require special handling.
+        i: int = 0
+        j: int = 0
+        parts = []
+        script += " "
+        while i < len(script):
+            j = script.find(" ", i)
+            p = script[i:j]
+            # The P-argument *for macro and files* is always
+            # the last one PanelDue sends.
+            if (p.startswith("P") or script.startswith("M36")) \
+                    and p.find("/") != -1:                  # v1.2x
+                p = script[i:-1]
+                j = len(script)
+            if p.startswith('P"') and not p.endswith('"'):  # >=v3.3
+                j = script.find('"', j) + 1
+                p = script[i:j]
+            parts.append(p)
+            i = j + 1
         cmd = parts[0].strip()
         if cmd in ["M23", "M30", "M32", "M36", "M37", "M98"]:
             arg = script[len(cmd):].strip()
@@ -405,7 +424,7 @@ class PanelDue:
         if cmd in self.direct_gcodes:
             params: Dict[str, Any] = {}
             for p in parts[1:]:
-                if p[0] not in "PSR":
+                if p[0] not in "PSRKF":
                     params["arg_p"] = p.strip(" \"\t\n")
                     continue
                 arg = p[0].lower()
@@ -426,7 +445,6 @@ class PanelDue:
         if cmd in self.special_gcodes:
             sgc_func = self.special_gcodes[cmd]
             script = sgc_func(parts[1:])
-
         if not script:
             return
         self.queue_gcode(script)
@@ -497,13 +515,19 @@ class PanelDue:
         return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
 
     def _prepare_M98(self, args: List[str]) -> str:
-        macro = args[0][1:].strip(" \"\t\n")
-        name_start = macro.rfind('/') + 1
-        macro = macro[name_start:]
-        cmd = self.available_macros.get(macro)
+        args[0] = args[0].strip('"')
+        match = re.search(r"""P"?0?:?/macros/(.*)\"?""", args[0], re.VERBOSE)
+        if match:
+            macro = match.group(1)
+        else:
+            raise PanelDueError(f"Unable to parse macro '{args[0]}'")
+        for key, value in self.available_macros.items():
+            if value == macro:
+                cmd = key
+        logging.debug(f"Trying to run macro '{cmd}'...")
         if cmd is None:
             raise PanelDueError(f"Macro {macro} invalid")
-        if macro in self.confirmed_macros:
+        if cmd in self.confirmed_macros:
             self._create_confirmation(macro, cmd)
             cmd = ""
         return cmd
@@ -582,6 +606,44 @@ class PanelDue:
 
         return 'I'
 
+    def _get_macro_dir(self, path: str, issubdir: bool) -> list:
+        mlist = []
+        # Get only the items of a subfolder (or all, if it is the root).
+        filtered = dict(filter(
+            lambda x: x[1].startswith(path),
+            self.available_macros.items()))
+        for fkey, fval in filtered.items():
+            if issubdir:
+                val = fval.replace(path + "/", "")
+            else:
+                val = fval.replace(path, "")
+            # Is the current item a (sub)directory?
+            idx = val.find("/")
+            if idx > 0:
+                # Folders need an asterisk in front of their name.
+                nkey = "*" + val[:idx]
+                mlist.append(nkey) if nkey not in mlist else mlist
+            else:
+                mlist.append(val)
+        return mlist
+
+    def _parse_macro_configline(self, macros: list) -> Dict[str, str]:
+        # The macro's configuration name is the key, whereas the full
+        # command is the value.
+        macrolist: Dict[str, str] = {}
+        folder: str = ""
+        for line in macros:
+            if line.startswith("/"):
+                # folder
+                folder = line[1:] + "/"
+            elif line.startswith("@"):
+                # alias
+                alias = line.split('"')
+                macrolist[alias[2][1:]] = f"{folder}{alias[1]}"
+            else:
+                macrolist[line] = f"{folder}{line}"
+        return macrolist
+
     def _run_paneldue_M408(self,
                            arg_r: Optional[int] = None,
                            arg_s: int = 1
@@ -597,7 +659,7 @@ class PanelDue:
 
         if not self.initialized:
             response['dir'] = "/macros"
-            response['files'] = list(self.available_macros.keys())
+            response['files'] = self._get_macro_dir("", False)
             self.initialized = True
         if not self.is_ready:
             self.last_printer_state = 'O'
@@ -728,9 +790,6 @@ class PanelDue:
             return
         path = arg_p
 
-        # Strip quotes if they exist
-        path = path.strip('\"')
-
         # Path should come in as "0:/macros, or 0:/<gcode_folder>".  With
         # repetier compatibility enabled, the default folder is root,
         # ie. "0:/"
@@ -739,8 +798,9 @@ class PanelDue:
         response: Dict[str, Any] = {'dir': path}
         response['files'] = []
 
-        if path == "/macros":
-            response['files'] = list(self.available_macros.keys())
+        if path.startswith("/macros"):
+            issubdir = path[8:] != ""
+            response['files'] = self._get_macro_dir(path[8:], issubdir)
         else:
             # HACK: The PanelDue has a bug where it does not correctly detect
             # subdirectories if we return the root as "/".  Moonraker can

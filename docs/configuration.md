@@ -352,39 +352,57 @@ machine_name: Klipper
 #   An optional unique machine name which displays on the PanelDue's
 #   Header.  The default is "Klipper".
 macros:
- LOAD_FILAMENT
- UNLOAD_FILAMENT
- PANELDUE_BEEP FREQUENCY=500 DURATION=1
-#   A list of newline separated "macros" that are displayed in the
-#   PanelDue's "macros" tab.  These can be gcode macros or simple
-#   gcodes.  A macro may contain parameters.  The default is no
-#   macros will be displayed by the PanelDue.
+  STATUS
+  /My Sounds
+    @"Test Beep" PANELDUE_BEEP FREQUENCY=500 DURATION=1
+  /My Sounds/Subsounds
+    @"Test Beep 2" PANELDUE_BEEP FREQUENCY=500 DURATION=2
+    @"Test Beep 3" PANELDUE_BEEP FREQUENCY=500 DURATION=3
+  /Calibration
+    Z_TILT
+    @"Run Bed Mesh" BED_MESH_CALIBRATE
+    QUAD_GANTRY_LEVEL
+#   A list of macros, with optional virtual folders and display name
+#   to be shown in the "macros" tab. These can be GCODE macros or simple
+#   GCODES.  A macro may contain parameters.
+#   If a line starts with a '/'), it is considered a directory.
+#   Multiple levels are supported, as are whitespaces.
+#   If a line starts with an '@', the display name can be specified.
+#   This name has to be between mandatory double quotes (") to be able to
+#   handle  whitespaces. Everything after that will be considered a macro
+#   (with optional parameters) or just plain GCODE.
 confirmed_macros:
-  RESTART
-  FIRMWARE_RESTART
-#  Like the "macros" option, this list is added to the macros tab.
-#  When one of these macros is excuted the PanelDue will prompt
-#  the user with a confirmation dialog.  The default is to include
-#  RESTART and FIRMWARE_RESTART.
+  @"Restart" RESTART
+  @"Restart the Firmware" FIRMWARE_RESTART
+#   Like the "macros" option, this list is added to the macros tab.
+#   When one of these macros is excuted the PanelDue will prompt
+#   the user with a confirmation dialog. Folders and display names are
+#   supported here as well and will be merged with the ones in the
+#   "macros" option.
 ```
 
 Most options above are self explanatory.  The "macros" option can be used
 to specify commands (either built in or gcode_macros) that will show up
-in the PanelDue's "macro" menu.
+in the PanelDue's "macro" menu. If you leave out the ```confirmed_macros```
+option, the default of ```RESTART``` and ```FIRMWARE_RESTART``` will be
+shown.
 
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
 ```ini
 # printer.cfg
 
 [gcode_macro PANELDUE_BEEP]
-# Beep frequency
-default_parameter_FREQUENCY: 300
-# Beep duration in seconds
-default_parameter_DURATION: 1.
+# Parameter: FREQUENCY
+# Parameter: DURATION
 gcode:
-  {action_call_remote_method("paneldue_beep",
-                             frequency=FREQUENCY|int,
-                             duration=DURATION|float)}
+  # Beep frequency
+	{% set freq = params.FREQUENCY|default(4500)|int %}
+  # Beep duration in seconds
+	{% set dur = params.DURATION|default(1.0)|float %}
+
+	{action_call_remote_method("paneldue_beep",
+                              frequency=freq,
+                              duration=dur)}
 ```
 
 ### `[power]`
