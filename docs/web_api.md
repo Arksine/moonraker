@@ -3930,7 +3930,7 @@ The totals prior to setting the spool length:
 }
 ```
 
-The length argument is required to be in milimeters.
+The length argument is required to be in millimeters.
 
 ### MQTT APIs
 
