@@ -419,7 +419,11 @@ class Machine:
                         "address": addr,
                         "family": fam
                     }
-        return {}
+        return {
+            "ifname": "",
+            "address": src_ip or "",
+            "family": ""
+        }
 
     def _find_public_ip(self) -> Optional[str]:
         #  Check for an IPv4 Source IP
