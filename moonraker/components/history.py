@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 import time
+import logging
 from asyncio import Lock
 
 # Annotation imports
@@ -246,6 +247,9 @@ class History:
         self.history_ns[job_id] = job.get_stats()
         self.cached_job_ids.append(job_id)
         self.next_job_id += 1
+        logging.debug(
+            f"History Job Added - Id: {job_id}, File: {job.filename}"
+        )
         self.send_history_event("added")
 
     def delete_job(self, job_id: Union[int, str]) -> None:
@@ -272,6 +276,11 @@ class History:
         self.grab_job_metadata()
         self.save_current_job()
         self._update_job_totals()
+        logging.debug(
+            f"History Job Finished - Id: {self.current_job_id}, "
+            f"File: {self.current_job.filename}, "
+            f"Status: {status}"
+        )
         self.send_history_event("finished")
         self.current_job = None
         self.current_job_id = None
