@@ -76,7 +76,7 @@ class JobQueue:
                 event_loop = self.server.get_event_loop()
                 self._set_queue_state("loading")
                 self.pop_queue_handle = event_loop.delay_callback(
-                    0.01, self._pop_job, False)
+                    1., self._pop_job, False)
 
     async def _handle_shutdown(self) -> None:
         await self.pause_queue()
