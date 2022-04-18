@@ -56,6 +56,7 @@ class KlippyConnection:
         self.closing: bool = False
         self._klippy_info: Dict[str, Any] = {}
         self.init_list: List[str] = []
+        self._klipper_version: str = ""
         self._missing_reqs: Set[str] = set()
         self._peer_cred: Dict[str, int] = {}
         self.init_attempts: int = 0
@@ -319,6 +320,11 @@ class KlippyConnection:
                     f"Klippy may have experienced an error during startup.\n"
                     f"Please check klippy.log for more information")
             return
+        version = result.get("software_version", "")
+        if version != self._klipper_version:
+            self._klipper_version = version
+            msg = f"Klipper Version: {version}"
+            self.server.add_log_rollover_item("klipper_version", msg)
         self._klippy_info = dict(result)
         self._state = result.get('state', "unknown")
         if send_id:
