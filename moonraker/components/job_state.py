@@ -38,6 +38,9 @@ class JobState:
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
         self.last_print_stats = result.get("print_stats", {})
+        if "state" in self.last_print_stats:
+            state = self.last_print_stats["state"]
+            logging.info(f"Job state initialized: {state}")
 
     async def _status_update(self, data: Dict[str, Any]) -> None:
         if 'print_stats' not in data:
@@ -56,7 +59,14 @@ class JobState:
                     if self._check_resumed(prev_ps, new_ps):
                         new_state = "resumed"
                     else:
+                        logging.info(
+                            f"Job Started: {new_ps['filename']}"
+                        )
                         new_state = "started"
+                logging.debug(
+                    f"Job State Changed - Prev State: {old_state}, "
+                    f"New State: {new_state}"
+                )
                 self.server.send_event(
                     f"job_state:{new_state}", prev_ps, new_ps)
         self.last_print_stats.update(ps)
