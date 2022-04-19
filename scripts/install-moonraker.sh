@@ -6,6 +6,7 @@ PYTHONDIR="${HOME}/moonraker-env"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="n"
 FORCE_DEFAULTS="n"
+DISABLE_SYSTEMCTL="n"
 CONFIG_PATH="${HOME}/moonraker.conf"
 LOG_PATH="/tmp/moonraker.log"
 
@@ -89,8 +90,10 @@ Restart=always
 RestartSec=10
 EOF
 # Use systemctl to enable the klipper systemd service script
-    sudo systemctl enable moonraker.service
-    sudo systemctl daemon-reload
+    if [ $DISABLE_SYSTEMCTL = "n" ]; then
+        sudo systemctl enable moonraker.service
+        sudo systemctl daemon-reload
+    fi
 }
 
 check_polkit_rules()
@@ -149,10 +152,11 @@ SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
 LAUNCH_CMD="${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py"
 
 # Parse command line arguments
-while getopts "rfc:l:" arg; do
+while getopts "rfzc:l:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
         f) FORCE_DEFAULTS="y";;
+        z) DISABLE_SYSTEMCTL="y";;
         c) CONFIG_PATH=$OPTARG;;
         l) LOG_PATH=$OPTARG;;
     esac
@@ -165,4 +169,6 @@ install_packages
 create_virtualenv
 install_script
 check_polkit_rules
-start_software
+if [ $DISABLE_SYSTEMCTL = "n" ]; then
+    start_software
+fi
