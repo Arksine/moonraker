@@ -689,8 +689,9 @@ class MoonrakerDatabase:
             decode_func = RECORD_DECODE_FUNCS[fmt]
             return decode_func(bvalue)
         except Exception:
+            val = bytes(bvalue).decode()
             raise self.server.error(
-                f"Error decoding value {bvalue.decode()}, format: {chr(fmt)}")
+                f"Error decoding value {val}, format: {chr(fmt)}")
 
     async def _handle_list_request(self,
                                    web_request: WebRequest
