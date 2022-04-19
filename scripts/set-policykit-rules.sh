@@ -113,6 +113,7 @@ verify_ready()
 
 CLEAR="n"
 ROOT="n"
+DISABLE_SYSTEMCTL="n"
 
 # Parse command line arguments
 while :; do
@@ -122,6 +123,9 @@ while :; do
             ;;
         -r|--root)
             ROOT="y"
+            ;;
+        -z|--disable-systemctl)
+            DISABLE_SYSTEMCTL="y"
             ;;
         *)
             break
@@ -140,6 +144,8 @@ else
     set -e
     check_moonraker_service
     add_polkit_rules
-    report_status "Restarting Moonraker..."
-    sudo systemctl restart moonraker
+    if [ $DISABLE_SYSTEMCTL = "n" ]; then
+        report_status "Restarting Moonraker..."
+        sudo systemctl restart moonraker
+    fi
 fi
