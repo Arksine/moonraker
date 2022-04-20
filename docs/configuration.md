@@ -1872,3 +1872,76 @@ command_payload:
   # generate the json output
   { my_payload|tojson }
 ```
+## Option Moved Deprecations
+
+On November 7th 2021 a change to Moonraker was made regarding configuration of
+`core components`.  Moonraker defines a `core component` as a component that
+is required for Moonraker to function and is always loaded.  Prior to November
+7th all core components were configured in the `[server]` section.  As
+Moonraker's functionality expanded, this became untenable as the `[server]`
+section began to bloat.  Thus a change was made to move the configuration
+for `core components` out of `[server]` into their own sections.  This was
+not a breaking change, Moonraker would fall back to the `[server]` section
+for core component configuration if no section was present.
+
+On April 6th 2022 the fallback was deprecated.  Moonraker will still function
+normally if `core components` are configured in the `[server]` section,
+however Moonraker now generates warnings when it detected this condition,
+such as:
+
+```
+[server]: Option 'config_path' has been moved to section [file_manager]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
+[server]: Option 'log_path' has been moved to section [file_manager]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
+[server]: Option 'temperature_store_size' has been moved to section [data_store]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
+[server]: Option 'gcode_store_size' has been moved to section [data_store]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation
+```
+
+To correct these warnings, the user must modify `moonraker.conf`.  For example,
+your current configuration may look like the following:
+
+```ini
+# moonraker.conf
+
+[server]
+host: 0.0.0.0
+port: 7125
+temperature_store_size: 600
+gcode_store_size: 1000
+config_path: ~/klipper_config
+log_path: ~/klipper_logs
+
+```
+
+You will need to change it to the following;
+
+```ini
+# moonraker.conf
+
+[server]
+host: 0.0.0.0
+port: 7125
+
+[file_manager]
+config_path: ~/klipper_config
+log_path: ~/klipper_logs
+
+[data_store]
+temperature_store_size: 600
+gcode_store_size: 1000
+```
+
+The common front ends provide a UI for modifying `moonraker.conf`, otherwise
+it will be necessary to ssh into the host and use a tool such as `nano` to
+make the changes.
+
+!!! Warning
+    Make sure `moonraker.conf` does not have duplicate sections, and double
+    check to make sure that the formatting is correct.
+
+Once the changes are complete you may use the UI to restart Moonraker and
+the warnings should clear.
+
+!!! Note
+    Some users have asked why Moonraker does not automate these changes.
+    Currently Moonraker has no mechanism to modify the configuration directly,
+    however this functionality will be added in the future.
