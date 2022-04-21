@@ -16,6 +16,7 @@ import traceback
 import tempfile
 import zipfile
 import shutil
+import uuid
 from PIL import Image
 
 # Annotation imports
@@ -824,6 +825,7 @@ def extract_metadata(file_path: str,
     size = os.path.getsize(file_path)
     metadata['size'] = size
     metadata['modified'] = os.path.getmtime(file_path)
+    metadata['uuid'] = str(uuid.uuid4())
     with open(file_path, 'r') as f:
         # read the default size, which should be enough to
         # identify the slicer
