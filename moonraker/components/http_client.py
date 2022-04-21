@@ -470,7 +470,8 @@ class StreamingDownload:
             self.total_recd += len(chunk)
             if self.download_size > 0 and self.progress_callback is not None:
                 pct = int(self.total_recd / self.download_size * 100 + .5)
-                if pct - self.pct_done > 5:
+                pct = min(100, pct)
+                if pct != self.pct_done:
                     self.pct_done = pct
                     self.progress_callback(
                         pct, self.download_size, self.total_recd)
