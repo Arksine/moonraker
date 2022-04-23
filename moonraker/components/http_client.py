@@ -274,6 +274,8 @@ class HttpClient:
                     header_callback=dl.on_headers_recd)
                 timeout = connect_timeout + request_timeout + 1.
                 resp = await asyncio.wait_for(fut, timeout)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 if i + 1 == attempts:
                     raise
