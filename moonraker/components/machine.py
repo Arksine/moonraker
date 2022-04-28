@@ -54,6 +54,11 @@ SD_MFGRS = {
 }
 IP_FAMILIES = {'inet': 'ipv4', 'inet6': 'ipv6'}
 NETWORK_UPDATE_SEQUENCE = 10
+SERVICE_PROPERTIES = [
+    "Requires", "After", "SupplementaryGroups", "EnvironmentFiles",
+    "ExecStart", "WorkingDirectory", "FragmentPath", "Description",
+    "User"
+]
 
 class Machine:
     def __init__(self, config: ConfigHelper) -> None:
@@ -63,6 +68,7 @@ class Machine:
         dist_info.update(distro.info())
         dist_info['release_info'] = distro.distro_release_info()
         self.inside_container = False
+        self.moonraker_service_info: Dict[str, Any] = {}
         self.system_info: Dict[str, Any] = {
             'python': {
                 "version": sys.version_info,
@@ -132,6 +138,12 @@ class Machine:
                     sys_info_msg += f"\n  {key}: {val}"
         self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
 
+    def get_system_provider(self):
+        return self.sys_provider
+
+    def get_moonraker_service_info(self):
+        return dict(self.moonraker_service_info)
+
     async def wait_for_init(self, timeout: float = None) -> None:
         try:
             await asyncio.wait_for(self.init_evt.wait(), timeout)
@@ -150,6 +162,11 @@ class Machine:
         avail_list = list(available_svcs.keys())
         self.system_info['available_services'] = avail_list
         self.system_info['service_state'] = available_svcs
+        svc_info = await self.sys_provider.extract_service_info(
+            "moonraker", os.getpid(), SERVICE_PROPERTIES
+        )
+        self.moonraker_service_info = svc_info
+        self.log_service_info(svc_info)
         self.init_evt.set()
 
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
@@ -472,6 +489,20 @@ class Machine:
                 wifi_intfs[parts[0]] = parts[1].split(":")[-1].strip('"')
         return wifi_intfs
 
+    def log_service_info(self, svc_info: Dict[str, Any]) -> None:
+        if not svc_info:
+            return
+        name = svc_info.get("unit_name", "unknown")
+        msg = f"\nSystemd unit {name}:"
+        for key, val in svc_info.items():
+            if key == "properties":
+                msg += "\nProperties:"
+                for prop_key, prop in val.items():
+                    msg += f"\n**{prop_key}={prop}"
+            else:
+                msg += f"\n{key}: {val}"
+        self.server.add_log_rollover_item(name, msg)
+
 class BaseProvider:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -505,6 +536,11 @@ class BaseProvider:
 
     def get_available_services(self) -> Dict[str, Dict[str, str]]:
         return self.available_services
+
+    async def extract_service_info(
+        self, service: str, pid: int, properties: List[str], raw: bool = False
+    ) -> Dict[str, Any]:
+        return {}
 
 class SystemdCliProvider(BaseProvider):
     async def initialize(self) -> None:
@@ -604,6 +640,69 @@ class SystemdCliProvider(BaseProvider):
                             {svc: new_state})
         except Exception:
             logging.exception("Error processing service state update")
+
+    async def extract_service_info(
+        self,
+        service_name: str,
+        pid: int,
+        properties: List[str],
+        raw: bool = False
+    ) -> Dict[str, Any]:
+        service_info: Dict[str, Any] = {}
+        expected_name = f"{service_name}.service"
+        try:
+            resp: str = await self.shell_cmd.exec_cmd(
+                f"systemctl status {pid}"
+            )
+            unit_name = resp.split(maxsplit=2)[1]
+            service_info["unit_name"] = unit_name
+            service_info["is_default"] = True
+            if unit_name != expected_name:
+                service_info["is_default"] = False
+                logging.info(
+                    f"Detected alternate unit name for {service_name}: "
+                    f"{unit_name}"
+                )
+            prop_args = ",".join(properties)
+            props: str = await self.shell_cmd.exec_cmd(
+                f"systemctl show -p {prop_args} {unit_name}"
+            )
+            raw_props: Dict[str, Any] = {}
+            lines = [p.strip() for p in props.split("\n") if p.strip]
+            for line in lines:
+                parts = line.split("=", 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    val = parts[1].strip()
+                    raw_props[key] = val
+            if raw:
+                service_info["properties"] = raw_props
+            else:
+                processed = self._process_raw_properties(raw_props)
+                service_info["properties"] = processed
+        except Exception:
+            logging.exception("Error extracting service info")
+            return {}
+        return service_info
+
+    def _process_raw_properties(
+        self, raw_props: Dict[str, str]
+    ) -> Dict[str, Any]:
+        processed: Dict[str, Any] = {}
+        for key, val in raw_props.items():
+            processed[key] = val
+            if key == "ExecStart":
+                # this is a struct, we need to deconstruct it
+                match = re.search(r"argv\[\]=([^;]+);", val)
+                if match is not None:
+                    processed[key] = match.group(1).strip()
+            elif key == "EnvironmentFiles":
+                if val:
+                    processed[key] = val.split()[0]
+            elif key in ["Requires", "After", "SupplementaryGroups"]:
+                vals = [v.strip() for v in val.split() if v.strip()]
+                processed[key] = vals
+        return processed
 
 class SystemdDbusProvider(BaseProvider):
     def __init__(self, config: ConfigHelper) -> None:
@@ -781,6 +880,72 @@ class SystemdDbusProvider(BaseProvider):
             self.server.send_event("machine:service_state_changed",
                                    {service_name: dict(svc)})
 
+    async def extract_service_info(
+        self,
+        service_name: str,
+        pid: int,
+        properties: List[str],
+        raw: bool = False
+    ) -> Dict[str, Any]:
+        if not hasattr(self, "systemd_mgr"):
+            return {}
+        mgr = self.systemd_mgr
+        service_info: Dict[str, Any] = {}
+        expected_name = f"{service_name}.service"
+        try:
+            dbus_path: str
+            dbus_path = await mgr.call_get_unit_by_pid(pid)  # type: ignore
+            bus = "org.freedesktop.systemd1"
+            unit_intf, svc_intf = await self.dbus_mgr.get_interfaces(
+                "org.freedesktop.systemd1", dbus_path,
+                [f"{bus}.Unit", f"{bus}.Service"]
+            )
+            unit_name = await unit_intf.get_id()  # type: ignore
+            service_info["unit_name"] = unit_name
+            service_info["is_default"] = True
+            if unit_name != expected_name:
+                service_info["is_default"] = False
+                logging.info(
+                    f"Detected alternate unit name for {service_name}: "
+                    f"{unit_name}"
+                )
+            raw_props: Dict[str, Any] = {}
+            for key in properties:
+                snake_key = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", key).lower()
+                func = getattr(unit_intf, f"get_{snake_key}", None)
+                if func is None:
+                    func = getattr(svc_intf, f"get_{snake_key}", None)
+                    if func is None:
+                        continue
+                val = await func()
+                raw_props[key] = val
+            if raw:
+                service_info["properties"] = raw_props
+            else:
+                processed = self._process_raw_properties(raw_props)
+                service_info["properties"] = processed
+        except Exception:
+            logging.exception("Error Extracting Service Info")
+            return {}
+        return service_info
+
+    def _process_raw_properties(
+        self, raw_props: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        processed: Dict[str, Any] = {}
+        for key, val in raw_props.items():
+            if key == "ExecStart":
+                try:
+                    val = " ".join(val[0][1])
+                except Exception:
+                    pass
+            elif key == "EnvironmentFiles":
+                try:
+                    val = val[0][0]
+                except Exception:
+                    pass
+            processed[key] = val
+        return processed
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
