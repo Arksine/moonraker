@@ -7,8 +7,13 @@ SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
 FORCE_DEFAULTS="${MOONRAKER_FORCE_DEFAULTS:-n}"
 DISABLE_SYSTEMCTL="${MOONRAKER_DISABLE_SYSTEMCTL:-n}"
-CONFIG_PATH="${MOONRAKER_CONFIG_PATH:-${HOME}/moonraker.conf}"
-LOG_PATH="${MOONRAKER_LOG_PATH:-/tmp/moonraker.log}"
+SKIP_POLKIT="${MOONRAKER_SKIP_POLKIT:-n}"
+CONFIG_PATH="${MOONRAKER_CONFIG_PATH}"
+LOG_PATH="${MOONRAKER_LOG_PATH}"
+DATA_PATH="${MOONRAKER_DATA_PATH}"
+INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
+SERVICE_VERSION="1"
+MACHINE_PROVIDER="systemd_cli"
 
 # Step 2: Clean up legacy installation
 cleanup_legacy() {
@@ -51,11 +56,11 @@ create_virtualenv()
     fi
 
     if [ ! -d ${PYTHONDIR} ]; then
-        GET_PIP="${HOME}/get-pip.py"
-        virtualenv --no-pip -p /usr/bin/python3 ${PYTHONDIR}
-        curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o ${GET_PIP}
-        ${PYTHONDIR}/bin/python ${GET_PIP}
-        rm ${GET_PIP}
+        virtualenv -p /usr/bin/python3 ${PYTHONDIR}
+        #GET_PIP="${HOME}/get-pip.py"
+        #curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o ${GET_PIP}
+        #${PYTHONDIR}/bin/python ${GET_PIP}
+        #rm ${GET_PIP}
     fi
 
     # Install/update dependencies
@@ -66,14 +71,25 @@ create_virtualenv()
 install_script()
 {
     # Create systemd service file
-    SERVICE_FILE="${SYSTEMDDIR}/moonraker.service"
+    ENV_FILE="${SRCDIR}/${INSTANCE_ALIAS}.env"
+    SERVICE_FILE="${SYSTEMDDIR}/${INSTANCE_ALIAS}.service"
+    if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
+        rm -f $ENV_FILE
+        args="MOONRAKER_ARGS=\"${SRCDIR}/moonraker/moonraker.py"
+        args="${args} -a ${INSTANCE_ALIAS}"
+        [ -n "${CONFIG_PATH}" ] && args="${args} -c ${CONFIG_PATH}"
+        [ -n "${LOG_PATH}" ] && args="${args} -l ${LOG_PATH}"
+        [ -n "${DATA_PATH}" ] && args="${args} -d ${DATA_PATH}"
+        args="${args}\""
+        echo $args > $ENV_FILE
+    fi
     [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
     report_status "Installing system start script..."
     sudo groupadd -f moonraker-admin
     sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
-#Systemd service file for moonraker
+# systemd service file for moonraker
 [Unit]
-Description=API Server for Klipper
+Description=API Server for Klipper SV${SERVICE_VERSION}
 Requires=network-online.target
 After=network-online.target
 
@@ -86,13 +102,14 @@ User=$USER
 SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
 WorkingDirectory=${SRCDIR}
-ExecStart=${LAUNCH_CMD} -c ${CONFIG_PATH} -l ${LOG_PATH}
+EnvironmentFile=${ENV_FILE}
+ExecStart=${PYTHONDIR}/bin/python \$MOONRAKER_ARGS
 Restart=always
 RestartSec=10
 EOF
 # Use systemctl to enable the klipper systemd service script
     if [ $DISABLE_SYSTEMCTL = "n" ]; then
-        sudo systemctl enable moonraker.service
+        sudo systemctl enable "${INSTANCE_ALIAS}.service"
         sudo systemctl daemon-reload
     fi
 }
@@ -102,33 +119,74 @@ check_polkit_rules()
     if [ ! -x "$(command -v pkaction)" ]; then
         return
     fi
-    POLKIT_VERSION="$( pkaction --version | grep -Po "(\d?\.\d+)" )"
+    POLKIT_VERSION="$( pkaction --version | grep -Po "(\d+\.?\d*)" )"
+    NEED_POLKIT_INSTALL="n"
     if [ "$POLKIT_VERSION" = "0.105" ]; then
         POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker.pkla"
         # legacy policykit rules don't give users other than root read access
         if sudo [ ! -f $POLKIT_LEGACY_FILE ]; then
-            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
-            echo "*** if you wish to grant Moonraker authorization to manage"
-            echo "*** system services, reboot/shutdown the system, and update"
-            echo "*** packages."
+            NEED_POLKIT_INSTALL="y"
         fi
     else
         POLKIT_FILE="/etc/polkit-1/rules.d/moonraker.rules"
         POLKIT_USR_FILE="/usr/share/polkit-1/rules.d/moonraker.rules"
         if [ ! -f $POLKIT_FILE ] && [ ! -f $POLKIT_USR_FILE ]; then
+            NEED_POLKIT_INSTALL="y"
+        fi
+    fi
+    if [ "${NEED_POLKIT_INSTALL}" = "y" ]; then
+        if [ "${SKIP_POLKIT}" = "y" ]; then
             echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
             echo "*** if you wish to grant Moonraker authorization to manage"
             echo "*** system services, reboot/shutdown the system, and update"
             echo "*** packages."
+        else
+            report_status "Installing PolKit Rules"
+            ${SRCDIR}/scripts/set-policykit-rules.sh -z
+            MACHINE_PROVIDER="systemd_dbus"
         fi
+    else
+        MACHINE_PROVIDER="systemd_dbus"
     fi
 }
 
-# Step 6: Start server
+# Step 6: Initialize data folder
+init_data_path()
+{
+    dpath="${DATA_PATH:-${HOME}/${INSTANCE_ALIAS}_data}"
+    report_status "Initializing Moonraker Data Path at ${dpath}"
+    config_dir="${dpath}/config"
+    logs_dir="${dpath}/logs"
+    config_file="${dpath}/config/${INSTANCE_ALIAS}.conf"
+    [ ! -e "${dpath}" ] && mkdir ${dpath}
+    [ ! -e "${config_dir}" ] && mkdir ${config_dir}
+    [ ! -e "${logs_dir}" ] && mkdir ${logs_dir}
+    [ -n "${CONFIG_PATH}" ] && config_file=${CONFIG_PATH}
+    if [ ! -e "${config_file}" ]; then
+        report_status "Writing Config File ${config_file}:\n"
+        /bin/sh -c "cat > ${config_file}" << EOF
+# Moonraker Configuration File
+
+[server]
+host: 0.0.0.0
+port: 7125
+# Make sure the klippy_uds_address is correct.  It is initialized
+# to the default address.
+klippy_uds_address: /tmp/klippy_uds
+
+[machine]
+provider: ${MACHINE_PROVIDER}
+
+EOF
+        cat ${config_file}
+    fi
+}
+
+# Step 7: Start server
 start_software()
 {
     report_status "Launching Moonraker API Server..."
-    sudo systemctl restart moonraker
+    sudo systemctl restart ${INSTANCE_ALIAS}
 }
 
 # Helper functions
@@ -150,16 +208,18 @@ set -e
 
 # Find SRCDIR from the pathname of this script
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
-LAUNCH_CMD="${PYTHONDIR}/bin/python ${SRCDIR}/moonraker/moonraker.py"
 
 # Parse command line arguments
-while getopts "rfzc:l:" arg; do
+while getopts "rfzxc:l:d:a:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
         f) FORCE_DEFAULTS="y";;
         z) DISABLE_SYSTEMCTL="y";;
+        x) SKIP_POLKIT="y";;
         c) CONFIG_PATH=$OPTARG;;
         l) LOG_PATH=$OPTARG;;
+        d) DATA_PATH=$OPTARG;;
+        a) INSTANCE_ALIAS=$OPTARG;;
     esac
 done
 
@@ -170,6 +230,7 @@ install_packages
 create_virtualenv
 install_script
 check_polkit_rules
+init_data_path
 if [ $DISABLE_SYSTEMCTL = "n" ]; then
     start_software
 fi
