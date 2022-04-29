@@ -34,7 +34,7 @@ from typing import (
 if TYPE_CHECKING:
     from types import ModuleType
 
-MOONRAKER_PATH = os.path.join(os.path.dirname(__file__), '..')
+MOONRAKER_PATH = str(pathlib.Path(__file__).parent.parent.resolve())
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
 
