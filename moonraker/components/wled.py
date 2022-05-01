@@ -79,8 +79,8 @@ class Strip():
         self.onoff = OnOff.on
         self.preset = self.initial_preset
         self.brightness = 255
-        self.intensity = None
-        self.speed = None
+        self.intensity = -1
+        self.speed = -1
         if self.initial_preset >= 0:
             self._update_color_data(self.initial_red,
                                     self.initial_green,
@@ -140,9 +140,9 @@ class Strip():
             self.send_full_chain_data = True
             self.preset = preset
             # Without reading the data back from wled we don't know the values
-            self.brightness = None
-            self.intensity = None
-            self.speed = None
+            self.brightness = -1
+            self.intensity = -1
+            self.speed = -1
             await self._send_wled_command({"on": True, "ps": preset})
 
     async def wled_off(self: Strip) -> None:
@@ -161,7 +161,7 @@ class Strip():
 
         # Even if a preset is not activated sending seg {} information will
         # turn it back on
-        control: Dict[str, Any] = None
+        control: Dict[str, Any]
         if self.preset != -1:
             control = {"seg": {}}
         else:
@@ -224,7 +224,7 @@ class Strip():
             # If we are coming from a preset without a wled_control
             # we don't know a brightness, this will also ensure
             # behaviour is consistent prior to introduction of wled_control
-            if self.brightness is None:
+            if self.brightness == -1:
                 self.brightness = 255
 
             # Base command for setting an led (for all active segments)
@@ -508,6 +508,9 @@ class WLED:
                                           ) -> Dict[str, Any]:
         strip_name: str = web_request.get_str('strip')
         preset: int = web_request.get_int('preset', -1)
+        brightness: int = web_request.get_int('brightness', -1)
+        intensity: int = web_request.get_int('intensity', -1)
+        speed: int = web_request.get_int('speed', -1)
 
         req_action = web_request.get_action()
         if strip_name not in self.strips:
@@ -520,7 +523,8 @@ class WLED:
             if action not in ["on", "off", "toggle", "control"]:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
-            result = await self._process_request(strip, action, preset)
+            result = await self._process_request(strip, action, preset,
+                                                 brightness, intensity, speed)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self: WLED,
@@ -535,7 +539,8 @@ class WLED:
         req = ep.split("/")[-1]
         for name, strip in requested_strips.items():
             if strip is not None:
-                result[name] = await self._process_request(strip, req, -1)
+                result[name] = await self._process_request(strip, req, -1,
+                                                           -1, -1, -1)
             else:
                 result[name] = {"error": "strip_not_found"}
         return result
@@ -543,8 +548,8 @@ class WLED:
     async def _process_request(self: WLED,
                                strip: Strip,
                                req: str,
-                               brightness: int,
                                preset: int,
+                               brightness: int,
                                intensity: int,
                                speed: int
                                ) -> Dict[str, Any]:
@@ -554,15 +559,15 @@ class WLED:
             return strip.get_strip_info()
         if req == "toggle":
             req = "on" if strip_onoff == OnOff.off else "off"
-        if req == "control":
-            strip.wled_control(brightness, intensity, speed)
 
-        if req in ["on", "off"]:
+        if req in ["on", "off", "control"]:
             # Always do something, could be turning off colors, or changing
             # preset, easier not to have to worry
             if req == "on":
                 strip_onoff = OnOff.on
                 await strip.wled_on(preset)
+            elif req == "control":
+                await strip.wled_control(brightness, intensity, speed)
             else:
                 strip_onoff = OnOff.off
                 await strip.wled_off()
