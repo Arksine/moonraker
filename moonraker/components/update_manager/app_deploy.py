@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import os
 import pathlib
 import shutil
 import hashlib
@@ -72,9 +73,14 @@ class AppDeploy(BaseDeploy):
             self.executable = pathlib.Path(executable).expanduser()
             self.pip_exe = self.executable.parent.joinpath("pip")
             if not self.pip_exe.exists():
-                self.server.add_warning(
-                    f"Update Manger {self.name}: Unable to locate pip "
-                    "executable")
+                if self.executable.is_symlink():
+                    self.executable = pathlib.Path(os.readlink(self.executable))
+                    self.pip_exe = self.executable.parent.joinpath("pip")
+                if not self.pip_exe.exists():
+                    logging.info(
+                        f"Update Manger {self.name}: Unable to locate pip "
+                        "executable")
+                    self.pip_exe = None
             self._verify_path(config, 'env', self.executable)
             self.venv_args = config.get('venv_args', None)
 
