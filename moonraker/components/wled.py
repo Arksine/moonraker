@@ -68,6 +68,9 @@ class Strip():
             "status": self.onoff,
             "chain_count": self.chain_count,
             "preset": self.preset,
+            "brightness": self.brightness,
+            "intensity": self.intensity,
+            "speed": self.speed,
             "error": self.error_state
         }
 
@@ -75,6 +78,9 @@ class Strip():
         self.send_full_chain_data = True
         self.onoff = OnOff.on
         self.preset = self.initial_preset
+        self.brightness = 255
+        self.intensity = None
+        self.speed = None
         if self.initial_preset >= 0:
             self._update_color_data(self.initial_red,
                                     self.initial_green,
@@ -133,6 +139,10 @@ class Strip():
         else:
             self.send_full_chain_data = True
             self.preset = preset
+            # Without reading the data back from wled we don't know the values
+            self.brightness = None
+            self.intensity = None
+            self.speed = None
             await self._send_wled_command({"on": True, "ps": preset})
 
     async def wled_off(self: Strip) -> None:
@@ -142,6 +152,56 @@ class Strip():
         # would send just that pixel
         self.send_full_chain_data = True
         await self._send_wled_command({"on": False})
+
+    async def wled_control(self: Strip, brightness: int, intensity: int,
+                           speed: int) -> None:
+        logging.debug(
+            f"WLED: {self.name} control {self.onoff} BRIGHTNESS={brightness} "
+            f"INTENSITY={intensity} SPEED={speed} CURRENTPRESET={self.preset}")
+
+        # Even if a preset is not activated sending seg {} information will
+        # turn it back on
+        control: Dict[str, Any] = None
+        if self.preset != -1:
+            control = {"seg": {}}
+        else:
+            control = {}
+
+        shouldSend: bool = False
+        # Using 0 is not recommended in wled docs
+        if brightness > 0:
+            if brightness > 255:
+                logging.info("BRIGHTNESS should be between 1 and 255")
+            else:
+                shouldSend = True
+                self.brightness = brightness
+                control["bri"] = self.brightness
+                # Brightness in seg {} - only if a preset is on
+                if self.preset != -1:
+                  control["seg"]["bri"] = self.brightness
+
+        # Intensity - only if a preset is on
+        if intensity > -1 and self.preset != -1:
+            if intensity > 255:
+                logging.info("INTENSITY should be between 0 and 255")
+            else:
+                shouldSend = True
+                self.intensity = intensity
+                control["seg"]["ix"] = self.intensity
+
+        # Speed - only if a preset is on
+        if speed > -1 and self.preset != -1:
+            if speed > 255:
+                logging.info("SPEED should be between 0 and 255")
+            else:
+                shouldSend = True
+                self.speed = speed
+                control["seg"]["sx"] = self.speed
+
+        # Control brightness, intensity, and speed for segment
+        # This will allow full control for effects such as "Percent"
+        if shouldSend:
+            await self._send_wled_command(control)
 
     def _wled_pixel(self: Strip, index: int) -> List[int]:
         led_color_data: List[int] = []
@@ -158,13 +218,21 @@ class Strip():
             f"INDEX={index} TRANSMIT={transmit}")
         self._update_color_data(red, green, blue, white, index)
         if transmit:
+            # Clear preset (issues with sending seg{} will revert to preset)
+            self.preset = -1
+
+            # If we are coming from a preset without a wled_control
+            # we don't know a brightness, this will also ensure
+            # behaviour is consistent prior to introduction of wled_control
+            if self.brightness is None:
+                self.brightness = 255
 
             # Base command for setting an led (for all active segments)
             # See https://kno.wled.ge/interfaces/json-api/
             state: Dict[str, Any] = {"on": True,
                                      "tt": 0,
-                                     "bri": 255,
-                                     "seg": {"bri": 255, "i": []}}
+                                     "bri": self.brightness,
+                                     "seg": {"bri": self.brightness, "i": []}}
             if index is None:
                 # All pixels same color only send range command of first color
                 self.send_full_chain_data = False
@@ -330,6 +398,9 @@ class WLED:
             "/machine/wled/off", ["POST"],
             self._handle_batch_wled_request)
         self.server.register_endpoint(
+            "/machine/wled/control", ["POST"],
+            self._handle_single_wled_request)
+        self.server.register_endpoint(
             "/machine/wled/strip", ["GET", "POST"],
             self._handle_single_wled_request)
 
@@ -372,8 +443,9 @@ class WLED:
     # Full control of wled
     # state: True, False, "on", "off"
     # preset: wled preset (int) to use (ignored if state False or "Off")
-    async def set_wled_state(self: WLED, strip: str, state: str,
-                             preset: int = -1) -> None:
+    async def set_wled_state(self: WLED, strip: str, state: str = None,
+                             preset: int = -1, brightness: int = -1,
+                             intensity: int = -1, speed: int = -1) -> None:
         status = None
 
         if isinstance(state, bool):
@@ -383,20 +455,27 @@ class WLED:
             if status in ["true", "false"]:
                 status = OnOff.on if status == "true" else OnOff.off
 
-        if status is None and preset == -1:
+        if status is None and preset == -1 and brightness == -1 and \
+           intensity == -1 and speed == -1:
             logging.info(
-                f"Invalid state received but no preset passed: {state}")
+                f"Invalid state received but no control or preset data passed")
             return
 
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
             return
 
+        # All other arguments are ignored
         if status == OnOff.off:
-            # All other arguments are ignored
             await self.strips[strip].wled_off()
-        else:
+
+        # Turn on if on or a preset is specified
+        if status == OnOff.on or preset != -1:
             await self.strips[strip].wled_on(preset)
+
+        # Control
+        if brightness != -1 or intensity != -1 or speed != -1:
+            await self.strips[strip].wled_control(brightness, intensity, speed)
 
     # Individual pixel control, for compatibility with SET_LED
     async def set_wled(self: WLED,
@@ -438,7 +517,7 @@ class WLED:
             return {strip_name: strip.get_strip_info()}
         elif req_action == "POST":
             action = web_request.get_str('action').lower()
-            if action not in ["on", "off", "toggle"]:
+            if action not in ["on", "off", "toggle", "control"]:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
             result = await self._process_request(strip, action, preset)
@@ -464,7 +543,10 @@ class WLED:
     async def _process_request(self: WLED,
                                strip: Strip,
                                req: str,
-                               preset: int
+                               brightness: int,
+                               preset: int,
+                               intensity: int,
+                               speed: int
                                ) -> Dict[str, Any]:
         strip_onoff = strip.onoff
 
@@ -472,6 +554,9 @@ class WLED:
             return strip.get_strip_info()
         if req == "toggle":
             req = "on" if strip_onoff == OnOff.off else "off"
+        if req == "control":
+            strip.wled_control(brightness, intensity, speed)
+
         if req in ["on", "off"]:
             # Always do something, could be turning off colors, or changing
             # preset, easier not to have to worry
