@@ -178,7 +178,7 @@ class Strip():
                 control["bri"] = self.brightness
                 # Brightness in seg {} - only if a preset is on
                 if self.preset != -1:
-                  control["seg"]["bri"] = self.brightness
+                    control["seg"]["bri"] = self.brightness
 
         # Intensity - only if a preset is on
         if intensity > -1 and self.preset != -1:
