@@ -69,6 +69,10 @@ class Machine:
         dist_info['release_info'] = distro.distro_release_info()
         self.inside_container = False
         self.moonraker_service_info: Dict[str, Any] = {}
+        self._sudo_password: Optional[str] = None
+        sudo_template = config.gettemplate("sudo_password", None)
+        if sudo_template is not None:
+            self._sudo_password = sudo_template.render()
         self.system_info: Dict[str, Any] = {
             'python': {
                 "version": sys.version_info,
@@ -108,6 +112,9 @@ class Machine:
         self.server.register_endpoint(
             "/machine/system_info", ['GET'],
             self._handle_sysinfo_request)
+        self.server.register_endpoint(
+            "/machine/sudo/password", ["POST"],
+            self._set_sudo_password)
 
         self.server.register_notification("machine:service_state_changed")
 
@@ -213,8 +220,38 @@ class Machine:
                                       ) -> Dict[str, Any]:
         return {'system_info': self.system_info}
 
+    async def _set_sudo_password(self, web_request: WebRequest) -> str:
+        self._sudo_password = web_request.get_str("password")
+        if not await self.check_sudo_access():
+            self._sudo_password = None
+            raise self.server.error("Invalid password, sudo access was denied")
+        self.server.send_event("machine:sudo_password_set")
+        return "ok"
+
     def get_system_info(self) -> Dict[str, Any]:
         return self.system_info
+
+    @property
+    def sudo_password(self) -> Optional[str]:
+        return self._sudo_password
+
+    async def check_sudo_access(self, cmds: List[str] = []) -> bool:
+        if not cmds:
+            cmds = ["systemctl --version", "ls /lost+found"]
+        shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
+        for cmd in cmds:
+            proc_input = None
+            full_cmd = f"sudo {cmd}"
+            if self._sudo_password is not None:
+                proc_input = self._sudo_password
+                full_cmd = f"sudo -S {cmd}"
+            try:
+                ret = await shell_cmd.exec_cmd(
+                    full_cmd, proc_input=proc_input, log_complete=False
+                )
+            except shell_cmd.error:
+                return False
+        return True
 
     def _get_sdcard_info(self) -> Dict[str, Any]:
         sd_info: Dict[str, Any] = {}
