@@ -301,7 +301,7 @@ enable_ufp: True
 
 flip_h: False
 #   Set the webcam horizontal flip.  The default is False.
-flip_h: False
+flip_v: False
 #   Set the webcam vertical flip.  The default is False.
 rotate_90: False
 #   Set the webcam rotation by 90 degrees.  The default is False.
