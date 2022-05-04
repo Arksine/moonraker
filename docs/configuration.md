@@ -1,7 +1,7 @@
 #
 This document describes Moonraker's full configuration. By default Mooonraker
 loads the configuration file from `~/moonraker.conf`, however prebuilt
-images such as MainsailOS and FluiddPi configure Moonraker load the
+images such as MainsailOS and FluiddPi configure Moonraker to load the
 configuration from `~/klipper_config/moonraker.conf`.
 
 As this document references configuration for both Klipper (`printer.cfg`)
