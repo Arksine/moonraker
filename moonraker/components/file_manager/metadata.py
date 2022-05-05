@@ -747,33 +747,65 @@ class IdeaMaker(BaseSlicer):
 
 class IceSL(BaseSlicer):
     def check_identity(self, data) -> Optional[Dict[str, Any]]:
-        match = re.search(r"; <IceSL.*>", data)
+        match = re.search(r"<IceSL\s(.*)>", data)
         if match:
-            return {'slicer': "IceSL"}
+            version = match.group(1) if match.group(1)[0].isdigit() else "-"
+            return {
+                'slicer': "IceSL",
+                'slicer_version': version
+            }
         return None
 
     def parse_first_layer_height(self) -> Optional[float]:
         return _regex_find_first(
-            r"; z_layer_height_first_layer_mm :\s+(\d+\.\d+)",
+            r";\sz_layer_height_first_layer_mm\s:\s+(\d+\.\d+)",
             self.header_data)
 
     def parse_layer_height(self) -> Optional[float]:
         self.layer_height = _regex_find_first(
-            r"; z_layer_height_mm :\s+(\d+\.\d+)",
+            r";\sz_layer_height_mm\s:\s+(\d+\.\d+)",
             self.header_data)
         return self.layer_height
 
     def parse_object_height(self) -> Optional[float]:
-        return self._parse_max_float(
-            r"G0 F\d+ Z\d+\.\d+", self.footer_data, strict=True)
+        return _regex_find_first(
+            r";\sprint_height_mm\s:\s+(\d+\.\d+)", self.header_data)
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
         return _regex_find_first(
-            r"; extruder_temp_degree_c_0 :\s+(\d+\.?\d*)", self.header_data)
+            r";\sextruder_temp_degree_c_0\s:\s+(\d+\.?\d*)", self.header_data)
 
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
-            r"; bed_temp_degree_c :\s+(\d+\.?\d*)", self.header_data)
+            r";\sbed_temp_degree_c\s:\s+(\d+\.?\d*)", self.header_data)
+
+    def parse_filament_total(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\sfilament_used_mm\s:\s+(\d+\.\d+)", self.header_data)
+
+    def parse_filament_weight_total(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\sfilament_used_g\s:\s+(\d+\.\d+)", self.header_data)
+
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\sfilament_name\s:\s+(.*)", self.header_data)
+
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\sfilament_type\s:\s+(.*)", self.header_data)
+
+    def parse_estimated_time(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\sestimated_print_time_s\s:\s+(\d*\.*\d*)", self.header_data)
+
+    def parse_layer_count(self) -> Optional[int]:
+        return _regex_find_int(
+            r";\slayer_count\s:\s+(\d+)", self.header_data)
+
+    def parse_nozzle_diameter(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\snozzle_diameter_mm_0\s:\s+(\d+\.\d+)", self.header_data)
 
 
 READ_SIZE = 512 * 1024
