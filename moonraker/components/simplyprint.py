@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import os
 import asyncio
 import json
 import logging
@@ -763,6 +764,10 @@ class SimplyPrint(Subscribable):
         data["ssid"] = pub_intf.get("ssid", "")
         data["local_ip"] = pub_intf.get("address", "Unknown")
         data["hostname"] = pub_intf["hostname"]
+        data["core_count"] = os.cpu_count()
+        mem = sys_info["cpu_info"]["total_memory"]
+        if mem is not None:
+            data["total_memory"] = mem * 1024
         self._logger.info(f"calculated machine data: {data}")
         self.cache.machine_info = data
         self.send_sp("machine_data", data)
