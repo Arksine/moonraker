@@ -1491,6 +1491,20 @@ gcode:
                              state=True,
                              preset=preset)}
 
+[gcode_macro WLED_CONTROL]
+description: Control effect values and brightness
+gcode:
+  {% set strip = params.STRIP|default('lights')|string %}
+  {% set brightness = params.BRIGHTNESS|default(-1)|int %}
+  {% set intensity = params.INTENSITY|default(-1)|int %}
+  {% set speed = params.SPEED|default(-1)|int %}
+
+  {action_call_remote_method("set_wled_state",
+                             strip=strip,
+                             brightness=brightness,
+                             intensity=intensity,
+                             speed=speed)}
+                             
 [gcode_macro WLED_OFF]
 description: Turn WLED strip off
 gcode:
