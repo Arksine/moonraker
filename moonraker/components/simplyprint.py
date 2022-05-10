@@ -25,7 +25,6 @@ from utils import LocalQueueHandler
 
 from typing import (
     TYPE_CHECKING,
-    Callable,
     Optional,
     Dict,
     List,
@@ -33,6 +32,7 @@ from typing import (
     Any,
 )
 if TYPE_CHECKING:
+    from app import InternalTransport
     from confighelper import ConfigHelper
     from websockets import WebsocketManager, WebSocket
     from tornado.websocket import WebSocketClientConnection
@@ -339,12 +339,27 @@ class SimplyPrint(Subscribable):
                 self.eventloop.create_task(self.print_handler.start_print())
             else:
                 self._logger.info("Failed to start print")
+        elif demand == "system_restart":
+            self._call_internal_api("machine.reboot")
+        elif demand == "system_shutdown":
+            self._call_internal_api("machine.shutdown")
+        elif demand == "api_restart":
+            machine: Machine = self.server.lookup_component("machine")
+            machine.do_service_action("restart", "moonraker")
+        elif demand == "api_shutdown":
+            machine = self.server.lookup_component("machine")
+            machine.do_service_action("stop", "moonraker")
         else:
             self._logger.info(f"Unknown demand: {demand}")
 
     def save_item(self, name: str, data: Any):
         self.sp_info[name] = data
         self.spdb[name] = data
+
+    def _call_internal_api(self, method: str, **kwargs):
+        itransport: InternalTransport
+        itransport = self.server.lookup_component("internal_transport")
+        self.eventloop.create_task(itransport.call_method(method, **kwargs))
 
     def _set_ws_url(self):
         token: Optional[str] = self.sp_info.get("printer_token")
