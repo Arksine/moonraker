@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from components.machine import Machine
     from components.file_manager.file_manager import FileManager
     from components.http_client import HttpClient
+    from components.power import PrinterPower
     from klippy_connection import KlippyConnection
 
 COMPONENT_VERSION = "0.0.1"
@@ -108,6 +109,18 @@ class SimplyPrint(Subscribable):
         else:
             self._set_ws_url()
 
+        self.power_id: str = ""
+        power_id: Optional[str] = config.get("power_device", None)
+        if power_id is not None:
+            self.power_id = power_id
+            if self.power_id.startswith("power "):
+                self.power_id = self.power_id[6:]
+            if not config.has_section(f"power {self.power_id}"):
+                self.power_id = ""
+                self.server.add_warning(
+                    "SimplyPrint: Unable to locate configuration for "
+                    f"power_device: {power_id}")
+
         # Register State Events
         self.server.register_event_handler(
             "server:klippy_started", self._on_klippy_startup)
@@ -152,6 +165,9 @@ class SimplyPrint(Subscribable):
             "server:gcode_response", self._on_gcode_response)
         self.server.register_event_handler(
             "klippy_connection:gcode_received", self._on_gcode_received
+        )
+        self.server.register_event_handler(
+            "power:power_changed", self._on_power_changed
         )
 
         # TODO: We need the ability to show users the activation code.
@@ -340,15 +356,19 @@ class SimplyPrint(Subscribable):
             else:
                 self._logger.info("Failed to start print")
         elif demand == "system_restart":
-            self._call_internal_api("machine.reboot")
+            coro = self._call_internal_api("machine.reboot")
+            self.eventloop.create_task(coro)
         elif demand == "system_shutdown":
-            self._call_internal_api("machine.shutdown")
+            coro = self._call_internal_api("machine.shutdown")
+            self.eventloop.create_task(coro)
         elif demand == "api_restart":
-            machine: Machine = self.server.lookup_component("machine")
-            machine.do_service_action("restart", "moonraker")
+            self.eventloop.create_task(self._do_service_action("restart"))
         elif demand == "api_shutdown":
-            machine = self.server.lookup_component("machine")
-            machine.do_service_action("stop", "moonraker")
+            self.eventloop.create_task(self._do_service_action("shutdown"))
+        elif demand == "psu_on":
+            self._do_power_action("on")
+        elif demand == "psu_off":
+            self._do_power_action("off")
         else:
             self._logger.info(f"Unknown demand: {demand}")
 
@@ -356,10 +376,14 @@ class SimplyPrint(Subscribable):
         self.sp_info[name] = data
         self.spdb[name] = data
 
-    def _call_internal_api(self, method: str, **kwargs):
+    async def _call_internal_api(self, method: str, **kwargs) -> Any:
         itransport: InternalTransport
         itransport = self.server.lookup_component("internal_transport")
-        self.eventloop.create_task(itransport.call_method(method, **kwargs))
+        try:
+            ret = await itransport.call_method(method, **kwargs)
+        except self.server.error:
+            return None
+        return ret
 
     def _set_ws_url(self):
         token: Optional[str] = self.sp_info.get("printer_token")
@@ -372,6 +396,18 @@ class SimplyPrint(Subscribable):
             else:
                 self.is_set_up = True
                 self.connect_url = f"{ep}/{printer_id}/{token}"
+
+    def _do_power_action(self, state: str) -> None:
+        if self.power_id:
+            power: PrinterPower = self.server.lookup_component("power")
+            power.set_device_power(self.power_id, state)
+
+    async def _do_service_action(self, action: str) -> None:
+        try:
+            machine: Machine = self.server.lookup_component("machine")
+            machine.do_service_action(action, "moonraker")
+        except self.server.error:
+            pass
 
     async def _request_print_action(self, action: str) -> None:
         cur_state = self.cache.state
@@ -457,6 +493,11 @@ class SimplyPrint(Subscribable):
                 )
         self.amb_detect.start()
         self.printer_info_timer.start(delay=1.)
+
+    def _on_power_changed(self, device_info: Dict[str, Any]) -> None:
+        if self.power_id and device_info["device"] == self.power_id:
+            is_on = device_info["status"] == "on"
+            self.send_sp("power_controller", {"on": is_on})
 
     def _on_websocket_identified(self, ws: WebSocket) -> None:
         if (
@@ -831,6 +872,15 @@ class SimplyPrint(Subscribable):
         }
         self.send_sp("webcam", wc_data)
 
+    async def _send_power_state(self) -> None:
+        dev_info: Optional[Dict[str, Any]]
+        dev_info = await self._call_internal_api(
+            "machine.device_power.get_device", device=self.power_id
+        )
+        if dev_info is not None:
+            is_on = dev_info[self.power_id] == "on"
+            self.send_sp("power_controller", {"on": is_on})
+
     def _push_initial_state(self):
         # TODO: This method is called after SP is connected
         # and ready to receive state.  We need a list of items
@@ -857,6 +907,8 @@ class SimplyPrint(Subscribable):
         if self.cache.cpu_info:
             self.send_sp("cpu_info", self.cache.cpu_info)
         self.send_sp("ambient", {"new": self.amb_detect.ambient})
+        if self.power_id:
+            self.eventloop.create_task(self._send_power_state())
         self.eventloop.create_task(self._send_machine_data())
         self.eventloop.create_task(self._send_webcam_config())
 
