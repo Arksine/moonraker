@@ -118,8 +118,23 @@ class SimplyPrint(Subscribable):
             if not config.has_section(f"power {self.power_id}"):
                 self.power_id = ""
                 self.server.add_warning(
-                    "SimplyPrint: Unable to locate configuration for "
-                    f"power_device: {power_id}")
+                    "Section [simplyprint], option 'power_device': Unable "
+                    f"to locate configuration for power device {power_id}"
+                )
+        self.filament_sensor: str = ""
+        fsensor = config.get("filament_sensor", None)
+        fs_prefixes = ["filament_switch_sensor ", "filament_motion_sensor "]
+        if fsensor is not None:
+            for prefix in fs_prefixes:
+                if fsensor.startswith(prefix):
+                    self.filament_sensor = fsensor
+                    break
+            else:
+                self.server.add_warning(
+                    "Section [simplyprint], option 'filament_sensor': Invalid "
+                    f"sensor '{fsensor}', must start with one the following "
+                    f"prefixes: {fs_prefixes}"
+                )
 
         # Register State Events
         self.server.register_event_handler(
@@ -449,6 +464,7 @@ class SimplyPrint(Subscribable):
             "toolhead": ["extruder"],
             "gcode_move": ["gcode_position"]
         }
+        # Add Heater Subscriptions
         if query is not None:
             heaters: Dict[str, Any] = query.get("heaters", {})
             avail_htrs: List[str]
@@ -465,6 +481,12 @@ class SimplyPrint(Subscribable):
                 elif htr == "heater_bed":
                     sub_objs[htr] = ["temperature", "target"]
                     self.heaters[htr] = "bed"
+        if self.filament_sensor:
+            objects: List[str]
+            objects = await self.klippy_apis.get_object_list(default=[])
+            if self.filament_sensor in objects:
+                sub_objs[self.filament_sensor] = ["filament_detected"]
+            # Add filament sensor subscription
         if not sub_objs:
             return
         status: Dict[str, Any]
@@ -491,6 +513,11 @@ class SimplyPrint(Subscribable):
                 self.layer_detect.update(
                     status["gcode_move"]["gcode_position"]
                 )
+            if self.filament_sensor and self.filament_sensor in status:
+                detected = status[self.filament_sensor]["filament_detected"]
+                fstate = "loaded" if detected else "runout"
+                self.cache.filament_state = fstate
+                self.send_sp("filament_sensor", {"state": fstate})
         self.amb_detect.start()
         self.printer_info_timer.start(delay=1.)
 
@@ -675,6 +702,11 @@ class SimplyPrint(Subscribable):
             self._send_active_extruder(status["toolhead"]["extruder"])
         if "gcode_move" in status:
             self.layer_detect.update(status["gcode_move"]["gcode_position"])
+        if self.filament_sensor and self.filament_sensor in status:
+            detected = status[self.filament_sensor]["filament_detected"]
+            fstate = "loaded" if detected else "runout"
+            self.cache.filament_state = fstate
+            self.send_sp("filament_sensor", {"state": fstate})
 
     def _handle_printer_info_update(self, eventtime: float) -> float:
         # Job Info Timer handler
@@ -909,6 +941,10 @@ class SimplyPrint(Subscribable):
         self.send_sp("ambient", {"new": self.amb_detect.ambient})
         if self.power_id:
             self.eventloop.create_task(self._send_power_state())
+        if self.cache.filament_state:
+            self.send_sp(
+                "filament_sensor", {"state": self.cache.filament_state}
+            )
         self.eventloop.create_task(self._send_machine_data())
         self.eventloop.create_task(self._send_webcam_config())
 
@@ -1004,6 +1040,7 @@ class ReportCache:
         self.cpu_info: Dict[str, Any] = {}
         self.throttled_state: Dict[str, Any] = {}
         self.current_wsid: Optional[int] = None
+        self.filament_state: str = ""
 
     def reset_print_state(self) -> None:
         self.temps = {}
