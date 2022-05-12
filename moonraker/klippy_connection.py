@@ -326,13 +326,16 @@ class KlippyConnection:
             msg = f"Klipper Version: {version}"
             self.server.add_log_rollover_item("klipper_version", msg)
         self._klippy_info = dict(result)
-        self._state = result.get('state', "unknown")
+        state = result.get('state', "unknown")
+        if state != "startup" and "endpoints_requested" not in self.init_list:
+            await self._request_endpoints()
+            self.init_list.append("endpoints_requested")
+        self._state = state
         if send_id:
             self.init_list.append("identified")
             await self.server.send_event("server:klippy_identified")
         if self._state != "startup":
             self.init_list.append('startup_complete')
-            await self._request_endpoints()
             await self.server.send_event("server:klippy_started",
                                          self._state)
             if self._state != "ready":
