@@ -288,7 +288,7 @@ class KlippyConnection:
                     self.init_list.append("gcode_output_sub")
             if "startup_complete" not in self.init_list:
                 await self._check_ready()
-            if len(self.init_list) == 4:
+            if len(self.init_list) == 5:
                 logging.debug("Klippy Connection Initialized")
                 return True
             elif not self.is_connected():
