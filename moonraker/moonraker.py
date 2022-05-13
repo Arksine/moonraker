@@ -49,7 +49,7 @@ CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
     'job_state', 'job_queue', 'http_client', 'announcements',
-    'extensions'
+    'webcam', 'extensions',
 ]
 
 SENTINEL = SentinelClass.get_instance()
