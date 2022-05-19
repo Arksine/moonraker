@@ -232,6 +232,7 @@ class SimplyPrint(Subscribable):
             if isinstance(message, str):
                 self._process_message(message)
             elif message is None:
+                self.webcam_stream.stop()
                 cur_time = self.eventloop.get_loop_time()
                 ping_time: float = cur_time - self._last_ping_received
                 reason = code = None
