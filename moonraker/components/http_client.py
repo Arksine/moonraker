@@ -32,7 +32,11 @@ if TYPE_CHECKING:
     from io import BufferedWriter
     StrOrPath = Union[str, pathlib.Path]
 
-AsyncHTTPClient.configure(None, defaults=dict(user_agent="Moonraker"))
+MAX_BODY_SIZE = 512 * 1024 * 1024
+AsyncHTTPClient.configure(
+    None, defaults=dict(user_agent="Moonraker"),
+    max_body_size=MAX_BODY_SIZE
+)
 
 GITHUB_PREFIX = "https://api.github.com/"
 
