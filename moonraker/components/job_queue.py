@@ -31,7 +31,7 @@ class JobQueue:
         self.lock = asyncio.Lock()
         self.load_on_start = config.getboolean("load_on_startup", False)
         self.automatic = config.getboolean("automatic_transition", False)
-        self.queue_state: str = "ready" if self.automatic else "paused"
+        self.queue_state: str = "ready"
         self.job_delay = config.getfloat("job_transition_delay", 0.01)
         if self.job_delay <= 0.:
             raise config.error(
@@ -212,6 +212,7 @@ class JobQueue:
                         0.01, self._pop_job)
                 else:
                     self._set_queue_state("ready")
+
     def _job_map_to_list(self) -> List[Dict[str, Any]]:
         cur_time = time.time()
         return [job.as_dict(cur_time) for
