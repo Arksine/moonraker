@@ -699,7 +699,7 @@ class Authorization:
                          request: HTTPServerRequest
                          ) -> Optional[Dict[str, Any]]:
         if request.path in self.permitted_paths or \
-            request.method == "OPTIONS":
+                request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
