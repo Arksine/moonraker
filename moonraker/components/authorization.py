@@ -35,7 +35,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper, ConfigError
+    from confighelper import ConfigHelper
     from websockets import WebRequest
     from tornado.httputil import HTTPServerRequest
     from tornado.web import RequestHandler
@@ -350,6 +350,9 @@ class Authorization:
         if user_info is None:
             raise self.server.error("No Current User")
         username = user_info['username']
+        if user_info['password'] == "ldap":
+            raise self.server.error(
+                f"Can´t Reset password for ldap user {username}")
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Reset Request for user {username}")
@@ -384,9 +387,7 @@ class Authorization:
                     return True
         except ldap.INVALID_CREDENTIALS:
             ldap_client.unbind()
-            return 'Wrong username ili password'
-        except ldap.SERVER_DOWN:
-            return 'AD server not awailable'
+            return False
         ldap_client.unbind()
         return False
 
@@ -418,10 +419,6 @@ class Authorization:
         else:
             if username not in self.users:
                 if self.use_ldap:
-                    if self.ldap_server or self.ldap_basedn \
-                            or self.ldap_groupdn or self.ldap_url is None:
-                        raise ConfigError(f"Configuration of LDAP "
-                                          f"is incomplete'")
                     if not self._login_ldap_user(username, password):
                         raise self.server.error("LDAP:Invalid Username or "
                                                 "Password")
