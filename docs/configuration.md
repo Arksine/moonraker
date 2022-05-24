@@ -285,6 +285,14 @@ force_logins: False
 #   one user has been created, overriding the "trusted_clients" configuration.
 #   If no users have been created then trusted client checks will apply.
 #   The default is False.
+use_ldap: False
+#   When this and force_login are set to True, a user login is required for
+#   authorization. Providing the right configuration for an LDAP session
+#   is required because moonraker does not check the provided configuration.
+ldap_server: ldap://ldap.local
+ldap_basedn: DC=ldap,DC=local
+ldap_groupdn: CN=moonraker,OU=Gruppen,DC=ldap,DC=local
+ldap_url: ldap.local
 ```
 
 ### `[octoprint_compat]`
