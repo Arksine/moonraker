@@ -398,7 +398,7 @@ class Authorization:
                 f"Invalid Request for user {username}")
         if source == "ldap":
             if self.ldap_server is None or self.ldap_basedn is None \
-                or self.ldap_groupdn is None or self.ldap_url is None:
+                    or self.ldap_groupdn is None or self.ldap_url is None:
                 raise self.server.error(
                     "ldap: Configuration is not given", 401
                 )
