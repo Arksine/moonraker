@@ -21,7 +21,6 @@ import json
 import ldap
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
-
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
@@ -33,24 +32,20 @@ from typing import (
     Dict,
     List,
 )
-
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from tornado.httputil import HTTPServerRequest
     from tornado.web import RequestHandler
     from . import database
-
     DBComp = database.MoonrakerDatabase
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
     OneshotToken = Tuple[IPAddr, Optional[Dict[str, Any]], asyncio.Handle]
 
-
 # Helpers for base64url encoding and decoding
 def base64url_encode(data: bytes) -> bytes:
     return base64.urlsafe_b64encode(data).rstrip(b"=")
-
 
 def base64url_decode(data: str) -> bytes:
     pad_cnt = len(data) % 4
@@ -73,16 +68,15 @@ JWT_HEADER = {
     'typ': "JWT"
 }
 
-
 class Authorization:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.login_timeout = config.getint('login_timeout', 90)
         self.force_logins = config.getboolean('force_logins', False)
-        self.use_ldap = config.getboolean('use_ldap', False)
         self.ldap_server = config.get('ldap_server', None)
         self.ldap_basedn = config.get('ldap_basedn', None)
         self.ldap_groupdn = config.get('ldap_groupdn', None)
+        self.default_source = config.get('default_source', "moonraker")
         self.ldap_url = config.get('ldap_url', None)
         database: DBComp = self.server.lookup_component('database')
         database.register_local_namespace('authorized_users', forbidden=True)
@@ -397,10 +391,23 @@ class Authorization:
                         ) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
         password: str = web_request.get_str('password')
+        source: str = web_request.get_str('source', self.default_source).lower()
         user_info: Dict[str, Any]
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Request for user {username}")
+        if source == "ldap":
+            if self.ldap_server is None or self.ldap_basedn is None \
+                or self.ldap_groupdn is None or self.ldap_url is None:
+                raise self.server.error(
+                    "ldap: Configuration is not given", 401
+                )
+            if not self._login_ldap_user(username, password):
+                raise self.server.error(
+                    "ldap: Invalid Username or Password", 401
+                )
+            if username not in self.users:
+                create = True
         if create:
             if username in self.users:
                 raise self.server.error(f"User {username} already exists")
@@ -411,39 +418,24 @@ class Authorization:
                 'username': username,
                 'password': hashed_pass,
                 'salt': salt.hex(),
-                'created_on': time.time()
+                'created_on': time.time(),
+                'source': source
             }
             self.users[username] = user_info
             self._sync_user(username)
             action = "user_created"
+            if source == "ldap":
+                action = "user_logged_in"
         else:
             if username not in self.users:
-                if self.use_ldap:
-                    if not self._login_ldap_user(username, password):
-                        raise self.server.error("LDAP:Invalid Username or "
-                                                "Password")
-                    private_key = Signer()
-                    jwk_id = base64url_encode(secrets.token_bytes()).decode()
-                    user_info = {'username': username, 'password': 'ldap',
-                                 'created_on': time.time(),
-                                 'jwt_secret': private_key.hex_seed().decode(),
-                                 'jwk_id': jwk_id}
-                    self.users[username] = user_info
-                    self._sync_user(username)
-                    self.public_jwks[jwk_id] = self._generate_public_jwk(
-                        private_key)
-                else:
-                    raise self.server.error(f"Unregistered User: {username}")
+                raise self.server.error(f"Unregistered User: {username}")
             user_info = self.users[username]
-            if user_info['password'] != "ldap":
-                salt = bytes.fromhex(user_info['salt'])
-                hashed_pass = hashlib.pbkdf2_hmac(
-                    'sha256', password.encode(), salt, HASH_ITER).hex()
-                action = "user_logged_in"
-                if hashed_pass != user_info['password']:
-                    raise self.server.error("Invalid Password")
-            else:
-                action = "user_logged_in"
+            salt = bytes.fromhex(user_info['salt'])
+            hashed_pass = hashlib.pbkdf2_hmac(
+                'sha256', password.encode(), salt, HASH_ITER).hex()
+            action = "user_logged_in"
+            if hashed_pass != user_info['password']:
+                raise self.server.error("Invalid Password")
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
         if jwt_secret_hex is None:
             private_key = Signer()
@@ -695,8 +687,7 @@ class Authorization:
     def check_authorized(self,
                          request: HTTPServerRequest
                          ) -> Optional[Dict[str, Any]]:
-        if request.path in self.permitted_paths or \
-                request.method == "OPTIONS":
+        if request.path in self.permitted_paths or request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
@@ -725,7 +716,7 @@ class Authorization:
 
         # If the force_logins option is enabled and at least one
         # user is created this is an unauthorized request
-        if self.force_logins and len(self.users) > 1 and self.use_ldap is True:
+        if self.force_logins and len(self.users) > 1:
             raise HTTPError(401, "Unauthorized")
 
         # Check if IP is trusted
