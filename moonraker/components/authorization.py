@@ -18,7 +18,6 @@ import re
 import socket
 import logging
 import json
-import ldap
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 # Annotation imports
@@ -76,6 +75,7 @@ class Authorization:
         self.ldap_server = config.get('ldap_server', None)
         self.ldap_basedn = config.get('ldap_basedn', None)
         self.ldap_groupdn = config.get('ldap_groupdn', None)
+        self.ldap_type_ad = config.get('ldap_type_ad', False)
         self.default_source = config.get('default_source', "moonraker")
         self.ldap_url = config.get('ldap_url', None)
         database: DBComp = self.server.lookup_component('database')
@@ -364,25 +364,34 @@ class Authorization:
             'action': "user_password_reset"
         }
 
-    def _login_ldap_user(self, username, password):
+    async def _login_ldap_user(self, username, password):
         base_dn = str(self.ldap_basedn)
-        ldap_filter = ('userPrincipalName=%s@' + str(self.ldap_url)) % username
+        client = bonsai.LDAPClient(str(self.ldap_server))
         attrs = ['memberOf']
-        ldap_client = ldap
+        ldap_filter = ('%s@' + str(self.ldap_url)) % username
+        ldap_filter_sam = ("(&(objectClass=Person)"
+                           "(uid=" + '%s))') % username
+        if self.ldap_type_ad:
+            ldap_filter_sam = ("(&(objectClass=Person)"
+                               "(sAMAccountName=" + '%s))') % username
+        client.set_credentials("SIMPLE", ldap_filter, password)
+        conn = bonsai.LDAPConnection
         try:
-            ldap_client = ldap.initialize(str(self.ldap_server))
-            ldap_client.set_option(ldap.OPT_REFERRALS, 0)
-            ldap_client.simple_bind_s(('%s@' + str(self.ldap_url)) % username,
-                                      password)
-            user = ldap_client.search_s(base_dn, ldap.SCOPE_SUBTREE,
-                                        ldap_filter, attrs)
-            for x in user[0][1]['memberOf']:
-                if str(x).find(str(self.ldap_groupdn), 2) != -1:
-                    return True
-        except ldap.INVALID_CREDENTIALS:
-            ldap_client.unbind()
+            async with client.connect(is_async=True) as conn:
+                user_memberOf = \
+                    await conn.search(base_dn, bonsai.LDAPSearchScope.SUBTREE,
+                                      ldap_filter_sam, attrs)
+                for x in user_memberOf[0]['memberOf']:
+                    if str(x) == str(self.ldap_groupdn):
+                        conn.close()
+                        return True
+                conn.close()
+        except bonsai.ConnectionError:
             return False
-        ldap_client.unbind()
+        except bonsai.AuthenticationError:
+            conn.close()
+            return False
+        conn.close()
         return False
 
     def _login_jwt_user(self,
@@ -398,7 +407,6 @@ class Authorization:
                 f"Invalid Request for user {username}")
         if source == "ldap":
             if self.ldap_server is None or self.ldap_basedn is None \
-                    or self.ldap_groupdn is None or self.ldap_url is None:
                 raise self.server.error(
                     "ldap: Configuration is not given", 401
                 )
@@ -714,9 +722,11 @@ class Authorization:
         if key and key == self.api_key:
             return self.users[API_USER]
 
-        # If the force_logins option is enabled and at least one
-        # user is created this is an unauthorized request
-        if self.force_logins and len(self.users) > 1:
+        # If the force_logins option is enabled and at least one user is
+        # created or the default_source is not moonraker this is an
+        # unauthorized request
+        if (self.force_logins and len(
+                self.users) > 1) or self.default_source != "moonraker":
             raise HTTPError(401, "Unauthorized")
 
         # Check if IP is trusted
