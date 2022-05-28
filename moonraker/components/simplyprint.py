@@ -200,7 +200,7 @@ class SimplyPrint(Subscribable):
             if self.reconnect_token is not None:
                 url = f"{self.connect_url}/{self.reconnect_token}"
             if log_connect:
-                self._logger.info(f"Connecting To SimplyPrint: {url}")
+                logging.info(f"Connecting To SimplyPrint: {url}")
                 log_connect = False
             try:
                 self.ws = await tornado.websocket.websocket_connect(
@@ -245,7 +245,6 @@ class SimplyPrint(Subscribable):
                     f"Server Ping Time Elapsed: {ping_time}"
                 )
                 logging.info(msg)
-                self._logger.info(msg)
                 self.connected = False
                 self.ws = None
                 if self.keepalive_hdl is not None:
@@ -275,7 +274,7 @@ class SimplyPrint(Subscribable):
                 if isinstance(interval, dict):
                     for key, val in interval.items():
                         self.intervals[key] = val / 1000.
-                    self._logger.info(f"Intervals Updated: {self.intervals}")
+                    logging.debug(f"Intervals Updated: {self.intervals}")
                 self.reconnect_token = data.get("reconnect_token")
                 name = data.get("name")
                 if name is not None:
@@ -288,11 +287,11 @@ class SimplyPrint(Subscribable):
             self.reconnect_token = None
         elif event == "new_token":
             if data is None:
-                self._logger.info("Invalid message, no data")
+                logging.debug("Invalid message, no data")
                 return
             token = data.get("token")
             if not isinstance(token, str):
-                self._logger.info(f"Invalid token in message")
+                logging.debug(f"Invalid token in message")
                 return
             logging.info(f"SimplyPrint Token Received")
             self.save_item("printer_token", token)
@@ -301,24 +300,24 @@ class SimplyPrint(Subscribable):
             # TODO: This is a stubbed event to receive the printer ID,
             # it could change
             if data is None:
-                self._logger.info(f"Invalid message, no data")
+                logging.debug(f"Invalid message, no data")
                 return
             printer_id = data.get("id")
             if not isinstance(printer_id, str):
-                self._logger.info(f"Invalid printer id in message")
+                logging.debug(f"Invalid printer id in message")
                 return
             logging.info(f"SimplyPrint Printer ID Received: {printer_id}")
             self.save_item("printer_id", printer_id)
             self._set_ws_url()
             name = data.get("name")
             if not isinstance(name, str):
-                self._logger.info(f"Invalid name in message: {msg}")
+                logging.debug(f"Invalid name in message: {msg}")
                 return
             logging.info(f"SimplyPrint Printer ID Received: {name}")
             self.save_item("printer_name", name)
         elif event == "demand":
             if data is None:
-                self._logger.info(f"Invalid message, no data")
+                logging.debug(f"Invalid message, no data")
                 return
             demand = data.pop("demand", "unknown")
             self._process_demand(demand, data)
@@ -326,12 +325,12 @@ class SimplyPrint(Subscribable):
             if isinstance(data, dict):
                 for key, val in data.items():
                     self.intervals[key] = val / 1000.
-                self._logger.info(f"Intervals Updated: {self.intervals}")
+                logging.debug(f"Intervals Updated: {self.intervals}")
         else:
             # TODO: It would be good for the backend to send an
             # event indicating that it is ready to recieve printer
             # status.
-            self._logger.info(f"Unknown event: {msg}")
+            logging.debug(f"Unknown event: {msg}")
 
     def _process_demand(self, demand: str, args: Dict[str, Any]) -> None:
         kconn: KlippyConnection
@@ -359,7 +358,7 @@ class SimplyPrint(Subscribable):
         elif demand == "file":
             url: Optional[str] = args.get("url")
             if not isinstance(url, str):
-                self._logger.info(f"Invalid url in message")
+                logging.debug(f"Invalid url in message")
                 return
             start = bool(args.get("auto_start", 0))
             self.print_handler.download_file(url, start)
@@ -370,7 +369,7 @@ class SimplyPrint(Subscribable):
             ):
                 self.eventloop.create_task(self.print_handler.start_print())
             else:
-                self._logger.info("Failed to start print")
+                logging.debug("Failed to start print")
         elif demand == "system_restart":
             coro = self._call_internal_api("machine.reboot")
             self.eventloop.create_task(coro)
@@ -386,7 +385,7 @@ class SimplyPrint(Subscribable):
         elif demand == "psu_off":
             self._do_power_action("off")
         else:
-            self._logger.info(f"Unknown demand: {demand}")
+            logging.debug(f"Unknown demand: {demand}")
 
     def save_item(self, name: str, data: Any):
         self.sp_info[name] = data
@@ -470,7 +469,7 @@ class SimplyPrint(Subscribable):
             heaters: Dict[str, Any] = query.get("heaters", {})
             avail_htrs: List[str]
             avail_htrs = sorted(heaters.get("available_heaters", []))
-            self._logger.info(f"SimplyPrint: Heaters Detected: {avail_htrs}")
+            logging.debug(f"SimplyPrint: Heaters Detected: {avail_htrs}")
             for htr in avail_htrs:
                 if htr.startswith("extruder"):
                     sub_objs[htr] = ["temperature", "target"]
@@ -502,7 +501,7 @@ class SimplyPrint(Subscribable):
         except self.server.error:
             status = {}
         if status:
-            self._logger.info(f"SimplyPrint: Got Initial Status: {status}")
+            logging.debug(f"SimplyPrint: Got Initial Status: {status}")
             self.printer_status = status
             self._update_temps(1.)
             self.next_temp_update_time = 0.
@@ -857,7 +856,6 @@ class SimplyPrint(Subscribable):
         mem = sys_info["cpu_info"]["total_memory"]
         if mem is not None:
             data["total_memory"] = mem * 1024
-        self._logger.info(f"calculated machine data: {data}")
         self.cache.machine_info = data
         self.send_sp("machine_data", data)
 
@@ -1263,7 +1261,6 @@ class WebcamStream:
 class PrintHandler:
     def __init__(self, simplyprint: SimplyPrint) -> None:
         self.simplyprint = simplyprint
-        self._logger = simplyprint._logger
         self.server = simplyprint.server
         self.eventloop = self.server.get_event_loop()
         self.cache = simplyprint.cache
@@ -1292,7 +1289,7 @@ class PrintHandler:
         fm: FileManager = self.server.lookup_component("file_manager")
         gc_path = pathlib.Path(fm.get_directory())
         if not gc_path.is_dir():
-            self._logger.info(f"GCode Path Not Registered: {gc_path}")
+            logging.debug(f"GCode Path Not Registered: {gc_path}")
             self.simplyprint.send_sp(
                 "file_progress",
                 {"state": "error", "message": "GCode Path not Registered"}
@@ -1302,7 +1299,7 @@ class PrintHandler:
         accept = "text/plain,applicaton/octet-stream"
         self._on_download_progress(0, 0, 0)
         try:
-            self._logger.info(f"Downloading URL: {url}")
+            logging.debug(f"Downloading URL: {url}")
             tmp_path = await client.download_file(
                 url, accept, progress_callback=self._on_download_progress,
                 request_timeout=3600.
@@ -1310,7 +1307,7 @@ class PrintHandler:
         except asyncio.TimeoutError:
             raise
         except Exception:
-            self._logger.exception(f"Failed to download file: {url}")
+            logging.exception(f"Failed to download file: {url}")
             self.simplyprint.send_sp(
                 "file_progress",
                 {"state": "error", "message": "Network Error"}
@@ -1318,7 +1315,7 @@ class PrintHandler:
             return
         finally:
             self.download_progress = -1
-        self._logger.info("Download Complete")
+        logging.debug("Simplyprint: Download Complete")
         filename = pathlib.PurePath(tmp_path.name)
         fpath = gc_path.joinpath(filename.name)
         if self.cache.job_info.get("filename", "") == str(fpath):
@@ -1338,7 +1335,7 @@ class PrintHandler:
         try:
             ret = await fm.finalize_upload(args)
         except self.server.error as e:
-            self._logger.exception("GCode Finalization Failed")
+            logging.exception("GCode Finalization Failed")
             self.simplyprint.send_sp(
                 "file_progress",
                 {"state": "error", "message": f"GCode Finalization Failed: {e}"}
