@@ -288,14 +288,25 @@ force_logins: False
 default_source: ldap
 #   If the default_source is set to "ldap" user login is required for authorization.
 #   The default_source is set to "moonraker" by default.
+
 #   Providing the right configuration for an LDAP session
 #   is required because moonraker does not check the provided configuration.
-ldap_server: ldap://ldap.local
-ldap_basedn: DC=ldap,DC=local
-ldap_groupdn: CN=moonraker,OU=Gruppen,DC=ldap,DC=local
-ldap_url: ldap.local
-#   Set ldap_type_ad to True if you use Microsoft Active Directory.
+ldap_server: ldap.local
+ldap_base_dn: DC=ldap,DC=local
+ldap_secure: True
+#   Set ldap_secure to Ture to use LDAP over SSL(ldaps).
 ldap_type_ad: True
+#   Set ldap_type_ad to True if you use Microsoft Active Directory.
+ldap_bind_dn: {secure.ldap_credentials.bind_dn}
+#   The distinguished name for bind authentication. It should look like this
+#   CN=moonraker,OU=Users,DC=ldap,DC=local. This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.
+ldap_bind_password: {secure.ldap_credentials.bind_password}
+#   The password for bind authentication. This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.
+ldap_group_dn: CN=moonraker,OU=Groups,DC=ldap,DC=local
+#   The ldap_group_dn must be in the memberOf list of the user.
+#   If this option is not filled, a successful authentication is enough.
 ```
 
 ### `[octoprint_compat]`
