@@ -32,6 +32,17 @@ from typing import (
     Dict,
     List,
 )
+from bonsai import (
+    LDAPClient,
+    LDAPSearchScope,
+    LDAPConnection
+)
+from bonsai.errors import (
+    ConnectionError,
+    AuthenticationError,
+    TimeoutError,
+)
+
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
@@ -74,9 +85,10 @@ class Authorization:
         self.login_timeout = config.getint('login_timeout', 90)
         self.force_logins = config.getboolean('force_logins', False)
         self.ldap_server = config.get('ldap_server', None)
-        self.ldap_basedn = config.get('ldap_basedn', None)
-        self.ldap_groupdn = config.get('ldap_groupdn', None)
+        self.ldap_base_dn = config.get('ldap_base_dn', None)
+        self.ldap_group_dn = config.get('ldap_group_dn', None)
         self.ldap_type_ad = config.getboolean('ldap_type_ad', False)
+        self.ldap_secure = config.getboolean('ldap_secure', False)
 
         ldap_bind_dn_template = config.gettemplate('ldap_bind_dn', None)
         self.ldap_bind_dn: Optional[str] = None
@@ -377,38 +389,41 @@ class Authorization:
         }
 
     def _login_ldap_user(self, username, password) -> bool:
-        base_dn = str(self.ldap_basedn)
-        client = bonsai.LDAPClient("ldap://" + str(self.ldap_server))
+        base_dn = str(self.ldap_base_dn)
+        client = LDAPClient(self._generate_ldap_url_(str(self.ldap_server)))
         client.set_credentials("SIMPLE", self.ldap_bind_dn,
                                self.ldap_bind_password)
-        conn = bonsai.LDAPConnection
+        client.set_cert_policy("allow")
+        conn = LDAPConnection
         try:
             conn = client.connect(is_async=False, timeout=10)
-            if self.ldap_type_ad:
-                ldap_filter = ("(&(objectClass=Person)"
-                               "(sAMAccountName=" + '%s))') % username
-            else:
-                ldap_filter = ("(&(objectClass=Person)"
-                               "(uid=" + '%s))') % username
-            user = \
-                conn.search(base_dn, bonsai.LDAPSearchScope.SUBTREE,
-                            ldap_filter)
-            if user:
-                auth_username = str(user[0]['DN'])
-                client.set_credentials("SIMPLE", auth_username, password)
-                conn = client.connect(is_async=False, timeout=10)
-                if user[0]['memberOf']:
-                    for x in user[0]['memberOf']:
-                        if str(x) == str(self.ldap_groupdn):
-                            conn.close()
-                            return True
-                        conn.close()
-        except bonsai.ConnectionError:
+            ldap_filter = ("(&(objectClass=Person)(%s=" + '%s))') % \
+                          ("sAMAccountName"
+                           if self.ldap_type_ad
+                           else "uid",
+                           username)
+            user = conn.search(
+                base_dn,
+                LDAPSearchScope.SUBTREE,
+                ldap_filter,
+                ['memberOf']
+            )
+            auth_username = str(user[0]['DN'])
+            client.set_credentials("SIMPLE", auth_username, password)
+            conn = client.connect(is_async=False, timeout=10)
+            conn.close()
+            if self.ldap_group_dn is None:
+                return True
+            if len(user[0]['memberOf']) > 0:
+                for group in user[0]['memberOf']:
+                    if str(group) == str(self.ldap_group_dn):
+                        return True
+        except ConnectionError:
             return False
-        except bonsai.AuthenticationError:
+        except AuthenticationError:
             conn.close()
             return False
-        except bonsai.TimeoutError:
+        except TimeoutError:
             return False
         conn.close()
         return False
@@ -425,8 +440,8 @@ class Authorization:
             raise self.server.error(
                 f"Invalid Request for user {username}")
         if source == "ldap":
-            if self.ldap_server is None or self.ldap_basedn is None \
-                    or self.ldap_groupdn is None \
+            if self.ldap_server is None or self.ldap_base_dn is None \
+                    or self.ldap_group_dn is None \
                     or self.ldap_bind_password is None \
                     or self.ldap_bind_dn is None:
                 raise self.server.error(
@@ -606,6 +621,9 @@ class Authorization:
             'crv': "Ed25519",
             'use': "sig"
         }
+
+    def _generate_ldap_url_(self, url: str) -> str:
+        return "ldap%s://%s" % ("s" if self.ldap_secure else "", url)
 
     def _public_key_from_jwk(self, jwk: Dict[str, Any]) -> Verifier:
         if jwk.get('kty') != "OKP":
