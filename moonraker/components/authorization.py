@@ -18,6 +18,7 @@ import re
 import socket
 import logging
 import json
+import bonsai
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 # Annotation imports
@@ -76,8 +77,20 @@ class Authorization:
         self.ldap_basedn = config.get('ldap_basedn', None)
         self.ldap_groupdn = config.get('ldap_groupdn', None)
         self.ldap_type_ad = config.get('ldap_type_ad', False)
+        self.ldap_type_ad = config.getboolean('ldap_type_ad', False)
+
+        ldap_bind_dn_template = config.gettemplate('ldap_bind_dn', None)
+        self.ldap_bind_dn: Optional[str] = None
+        if ldap_bind_dn_template is not None:
+            self.ldap_bind_dn = ldap_bind_dn_template.render()
+
+        ldap_bind_password_template = config.gettemplate('ldap_bind_password',
+                                                         None)
+        self.ldap_bind_password: Optional[str] = None
+        if ldap_bind_password_template is not None:
+            self.ldap_bind_password = ldap_bind_password_template.render()
+
         self.default_source = config.get('default_source', "moonraker")
-        self.ldap_url = config.get('ldap_url', None)
         database: DBComp = self.server.lookup_component('database')
         database.register_local_namespace('authorized_users', forbidden=True)
         self.user_db = database.wrap_namespace('authorized_users')
@@ -344,7 +357,7 @@ class Authorization:
         if user_info is None:
             raise self.server.error("No Current User")
         username = user_info['username']
-        if user_info['password'] == "ldap":
+        if user_info['source'] == "ldap":
             raise self.server.error(
                 f"Can´t Reset password for ldap user {username}")
         if username in RESERVED_USERS:
@@ -364,32 +377,39 @@ class Authorization:
             'action': "user_password_reset"
         }
 
-    async def _login_ldap_user(self, username, password):
+    def _login_ldap_user(self, username, password) -> bool:
         base_dn = str(self.ldap_basedn)
-        client = bonsai.LDAPClient(str(self.ldap_server))
-        attrs = ['memberOf']
-        ldap_filter = ('%s@' + str(self.ldap_url)) % username
-        ldap_filter_sam = ("(&(objectClass=Person)"
-                           "(uid=" + '%s))') % username
-        if self.ldap_type_ad:
-            ldap_filter_sam = ("(&(objectClass=Person)"
-                               "(sAMAccountName=" + '%s))') % username
-        client.set_credentials("SIMPLE", ldap_filter, password)
+        client = bonsai.LDAPClient("ldap://" + str(self.ldap_server))
+        client.set_credentials("SIMPLE", self.ldap_bind_dn,
+                               self.ldap_bind_password)
         conn = bonsai.LDAPConnection
         try:
-            async with client.connect(is_async=True) as conn:
-                user_memberOf = \
-                    await conn.search(base_dn, bonsai.LDAPSearchScope.SUBTREE,
-                                      ldap_filter_sam, attrs)
-                for x in user_memberOf[0]['memberOf']:
-                    if str(x) == str(self.ldap_groupdn):
+            conn = client.connect(is_async=False, timeout=10)
+            if self.ldap_type_ad:
+                ldap_filter = ("(&(objectClass=Person)"
+                               "(sAMAccountName=" + '%s))') % username
+            else:
+                ldap_filter = ("(&(objectClass=Person)"
+                               "(uid=" + '%s))') % username
+            user = \
+                conn.search(base_dn, bonsai.LDAPSearchScope.SUBTREE,
+                            ldap_filter)
+            if user:
+                auth_username = str(user[0]['DN'])
+                client.set_credentials("SIMPLE", auth_username, password)
+                conn = client.connect(is_async=False, timeout=10)
+                if user[0]['memberOf']:
+                    for x in user[0]['memberOf']:
+                        if str(x) == str(self.ldap_groupdn):
+                            conn.close()
+                            return True
                         conn.close()
-                        return True
-                conn.close()
         except bonsai.ConnectionError:
             return False
         except bonsai.AuthenticationError:
             conn.close()
+            return False
+        except bonsai.TimeoutError:
             return False
         conn.close()
         return False
@@ -407,7 +427,9 @@ class Authorization:
                 f"Invalid Request for user {username}")
         if source == "ldap":
             if self.ldap_server is None or self.ldap_basedn is None \
-                    or self.ldap_groupdn is None or self.ldap_url is None:
+                    or self.ldap_groupdn is None \
+                    or self.ldap_bind_password is None \
+                    or self.ldap_bind_dn is None:
                 raise self.server.error(
                     "ldap: Configuration is not given", 401
                 )
