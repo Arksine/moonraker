@@ -76,7 +76,6 @@ class Authorization:
         self.ldap_server = config.get('ldap_server', None)
         self.ldap_basedn = config.get('ldap_basedn', None)
         self.ldap_groupdn = config.get('ldap_groupdn', None)
-        self.ldap_type_ad = config.get('ldap_type_ad', False)
         self.ldap_type_ad = config.getboolean('ldap_type_ad', False)
 
         ldap_bind_dn_template = config.gettemplate('ldap_bind_dn', None)
