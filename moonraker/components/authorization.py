@@ -42,9 +42,6 @@ from bonsai.errors import (
     AuthenticationError,
     TimeoutError,
 )
-from bonsai.asyncio.aioconnection import (
-    AIOLDAPConnection
-)
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
@@ -412,7 +409,6 @@ class Authorization:
                                self.ldap_bind_password)
         client.set_cert_policy("allow")
         bind_success = False
-        conn = Optional[AIOLDAPConnection]
         try:
             async with client.connect(is_async=True, timeout=10) as conn:
                 ldap_filter = ("(&(objectClass=Person)(%s=" + '%s))') % \
@@ -426,11 +422,12 @@ class Authorization:
                     ldap_filter,
                     ['memberOf']
                 )
+                conn.close()
                 auth_username = str(user[0]['DN'])
                 client.set_credentials("SIMPLE", auth_username, password)
                 bind_success = True
-                conn.close()
             async with client.connect(is_async=True, timeout=10) as conn:
+                conn.close()
                 if self.ldap_group_dn is None:
                     return True
                 if len(user[0]['memberOf']) > 0:
@@ -440,9 +437,6 @@ class Authorization:
         except (ConnectionError, AuthenticationError, TimeoutError):
             if not bind_success:
                 raise self.server.error("ldap: bind error", 401)
-        finally:
-            if conn is AIOLDAPConnection:
-                conn.close()
         raise self.server.error("ldap: Invalid Username or Password",
                                 401)
 
