@@ -21,6 +21,7 @@ import json
 import bonsai
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
+
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
@@ -34,13 +35,15 @@ from typing import (
 )
 from bonsai import (
     LDAPClient,
-    LDAPSearchScope,
-    LDAPConnection
+    LDAPSearchScope
 )
 from bonsai.errors import (
     ConnectionError,
     AuthenticationError,
     TimeoutError,
+)
+from bonsai.asyncio.aioconnection import (
+    AIOLDAPConnection
 )
 
 if TYPE_CHECKING:
@@ -281,7 +284,7 @@ class Authorization:
         return self.get_oneshot_token(ip, user_info)
 
     async def _handle_login(self, web_request: WebRequest) -> Dict[str, Any]:
-        return self._login_jwt_user(web_request)
+        return await self._login_jwt_user(web_request)
 
     async def _handle_logout(self, web_request: WebRequest) -> Dict[str, str]:
         user_info = web_request.get_current_user()
@@ -317,6 +320,8 @@ class Authorization:
         return {
             'username': username,
             'token': token,
+            'source': '%s' % (user_info['source'] if 'source' in user_info
+                              else "moonraker"),
             'action': 'user_jwt_refresh'
         }
 
@@ -329,16 +334,19 @@ class Authorization:
             if user is None:
                 return {
                     'username': None,
+                    'source': None,
                     'created_on': None,
                 }
             else:
                 return {
                     'username': user['username'],
+                    'source': '%s' % (user['source'] if 'source' in user
+                                      else "moonraker"),
                     'created_on': user.get('created_on')
                 }
         elif action == "POST":
             # Create User
-            return self._login_jwt_user(web_request, create=True)
+            return await self._login_jwt_user(web_request, create=True)
         elif action == "DELETE":
             # Delete User
             return self._delete_jwt_user(web_request)
@@ -353,6 +361,8 @@ class Authorization:
                 continue
             user_list.append({
                 'username': user['username'],
+                'source': '%s' % (user['source'] if 'source' in user
+                                  else "moonraker"),
                 'created_on': user['created_on']
             })
         return {
@@ -388,50 +398,58 @@ class Authorization:
             'action': "user_password_reset"
         }
 
-    def _login_ldap_user(self, username, password) -> bool:
+    async def _login_ldap_user(self, username, password) -> bool:
+        if self.ldap_server is None or self.ldap_base_dn is None \
+                or self.ldap_group_dn is None \
+                or self.ldap_bind_password is None \
+                or self.ldap_bind_dn is None:
+            raise self.server.error(
+                "ldap: Configuration is not given", 401
+            )
         base_dn = str(self.ldap_base_dn)
         client = LDAPClient(self._generate_ldap_url_(str(self.ldap_server)))
         client.set_credentials("SIMPLE", self.ldap_bind_dn,
                                self.ldap_bind_password)
         client.set_cert_policy("allow")
-        conn = LDAPConnection
+        bind_success = False
+        conn = Optional[AIOLDAPConnection]
         try:
-            conn = client.connect(is_async=False, timeout=10)
-            ldap_filter = ("(&(objectClass=Person)(%s=" + '%s))') % \
-                          ("sAMAccountName"
-                           if self.ldap_type_ad
-                           else "uid",
-                           username)
-            user = conn.search(
-                base_dn,
-                LDAPSearchScope.SUBTREE,
-                ldap_filter,
-                ['memberOf']
-            )
-            auth_username = str(user[0]['DN'])
-            client.set_credentials("SIMPLE", auth_username, password)
-            conn = client.connect(is_async=False, timeout=10)
-            conn.close()
-            if self.ldap_group_dn is None:
-                return True
-            if len(user[0]['memberOf']) > 0:
-                for group in user[0]['memberOf']:
-                    if str(group) == str(self.ldap_group_dn):
-                        return True
-        except ConnectionError:
-            return False
-        except AuthenticationError:
-            conn.close()
-            return False
-        except TimeoutError:
-            return False
-        conn.close()
-        return False
+            async with client.connect(is_async=True, timeout=10) as conn:
+                ldap_filter = ("(&(objectClass=Person)(%s=" + '%s))') % \
+                              ("sAMAccountName"
+                               if self.ldap_type_ad
+                               else "uid",
+                               username)
+                user = await conn.search(
+                    base_dn,
+                    LDAPSearchScope.SUBTREE,
+                    ldap_filter,
+                    ['memberOf']
+                )
+                auth_username = str(user[0]['DN'])
+                client.set_credentials("SIMPLE", auth_username, password)
+                bind_success = True
+                conn.close()
+            async with client.connect(is_async=True, timeout=10) as conn:
+                if self.ldap_group_dn is None:
+                    return True
+                if len(user[0]['memberOf']) > 0:
+                    for group in user[0]['memberOf']:
+                        if str(group) == str(self.ldap_group_dn):
+                            return True
+        except (ConnectionError, AuthenticationError, TimeoutError):
+            if not bind_success:
+                raise self.server.error("ldap: bind error", 401)
+        finally:
+            if conn is AIOLDAPConnection:
+                conn.close()
+        raise self.server.error("ldap: Invalid Username or Password",
+                                401)
 
-    def _login_jwt_user(self,
-                        web_request: WebRequest,
-                        create: bool = False
-                        ) -> Dict[str, Any]:
+    async def _login_jwt_user(self,
+                              web_request: WebRequest,
+                              create: bool = False
+                              ) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
         password: str = web_request.get_str('password')
         source: str = web_request.get_str('source', self.default_source).lower()
@@ -439,18 +457,8 @@ class Authorization:
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Request for user {username}")
-        if source == "ldap":
-            if self.ldap_server is None or self.ldap_base_dn is None \
-                    or self.ldap_group_dn is None \
-                    or self.ldap_bind_password is None \
-                    or self.ldap_bind_dn is None:
-                raise self.server.error(
-                    "ldap: Configuration is not given", 401
-                )
-            if not self._login_ldap_user(username, password):
-                raise self.server.error(
-                    "ldap: Invalid Username or Password", 401
-                )
+        if source == "ldap" and not create:
+            await self._login_ldap_user(username, password)
             if username not in self.users:
                 create = True
         if create:
@@ -463,8 +471,8 @@ class Authorization:
                 'username': username,
                 'password': hashed_pass,
                 'salt': salt.hex(),
-                'created_on': time.time(),
-                'source': source
+                'source': source,
+                'created_on': time.time()
             }
             self.users[username] = user_info
             self._sync_user(username)
@@ -489,8 +497,7 @@ class Authorization:
             user_info['jwk_id'] = jwk_id
             self.users[username] = user_info
             self._sync_user(username)
-            self.public_jwks[jwk_id] = self._generate_public_jwk(
-                private_key)
+            self.public_jwks[jwk_id] = self._generate_public_jwk(private_key)
         else:
             private_key = self._load_private_key(jwt_secret_hex)
             jwk_id = user_info['jwk_id']
@@ -507,6 +514,8 @@ class Authorization:
         return {
             'username': username,
             'token': token,
+            'source': '%s' % (user_info['source'] if 'source' in user_info
+                              else "moonraker"),
             'refresh_token': refresh_token,
             'action': action
         }
@@ -735,7 +744,8 @@ class Authorization:
     def check_authorized(self,
                          request: HTTPServerRequest
                          ) -> Optional[Dict[str, Any]]:
-        if request.path in self.permitted_paths or request.method == "OPTIONS":
+        if request.path in self.permitted_paths \
+                or request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
@@ -762,11 +772,9 @@ class Authorization:
         if key and key == self.api_key:
             return self.users[API_USER]
 
-        # If the force_logins option is enabled and at least one user is
-        # created or the default_source is not moonraker this is an
-        # unauthorized request
-        if (self.force_logins and len(
-                self.users) > 1) or self.default_source != "moonraker":
+        # If the force_logins option is enabled and at least one
+        # user is created this is an unauthorized request
+        if self.force_logins and len(self.users) > 1:
             raise HTTPError(401, "Unauthorized")
 
         # Check if IP is trusted
