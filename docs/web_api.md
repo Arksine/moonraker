@@ -1949,11 +1949,12 @@ GET /access/user
 ```
 JSON-RPC request: Not Available
 
-Returns: An object containing the currently logged in user name and
+Returns: An object containing the currently logged in user name, the source and
 the date on which the user was created (in unix time).
 ```json
 {
     "username": "my_user",
+    "source": "moonraker",
     "created_on": 1618876783.8896716
 }
 ```
@@ -1966,19 +1967,21 @@ Content-Type: application/json
 
 {
     "username": "my_user",
-    "password": "my_password"
+    "password": "my_password",
+    "source": "moonraker",
 }
 ```
 JSON-RPC request: Not Available
 
 Returns: An object containing the created user name, an auth token,
-a refresh token, and an action summary.  Creating a user also effectively
+a refresh token, the source, and an action summary.  Creating a user also effectively
 logs the user in.
 ```json
 {
     "username": "my_user",
     "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNjE5LCAiZXhwIjogMTYxODg4MDM4My44OTE2MTksICJ1c2VybmFtZSI6ICJteV91c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.oH0IShTL7mdlVs4kcx3BIs_-1j0Oe-qXezJKjo-9Xgo",
     "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNzAyNCwgImV4cCI6IDE2MjY2NTI3ODMuODkxNzAyNCwgInVzZXJuYW1lIjogIm15X3VzZXIiLCAidG9rZW5fdHlwZSI6ICJyZWZyZXNoIn0.a6ZeRjk8RQQJDDH0JV-qGY_d_HIgfI3XpsqUlUaFT7c",
+    "source": "moonraker",
     "action": "user_created"
 }
 ```
@@ -2028,10 +2031,12 @@ Returns: A list of created users on the system
     "users": [
         {
             "username": "testuser",
+            "source": "moonraker",
             "created_on": 1618771331.1685035
         },
         {
             "username": "testuser2",
+            "source": "ldap",
             "created_on": 1620943153.0191233
         }
     ]
@@ -2076,11 +2081,12 @@ Content-Type: application/json
 
 JSON-RPC request: Not Available
 
-Returns:  The username, new auth token, and action summary.
+Returns:  The username, new auth token, the source and action summary.
 ```json
 {
     "username": "my_user",
     "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzgyNDMuNTE2Nzc5MiwgImV4cCI6IDE2MTg4ODE4NDMuNTE2Nzc5MiwgInVzZXJuYW1lIjogInRlc3R1c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.Ia_X_pf20RR4RAEXcxalZIOzOBOs2OwearWHfRnTSGU",
+    "source": "moonraker",
     "action": "user_jwt_refresh"
 }
 ```
