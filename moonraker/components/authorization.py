@@ -18,7 +18,6 @@ import re
 import socket
 import logging
 import json
-import bonsai
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 
@@ -422,12 +421,10 @@ class Authorization:
                     ldap_filter,
                     ['memberOf']
                 )
-                conn.close()
-                auth_username = str(user[0]['DN'])
+                auth_username = str(user[0]["DN"])
                 client.set_credentials("SIMPLE", auth_username, password)
                 bind_success = True
-            async with client.connect(is_async=True, timeout=10) as conn:
-                conn.close()
+            async with client.connect(is_async=True, timeout=10):
                 if self.ldap_group_dn is None:
                     return True
                 if len(user[0]['memberOf']) > 0:
