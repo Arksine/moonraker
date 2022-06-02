@@ -39,7 +39,7 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
         "requirements": "scripts/klippy-requirements.txt",
         "venv_args": "-p python2",
         "install_script": "scripts/install-octopi.sh",
-        "host_repo": "arksine/moonraker",
+        "host_repo": "Klipper3d/klipper",
         "managed_services": "klipper"
     }
 }
