@@ -39,7 +39,8 @@ if TYPE_CHECKING:
 
 ALLOWED_SERVICES = [
     "moonraker", "klipper", "webcamd", "MoonCord",
-    "KlipperScreen", "moonraker-telegram-bot"
+    "KlipperScreen", "moonraker-telegram-bot",
+    "sonar", "crowsnest"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
