@@ -285,6 +285,28 @@ force_logins: False
 #   one user has been created, overriding the "trusted_clients" configuration.
 #   If no users have been created then trusted client checks will apply.
 #   The default is False.
+default_source: moonraker
+#   If the default_source is set to "ldap", a user login is required for authorization.
+#   The default_source is set to "moonraker" by default.
+
+#   Providing a correct configuration for an LDAP session
+#   is required because moonraker does not verify the provided configuration.
+ldap_server: ldap.local
+ldap_base_dn: DC=ldap,DC=local
+ldap_secure: True
+#   To use LDAPs(LDAP over SSL/TLS), please set ldap_secure to True.
+ldap_type_ad: True
+#   Set ldap_type_ad to True if you use Microsoft Active Directory.
+ldap_bind_dn: {secrets.ldap_credentials.bind_dn}
+#   The distinguished name for bind authentication. It should look like this
+#   CN=moonraker,OU=Users,DC=ldap,DC=local. This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.
+ldap_bind_password: {secrets.ldap_credentials.bind_password}
+#   The password for bind authentication. This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.
+ldap_group_dn: CN=moonraker,OU=Groups,DC=ldap,DC=local
+#   The ldap_group_dn must be in the memberOf list of the user.
+#   If this option is not filled, a successful authentication is enough.
 ```
 
 ### `[octoprint_compat]`

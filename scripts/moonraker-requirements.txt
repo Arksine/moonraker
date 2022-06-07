@@ -15,3 +15,4 @@ preprocess-cancellation==0.2.0
 jinja2==3.0.3
 dbus-next==0.2.3
 apprise==0.9.7
+bonsai==1.4.0
