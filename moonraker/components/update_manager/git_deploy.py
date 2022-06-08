@@ -197,8 +197,11 @@ class GitDeploy(AppDeploy):
             return None
         event_loop = self.server.get_event_loop()
         data = await event_loop.run_in_thread(inst_path.read_text)
-        packages: List[str] = re.findall(r'PKGLIST="(.*)"', data)
-        packages = [p.lstrip("${PKGLIST}").strip() for p in packages]
+        plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
+        plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
+        packages: List[str] = []
+        for line in plines:
+            packages.extend(line.split())
         if not packages:
             self.log_info(f"No packages found in script: {inst_path}")
             return None
