@@ -285,6 +285,46 @@ force_logins: False
 #   one user has been created, overriding the "trusted_clients" configuration.
 #   If no users have been created then trusted client checks will apply.
 #   The default is False.
+default_source: moonraker
+#   The default source used to authenticate user logins. Can be "ldap" or
+#   "moonraker"  The default is "moonraker".
+```
+
+### `[ldap]`
+
+The `ldap` module may be used by `[authorization]` to perform user
+authentication though an ldap server.
+
+```ini
+# moonraker.conf
+
+[ldap]
+ldap_host: ldap.local
+#   The host address of the LDAP server.  This parameter must be provided
+ldap_port:
+#   The LDAP server's port.  The default is 389 for standard connections
+#   and 636 for SSL/TLS connections.
+ldap_secure: True
+#   Enables LDAP over SSL/TLS. The default is False.
+base_dn: DC=ldap,DC=local
+#   The base distinguished name used to search for users on the server.
+#   This option accepts Jinja2 Templates, see the [secrets] section for details.
+#   This parameter must be provided.
+bind_dn: {secrets.ldap_credentials.bind_dn}
+#   The distinguished name for bind authentication.  For example:
+#       CN=moonraker,OU=Users,DC=ldap,DC=local
+#   This option accepts Jinja2 Templates, see the [secrets] section for
+#   details.  By default the ldap client will attempt to bind anonymously.
+bind_password: {secrets.ldap_credentials.bind_password}
+#   The password for bind authentication. This option accepts Jinja2 Templates,
+#   see the [secrets] section for details.  This parameter must be provided
+#   if a "bind_dn" is specified, otherwise it must be omitted.
+group_dn: CN=moonraker,OU=Groups,DC=ldap,DC=local
+#   A group distinguished name in which the user must be a member of to pass
+#   authentication.  This option accepts Jinja2 Templates, see the [secrets]
+#   section for details. The default is no group requirement.
+is_active_directory: True
+#   Enables support for Microsoft Active Directory.  The default is False.
 ```
 
 ### `[octoprint_compat]`

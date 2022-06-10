@@ -1900,10 +1900,17 @@ Content-Type: application/json
 
 {
     "username": "my_user",
-    "password": "my_password"
+    "password": "my_password",
+    "source": "moonraker"
 }
 ```
 JSON-RPC request: Not Available
+
+Arguments:
+- `username`: The user login name.  This argument is required.
+- `password`: The user password. This arugment is required.
+- `source`:  The authentication source.  Can be `moonraker` or `ldap`. The
+  default is `moonraker`.
 
 Returns: An object the logged in username, auth token, refresh token,
 and action summary:
@@ -1912,7 +1919,8 @@ and action summary:
     "username": "my_user",
     "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY4MDAuNDgxNjU1LCAiZXhwIjogMTYxODg4MDQwMC40ODE2NTUsICJ1c2VybmFtZSI6ICJteV91c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.QdieeEskrU0FrH7rXKuPDSZxscM54kV_vH60uJqdU9g",
     "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY4MDAuNDgxNzUxNCwgImV4cCI6IDE2MjY2NTI4MDAuNDgxNzUxNCwgInVzZXJuYW1lIjogIm15X3VzZXIiLCAidG9rZW5fdHlwZSI6ICJyZWZyZXNoIn0.btJF0LJfymInhGJQ2xvPwkp2dFUqwgcw4OA_wE-EcCM",
-    "action": "user_logged_in"
+    "action": "user_logged_in",
+    "source": "moonraker"
 }
 ```
 - The `token` field is a JSON Web Token used to authorize the user.  It should
@@ -1924,7 +1932,7 @@ and action summary:
 
 !!! Note
     This endpoint may be accessed by unauthorized clients.  A 401 would
-    only be returned if the username and/or password is invalid.
+    only be returned if the authentication failed.
 
 #### Logout Current User
 HTTP Request:
@@ -1949,11 +1957,12 @@ GET /access/user
 ```
 JSON-RPC request: Not Available
 
-Returns: An object containing the currently logged in user name and
+Returns: An object containing the currently logged in user name, the source and
 the date on which the user was created (in unix time).
 ```json
 {
     "username": "my_user",
+    "source": "moonraker",
     "created_on": 1618876783.8896716
 }
 ```
@@ -1972,13 +1981,15 @@ Content-Type: application/json
 JSON-RPC request: Not Available
 
 Returns: An object containing the created user name, an auth token,
-a refresh token, and an action summary.  Creating a user also effectively
-logs the user in.
+a refresh token, the source, and an action summary.  Creating a user also
+effectively logs the user in.
+
 ```json
 {
     "username": "my_user",
     "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNjE5LCAiZXhwIjogMTYxODg4MDM4My44OTE2MTksICJ1c2VybmFtZSI6ICJteV91c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.oH0IShTL7mdlVs4kcx3BIs_-1j0Oe-qXezJKjo-9Xgo",
     "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzY3ODMuODkxNzAyNCwgImV4cCI6IDE2MjY2NTI3ODMuODkxNzAyNCwgInVzZXJuYW1lIjogIm15X3VzZXIiLCAidG9rZW5fdHlwZSI6ICJyZWZyZXNoIn0.a6ZeRjk8RQQJDDH0JV-qGY_d_HIgfI3XpsqUlUaFT7c",
+    "source": "moonraker",
     "action": "user_created"
 }
 ```
@@ -2028,10 +2039,12 @@ Returns: A list of created users on the system
     "users": [
         {
             "username": "testuser",
+            "source": "moonraker",
             "created_on": 1618771331.1685035
         },
         {
             "username": "testuser2",
+            "source": "ldap",
             "created_on": 1620943153.0191233
         }
     ]
@@ -2076,11 +2089,12 @@ Content-Type: application/json
 
 JSON-RPC request: Not Available
 
-Returns:  The username, new auth token, and action summary.
+Returns:  The username, new auth token, the source and action summary.
 ```json
 {
     "username": "my_user",
     "token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4NzgyNDMuNTE2Nzc5MiwgImV4cCI6IDE2MTg4ODE4NDMuNTE2Nzc5MiwgInVzZXJuYW1lIjogInRlc3R1c2VyIiwgInRva2VuX3R5cGUiOiAiYXV0aCJ9.Ia_X_pf20RR4RAEXcxalZIOzOBOs2OwearWHfRnTSGU",
+    "source": "moonraker",
     "action": "user_jwt_refresh"
 }
 ```
