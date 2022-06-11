@@ -102,7 +102,9 @@ class MoonrakerLDAP:
         if self.group_dn is None:
             logging.debug(f"LDAP User {username} login successful")
             return True
-        for group in user.memberOf.value:
+        if not hasattr(user, "memberOf"):
+            return False
+        for group in user.memberOf.values:
             if group == self.group_dn:
                 logging.debug(
                     f"LDAP User {username} group match success, "
