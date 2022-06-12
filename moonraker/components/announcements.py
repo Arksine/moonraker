@@ -73,6 +73,10 @@ class Announcements:
             "/server/announcements/feed", ["POST", "DELETE"],
             self._handle_feed_request
         )
+        self.server.register_endpoint(
+            "/server/announcements/feeds", ["GET"],
+            self._handle_list_feeds
+        )
         self.server.register_notification(
             "announcements:dismissed", "announcement_dismissed"
         )
@@ -163,6 +167,11 @@ class Announcements:
                 "entries": entries,
                 "modified": changed
             }
+
+    async def _handle_list_feeds(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        return {"feeds": list(self.subscriptions.keys())}
 
     async def _handle_feed_request(
         self, web_request: WebRequest
