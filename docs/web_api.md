@@ -2860,6 +2860,34 @@ The `entry_id` of the dismissed entry:
 }
 ```
 
+#### List announcement feeds
+
+HTTP request:
+```http
+GET /server/announcements/feeds
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.announcements.feeds",
+    "id": 4654
+}
+```
+
+Returns:
+
+A list of feeds the instance of Moonraker is subscribed to.
+
+```json
+{
+    "feeds": [
+        "moonraker",
+        "klipper"
+    ]
+}
+```
+
 #### Add an announcement feed
 Specifies a new feed for Moonraker's `announcements` component to query
 in addition to `moonraker`, `klipper`, and feeds configured in
