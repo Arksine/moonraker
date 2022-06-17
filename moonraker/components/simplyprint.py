@@ -191,6 +191,7 @@ class SimplyPrint(Subscribable):
         # and present it at http://hostname/server/simplyprint
 
     async def component_init(self) -> None:
+        await self.webcam_stream.test_connection()
         self.connection_task = self.eventloop.create_task(self._connect())
 
     async def _connect(self) -> None:
@@ -384,6 +385,8 @@ class SimplyPrint(Subscribable):
             self._do_power_action("on")
         elif demand == "psu_off":
             self._do_power_action("off")
+        elif demand == "test_webcam":
+            self.eventloop.create_task(self._test_webcam())
         else:
             logging.debug(f"Unknown demand: {demand}")
 
@@ -420,7 +423,7 @@ class SimplyPrint(Subscribable):
     async def _do_service_action(self, action: str) -> None:
         try:
             machine: Machine = self.server.lookup_component("machine")
-            machine.do_service_action(action, "moonraker")
+            await machine.do_service_action(action, "moonraker")
         except self.server.error:
             pass
 
@@ -449,6 +452,12 @@ class SimplyPrint(Subscribable):
             except Exception:
                 pass
             self._update_state_from_klippy()
+
+    async def _test_webcam(self) -> None:
+        await self.webcam_stream.test_connection()
+        self.send_sp(
+            "webcam_status", {"connected": self.webcam_stream.connected}
+        )
 
     async def _on_klippy_ready(self):
         last_stats: Dict[str, Any] = self.job_state.get_last_stats()
@@ -944,6 +953,9 @@ class SimplyPrint(Subscribable):
             self.send_sp(
                 "filament_sensor", {"state": self.cache.filament_state}
             )
+        self.send_sp(
+            "webcam_status", {"connected": self.webcam_stream.connected}
+        )
         self.eventloop.create_task(self._send_machine_data())
         self.eventloop.create_task(self._send_webcam_config())
 
@@ -1200,6 +1212,16 @@ class WebcamStream:
         self.running = False
         self.interval: float = 1.
         self.stream_task: Optional[asyncio.Task] = None
+        self._connected = False
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    async def test_connection(self):
+        headers = {"Accept": "image/jpeg"}
+        resp = await self.client.get(self.url, headers, enable_cache=False)
+        self._connected = not resp.has_error()
 
     async def get_webcam_config(self) -> Dict[str, Any]:
         db: MoonrakerDatabase = self.server.lookup_component("database")
