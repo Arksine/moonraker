@@ -293,7 +293,7 @@ class Authorization:
 
     async def _handle_default_source_request(self,
                                              web_request: WebRequest
-                                             ) -> Dict[str, str]:
+                                             ) -> Dict[str, str | List[str]]:
         sources = ["moonraker"]
         if self.ldap is not None:
             sources.append("ldap")
