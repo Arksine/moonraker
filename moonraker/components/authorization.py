@@ -220,6 +220,7 @@ class Authorization:
         self.permitted_paths.add("/server/redirect")
         self.permitted_paths.add("/access/login")
         self.permitted_paths.add("/access/refresh_jwt")
+        self.permitted_paths.add("/access/default_source")
         self.server.register_endpoint(
             "/access/login", ['POST'], self._handle_login,
             transports=['http'])
@@ -244,6 +245,9 @@ class Authorization:
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
             self._handle_oneshot_request, transports=['http'])
+        self.server.register_endpoint(
+            "/access/default_source", ['GET'],
+            self._handle_default_source_request, transports=['http'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
@@ -286,6 +290,11 @@ class Authorization:
             "username": username,
             "action": "user_logged_out"
         }
+
+    async def _handle_default_source_request(self,
+                                             web_request: WebRequest
+                                             ) -> str:
+        return self.default_source
 
     async def _handle_refresh_jwt(self,
                                   web_request: WebRequest

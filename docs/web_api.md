@@ -2125,6 +2125,20 @@ to any API endpoint.  The query string should be added in the form of:
 ?token={base32_random_token}
 ```
 
+#### Retrieve the configured default source
+HTTP Request:
+```http
+GET /access/default_source
+```
+JSON-RPC request: Not Available
+
+Returns: An object that contains the default_source in the "result" key.
+```json
+{
+    "result": "moonraker"
+}
+```
+
 #### Get the Current API Key
 HTTP request:
 ```http
