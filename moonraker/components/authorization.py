@@ -172,6 +172,7 @@ class Authorization:
         self.trusted_domains: List[str] = []
         for val in config.getlist('trusted_clients', []):
             # Check IP address
+            tc: Union[IPAddr, IPNetwork]
             try:
                 tc = ipaddress.ip_address(val)
             except ValueError:
@@ -247,7 +248,7 @@ class Authorization:
             self._handle_oneshot_request, transports=['http'])
         self.server.register_endpoint(
             "/access/info", ['GET'],
-            self._handle_default_source_request, transports=['http'])
+            self._handle_info_request, transports=['http'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
@@ -291,9 +292,9 @@ class Authorization:
             "action": "user_logged_out"
         }
 
-    async def _handle_default_source_request(self,
-                                             web_request: WebRequest
-                                             ) -> Dict[str, str | List[str]]:
+    async def _handle_info_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
         sources = ["moonraker"]
         if self.ldap is not None:
             sources.append("ldap")
@@ -689,7 +690,7 @@ class Authorization:
 
     def _check_oneshot_token(self,
                              token: str,
-                             cur_ip: IPAddr
+                             cur_ip: Optional[IPAddr]
                              ) -> Optional[Dict[str, Any]]:
         if token in self.oneshot_tokens:
             ip_addr, user, hdl = self.oneshot_tokens.pop(token)
@@ -717,7 +718,7 @@ class Authorization:
             return jwt_user
 
         try:
-            ip = ipaddress.ip_address(request.remote_ip)
+            ip = ipaddress.ip_address(request.remote_ip)  # type: ignore
         except ValueError:
             logging.exception(
                 f"Unable to Create IP Address {request.remote_ip}")
