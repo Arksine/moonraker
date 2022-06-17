@@ -2125,6 +2125,25 @@ to any API endpoint.  The query string should be added in the form of:
 ?token={base32_random_token}
 ```
 
+#### Retrieve information about authorization endpoints
+HTTP Request:
+```http
+GET /access/info
+```
+JSON-RPC request: Not Available
+
+Returns: An object containing information about authorization endpoints, such as
+default_source and available_sources.
+```json
+{
+    "default_source": "moonraker",
+    "available_sources": [
+        "moonraker",
+        "ldap"
+    ]
+}
+```
+
 #### Get the Current API Key
 HTTP request:
 ```http
