@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from components.file_manager.file_manager import FileManager
     from components.http_client import HttpClient
     from components.power import PrinterPower
+    from components.announcements import Announcements
     from klippy_connection import KlippyConnection
 
 COMPONENT_VERSION = "0.0.1"
@@ -271,6 +272,13 @@ class SimplyPrint(Subscribable):
             self.connected = True
             self.reconnect_token = None
             if data is not None:
+                if data.get("in_setup", 0) == 1:
+                    self.is_set_up = False
+                    self.save_item("printer_id", None)
+                    if "short_id" in data:
+                        self.eventloop.create_task(
+                            self._announce_setup(data["short_id"])
+                        )
                 interval = data.get("interval")
                 if isinstance(interval, dict):
                     for key, val in interval.items():
@@ -290,32 +298,36 @@ class SimplyPrint(Subscribable):
             if data is None:
                 logging.debug("Invalid message, no data")
                 return
-            token = data.get("token")
+            if data.get("no_exist", False) is True and self.is_set_up:
+                self.is_set_up = False
+                self.save_item("printer_id", None)
+            token: Optional[str] = data.get("token")
             if not isinstance(token, str):
-                logging.debug(f"Invalid token in message")
-                return
-            logging.info(f"SimplyPrint Token Received")
+                logging.debug(f"Invalid token received: {token}")
+                token = None
+            else:
+                logging.info(f"SimplyPrint Token Received")
             self.save_item("printer_token", token)
             self._set_ws_url()
-        elif event == "set_up":
-            # TODO: This is a stubbed event to receive the printer ID,
-            # it could change
+            if "short_id" in data:
+                short_id = data["short_id"]
+                if not isinstance(short_id, str):
+                    self._logger.debug(f"Invalid short_id received: {short_id}")
+                else:
+                    self.eventloop.create_task(
+                        self._announce_setup(data["short_id"])
+                    )
+        elif event == "complete_setup":
             if data is None:
-                logging.debug(f"Invalid message, no data")
+                logging.debug("Invalid message, no data")
                 return
-            printer_id = data.get("id")
-            if not isinstance(printer_id, str):
-                logging.debug(f"Invalid printer id in message")
-                return
-            logging.info(f"SimplyPrint Printer ID Received: {printer_id}")
-            self.save_item("printer_id", printer_id)
+            printer_id = data.get("printer_id")
+            if printer_id is None:
+                logging.debug(f"Invalid printer id, received null (None) value")
+            self.save_item("printer_id", str(printer_id))
             self._set_ws_url()
-            name = data.get("name")
-            if not isinstance(name, str):
-                logging.debug(f"Invalid name in message: {msg}")
-                return
-            logging.info(f"SimplyPrint Printer ID Received: {name}")
-            self.save_item("printer_name", name)
+            self.save_item("temp_short_setup_id", None)
+            self.eventloop.create_task(self._remove_setup_announcement())
         elif event == "demand":
             if data is None:
                 logging.debug(f"Invalid message, no data")
@@ -403,7 +415,7 @@ class SimplyPrint(Subscribable):
             return None
         return ret
 
-    def _set_ws_url(self):
+    def _set_ws_url(self) -> None:
         token: Optional[str] = self.sp_info.get("printer_token")
         printer_id: Optional[str] = self.sp_info.get("printer_id")
         ep = TEST_ENDPOINT if self.test else PROD_ENDPOINT
@@ -414,6 +426,39 @@ class SimplyPrint(Subscribable):
             else:
                 self.is_set_up = True
                 self.connect_url = f"{ep}/{printer_id}/{token}"
+
+    async def _announce_setup(self, short_id: str) -> None:
+        eid: Optional[str] = self.sp_info.get("announcement_id")
+        if (
+            eid is not None and
+            self.sp_info.get("temp_short_setup_id") == short_id
+        ):
+            return
+        if eid is not None:
+            # remove stale announcement
+            await self._remove_setup_announcement()
+        self.save_item("temp_short_setup_id", short_id)
+        ann: Announcements = self.server.lookup_component("announcements")
+        entry = ann.add_internal_announcement(
+            "SimplyPrint Setup Request",
+            "SimplyPrint is ready to complete setup for your printer. "
+            "Please log in to your account and enter the following "
+            f"setup code:\n\n{short_id}\n\n",
+            "https://simplyprint.io", "high", "simplyprint"
+        )
+        eid = entry.get("entry_id")
+        self.save_item("announcement_id", eid)
+
+    async def _remove_setup_announcement(self) -> None:
+        eid = self.sp_info.get("announcement_id")
+        if eid is None:
+            return
+        self.save_item("announcement_id", None)
+        ann: Announcements = self.server.lookup_component("announcements")
+        try:
+            await ann.remove_announcement(eid)
+        except self.server.error:
+            pass
 
     def _do_power_action(self, state: str) -> None:
         if self.power_id:
