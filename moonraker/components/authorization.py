@@ -172,7 +172,6 @@ class Authorization:
         self.trusted_domains: List[str] = []
         for val in config.getlist('trusted_clients', []):
             # Check IP address
-            tc: Union[IPAddr, IPNetwork]
             try:
                 tc = ipaddress.ip_address(val)
             except ValueError:
@@ -182,7 +181,7 @@ class Authorization:
                 continue
             # Check ip network
             try:
-                tc = ipaddress.ip_network(val)
+                tn = ipaddress.ip_network(val)
             except ValueError as e:
                 if "has host bits set" in str(e):
                     self.server.add_warning(
@@ -191,7 +190,7 @@ class Authorization:
                     continue
                 pass
             else:
-                self.trusted_ranges.append(tc)
+                self.trusted_ranges.append(tn)
                 continue
             # Check hostname
             match = re.match(r"([a-z0-9]+(-[a-z0-9]+)*\.?)+[a-z]{2,}$", val)
