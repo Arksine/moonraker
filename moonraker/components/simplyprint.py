@@ -53,6 +53,9 @@ PROD_ENDPOINT = f"wss://ws.simplyprint.io/{SP_VERSION}/p"
 KEEPALIVE_TIME = 96.0
 # TODO: Increase this time to something greater, perhaps 30 minutes
 CONNECTION_ERROR_LOG_TIME = 60.
+PRE_SETUP_EVENTS = [
+    "connection", "state_change", "shutdown", "machine_data", "keepalive"
+]
 
 class SimplyPrint(Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
@@ -840,8 +843,7 @@ class SimplyPrint(Subscribable):
             self.next_temp_update_time = eventtime + self.intervals["temps"]
         if not temp_data:
             return
-        if self.is_set_up:
-            self.send_sp("temps", temp_data)
+        self.send_sp("temps", temp_data)
 
     def _update_state_from_klippy(self) -> None:
         kstate = self.server.get_klippy_state()
@@ -980,7 +982,7 @@ class SimplyPrint(Subscribable):
         # simplyprint.  It might be better for SP to request it
         # rather than for the client to send it on every connection.
         self.send_sp("state_change", {"new": self.cache.state})
-        if self.cache.temps and self.is_set_up:
+        if self.cache.temps:
             self.send_sp("temps", self.cache.temps)
         if self.cache.firmware_info:
             self.send_sp(
@@ -1008,8 +1010,15 @@ class SimplyPrint(Subscribable):
         self.eventloop.create_task(self._send_machine_data())
         self.eventloop.create_task(self._send_webcam_config())
 
+    def _check_setup_event(self, evt_name: str) -> bool:
+        return self.is_set_up or evt_name in PRE_SETUP_EVENTS
+
     def send_sp(self, evt_name: str, data: Any) -> asyncio.Future:
-        if not self.connected or self.ws is None:
+        if (
+            not self.connected or
+            self.ws is None or
+            not self._check_setup_event(evt_name)
+        ):
             fut = self.eventloop.create_future()
             fut.set_result(False)
             return fut
