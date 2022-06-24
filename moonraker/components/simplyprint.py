@@ -403,8 +403,12 @@ class SimplyPrint(Subscribable):
             logging.debug(f"Unknown demand: {demand}")
 
     def save_item(self, name: str, data: Any):
-        self.sp_info[name] = data
-        self.spdb[name] = data
+        if data is None:
+            self.sp_info.pop(name, None)
+            self.spdb.pop(name, None)
+        else:
+            self.sp_info[name] = data
+            self.spdb[name] = data
 
     async def _call_internal_api(self, method: str, **kwargs) -> Any:
         itransport: InternalTransport
