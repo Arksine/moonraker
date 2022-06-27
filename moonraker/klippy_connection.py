@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
-UNIX_BUFFER_LIMIT = 2 * 1024 * 1024
+UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 
 class KlippyConnection:
     def __init__(self, config: confighelper.ConfigHelper) -> None:
