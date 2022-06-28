@@ -8,12 +8,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import functools
+import socket
 from typing import (
     TYPE_CHECKING,
     Awaitable,
     Callable,
     Coroutine,
     Optional,
+    Tuple,
     TypeVar,
     Union
 )
@@ -82,6 +84,45 @@ class EventLoop:
                       *args
                       ) -> Awaitable[_T]:
         return self.aioloop.run_in_executor(None, callback, *args)
+
+    async def create_socket_connection(
+        self, address: Tuple[str, int], timeout: Optional[float] = None
+    ) -> socket.socket:
+        host, port = address
+        """
+        async port of socket.create_connection()
+        """
+        loop = self.aioloop
+        err = None
+        ainfo = await loop.getaddrinfo(
+            host, port, family=0, type=socket.SOCK_STREAM
+        )
+        for res in ainfo:
+            af, socktype, proto, canonname, sa = res
+            sock = None
+            try:
+                sock = socket.socket(af, socktype, proto)
+                sock.settimeout(0)
+                sock.setblocking(False)
+                await asyncio.wait_for(
+                    loop.sock_connect(sock, (host, port)), timeout
+                )
+                # Break explicitly a reference cycle
+                err = None
+                return sock
+            except (socket.error, asyncio.TimeoutError) as _:
+                err = _
+                if sock is not None:
+                    loop.remove_writer(sock.fileno())
+                    sock.close()
+        if err is not None:
+            try:
+                raise err
+            finally:
+                # Break explicitly a reference cycle
+                err = None
+        else:
+            raise socket.error("getaddrinfo returns an empty list")
 
     def start(self):
         self.aioloop.run_forever()
