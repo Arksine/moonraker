@@ -373,6 +373,8 @@ class Server:
                 except Exception:
                     logging.exception(
                         f"Error executing 'close()' for component: {name}")
+        # Allow cancelled tasks a chance to run in the eventloop
+        await asyncio.sleep(.001)
 
         self.exit_reason = exit_reason
         self.event_loop.remove_signal_handler(signal.SIGTERM)
