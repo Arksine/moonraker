@@ -191,7 +191,7 @@ class PrinterPower:
                 f"Device [{name}] already configured")
         success = device.initialize()
         if asyncio.iscoroutine(success):
-            success = await success
+            success = await success  # type: ignore
         if not success:
             self.server.add_warning(
                 f"Power device '{device.get_name()}' failed to initialize"
