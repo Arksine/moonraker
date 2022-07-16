@@ -9,6 +9,8 @@ import asyncio
 import inspect
 import functools
 import socket
+import time
+import logging
 from typing import (
     TYPE_CHECKING,
     Awaitable,
@@ -31,7 +33,7 @@ class EventLoop:
         self.reset()
 
     def reset(self) -> None:
-        self.aioloop = asyncio.get_event_loop()
+        self.aioloop = self._create_new_loop()
         self.add_signal_handler = self.aioloop.add_signal_handler
         self.remove_signal_handler = self.aioloop.remove_signal_handler
         self.add_reader = self.aioloop.add_reader
@@ -44,6 +46,21 @@ class EventLoop:
         self.call_at = self.aioloop.call_at
         self.set_debug = self.aioloop.set_debug
         self.is_running = self.aioloop.is_running
+
+    def _create_new_loop(self) -> asyncio.AbstractEventLoop:
+        for _ in range(5):
+            # Sometimes the new loop does not properly instantiate.
+            # Give 5 attempts before raising an exception
+            new_loop = asyncio.new_event_loop()
+            if not new_loop.is_closed():
+                break
+            logging.info("Failed to create open eventloop, "
+                         "retyring in .5 seconds...")
+            time.sleep(.5)
+        else:
+            raise RuntimeError("Unable to create new open eventloop")
+        asyncio.set_event_loop(new_loop)
+        return new_loop
 
     def register_callback(self,
                           callback: FlexCallback,

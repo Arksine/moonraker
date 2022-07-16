@@ -493,18 +493,6 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         # it is ok to use a blocking sleep here
         time.sleep(.5)
         logging.info("Attempting Server Restart...")
-        for _ in range(5):
-            # Sometimes the new loop does not properly instantiate.
-            # Give 5 attempts before raising an exception
-            new_loop = asyncio.new_event_loop()
-            if not new_loop.is_closed():
-                break
-            logging.info("Failed to create open eventloop, "
-                         "retyring in .5 seconds...")
-            time.sleep(.5)
-        else:
-            raise RuntimeError("Unable to create new open eventloop")
-        asyncio.set_event_loop(new_loop)
         event_loop.reset()
     event_loop.close()
     logging.info("Server Shutdown")
