@@ -446,7 +446,7 @@ The following configuration options are available for all power device types:
 type:
 #   The type of device.  Can be either gpio, klipper_device, rf,
 #   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
-#   smartthings, or mqtt.
+#   smartthings, mqtt or hue.
 #   This parameter must be provided.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
@@ -1031,6 +1031,28 @@ token: smartthings-bearer-token
 device: smartthings-device-id
 ```
 
+#### Hue Device Configuration
+
+The following options are available for `hue` device types:
+
+```ini
+# moonraker.conf
+
+address:
+#   A valid ip address or hostname of the Philips Hue Bridge. This
+#   parameter must be provided.
+user:
+#   The api key used for request authorization.  This option accepts
+#   Jinja2 Templates, see the [secrets] section for details.
+#   An explanation how to get the api key can be found here:
+#   https://developers.meethue.com/develop/get-started-2/#so-lets-get-started
+device_id:
+#   The device id of the light/socket you want to control.
+#   An explanation on how you could get the device id, can be found here:
+#   https://developers.meethue.com/develop/get-started-2/#turning-a-light-on-and-off
+
+```
+
 #### Toggling device state from Klipper
 
 It is possible to toggle device power from the Klippy host, this can be done
@@ -1544,7 +1566,7 @@ gcode:
                              brightness=brightness,
                              intensity=intensity,
                              speed=speed)}
-                             
+
 [gcode_macro WLED_OFF]
 description: Turn WLED strip off
 gcode:
