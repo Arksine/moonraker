@@ -52,7 +52,8 @@ class PrinterPower:
             "loxonev1": Loxonev1,
             "rf": RFDevice,
             "mqtt": MQTTDevice,
-            "smartthings": SmartThings
+            "smartthings": SmartThings,
+            "hue": HueDevice
         }
 
         for section in prefix_sections:
@@ -1285,6 +1286,33 @@ class MQTTDevice(PowerDevice):
             raise self.server.error(
                 f"MQTT Power Device {self.name}: Failed to set "
                 f"device to state '{state}'", 500)
+
+
+class HueDevice(HTTPDevice):
+
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        self.device_id = config.get("device_id")
+
+    async def _send_power_request(self, state: str) -> str:
+        new_state = True if state == "on" else False
+        url = f"http://{self.addr}/api" \
+              f"/{self.user}/lights" \
+              f"/{self.device_id}/state"
+        url = self.client.escape_url(url)
+        ret = await self.client.request("PUT",
+                                        url,
+                                        body={"on": new_state})
+        return "on" if \
+            ret.json()[0].get("success")[f"/lights/{self.device_id}/state/on"] \
+            else "off"
+
+    async def _send_status_request(self) -> str:
+        ret = await self.client.request("GET",
+                                        f"http://{self.addr}/api/"
+                                        f"{self.user}/lights/"
+                                        f"{self.device_id}")
+        return "on" if ret.json().get("state")["on"] else "off"
 
 
 # The power component has multiple configuration sections
