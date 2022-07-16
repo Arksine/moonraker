@@ -1303,8 +1303,9 @@ class HueDevice(HTTPDevice):
         ret = await self.client.request("PUT",
                                         url,
                                         body={"on": new_state})
+        json_: list[dict[str:dict]] = ret.json()
         return "on" if \
-            ret.json()[0].get("success")[f"/lights/{self.device_id}/state/on"] \
+            json_[0].get("success")[f"/lights/{self.device_id}/state/on"] \
             else "off"
 
     async def _send_status_request(self) -> str:
@@ -1312,7 +1313,8 @@ class HueDevice(HTTPDevice):
                                         f"http://{self.addr}/api/"
                                         f"{self.user}/lights/"
                                         f"{self.device_id}")
-        return "on" if ret.json().get("state")["on"] else "off"
+        json_: dict[str:dict] = ret.json()
+        return "on" if json_.get("state")["on"] else "off"
 
 
 # The power component has multiple configuration sections
