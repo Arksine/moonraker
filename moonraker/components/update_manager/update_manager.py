@@ -467,8 +467,8 @@ class CommandHelper:
         db.register_local_namespace("update_manager")
         self.umdb = db.wrap_namespace("update_manager")
 
-        # Refresh Time Tracking (default is to refresh every 28 days)
-        reresh_interval = config.getint('refresh_interval', 672)
+        # Refresh Time Tracking (default is to refresh every 7 days)
+        reresh_interval = config.getint('refresh_interval', 168)
         # Convert to seconds
         self.refresh_interval = reresh_interval * 60 * 60
 
