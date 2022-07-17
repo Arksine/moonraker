@@ -1,5 +1,6 @@
 #!/bin/bash
 # This script installs Moonraker's PolicyKit Rules used to grant access
+set -x
 
 POLKIT_LEGACY_DIR="/etc/polkit-1/localauthority/50-local.d"
 POLKIT_DIR="/etc/polkit-1/rules.d"
@@ -45,7 +46,7 @@ add_polkit_rules()
         echo "PolicyKit not installed"
         exit 1
     fi
-    POLKIT_VERSION="$( pkaction --version | grep -Po "(\d?\.\d+)" )"
+    POLKIT_VERSION="$( pkaction --version | grep -Po "(\d+\.?\d*)" )"
     report_status "PolicyKit Version ${POLKIT_VERSION} Detected"
     if [ "$POLKIT_VERSION" = "0.105" ]; then
         # install legacy pkla file
