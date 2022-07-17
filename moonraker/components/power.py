@@ -1296,23 +1296,25 @@ class HueDevice(HTTPDevice):
 
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
-        url = f"http://{self.addr}/api" \
-              f"/{self.user}/lights" \
-              f"/{self.device_id}/state"
+        url = (
+            f"http://{self.addr}/api/{self.user}/lights/{self.device_id}/state"
+        )
         url = self.client.escape_url(url)
-        ret = await self.client.request("PUT",
-                                        url,
-                                        body={"on": new_state})
-        return "on" if \
-            ret.json()[0].get("success")[f"/lights/{self.device_id}/state/on"] \
+        ret = await self.client.request("PUT", url, body={"on": new_state})
+        resp = cast(List[Dict[str, Dict[str, Any]]], ret)
+        return (
+            "on" if resp[0]["success"][f"/lights/{self.device_id}/state/on"]
             else "off"
+        )
 
     async def _send_status_request(self) -> str:
-        ret = await self.client.request("GET",
-                                        f"http://{self.addr}/api/"
-                                        f"{self.user}/lights/"
-                                        f"{self.device_id}")
-        return "on" if ret.json().get("state")["on"] else "off"
+        url = (
+            f"http://{self.addr}/api/{self.user}/lights/{self.device_id}"
+        )
+        url = self.client.escape_url(url)
+        ret = await self.client.request("GET", url)
+        resp = cast(Dict[str, Dict[str, Any]], ret)
+        return "on" if resp["state"]["on"] else "off"
 
 
 # The power component has multiple configuration sections
