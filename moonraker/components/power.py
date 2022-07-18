@@ -1301,7 +1301,7 @@ class HueDevice(HTTPDevice):
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("PUT", url, body={"on": new_state})
-        resp = cast(List[Dict[str, Dict[str, Any]]], ret)
+        resp = cast(List[Dict[str, Dict[str, Any]]], ret.json())
         return (
             "on" if resp[0]["success"][f"/lights/{self.device_id}/state/on"]
             else "off"
@@ -1313,7 +1313,7 @@ class HueDevice(HTTPDevice):
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("GET", url)
-        resp = cast(Dict[str, Dict[str, Any]], ret)
+        resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"]["on"] else "off"
 
 
