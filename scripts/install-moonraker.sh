@@ -2,7 +2,7 @@
 # This script installs Moonraker on a Raspberry Pi machine running
 # Raspbian/Raspberry Pi OS based distributions.
 
-PYTHONDIR="${MOONRAKER_VENV:-${HOME}/envs/moonraker}"
+PYTHONDIR="${MOONRAKER_VENV:-${HOME}/moonraker-env}"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
 FORCE_DEFAULTS="${MOONRAKER_FORCE_DEFAULTS:-n}"
