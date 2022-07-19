@@ -799,6 +799,11 @@ class Authorization:
                 "Origin, Accept, Content-Type, X-Requested-With, "
                 "X-CRSF-Token, Authorization, X-Access-Token, "
                 "X-Api-Key")
+            if req_hdlr.request.headers.get(
+                    "Access-Control-Request-Private-Network", None) == "true":
+                req_hdlr.set_header(
+                    "Access-Control-Allow-Private-Network",
+                    "true")
 
     def cors_enabled(self) -> bool:
         return self.cors_domains is not None
