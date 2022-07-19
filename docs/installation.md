@@ -136,6 +136,16 @@ particularly for those upgrading:
   This is useful for installations that occur outside of a standard environment
   where systemd is not running.
 
+Additionally, installation may be customized with the following environment
+variables:
+
+- `MOONRAKER_VENV`
+- `MOONRAKER_REBUILD_ENV`
+- `MOONRAKER_FORCE_DEFAULTS`
+- `MOONRAKER_DISABLE_SYSTEMCTL`
+- `MOONRAKER_CONFIG_PATH`
+- `MOONRAKER_LOG_PATH`
+
 When the script completes it should start both Moonraker and Klipper. In
 `/tmp/klippy.log` you should find the following entry:
 

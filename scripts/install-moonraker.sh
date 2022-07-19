@@ -2,13 +2,13 @@
 # This script installs Moonraker on a Raspberry Pi machine running
 # Raspbian/Raspberry Pi OS based distributions.
 
-PYTHONDIR="${HOME}/moonraker-env"
+PYTHONDIR="${MOONRAKER_VENV:-${HOME}/moonraker-env}"
 SYSTEMDDIR="/etc/systemd/system"
-REBUILD_ENV="n"
-FORCE_DEFAULTS="n"
-DISABLE_SYSTEMCTL="n"
-CONFIG_PATH="${HOME}/moonraker.conf"
-LOG_PATH="/tmp/moonraker.log"
+REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
+FORCE_DEFAULTS="${MOONRAKER_FORCE_DEFAULTS:-n}"
+DISABLE_SYSTEMCTL="${MOONRAKER_DISABLE_SYSTEMCTL:-n}"
+CONFIG_PATH="${MOONRAKER_CONFIG_PATH:-${HOME}/moonraker.conf}"
+LOG_PATH="${MOONRAKER_LOG_PATH:-/tmp/moonraker.log}"
 
 # Step 2: Clean up legacy installation
 cleanup_legacy() {
