@@ -2981,6 +2981,280 @@ The name of the new feed and the action taken.  The `action` will be
 }
 ```
 
+### Webcam APIs
+The following APIs are available to manage webcam configuration:
+
+#### List Webcams
+
+HTTP request:
+```http
+GET /server/webcams/list
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.webcams.list",
+    "id": 4654
+}
+```
+
+Returns:
+
+A list of configured webcams:
+
+```json
+{
+    "webcams": [
+        {
+            "name": "testcam3",
+            "location": "door",
+            "service": "mjpegstreamer",
+            "target_fps": 20,
+            "stream_url": "http://camera.lan/webcam?action=stream",
+            "snapshot_url": "http://camera.lan/webcam?action=snapshot",
+            "flip_horizontal": false,
+            "flip_vertical": true,
+            "rotation": 90,
+            "source": "config"
+        },
+        {
+            "name": "tc2",
+            "location": "printer",
+            "service": "mjpegstreamer",
+            "target_fps": 15,
+            "stream_url": "http://printer.lan/webcam?action=stream",
+            "snapshot_url": "http://printer.lan/webcam?action=snapshot",
+            "flip_horizontal": false,
+            "flip_vertical": false,
+            "rotation": 0,
+            "source": "database"
+        },
+        {
+            "name": "TestCam",
+            "location": "printer",
+            "service": "mjpegstreamer",
+            "target_fps": 15,
+            "stream_url": "/webcam/?action=stream",
+            "snapshot_url": "/webcam/?action=snapshot",
+            "flip_horizontal": false,
+            "flip_vertical": false,
+            "rotation": 0,
+            "source": "database"
+        }
+    ]
+}
+```
+
+#### Get Webcam Information
+
+HTTP request:
+```http
+GET /server/webcams/item?name=cam_name
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.webcams.get_item",
+    "parmams": {
+        "name": "cam_name"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`: The name of the camera to request information for.  If the named
+  camera is not available the request will return with an error.  This
+  parameter must be provided.
+
+Returns:
+
+The full configuration for the requested webcam:
+
+```json
+{
+    "webcam": {
+        "name": "TestCam",
+        "location": "printer",
+        "service": "mjpegstreamer",
+        "target_fps": 15,
+        "stream_url": "/webcam/?action=stream",
+        "snapshot_url": "/webcam/?action=snapshot",
+        "flip_horizontal": false,
+        "flip_vertical": false,
+        "rotation": 0,
+        "source": "database"
+    }
+}
+```
+#### Add or update a webcam
+
+!!! Note
+    A webcam configured via `moonraker.conf` cannot be updated or
+    overwritten using this API.
+
+HTTP request:
+```http
+POST /server/webcams/item
+Content-Type: application/json
+
+{
+    "name": "cam_name",
+    "snapshot_url": "http://printer.lan:8080/webcam?action=snapshot",
+    "stream_url": "http://printer.lan:8080/webcam?action=stream"
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.webcams.post_item",
+    "parmams": {
+        "name": "cam_name",
+        "snapshot_url": "/webcam?action=snapshot",
+        "stream_url": "/webcam?action=stream"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`: The name of the camera to add or update.  This parameter must
+  be provided.
+- `location`: A description of the webcam location, ie: what the webcam is
+  observing.  The default is "printer".
+- `service`: The name of the webcam application streaming service.  The default
+  is "mjpegstreamer".
+- `target_fps`:  The target framerate.  The default is 15
+- `stream_url`:  The url for the camera stream request.  This may be a full url
+  or a url relative to Moonraker's host machine.  If the url is relative it is
+  assumed that the stream is available over http on port 80. This parameter
+  must be provided.
+- `snapshot_url`: The url for the camera snapshot request. This may be a full
+  url or a url relative to Moonraker's host machine.  If the url is relative
+  it is assumed that the snapshot is available over http on port 80. This
+  parameter must be provided.
+- `flip_horizontal`:  A boolean value indicating whether the stream should be
+  flipped horizontally.  The default is false.
+- `flip_vertical`: A boolean value indicating whether the stream should be
+  flipped vertically.  The default is false.
+- `rotation`: An integer value indicating the amount of clockwise rotation to
+   apply to the stream.  May be 0, 90, 180, or 270.  The default is 0.
+
+Returns:
+
+The full configuration for the added webcam:
+
+```json
+{
+    "webcam": {
+        "name": "TestCam",
+        "location": "printer",
+        "service": "mjpegstreamer",
+        "target_fps": 15,
+        "stream_url": "/webcam/?action=stream",
+        "snapshot_url": "/webcam/?action=snapshot",
+        "flip_horizontal": false,
+        "flip_vertical": false,
+        "rotation": 0,
+        "source": "database"
+    }
+}
+```
+
+#### Delete a webcam
+
+!!! Note
+    A webcam configured via `moonraker.conf` cannot be deleted
+    using this API.
+
+HTTP request:
+```http
+DELETE /server/webcams/item?name=cam_name
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.webcams.delete_item",
+    "parmams": {
+        "name": "cam_name"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`: The name of the camera to delete.  If the named camera is not
+  available the request will return with an error.  This parameter must
+  be provided.
+
+Returns:
+
+The full configuration of the deleted webcam:
+
+```json
+{
+    "webcam": {
+        "name": "TestCam",
+        "location": "printer",
+        "service": "mjpegstreamer",
+        "target_fps": 15,
+        "stream_url": "/webcam/?action=stream",
+        "snapshot_url": "/webcam/?action=snapshot",
+        "flip_horizontal": false,
+        "flip_vertical": false,
+        "rotation": 0,
+        "source": "database"
+    }
+}
+```
+
+#### Test a webcam
+
+Resolves a webcam's stream and snapshot urls.  If the snapshot
+is served over http, a test is performed to see if the url is
+reachable.
+
+HTTP request:
+```http
+POST /server/webcams/test?name=cam_name
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.webcams.test",
+    "parmams": {
+        "name": "cam_name"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`: The name of the camera to test.  If the named camera is not
+  available the request will return with an error.  This parameter must
+  be provided.
+
+Returns: Test results in the following format
+
+```json
+{
+    "name": "TestCam",
+    "snapshot_reachable": true,
+    "snapshot_url": "http://127.0.0.1:80/webcam/?action=snapshot",
+    "stream_url": "http://127.0.0.1:80/webcam/?action=stream"
+}
+```
+
 ### Update Manager APIs
 The following endpoints are available when the `[update_manager]` component has
 been configured:
