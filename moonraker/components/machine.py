@@ -115,7 +115,10 @@ class Machine:
         shell_cmd: SCMDComp = self.server.load_component(
             config, 'shell_command')
         self.addr_cmd = shell_cmd.build_shell_command("ip -json address")
-        self.iwgetid_cmd = shell_cmd.build_shell_command("iwgetid")
+        iwgetbin = "/sbin/iwgetid"
+        if not pathlib.Path(iwgetbin).exists():
+            iwgetbin = "iwgetid"
+        self.iwgetid_cmd = shell_cmd.build_shell_command(iwgetbin)
         self.init_evt = asyncio.Event()
 
     def _update_log_rollover(self, log: bool = False) -> None:
@@ -448,8 +451,13 @@ class Machine:
 
     async def _get_wifi_interfaces(self) -> Dict[str, Any]:
         # get wifi interfaces
+        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         wifi_intfs: Dict[str, Any] = {}
-        resp = await self.iwgetid_cmd.run_with_response(log_complete=False)
+        try:
+            resp = await self.iwgetid_cmd.run_with_response(log_complete=False)
+        except shell_cmd.error:
+            logging.exception("Failed to run 'iwgetid' command")
+            return {}
         if resp:
             for line in resp.split("\n"):
                 parts = line.strip().split(maxsplit=1)
