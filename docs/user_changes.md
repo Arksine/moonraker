@@ -2,6 +2,14 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### July 27th 2022
+- The behavior of `[include]` directives has changed.  Included files
+  are now parsed as they are encountered.  If sections are duplicated
+  options in the last section parsed take precendence.  If you are
+  using include directives to override configuration in `moonraker.conf`
+  the directives should be moved to the bottom of the file.
+- Configuration files now support inline comments.
+
 ### April 6th 2022
 - The ability to configure core components in the `[server]`section
   is now deprecated.  When legacy items are detected in `[server]` a

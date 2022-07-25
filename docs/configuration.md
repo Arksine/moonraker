@@ -9,6 +9,24 @@ and Moonraker (`moonraker.conf`), each example contains a comment indicating
 which configuration file is being referenced A basic
 [sample configuration](./moonraker.conf) in the `docs` directory.
 
+Moonraker uses an ini style configuration very close to that of Klipper.
+Inline comments are supported, prefixed by either a `#` or `;`.  If it
+is necessary to use one of those characters in an option, they may be
+escaped using backslash, ie `\#`.  For example:
+
+```ini
+# This is a comment
+[section_name] # This is a comment
+opt: \# This is not a comment
+```
+
+Moonraker uses strict parsing rules.  A configuration file may not
+contain multiple sections of the same name.  A section may not contain
+multiple options of the same name.   However, configuration files included
+using [include directives](#include-directives) may contain sections
+specified in other files, and those sections may contain options
+specified in other files.
+
 ## Core Components
 
 Moonraker's core components are always loaded regardless of configuration.
@@ -1933,8 +1951,8 @@ attach: http://192.168.1.100/webcam/?action=snapshot
 It is possible to include configuration from other files via include
 directives.  Include directives in Moonraker are specified identically
 to those in Klipper, ie: `[include relative_path]`.  The `relative_path`
-is a path relative to the configuration file's parent, and may include
-wildcards.  For example:
+is a path relative to the configuration file's parent folder, and may
+include wildcards.  For example:
 
 ```ini
 # moonraker.conf
@@ -1946,11 +1964,10 @@ wildcards.  For example:
 ```
 
 If a section is duplicated in an included file the options from both
-sections will be merged, with the latest file parsed taking precedence.
-When wildcards are specified all matches are parsed in alphabetical
-order.  If includes are nested (ie: an included file specifies an
-`[include]` directive), those includes will be parsed after all matches
-of the previous include.
+sections will be merged, with the latest section parsed taking precedence.
+The order in which a section is parsed depends on the location of the
+include directive.  When wildcards are specified all matches are parsed in
+alphabetical order.
 
 
 ## Jinja2 Templates
