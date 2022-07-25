@@ -151,14 +151,15 @@ class ConfigHelper:
                     f"configuration, see {help} for detailed documentation."
                 )
             self._check_option(option, val, above, below, minval, maxval)
-        if (
-            val is None or
-            isinstance(val, (int, float, bool, str, dict, list))
-        ):
-            self.parsed[section][option] = val
-        else:
-            # If the item cannot be encoded to json serialize to a string
-            self.parsed[section][option] = str(val)
+        if option not in self.parsed[section]:
+            if (
+                val is None or
+                isinstance(val, (int, float, bool, str, dict, list))
+            ):
+                self.parsed[section][option] = val
+            else:
+                # If the item cannot be encoded to json serialize to a string
+                self.parsed[section][option] = str(val)
         return val
 
     def _check_option(self,
