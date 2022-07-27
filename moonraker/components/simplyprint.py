@@ -278,6 +278,7 @@ class SimplyPrint(Subscribable):
                 if data.get("in_setup", 0) == 1:
                     self.is_set_up = False
                     self.save_item("printer_id", None)
+                    self.save_item("printer_name", None)
                     if "short_id" in data:
                         self.eventloop.create_task(
                             self._announce_setup(data["short_id"])
