@@ -1946,6 +1946,70 @@ body: {event_args[1].message}
 attach: http://192.168.1.100/webcam/?action=snapshot
 ```
 
+### `[simplyprint]`
+
+!!! Note
+    Currently the SimplyPrint service is only available for developers
+    and testers.  When the service is available for end users this note
+    will be removed.
+
+Enables support for print monitoring through
+[SimplyPrint](https://simplyprint.io).
+
+```ini
+# moonraker.conf
+[simplyprint]
+webcam_name:
+#   Optional name of a configured webcam for use by the SimplyPrint service.
+#   This can either be a webcam configured through the `[webcam]` module or
+#   a webcam added via a front-end like Mainsail.  The default is to attempt
+#   to autodetect a webcam.
+power_device:
+#   The name of a configured [power] device available to toggle over using
+#   the SimplyPrint service.  For example, to toggle a device configured
+#   as `[power printer]` this may be configured as:
+#       power_device: printer
+#   By default no power device is configured.
+filament_sensor:
+#   The full name of a configured filament sensor to be monitored by
+#   SimplyPrint.  The filament sensor must be configured in Klipper and
+#   the full name, including the prefix, must be specified.  For example,
+#   to monitor a sensor configured as `[filament_switch_sensor fsensor],
+#   this may be configured as:
+#       filament_sensor:  filament_switch_sensor fsensor
+#   By default no filament sensor is monitored.
+```
+
+!!! Note
+    This module collects and uploads the following data to SimplyPrint:
+
+    - Klipper's version, connection state, and date pulled
+    - Moonraker's version
+    - Currenly connected front-end and version
+    - Current python version
+    - Linux distribution and version
+    - Network connection type (wifi or ethernet)
+    - wifi SSID (if connected)
+    - LAN IP address
+    - LAN hostname
+    - CPU model
+    - CPU core count
+    - Total system memory
+    - CPU usage
+    - Memory usage
+    - Current extruder selected
+    - Extruder and bed temperatures
+    - Mesh data (if Klipper has `bed_mesh` configured)
+    - Current print state
+    - Loaded file metadata, including estimated filament usage and print time
+    - Current print filament usage
+    - Current print time elapse
+    - Estimated ambient temperature
+    - Webcam configuration (if available)
+    - Webcam images.  These images are also sent to `printpal.io`
+    - Power device state (if configured)
+    - Filament sensor state (if configured)
+
 ## Include directives
 
 It is possible to include configuration from other files via include
