@@ -76,7 +76,7 @@ class HttpClient:
         if len(headers) == 0:
             raise self.server.error(
                 "Either an Etag or Last Modified Date must be specified")
-        empty_resp = HttpResponse(url, 200, b"", headers, None)
+        empty_resp = HttpResponse(url, url, 200, b"", headers, None)
         self.response_cache[url] = empty_resp
 
     def escape_url(self, url: str) -> str:
@@ -160,10 +160,13 @@ class HttpClient:
                     continue
                 else:
                     result = resp.body
-                ret = HttpResponse(url, resp.code, result, resp.headers, err)
+                ret = HttpResponse(
+                    url, resp.effective_url, resp.code, result,
+                    resp.headers, err
+                )
                 break
         else:
-            ret = HttpResponse(url, 500, b"", HTTPHeaders(), err)
+            ret = HttpResponse(url, url, 500, b"", HTTPHeaders(), err)
         if enable_cache and ret.is_cachable():
             logging.debug(f"Caching HTTP Response: {url}")
             self.response_cache[cache_key] = ret
@@ -297,12 +300,14 @@ class HttpClient:
 class HttpResponse:
     def __init__(self,
                  url: str,
+                 final_url: str,
                  code: int,
                  result: bytes,
                  response_headers: HTTPHeaders,
                  error: Optional[BaseException]
                  ) -> None:
         self._url = url
+        self._final_url = final_url
         self._code = code
         self._result: bytes = result
         self._encoding: str = "utf-8"
@@ -352,6 +357,10 @@ class HttpResponse:
     @property
     def url(self) -> str:
         return self._url
+
+    @property
+    def final_url(self) -> str:
+        return self._final_url
 
     @property
     def status_code(self) -> int:
