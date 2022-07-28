@@ -284,6 +284,9 @@ class GitRepo:
             'commits_behind', [])
         self.tag_data: Dict[str, Any] = storage.get('tag_data', {})
         self.diverged: bool = storage.get("diverged", False)
+        self.repo_veriified: bool = storage.get(
+            "verified", storage.get("is_valid", False)
+        )
 
     def get_persistent_data(self) -> Dict[str, Any]:
         return {
@@ -304,7 +307,8 @@ class GitRepo:
             'git_messages': self.git_messages,
             'commits_behind': self.commits_behind,
             'tag_data': self.tag_data,
-            'diverged': self.diverged
+            'diverged': self.diverged,
+            'verified': self.repo_veriified
         }
 
     async def initialize(self, need_fetch: bool = True) -> None:
@@ -622,6 +626,8 @@ class GitRepo:
             invalids.append("Detached HEAD detected")
         if self.diverged:
             invalids.append("Repo has diverged from remote")
+        if not invalids:
+            self.repo_veriified = True
         return invalids
 
     def _verify_repo(self, check_remote: bool = False) -> None:
@@ -720,6 +726,10 @@ class GitRepo:
 
     async def clone(self) -> None:
         async with self.git_operation_lock:
+            if not self.repo_veriified:
+                raise self.server.error(
+                    "Repo has not been verified, clone aborted"
+                )
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Starting Clone Recovery...")
             event_loop = self.server.get_event_loop()
