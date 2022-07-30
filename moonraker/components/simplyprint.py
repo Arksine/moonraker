@@ -1021,6 +1021,7 @@ class SimplyPrint(Subscribable):
         if (
             not self.connected or
             self.ws is None or
+            self.ws.protocol is None or
             not self._check_setup_event(evt_name)
         ):
             fut = self.eventloop.create_future()
@@ -1032,7 +1033,14 @@ class SimplyPrint(Subscribable):
         else:
             self._logger.info("sent: webcam stream")
         self._reset_keepalive()
-        return self.ws.write_message(json.dumps(packet))
+        try:
+            fut = self.ws.write_message(json.dumps(packet))
+        except tornado.websocket.WebSocketClosedError:
+            fut = self.eventloop.create_future()
+            fut.set_result(False)
+        else:
+            self._reset_keepalive()
+        return fut
 
     def _reset_keepalive(self):
         if self.keepalive_hdl is not None:
@@ -1059,10 +1067,13 @@ class SimplyPrint(Subscribable):
     async def close(self):
         self.print_handler.cancel()
         self.webcam_stream.stop()
-        await self.send_sp("shutdown", None)
-        self._logger.close()
         self.amb_detect.stop()
         self.printer_info_timer.stop()
+        try:
+            await self.send_sp("shutdown", None)
+        except tornado.websocket.WebSocketClosedError:
+            pass
+        self._logger.close()
         self.is_closing = True
         if self.ws is not None:
             self.ws.close(1001, "Client Shutdown")
