@@ -34,15 +34,18 @@ class DbusManager:
         self.bus: Optional[MessageBus] = None
         self.polkit: Optional[ProxyInterface] = None
         self.warned: bool = False
-        proc_data = pathlib.Path(f"/proc/self/stat").read_text()
-        start_clk_ticks = int(proc_data.split()[21])
-        self.polkit_subject = [
-            "unix-process",
-            {
-                "pid": dbus_next.Variant("u", os.getpid()),
-                "start-time": dbus_next.Variant("t", start_clk_ticks)
-            }
-        ]
+        try:
+            proc_data = pathlib.Path(f"/proc/self/stat").read_text()
+            start_clk_ticks = int(proc_data.split()[21])
+            self.polkit_subject = [
+                "unix-process",
+                {
+                    "pid": dbus_next.Variant("u", os.getpid()),
+                    "start-time": dbus_next.Variant("t", start_clk_ticks)
+                }
+            ]
+        except FileNotFoundError:
+            pass
 
     def is_connected(self) -> bool:
         return self.bus is not None and self.bus.connected
