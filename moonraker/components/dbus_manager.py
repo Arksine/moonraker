@@ -16,11 +16,13 @@ from typing import (
     TYPE_CHECKING,
     List,
     Optional,
+    Any,
 )
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
 
+STAT_PATH = "/proc/self/stat"
 DOC_URL = (
     "https://moonraker.readthedocs.io/en/latest/"
     "installation/#policykit-permissions"
@@ -34,7 +36,11 @@ class DbusManager:
         self.bus: Optional[MessageBus] = None
         self.polkit: Optional[ProxyInterface] = None
         self.warned: bool = False
-        proc_data = pathlib.Path(f"/proc/self/stat").read_text()
+        st_path = pathlib.Path(STAT_PATH)
+        self.polkit_subject: List[Any] = []
+        if not st_path.is_file():
+            return
+        proc_data = st_path.read_text()
         start_clk_ticks = int(proc_data.split()[21])
         self.polkit_subject = [
             "unix-process",
