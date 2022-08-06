@@ -82,7 +82,7 @@ class Server:
         self.events: Dict[str, List[FlexCallback]] = {}
         self.components: Dict[str, Any] = {}
         self.failed_components: List[str] = []
-        self.warnings: List[str] = []
+        self.warnings: Dict[str, str] = {}
         self.klippy_connection = KlippyConnection(config)
 
         # Tornado Application/Server
@@ -121,7 +121,7 @@ class Server:
         return API_VERSION
 
     def get_warnings(self) -> List[str]:
-        return self.warnings
+        return list(self.warnings.values())
 
     def is_running(self) -> bool:
         return self.server_running
@@ -187,10 +187,18 @@ class Server:
         if log and item is not None:
             logging.info(item)
 
-    def add_warning(self, warning: str, log: bool = True) -> None:
-        self.warnings.append(warning)
+    def add_warning(
+        self, warning: str, warn_id: Optional[str] = None, log: bool = True
+    ) -> str:
+        if warn_id is None:
+            warn_id = str(id(warning))
+        self.warnings[warn_id] = warning
         if log:
             logging.warning(warning)
+        return warn_id
+
+    def remove_warning(self, warn_id: str) -> None:
+        self.warnings.pop(warn_id, None)
 
     # ***** Component Management *****
     async def _initialize_component(self, name: str, component: Any) -> None:
@@ -400,7 +408,7 @@ class Server:
             'components': list(self.components.keys()),
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,
-            'warnings': self.warnings,
+            'warnings': list(self.warnings.values()),
             'websocket_count': wsm.get_count(),
             'moonraker_version': self.app_args['software_version'],
             'missing_klippy_requirements': mreqs,
