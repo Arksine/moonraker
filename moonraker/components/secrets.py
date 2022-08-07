@@ -21,16 +21,17 @@ class Secrets:
     def __init__(self, config: ConfigHelper) -> None:
         server = config.get_server()
         self.secrets_file: Optional[pathlib.Path] = None
-        path: Optional[str] = config.get('secrets_path', None)
+        path: Optional[str] = config.get("secrets_path", None, deprecate=True)
+        app_args = server.get_app_args()
+        alias = app_args["alias"]
+        data_path = app_args["data_path"]
+        fpath = pathlib.Path(data_path).joinpath(f"{alias}.secrets")
+        if not fpath.is_file() and path is not None:
+            fpath = pathlib.Path(path).expanduser().resolve()
         self.type = "invalid"
         self.values: Dict[str, Any] = {}
-        if path is not None:
-            self.secrets_file = pathlib.Path(path).expanduser().resolve()
-            if not self.secrets_file.is_file():
-                server.add_warning(
-                    "[secrets]: option 'secrets_path', file does not exist: "
-                    f"'{self.secrets_file}'")
-                return
+        if fpath.is_file():
+            self.secrets_file = fpath
             data = self.secrets_file.read_text()
             vals = self._parse_json(data)
             if vals is not None:
@@ -52,6 +53,10 @@ class Secrets:
                 self.type = "ini"
             logging.debug(f"[secrets]: Loaded {self.type} file: "
                           f"{self.secrets_file}")
+        elif path is not None:
+            server.add_warning(
+                "[secrets]: option 'secrets_path', file does not exist: "
+                f"'{self.secrets_file}'")
         else:
             logging.debug(
                 "[secrets]: Option `secrets_path` not supplied")
