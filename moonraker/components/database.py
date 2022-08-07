@@ -5,7 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import os
+import pathlib
 import json
 import struct
 import operator
@@ -78,10 +78,29 @@ class MoonrakerDatabase:
         self.eventloop = self.server.get_event_loop()
         self.namespaces: Dict[str, object] = {}
         self.thread_lock = ThreadLock()
-        self.database_path = os.path.expanduser(config.get(
-            'database_path', "~/.moonraker_database"))
-        if not os.path.isdir(self.database_path):
-            os.mkdir(self.database_path)
+        app_args = self.server.get_app_args()
+        dep_path = config.get("database_path", None, deprecate=True)
+        db_path = pathlib.Path(app_args["data_path"]).joinpath("database")
+        if (
+            app_args["is_default_alias"] and
+            app_args["is_default_data_path"] and
+            not (dep_path is None and db_path.exists())
+        ):
+            # Allow configured DB fallback
+            dep_path = dep_path or "~/.moonraker_database"
+            legacy_db = pathlib.Path(dep_path).expanduser().resolve()
+            try:
+                same = legacy_db.samefile(db_path)
+            except Exception:
+                same = False
+            if not same and legacy_db.exists():
+                self.server.add_warning(
+                    f"Reverting to legacy database path: {db_path}"
+                )
+                db_path = legacy_db
+        if not db_path.is_dir():
+            db_path.mkdir()
+        self.database_path = str(db_path)
         self.lmdb_env = lmdb.open(self.database_path, map_size=MAX_DB_SIZE,
                                   max_dbs=MAX_NAMESPACES)
         with self.lmdb_env.begin(write=True, buffers=True) as txn:
