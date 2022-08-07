@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     _T = TypeVar("_T")
 
 API_VERSION = (1, 0, 5)
-
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
@@ -433,20 +432,41 @@ class Server:
         }
 
 def main(cmd_line_args: argparse.Namespace) -> None:
-    cfg_file = cmd_line_args.configfile
-    app_args = {'config_file': cfg_file}
-
     startup_warnings: List[str] = []
-    app_args["startup_warnings"] = startup_warnings
+    alias: str = cmd_line_args.alias or "moonraker"
+    dp: str = cmd_line_args.datapath or f"~/{alias}_data"
+    data_path = pathlib.Path(dp).expanduser().resolve()
+    if not data_path.exists():
+        try:
+            data_path.mkdir()
+        except Exception:
+            startup_warnings.append(
+                f"Unable to create data path folder at {data_path}"
+            )
+    if cmd_line_args.configfile is not None:
+        cfg_file: str = cmd_line_args.configfile
+    else:
+        cfg_file = str(data_path.joinpath(f"config/{alias}.conf"))
+    app_args = {
+        "alias": alias,
+        "data_path": str(data_path),
+        "is_default_alias": cmd_line_args.alias is None,
+        "is_default_data_path": cmd_line_args.datapath is None,
+        "config_file": cfg_file,
+        "startup_warnings": startup_warnings
+    }
+
     # Setup Logging
     version = utils.get_software_version()
     if cmd_line_args.nologfile:
-        app_args['log_file'] = ""
-    else:
-        app_args['log_file'] = os.path.normpath(
+        app_args["log_file"] = ""
+    elif cmd_line_args.logfile:
+        app_args["log_file"] = os.path.normpath(
             os.path.expanduser(cmd_line_args.logfile))
-    app_args['software_version'] = version
-    app_args['python_version'] = sys.version.replace("\n", " ")
+    else:
+        app_args["log_file"] = str(data_path.joinpath(f"logs/{alias}.log"))
+    app_args["software_version"] = version
+    app_args["python_version"] = sys.version.replace("\n", " ")
     ql, file_logger, warning = utils.setup_logging(app_args)
     if warning is not None:
         startup_warnings.append(warning)
@@ -465,7 +485,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
             if alt_config_loaded or backup_cfg is None:
                 estatus = 1
                 break
-            app_args['config_file'] = backup_cfg
+            app_args["config_file"] = backup_cfg
             warn_list = list(startup_warnings)
             app_args["startup_warnings"] = warn_list
             warn_list.append(
@@ -493,7 +513,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         # Restore the original config and clear the warning
         # before the server restarts
         if alt_config_loaded:
-            app_args['config_file'] = cfg_file
+            app_args["config_file"] = cfg_file
             app_args["startup_warnings"] = startup_warnings
             alt_config_loaded = False
         event_loop.close()
@@ -513,11 +533,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Moonraker - Klipper API Server")
     parser.add_argument(
-        "-c", "--configfile", default="~/moonraker.conf",
-        metavar='<configfile>',
+        "-a", "--alias", default=None, metavar="<alias>",
+        help="Alternate name of instance"
+    )
+    parser.add_argument(
+        "-d", "--datapath", default=None,
+        metavar='<data path>',
+        help="Location of Moonraker Data File Path"
+    )
+    parser.add_argument(
+        "-c", "--configfile", default=None, metavar='<configfile>',
         help="Location of moonraker configuration file")
     parser.add_argument(
-        "-l", "--logfile", default="/tmp/moonraker.log", metavar='<logfile>',
+        "-l", "--logfile", default=None, metavar='<logfile>',
         help="log file name and location")
     parser.add_argument(
         "-n", "--nologfile", action='store_true',
