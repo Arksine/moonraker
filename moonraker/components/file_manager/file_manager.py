@@ -66,9 +66,9 @@ class FileManager:
         db: DBComp = self.server.load_component(config, "database")
         db_path = db.get_database_path()
         self.add_reserved_path("database", db_path)
-        gc_path: str = db.get_item(
-            "moonraker", "file_manager.gcode_path", "").result()
-        self.gcode_metadata = MetadataStorage(config, gc_path, db)
+        app_args = self.server.get_app_args()
+        self.datapath = pathlib.Path(app_args["data_path"])
+        self.gcode_metadata = MetadataStorage(config, db)
         self.inotify_handler = INotifyHandler(config, self,
                                               self.gcode_metadata)
         self.write_mutex = asyncio.Lock()
@@ -98,19 +98,32 @@ class FileManager:
         self.server.register_event_handler(
             "server:klippy_identified", self._update_fixed_paths)
 
-        # Register Klippy Configuration Path
-        config_path = config.get('config_path', None)
-        if config_path is not None:
-            self.register_directory('config', config_path, full_access=True)
+        # Register Data Folders
+        config.get('config_path', None, deprecate=True)
+        self.register_data_folder("config", full_access=True)
 
-        # Register logs path
-        log_path = config.get('log_path', None)
-        if log_path is not None:
-            self.register_directory('logs', log_path)
-
-        # If gcode path is in the database, register it
-        if gc_path:
-            self.register_directory('gcodes', gc_path, full_access=True)
+        config.get('log_path', None, deprecate=True)
+        self.register_data_folder("logs")
+        gc_path = self.register_data_folder("gcodes", full_access=True)
+        if gc_path.is_dir():
+            prune: bool = True
+            saved_gc_dir: str = db.get_item(
+                "moonraker", "file_manager.gcode_path", ""
+            ).result()
+            is_empty = next(gc_path.iterdir(), None) is None
+            if is_empty and saved_gc_dir:
+                saved_path = pathlib.Path(saved_gc_dir)
+                if (
+                    saved_path.is_dir() and
+                    next(saved_path.iterdir(), None) is not None
+                ):
+                    logging.info(
+                        f"Legacy GCode Path found at '{saved_path}', "
+                        "aborting metadata prune"
+                    )
+                    prune = False
+            if prune:
+                self.gcode_metadata.prune_storage()
 
     async def component_init(self):
         self.inotify_handler.initalize_roots()
@@ -144,6 +157,37 @@ class FileManager:
             self.server.register_static_file_handler(
                 "klippy.log", log_path, force=True)
 
+    def validate_gcode_path(self, gc_path: str) -> None:
+        gc_dir = pathlib.Path(gc_path).expanduser()
+        if not gc_dir.exists():
+            self.server.add_warning(
+                f"GCode path received from Klipper does not exist: {gc_dir}",
+                warn_id="gcode_path"
+            )
+            return
+        if "gcodes" in self.file_paths:
+            expected = self.file_paths["gcodes"]
+            if not gc_dir.samefile(self.file_paths["gcodes"]):
+                self.server.add_warning(
+                    "GCode path received from Klipper does not match "
+                    f"expected path: {expected}",
+                    warn_id="gcode_path"
+                )
+            else:
+                self.server.remove_warning("gcode_path")
+
+    def register_data_folder(
+        self, folder_name: str, full_access: bool = False
+    ) -> pathlib.Path:
+        new_path = self.datapath.joinpath(folder_name)
+        if not new_path.exists():
+            try:
+                new_path.mkdir()
+            except Exception:
+                pass
+        self.register_directory(folder_name, str(new_path), full_access)
+        return new_path
+
     def register_directory(self,
                            root: str,
                            path: Optional[str],
@@ -174,8 +218,6 @@ class FileManager:
             self.file_paths[root] = path
             self.server.register_static_file_handler(root, path)
             if root == "gcodes":
-                db: DBComp = self.server.lookup_component("database")
-                db.insert_item("moonraker", "file_manager.gcode_path", path)
                 # scan for metadata changes
                 self.gcode_metadata.update_gcode_path(path)
             if full_access:
@@ -1514,13 +1556,12 @@ METADATA_VERSION = 3
 class MetadataStorage:
     def __init__(self,
                  config: ConfigHelper,
-                 gc_path: str,
                  db: DBComp
                  ) -> None:
         self.server = config.get_server()
         self.enable_object_proc = config.getboolean(
             'enable_object_processing', False)
-        self.gc_path = gc_path
+        self.gc_path = ""
         db.register_local_namespace(METADATA_NAMESPACE)
         self.mddb = db.wrap_namespace(
             METADATA_NAMESPACE, parse_keys=False)
@@ -1542,6 +1583,7 @@ class MetadataStorage:
             str, Tuple[Dict[str, Any], asyncio.Event]] = {}
         self.busy: bool = False
 
+    def prune_storage(self):
         # Check for removed gcode files while moonraker was shutdown
         if self.gc_path:
             del_keys: List[str] = []
@@ -1571,8 +1613,9 @@ class MetadataStorage:
     def update_gcode_path(self, path: str) -> None:
         if path == self.gc_path:
             return
-        self.metadata.clear()
-        self.mddb.clear()
+        if self.gc_path:
+            self.metadata.clear()
+            self.mddb.clear()
         self.gc_path = path
 
     def get(self,

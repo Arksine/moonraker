@@ -390,8 +390,7 @@ class KlippyConnection:
                 if vsd_path is not None:
                     file_manager: FileManager = self.server.lookup_component(
                         'file_manager')
-                    file_manager.register_directory('gcodes', vsd_path,
-                                                    full_access=True)
+                    file_manager.validate_gcode_path(vsd_path)
                 else:
                     logging.info(
                         "Configuration for [virtual_sdcard] not found,"
