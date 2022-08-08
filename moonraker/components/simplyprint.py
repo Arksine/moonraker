@@ -1336,7 +1336,7 @@ class WebcamStream:
                 raise
             except Exception as e:
                 if not self.server.is_debug_enabled():
-                    pass
+                    continue
                 if type(last_err) != type(e) or last_err.args != e.args:
                     last_err = e
                     cname = self.__class__.__name__
