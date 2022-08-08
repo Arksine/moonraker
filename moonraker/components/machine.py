@@ -438,15 +438,23 @@ class Machine:
         # However, it would be better to use NETLINK for this rather
         # than run another shell command
         src_ip: Optional[str] = None
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.settimeout(0)
-            s.connect(('10.255.255.255', 1))
-            src_ip = s.getsockname()[0]
-        except Exception:
-            pass
-        finally:
-            s.close()
+        # First attempt: use "broadcast" to find the local IP
+        addr_info = [("<broadcast>", 0, False), ("10.255.255.255", 1, True)]
+        for (addr, port, bcast) in addr_info:
+            s = socket.socket(
+                socket.AF_INET, socket.SOCK_DGRAM | socket.SOCK_NONBLOCK
+            )
+            try:
+                if bcast:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                s.connect((addr, port))
+                src_ip = s.getsockname()[0]
+            except Exception:
+                continue
+            logging.info(f"Detected Local IP: {src_ip}")
+            return src_ip
+        if src_ip is None:
+            logging.info("Failed to detect local IP address")
         return src_ip
 
     async def _get_wifi_interfaces(self) -> Dict[str, Any]:
@@ -456,7 +464,7 @@ class Machine:
         try:
             resp = await self.iwgetid_cmd.run_with_response(log_complete=False)
         except shell_cmd.error:
-            logging.exception("Failed to run 'iwgetid' command")
+            logging.info("Failed to run 'iwgetid' command")
             return {}
         if resp:
             for line in resp.split("\n"):
