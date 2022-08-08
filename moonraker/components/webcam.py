@@ -63,10 +63,9 @@ class WebcamManager:
         machine: Machine = self.server.lookup_component("machine")
         pubnet = await machine.get_public_network()
         ip: Optional[str] = pubnet.get("address")
-        default_host = f"http://{pubnet['hostname']}"
-        if ip is not None:
+        if ip:
             default_host = f"http://{ip}"
-        WebCam.set_default_host(default_host)
+            WebCam.set_default_host(default_host)
         db: MoonrakerDatabase = self.server.lookup_component("database")
         saved_cams: Dict[str, Any] = await db.get_item("webcams", default={})
         for cam_data in saved_cams.values():
