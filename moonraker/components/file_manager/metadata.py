@@ -195,6 +195,9 @@ class BaseSlicer(object):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return None
 
+    def parse_chamber_temp(self) -> Optional[float]:
+        return None
+
     def parse_first_layer_extr_temp(self) -> Optional[float]:
         return None
 
@@ -292,6 +295,10 @@ class UnknownSlicer(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r"M191 S(\d+\.?\d*)", self.header_data)
+
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         return None
 
@@ -386,6 +393,10 @@ class PrusaSlicer(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"; first_layer_bed_temperature = (\d+\.?\d*)", self.footer_data)
+
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r"; chamber_temperature = (\d+\.?\d*)", self.footer_data)
 
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
@@ -490,6 +501,10 @@ class Cura(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
+
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r"M191 S(\d+\.?\d*)", self.header_data)
 
     def parse_layer_count(self) -> Optional[int]:
         return _regex_find_int(
@@ -662,6 +677,10 @@ class KISSlicer(BaseSlicer):
         return _regex_find_first(
             r"; bed_C = (\d+\.?\d*)", self.header_data)
 
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r"; chamber_C = (\d+\.?\d*)", self.header_data)
+
 
 class IdeaMaker(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
@@ -741,6 +760,10 @@ class IdeaMaker(BaseSlicer):
         return _regex_find_first(
             r"M190 S(\d+\.?\d*)", self.header_data)
 
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r"M191 S(\d+\.?\d*)", self.header_data)
+
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
             r";Dimension:(?:\s\d+\.\d+){3}\s(\d+\.\d+)", self.header_data)
@@ -778,6 +801,10 @@ class IceSL(BaseSlicer):
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
             r";\sbed_temp_degree_c\s:\s+(\d+\.?\d*)", self.header_data)
+
+    def parse_chamber_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r";\schamber_temp_degree_c\s:\s+(\d+\.?\d*)", self.header_data)
 
     def parse_filament_total(self) -> Optional[float]:
         return _regex_find_first(
@@ -885,6 +912,7 @@ SUPPORTED_DATA = [
     'first_layer_height',
     'first_layer_extr_temp',
     'first_layer_bed_temp',
+    'chamber_temp',
     'filament_name',
     'filament_type',
     'filament_total',
