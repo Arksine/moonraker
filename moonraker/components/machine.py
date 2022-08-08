@@ -439,7 +439,7 @@ class Machine:
         # than run another shell command
         src_ip: Optional[str] = None
         # First attempt: use "broadcast" to find the local IP
-        addr_info = [("<broadcast>", 0, False), ("10.255.255.255", 1, True)]
+        addr_info = [("<broadcast>", 0, True), ("10.255.255.255", 1, False)]
         for (addr, port, bcast) in addr_info:
             s = socket.socket(
                 socket.AF_INET, socket.SOCK_DGRAM | socket.SOCK_NONBLOCK
