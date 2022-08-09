@@ -489,7 +489,7 @@ class WebSocket(WebSocketHandler, Subscribable):
         self.rpc = self.wsm.rpc
         self._uid = id(self)
         self.is_closed: bool = False
-        self.ip_addr: str = self.request.remote_ip
+        self.ip_addr: str = self.request.remote_ip or ""
         self.queue_busy: bool = False
         self.pending_responses: Dict[int, asyncio.Future] = {}
         self.message_buf: List[Union[str, Dict[str, Any]]] = []
