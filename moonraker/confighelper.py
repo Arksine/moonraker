@@ -806,6 +806,35 @@ class FileSourceWrapper(ConfigSourceWrapper):
             self.read_file(entry)
             return True
 
+    def write_config(
+        self, dest_folder: Union[str, pathlib.Path]
+    ) -> Awaitable[None]:
+        eventloop = self.server.get_event_loop()
+        if self.server.is_running():
+            fut = eventloop.run_in_thread(self._do_write, dest_folder)
+        else:
+            self._do_write(dest_folder)
+            fut = eventloop.create_future()
+            fut.set_result(None)
+        return fut
+
+    def _do_write(self, dest_folder: Union[str, pathlib.Path]) -> None:
+        with self.save_lock:
+            if isinstance(dest_folder, str):
+                dest_folder = pathlib.Path(dest_folder)
+            dest_folder = dest_folder.expanduser().resolve()
+            cfg_parent = self.files[0].parent
+            for i, path in enumerate(self.files):
+                try:
+                    rel_path = path.relative_to(cfg_parent)
+                    dest_file = dest_folder.joinpath(rel_path)
+                except ValueError:
+                    dest_file = dest_folder.joinpath(
+                        f"{path.parent.name}-{path.name}"
+                    )
+                os.makedirs(str(dest_file.parent), exist_ok=True)
+                dest_file.write_text(self.raw_config_data[i])
+
     def _find_section_info(
         self, section: str, file_data: List[str], raise_error: bool = True
     ) -> Dict[str, Any]:
