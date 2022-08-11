@@ -702,12 +702,35 @@ class Authorization:
         else:
             return None
 
+    def _check_public_path(self,
+                           request: HTTPServerRequest
+                           ) -> bool:
+        if (request.method != "GET"):
+            return False
+
+        if (request.path.startswith("/server/files/public/")):
+            return True
+
+        if (request.path == "/server/files/list"):
+            root: Optional[List[bytes]] = request.arguments.get('root', None)
+            if (root is not None):
+                return root[-1].decode() == 'public'
+
+        if (request.path == '/server/files/directory'):
+            path: Optional[List[bytes]] = request.arguments.get('path', None)
+            if (path is not None):
+                decoded = path[-1].decode()
+                return decoded == 'public' or decoded.startswith("public/")
+
+        return False
+
     def check_authorized(self,
                          request: HTTPServerRequest
                          ) -> Optional[Dict[str, Any]]:
         if (
             request.path in self.permitted_paths
             or request.method == "OPTIONS"
+            or self._check_public_path(request)
         ):
             return None
 
