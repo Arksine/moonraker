@@ -108,6 +108,11 @@ class FileManager:
         if log_path is not None:
             self.register_directory('logs', log_path)
 
+        # Register public path
+        public_path = config.get('public_path', None)
+        if public_path is not None:
+            self.register_directory('public', public_path, full_access=True)
+
         # If gcode path is in the database, register it
         if gc_path:
             self.register_directory('gcodes', gc_path, full_access=True)
