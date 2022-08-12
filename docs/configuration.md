@@ -85,6 +85,12 @@ log_path:
 #   An optional path to a directory where log files are located.  Users may
 #   configure various applications to store logs here and Moonraker will serve
 #   them at "/server/files/logs/*".  The default is no log paths.
+public_path:
+#   An optional path to a directory where public files are located.  Users may
+#   configure various applications to store files here and Moonraker will serve
+#   them at "/server/files/public/*".  Anonymous users will be able to read and
+#   list the files on this folder and sub-folders.  The default is no
+#   public path.
 queue_gcode_uploads: False
 #   When set to True the file manager will add uploads to the job_queue when
 #   the `start_print` flag has been set.  The default if False.
@@ -98,14 +104,14 @@ enable_object_processing: False
 ```
 
 !!! Warning
-    Moonraker currently supports two paths with read/write access, the
-    `config_path` configured in the `file_manager` and the `virtual_sdcard` path
-    configured through Klipper in `printer.cfg`. These paths are monitored for
-    changes, thus they must not overlap. Likewise, these paths may not be a
-    parent or child of folders containing sensitive files such as the `database`,
-    Moonraker's source, or Klipper's source.  If either of the above conditions
-    are present Moonraker will generate a warning and revoke access to the
-    offending path.
+    Moonraker currently supports three paths with read/write access, the
+    `config_path` and `public_path` configured in the `file_manager` and the
+    `virtual_sdcard` path configured through Klipper in `printer.cfg`. These
+    paths are monitored for changes, thus they must not overlap. Likewise, these
+    paths may not be a parent or child of folders containing sensitive files
+    such as the `database`, Moonraker's source, or Klipper's source.  If either
+    of the above conditions are present Moonraker will generate a warning and
+    revoke access to the offending path.
 
 !!! Tip
     It is also possible to enable object processing directly in the slicer.
