@@ -40,6 +40,7 @@ from typing import (
 if TYPE_CHECKING:
     from websockets import WebRequest, WebsocketManager
     from components.file_manager.file_manager import FileManager
+    from components.machine import Machine
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
 
@@ -161,6 +162,10 @@ class Server:
 
         if not self.warnings:
             await self.event_loop.run_in_thread(self.config.create_backup)
+
+        machine: Machine = self.lookup_component("machine")
+        if await machine.validate_installation():
+            return
 
         if start_server:
             await self.start_server()
