@@ -89,12 +89,12 @@ class Machine:
             "systemd_cli": SystemdCliProvider,
             "systemd_dbus": SystemdDbusProvider
         }
-        ptype = config.get('provider', 'systemd_dbus')
-        pclass = providers.get(ptype)
+        self.provider_type = config.get('provider', 'systemd_dbus')
+        pclass = providers.get(self.provider_type)
         if pclass is None:
-            raise config.error(f"Invalid Provider: {ptype}")
+            raise config.error(f"Invalid Provider: {self.provider_type}")
         self.sys_provider: BaseProvider = pclass(config)
-        logging.info(f"Using System Provider: {ptype}")
+        logging.info(f"Using System Provider: {self.provider_type}")
 
         self.server.register_endpoint(
             "/machine/reboot", ['POST'], self._handle_machine_request)
@@ -147,6 +147,12 @@ class Machine:
 
     def get_system_provider(self):
         return self.sys_provider
+
+    def is_inside_container(self):
+        return self.inside_container
+
+    def get_provider_type(self):
+        return self.provider_type
 
     def get_moonraker_service_info(self):
         return dict(self.moonraker_service_info)
