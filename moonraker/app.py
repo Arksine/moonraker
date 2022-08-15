@@ -693,15 +693,12 @@ class FileRequestHandler(AuthorizedFileHandler):
     async def delete(self, path: str) -> None:
         path = self.request.path.lstrip("/").split("/", 2)[-1]
         path = url_unescape(path, plus=False)
+        file_manager: FileManager
         file_manager = self.server.lookup_component('file_manager')
         try:
             filename = await file_manager.delete_file(path)
         except self.server.error as e:
-            if e.status_code == 403:
-                raise tornado.web.HTTPError(
-                    403, "File is loaded, DELETE not permitted")
-            else:
-                raise tornado.web.HTTPError(e.status_code, str(e))
+            raise tornado.web.HTTPError(e.status_code, str(e))
         self.finish({'result': filename})
 
     async def get(self, path: str, include_body: bool = True) -> None:
@@ -713,6 +710,12 @@ class FileRequestHandler(AuthorizedFileHandler):
             self.root, absolute_path)
         if self.absolute_path is None:
             return
+        file_manager: FileManager
+        file_manager = self.server.lookup_component('file_manager')
+        try:
+            file_manager.check_reserved_path(self.absolute_path, False)
+        except self.server.error as e:
+            raise tornado.web.HTTPError(e.status_code, str(e))
 
         self.modified = self.get_modified_time()
         self.set_headers()

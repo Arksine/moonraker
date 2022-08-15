@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from components.dbus_manager import DbusManager
     from components.machine import Machine
     from components.http_client import HttpClient
+    from components.file_manager.file_manager import FileManager
     from eventloop import FlexTimer
     from dbus_next import Variant
     from dbus_next.aio import ProxyInterface
@@ -1133,6 +1134,8 @@ class WebClientDeploy(BaseDeploy):
         self.repo = config.get('repo').strip().strip("/")
         self.owner = self.repo.split("/", 1)[0]
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
+        fm: FileManager = self.server.lookup_component("file_manager")
+        fm.add_reserved_path(f"update_manager {self.name}", self.path)
         self.type = config.get('type')
         def_channel = "stable"
         if self.type == "web_beta":

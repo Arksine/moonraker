@@ -16,6 +16,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
+    from .file_manager.file_manager import FileManager
 
 class Secrets:
     def __init__(self, config: ConfigHelper) -> None:
@@ -30,6 +31,8 @@ class Secrets:
             fpath = pathlib.Path(path).expanduser().resolve()
         self.type = "invalid"
         self.values: Dict[str, Any] = {}
+        fm: FileManager = server.lookup_component("file_manager")
+        fm.add_reserved_path("secrets", fpath, False)
         if fpath.is_file():
             self.secrets_file = fpath
             data = self.secrets_file.read_text()

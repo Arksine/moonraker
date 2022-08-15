@@ -23,7 +23,7 @@ class BaseDeploy:
                  cfg_hash: Optional[str] = None
                  ) -> None:
         if name is None:
-            name = config.get_name().split()[-1]
+            name = config.get_name().split(maxsplit=1)[-1]
         self.name = name
         if prefix:
             prefix = f"{prefix} {self.name}: "
