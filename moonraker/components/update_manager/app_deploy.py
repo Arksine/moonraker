@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from .update_manager import CommandHelper
     from ..machine import Machine
+    from ..file_manager.file_manager import FileManager
 
 SUPPORTED_CHANNELS = {
     "zip": ["stable", "beta"],
@@ -60,6 +61,12 @@ class AppDeploy(BaseDeploy):
             self.type = "zip"
         self.path = pathlib.Path(
             config.get('path')).expanduser().resolve()
+        if (
+            self.name not in ["moonraker", "klipper"]
+            and not self.path.joinpath(".writeable").is_file()
+        ):
+            fm: FileManager = self.server.lookup_component("file_manager")
+            fm.add_reserved_path(f"update_manager {self.name}", self.path)
         executable = config.get('env', None)
         if self.channel not in SUPPORTED_CHANNELS[self.type]:
             raise config.error(

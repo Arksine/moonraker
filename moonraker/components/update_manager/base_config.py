@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 import copy
+from utils import MOONRAKER_PATH
 from typing import (
     TYPE_CHECKING,
     Dict
@@ -17,8 +18,6 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from components.database import MoonrakerDatabase
 
-MOONRAKER_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "../../.."))
 KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
 KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
 
