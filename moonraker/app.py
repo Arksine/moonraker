@@ -67,6 +67,7 @@ EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
+ASSET_PATH = pathlib.Path(__file__).parent.joinpath("assets")
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application: MoonrakerApp) -> None:
@@ -280,6 +281,9 @@ class MoonrakerApp:
 
     def get_server(self) -> Server:
         return self.server
+
+    def get_asset_path(self) -> pathlib.Path:
+        return ASSET_PATH
 
     async def close(self) -> None:
         if self.http_server is not None:
@@ -1020,5 +1024,4 @@ class WelcomeHandler(tornado.web.RequestHandler):
         self.render("welcome.html", **context)
 
     def get_template_path(self) -> Optional[str]:
-        tpath = pathlib.Path(__file__).parent.joinpath("assets")
-        return str(tpath)
+        return str(ASSET_PATH)
