@@ -25,12 +25,16 @@ class TemplateFactory:
         self.server = config.get_server()
         secrets: Secrets = self.server.load_component(config, 'secrets')
         self.jenv = jinja2.Environment('{%', '%}', '{', '}')
-        self.async_env = jinja2.Environment('{%', '%}', '{', '}',
-                                            enable_async=True)
+        self.async_env = jinja2.Environment(
+            '{%', '%}', '{', '}', enable_async=True
+        )
+        self.ui_env = jinja2.Environment(enable_async=True)
         self.jenv.add_extension("jinja2.ext.do")
         self.jenv.filters['fromjson'] = json.loads
         self.async_env.add_extension("jinja2.ext.do")
         self.async_env.filters['fromjson'] = json.loads
+        self.ui_env.add_extension("jinja2.ext.do")
+        self.ui_env.filters['fromjson'] = json.loads
         self.add_environment_global('raise_error', self._raise_error)
         self.add_environment_global('secrets', secrets)
 
@@ -55,6 +59,14 @@ class TemplateFactory:
             logging.exception(f"Error creating template from source:\n{source}")
             raise
         return JinjaTemplate(source, self.server, template, is_async)
+
+    def create_ui_template(self, source: str) -> JinjaTemplate:
+        try:
+            template = self.ui_env.from_string(source)
+        except Exception:
+            logging.exception(f"Error creating template from source:\n{source}")
+            raise
+        return JinjaTemplate(source, self.server, template, True)
 
 
 class JinjaTemplate:
