@@ -127,6 +127,7 @@ class UpdateManager:
                 )
 
         self.cmd_request_lock = asyncio.Lock()
+        self.initial_refresh_complete: bool = False
         self.klippy_identified_evt: Optional[asyncio.Event] = None
 
         # Auto Status Refresh
@@ -171,16 +172,16 @@ class UpdateManager:
             if key not in self.updaters:
                 logging.info(f"Removing stale update_manager data: {key}")
                 await umdb.pop(key, None)
-
-        async with self.cmd_request_lock:
-            for updater in list(self.updaters.values()):
-                await updater.initialize()
-                if updater.needs_refresh():
-                    await updater.refresh()
+        for updater in list(self.updaters.values()):
+            await updater.initialize()
         if self.refresh_timer is not None:
-            self.refresh_timer.start(delay=UPDATE_REFRESH_INTERVAL)
+            self.refresh_timer.start()
+        else:
+            self.event_loop.register_callback(
+                self._handle_auto_refresh, self.event_loop.get_loop_time()
+            )
 
-    async def _set_klipper_repo(self) -> None:
+    def _set_klipper_repo(self) -> None:
         if self.klippy_identified_evt is not None:
             self.klippy_identified_evt.set()
         kinfo = self.server.get_klippy_info()
@@ -206,12 +207,16 @@ class UpdateManager:
         need_notification = not isinstance(kupdater, AppDeploy)
         kclass = get_deploy_class(kpath)
         self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
+        coro = self._update_klipper_repo(need_notification)
+        self.event_loop.create_task(coro)
+
+    async def _update_klipper_repo(self, notify: bool) -> None:
         async with self.cmd_request_lock:
             umdb = self.cmd_helper.get_umdb()
             await umdb.pop('klipper', None)
             await self.updaters['klipper'].initialize()
             await self.updaters['klipper'].refresh()
-        if need_notification:
+        if notify:
             vinfo: Dict[str, Any] = {}
             for name, updater in self.updaters.items():
                 vinfo[name] = updater.get_update_status()
@@ -229,13 +234,14 @@ class UpdateManager:
 
     async def _handle_auto_refresh(self, eventtime: float) -> float:
         cur_hour = time.localtime(time.time()).tm_hour
-        # Update when the local time is between 12AM and 5AM
-        if cur_hour >= MAX_UPDATE_HOUR:
-            return eventtime + UPDATE_REFRESH_INTERVAL
-        if await self._check_klippy_printing():
-            # Don't Refresh during a print
-            logging.info("Klippy is printing, auto refresh aborted")
-            return eventtime + UPDATE_REFRESH_INTERVAL
+        if self.initial_refresh_complete:
+            # Update when the local time is between 12AM and 5AM
+            if cur_hour >= MAX_UPDATE_HOUR:
+                return eventtime + UPDATE_REFRESH_INTERVAL
+            if await self._check_klippy_printing():
+                # Don't Refresh during a print
+                logging.info("Klippy is printing, auto refresh aborted")
+                return eventtime + UPDATE_REFRESH_INTERVAL
         vinfo: Dict[str, Any] = {}
         need_notify = False
         async with self.cmd_request_lock:
@@ -248,6 +254,8 @@ class UpdateManager:
             except Exception:
                 logging.exception("Unable to Refresh Status")
                 return eventtime + UPDATE_REFRESH_INTERVAL
+            finally:
+                self.initial_refresh_complete = True
         if need_notify:
             uinfo = self.cmd_helper.get_rate_limit_stats()
             uinfo['version_info'] = vinfo
@@ -382,7 +390,8 @@ class UpdateManager:
         #   - Klippy is printing
         if (
             self.cmd_helper.is_update_busy() or
-            await self._check_klippy_printing()
+            await self._check_klippy_printing() or
+            not self.initial_refresh_complete
         ):
             check_refresh = False
 
