@@ -15,27 +15,43 @@ import asyncio
 import platform
 import socket
 import ipaddress
+import time
+import shutil
 import distro
+import tempfile
+import getpass
+from confighelper import FileSourceWrapper
+from utils import MOONRAKER_PATH
 
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
     Any,
+    Awaitable,
     Callable,
     Dict,
     List,
     Optional,
-    Tuple
+    Tuple,
+    Union,
+    cast
 )
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
+    from app import MoonrakerApp
     from .shell_command import ShellCommandFactory as SCMDComp
+    from .database import MoonrakerDatabase
+    from .file_manager.file_manager import FileManager
+    from .authorization import Authorization
+    from .announcements import Announcements
     from .proc_stats import ProcStats
     from .dbus_manager import DbusManager
     from dbus_next.aio import ProxyInterface
     from dbus_next import Variant
+    SudoReturn = Union[Awaitable[Tuple[str, bool]], Tuple[str, bool]]
+    SudoCallback = Callable[[], SudoReturn]
 
 ALLOWED_SERVICES = [
     "moonraker", "klipper", "webcamd", "MoonCord",
@@ -96,6 +112,8 @@ class Machine:
             raise config.error(f"Invalid Provider: {self.provider_type}")
         self.sys_provider: BaseProvider = pclass(config)
         logging.info(f"Using System Provider: {self.provider_type}")
+        self.validator = InstallValidator(config)
+        self.sudo_requests: List[Tuple[SudoCallback, str]] = []
 
         self.server.register_endpoint(
             "/machine/reboot", ['POST'], self._handle_machine_request)
@@ -114,12 +132,13 @@ class Machine:
             "/machine/system_info", ['GET'],
             self._handle_sysinfo_request)
         self.server.register_endpoint(
-            "/machine/sudo", ["GET"], self._handle_sudo_check)
+            "/machine/sudo/info", ["GET"], self._handle_sudo_info)
         self.server.register_endpoint(
             "/machine/sudo/password", ["POST"],
             self._set_sudo_password)
 
         self.server.register_notification("machine:service_state_changed")
+        self.server.register_notification("machine:sudo_alert")
 
         # Register remote methods
         self.server.register_remote_method(
@@ -151,6 +170,12 @@ class Machine:
     @property
     def public_ip(self) -> str:
         return self._public_ip
+
+    @property
+    def unit_name(self) -> str:
+        svc_info = self.moonraker_service_info
+        unit_name = svc_info.get("unit_name", "moonraker.service")
+        return unit_name.split(".", 1)[0]
 
     def get_system_provider(self):
         return self.sys_provider
@@ -189,6 +214,12 @@ class Machine:
         self.log_service_info(svc_info)
         self.init_evt.set()
 
+    async def validate_installation(self) -> bool:
+        return await self.validator.perform_validation()
+
+    async def on_exit(self) -> None:
+        await self.validator.remove_announcement()
+
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
         if self.inside_container:
@@ -210,15 +241,22 @@ class Machine:
                                 ) -> None:
         await self.sys_provider.do_service_action(action, service_name)
 
+    def restart_moonraker_service(self):
+        async def wrapper():
+            try:
+                await self.do_service_action("restart", self.unit_name)
+            except Exception:
+                pass
+        self.server.get_event_loop().create_task(wrapper())
+
     async def _handle_service_request(self, web_request: WebRequest) -> str:
         name: str = web_request.get('service')
         action = web_request.get_endpoint().split('/')[-1]
-        if name == "moonraker":
+        if name == self.unit_name:
             if action != "restart":
                 raise self.server.error(
                     f"Service action '{action}' not available for moonraker")
-            event_loop = self.server.get_event_loop()
-            event_loop.register_callback(self.do_service_action, action, name)
+            self.restart_moonraker_service()
         elif self.sys_provider.is_service_available(name):
             await self.do_service_action(action, name)
         else:
@@ -231,21 +269,73 @@ class Machine:
     async def _handle_sysinfo_request(self,
                                       web_request: WebRequest
                                       ) -> Dict[str, Any]:
-        return {'system_info': self.system_info}
+        return {"system_info": self.system_info}
 
-    async def _set_sudo_password(self, web_request: WebRequest) -> str:
+    async def _set_sudo_password(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
         self._sudo_password = web_request.get_str("password")
         if not await self.check_sudo_access():
             self._sudo_password = None
             raise self.server.error("Invalid password, sudo access was denied")
-        self.server.send_event("machine:sudo_password_set")
-        return "ok"
+        sudo_responses = ["Sudo password successfully set."]
+        restart: bool = False
+        failed: List[Tuple[SudoCallback, str]] = []
+        failed_msgs: List[str] = []
+        if self.sudo_requests:
+            while self.sudo_requests:
+                cb, msg = self.sudo_requests.pop(0)
+                try:
+                    ret = cb()
+                    if isinstance(ret, Awaitable):
+                        ret = await ret
+                    msg, need_restart = ret
+                    sudo_responses.append(msg)
+                    restart |= need_restart
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    failed.append((cb, msg))
+                    failed_msgs.append(str(e))
+            restart = False if len(failed) > 0 else restart
+            self.sudo_requests = failed
+            if not restart and len(sudo_responses) > 1:
+                # at least one successful response and not restarting
+                eventloop = self.server.get_event_loop()
+                eventloop.delay_callback(
+                    .05, self.server.send_event,
+                    "machine:sudo_alert",
+                    {
+                        "sudo_requested": self.sudo_requested,
+                        "request_messages": self.sudo_request_messages
+                    }
+                )
+            if failed_msgs:
+                err_msg = "\n".join(failed_msgs)
+                raise self.server.error(err_msg, 500)
+            if restart:
+                self.restart_moonraker_service()
+                sudo_responses.append(
+                    "Moonraker is currently in the process of restarting."
+                )
+        return {
+            "sudo_responses": sudo_responses,
+            "is_restarting": restart
+        }
 
-    async def _handle_sudo_check(
+    async def _handle_sudo_info(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
-        has_sudo = await self.check_sudo_access()
-        return {"sudo_access": has_sudo}
+        check_access = web_request.get("check_access", False)
+        has_sudo: Optional[bool] = None
+        if check_access:
+            has_sudo = await self.check_sudo_access()
+        return {
+            "sudo_access": has_sudo,
+            "linux_user": self.linux_user,
+            "sudo_requested": self.sudo_requested,
+            "request_messages": self.sudo_request_messages
+        }
 
     def get_system_info(self) -> Dict[str, Any]:
         return self.system_info
@@ -253,6 +343,30 @@ class Machine:
     @property
     def sudo_password(self) -> Optional[str]:
         return self._sudo_password
+
+    @property
+    def sudo_requested(self) -> bool:
+        return len(self.sudo_requests) > 0
+
+    @property
+    def linux_user(self) -> str:
+        return getpass.getuser()
+
+    @property
+    def sudo_request_messages(self) -> List[str]:
+        return [req[1] for req in self.sudo_requests]
+
+    def register_sudo_request(
+        self, callback: SudoCallback, message: str
+    ) -> None:
+        self.sudo_requests.append((callback, message))
+        self.server.send_event(
+            "machine:sudo_alert",
+            {
+                "sudo_requested": True,
+                "request_messages": self.sudo_request_messages
+            }
+        )
 
     async def check_sudo_access(self, cmds: List[str] = []) -> bool:
         if not cmds:
@@ -1016,6 +1130,465 @@ class SystemdDbusProvider(BaseProvider):
                     pass
             processed[key] = val
         return processed
+
+
+# Install validation
+INSTALL_VERSION = 1
+SERVICE_VERSION = 1
+
+SYSTEMD_UNIT = \
+"""
+# systemd service file for moonraker
+[Unit]
+Description=API Server for Klipper SV%d
+Requires=network-online.target
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=%s
+SupplementaryGroups=moonraker-admin
+RemainAfterExit=yes
+WorkingDirectory=%s
+EnvironmentFile=%s
+ExecStart=%s $MOONRAKER_ARGS
+Restart=always
+RestartSec=10
+"""  # noqa: E122
+
+ENVIRONMENT = "MOONRAKER_ARGS=\"%s/moonraker/moonraker.py %s\""
+TEMPLATE_NAME = "password_request.html"
+
+class ValidationError(Exception):
+    pass
+
+class InstallValidator:
+    def __init__(self, config: ConfigHelper) -> None:
+        self.server = config.get_server()
+        self.config = config
+        self.server.load_component(config, "template")
+        self.force_validation = config.getboolean("force_validation", False)
+        self.sc_enabled = config.getboolean("validate_service", True)
+        self.cc_enabled = config.getboolean("validate_config", True)
+        app_args = self.server.get_app_args()
+        self.data_path = pathlib.Path(app_args["data_path"])
+        self._update_backup_path()
+        self.alias = app_args["alias"]
+        self.data_path_valid = True
+        self._sudo_requested = False
+        self.announcement_id = ""
+
+    def _update_backup_path(self):
+        str_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        if not hasattr(self, "backup_path"):
+            self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
+        elif not self.backup_path.exists():
+            self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
+
+    async def perform_validation(self) -> bool:
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        install_ver: int = await db.get_item(
+            "moonraker", "validate_install.install_version", 0
+        )
+        if INSTALL_VERSION <= install_ver and not self.force_validation:
+            logging.debug("Installation version in database up to date")
+            return False
+        need_restart: bool = False
+        has_error: bool = False
+        try:
+            name = "service"
+            need_restart = await self._check_service_file()
+            name = "config"
+            need_restart |= await self._check_configuration()
+        except asyncio.CancelledError:
+            raise
+        except ValidationError as ve:
+            has_error = True
+            self.server.add_warning(str(ve))
+        except Exception as e:
+            has_error = True
+            msg = f"Failed to validate {name}: {e}"
+            logging.exception(msg)
+            self.server.add_warning(msg, log=False)
+        else:
+            await db.insert_item(
+                "moonraker", "validate_install.install_version", INSTALL_VERSION
+            )
+        if not has_error and need_restart:
+            machine: Machine = self.server.lookup_component("machine")
+            machine.restart_moonraker_service()
+            return True
+        return False
+
+    async def _check_service_file(self) -> bool:
+        if not self.sc_enabled:
+            return False
+        machine: Machine = self.server.lookup_component("machine")
+        if machine.is_inside_container():
+            raise ValidationError(
+                "Moonraker instance running inside a container, "
+                "cannot validate service file."
+            )
+        if machine.get_provider_type() == "none":
+            raise ValidationError(
+                "No machine provider configured, cannot validate service file."
+            )
+        logging.info("Performing Service Validation...")
+        app_args = self.server.get_app_args()
+        svc_info = machine.get_moonraker_service_info()
+        if not svc_info:
+            raise ValidationError(
+                "Unable to retrieve Moonraker service info.  Service file "
+                "must be updated manually."
+            )
+        props: Dict[str, str] = svc_info.get("properties", {})
+        if "FragmentPath" not in props:
+            raise ValidationError(
+                "Unable to locate path to Moonraker's service unit. Service "
+                "file must be must be updated manually."
+            )
+        desc = props.get("Description", "")
+        ver_match = re.match(r"API Server for Klipper SV(\d+)", desc)
+        if ver_match is not None and int(ver_match.group(1)) == SERVICE_VERSION:
+            logging.info("Service file validated and up to date")
+            return False
+        unit: str = svc_info.get("unit_name", "").split(".", 1)[0]
+        if not unit:
+            raise ValidationError(
+                "Unable to retrieve service unit name.  Service file "
+                "must be updated manually."
+            )
+        if unit != self.alias and self.alias == "moonraker":
+            # alias differs from unit name, current alias is set to default
+            self.alias = unit
+            if app_args["is_default_data_path"]:
+                # Using default datapath, switch to alias based path to
+                # avoid conflict
+                new_dp = pathlib.Path(f"~/{unit}_data").expanduser().resolve()
+                if new_dp.exists() and not self._check_path_bare(new_dp):
+                    raise ValidationError(
+                        f"Cannot resolve data path for custom unit '{unit}', "
+                        f"data path '{new_dp}' already exists.  Service file "
+                        "must be updated manually."
+                    )
+                # If the current path is bare we can remove it
+                if self._check_path_bare(self.data_path):
+                    shutil.rmtree(self.data_path)
+                self.data_path = new_dp
+                if not self.data_path.exists():
+                    self.data_path.mkdir()
+                # A non-default datapath requires successful update of the
+                # service
+                self.data_path_valid = False
+        if await machine.check_sudo_access():
+            logging.info("Moonraker has sudo access")
+        else:
+            self._request_sudo_access()
+            raise ValidationError(
+                "Moonraker requires sudo permission to update the system "
+                "service. Please check your notifications for further "
+                "intructions."
+            )
+        self._sudo_requested = False
+        svc_dest = pathlib.Path(props["FragmentPath"])
+        user: str = props["User"]
+        tmp_svc = pathlib.Path(
+            tempfile.gettempdir()
+        ).joinpath(f"{unit}-tmp.svc")
+        src_path = pathlib.Path(MOONRAKER_PATH)
+        # Create local environment file
+        env_file = src_path.joinpath(f"{unit}.env")
+        cmd_args = f"-a {unit} -d {self.data_path}"
+        cfg_file = pathlib.Path(app_args["config_file"])
+        fm: FileManager = self.server.lookup_component("file_manager")
+        cfg_path = fm.get_directory("config")
+        log_path = fm.get_directory("logs")
+        if not cfg_path or not cfg_file.parent.samefile(cfg_path):
+            # Configuration file does not exist in config path
+            cmd_args += f" -c {cfg_file}"
+        elif cfg_file.name != "moonraker.conf":
+            cfg_file = self.data_path.joinpath(f"config/{cfg_file.name}")
+            cmd_args += f" -c {cfg_file}"
+        if not app_args["log_file"]:
+            #  No log file configured
+            cmd_args += f" -n"
+        else:
+            # Log file does not exist in log path
+            log_file = pathlib.Path(app_args["log_file"])
+            if not log_path or not log_file.parent.samefile(log_path):
+                cmd_args += f" -l {log_file}"
+            elif log_file.name != "moonraker.log":
+                cfg_file = self.data_path.joinpath(f"logs/{log_file.name}")
+                cmd_args += f" -l {log_file}"
+        # backup existing service files
+        self._update_backup_path()
+        svc_bkp_path = self.backup_path.joinpath("service")
+        os.makedirs(str(svc_bkp_path), exist_ok=True)
+        if env_file.exists():
+            env_bkp = svc_bkp_path.joinpath(env_file.name)
+            shutil.copy2(str(env_file), str(env_bkp))
+        service_bkp = svc_bkp_path.joinpath(svc_dest.name)
+        shutil.copy2(str(svc_dest), str(service_bkp))
+        # write temporary service file
+        tmp_svc.write_text(
+            SYSTEMD_UNIT
+            % (SERVICE_VERSION, user, src_path, env_file, sys.executable)
+        )
+        try:
+            await machine.exec_sudo_command(f"cp -f {tmp_svc} {svc_dest}")
+            await machine.exec_sudo_command(f"systemctl daemon-reload")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("Failed to update moonraker service unit")
+            raise ValidationError(
+                f"Failed to update service unit file '{svc_dest}'. Update must "
+                f"be performed manually."
+            ) from None
+        finally:
+            tmp_svc.unlink()
+        # write new environment
+        env_file.write_text(ENVIRONMENT % (src_path, cmd_args))
+        self.data_path_valid = True
+        return True
+
+    def _check_path_bare(self, path: pathlib.Path) -> bool:
+        empty: bool = True
+        for item in path.iterdir():
+            if (
+                item.is_file() or
+                item.is_symlink() or
+                item.name not in ["gcodes", "config", "logs", "certs"]
+            ):
+                empty = False
+                break
+            if next(item.iterdir(), None) is not None:
+                empty = False
+                break
+        return empty
+
+    def _link_data_subfolder(
+        self, folder_name: str, source_dir: Union[str, pathlib.Path]
+    ) -> None:
+        if isinstance(source_dir, str):
+            source_dir = pathlib.Path(source_dir).expanduser().resolve()
+        if not source_dir.is_dir():
+            raise ValidationError(
+                f"Failed to link subfolder '{folder_name}' to source path "
+                f"'{source_dir}'.  The requusted path is not a valid directory."
+            )
+        subfolder = self.data_path.joinpath(folder_name)
+        if subfolder.is_symlink():
+            if not subfolder.samefile(source_dir):
+                raise ValidationError(
+                    f"Failed to link subfolder '{folder_name}' to "
+                    f"'{source_dir}'.  '{folder_name}' already exists and is "
+                    f"linked to {subfolder}.  This conflict requires "
+                    "manual resolution."
+                )
+            return
+        if not subfolder.exists():
+            subfolder.symlink_to(source_dir)
+            return
+        if subfolder.is_dir() and next(subfolder.iterdir(), None) is None:
+            subfolder.rmdir()
+            subfolder.symlink_to(source_dir)
+            return
+        raise ValidationError(
+            f"Failed to link subfolder '{folder_name}' to '{source_dir}'.  "
+            f"Folder '{folder_name}' already exists.  This conflict requires "
+            "manual resolution."
+        )
+
+    def _link_data_file(
+        self,
+        data_file: Union[str, pathlib.Path],
+        target: Union[str, pathlib.Path]
+    ) -> None:
+        if isinstance(data_file, str):
+            data_file = pathlib.Path(data_file)
+        if isinstance(target, str):
+            target = pathlib.Path(target)
+        target = target.expanduser().resolve()
+        if not target.is_file():
+            raise ValidationError(
+                f"Failed to link data file {data_file.name}.  Target "
+                f"{target} is not a valid file."
+            )
+        if data_file.is_symlink():
+            if not data_file.samefile(target):
+                raise ValidationError(
+                    f"Failed to link data file {data_file.name}.  Link "
+                    f"to {data_file.resolve()} already exists. This conflict "
+                    "must be resolved manually."
+                )
+            return
+        if not data_file.exists():
+            data_file.symlink_to(target)
+            return
+        raise ValidationError(
+            f"Failed to link data file {data_file.name}.  File already exists. "
+            f"This conflict must be resolved manually."
+        )
+
+    async def _check_configuration(self) -> bool:
+        if not self.cc_enabled or not self.data_path_valid:
+            return False
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        cfg_source = cast(FileSourceWrapper, self.config.get_source())
+        cfg_source.backup_source()
+        try:
+            # write current configuration to backup path
+            self._update_backup_path()
+            cfg_bkp_path = self.backup_path.joinpath("config")
+            os.makedirs(str(cfg_bkp_path), exist_ok=True)
+            await cfg_source.write_config(cfg_bkp_path)
+            # Create symbolic links for configured folders
+            server_cfg = self.config["server"]
+            fm_cfg = self.config["file_manager"]
+            db_cfg = self.config["database"]
+            cfg_path = fm_cfg.get("config_path", None)
+            if cfg_path is None:
+                cfg_path = server_cfg.get("config_path", None)
+            if cfg_path is not None:
+                self._link_data_subfolder("config", cfg_path)
+                cfg_source.remove_option("server", "config_path")
+                cfg_source.remove_option("file_manager", "config_path")
+
+            log_path = fm_cfg.get("log_path", None)
+            if log_path is None:
+                log_path = server_cfg.get("log_path", None)
+            if log_path is not None:
+                self._link_data_subfolder("logs", log_path)
+                cfg_source.remove_option("server", "log_path")
+                cfg_source.remove_option("file_manager", "log_path")
+
+            gc_path: Optional[str] = await db.get_item(
+                "moonraker", "file_manager.gcode_path", None
+            )
+            if gc_path is not None:
+                self._link_data_subfolder("gcodes", gc_path)
+                db.delete_item("moonraker", "file_manager.gcode_path")
+
+            db_path = db_cfg.get("database_path", None)
+            default_db = pathlib.Path("~/.moonraker_database").expanduser()
+            if db_path is None and default_db.exists():
+                self._link_data_subfolder("database", default_db)
+            elif db_path is not None:
+                self._link_data_subfolder("database", db_path)
+                cfg_source.remove_option("database", "database_path")
+
+            # Link individual files
+            secrets_path = self.config["secrets"].get("secrets_path", None)
+            if secrets_path is not None:
+                secrets_dest = self.data_path.joinpath(f"{self.alias}.secrets")
+                self._link_data_file(secrets_dest, secrets_path)
+                cfg_source.remove_option("secrets", "secrets_path")
+            certs_path = self.data_path.joinpath("certs")
+            if not certs_path.exists():
+                certs_path.mkdir()
+            ssl_cert = server_cfg.get("ssl_certificate_path", None)
+            if ssl_cert is not None:
+                cert_dest = certs_path.joinpath(f"{self.alias}.cert")
+                self._link_data_file(cert_dest, ssl_cert)
+                cfg_source.remove_option("server", "ssl_certificate_path")
+            ssl_key = server_cfg.get("ssl_key_path", None)
+            if ssl_key is not None:
+                key_dest = certs_path.joinpath(f"{self.alias}.key")
+                self._link_data_file(key_dest, ssl_key)
+                cfg_source.remove_option("server", "ssl_key_path")
+        except Exception:
+            cfg_source.cancel()
+            raise
+        finally:
+            self.cc_enabled = False
+        return await cfg_source.save()
+
+    def _request_sudo_access(self) -> None:
+        if self._sudo_requested:
+            return
+        self._sudo_requested = True
+        auth: Optional[Authorization]
+        auth = self.server.lookup_component("authorizaton", None)
+        if auth is not None:
+            # Bypass authentication requirements
+            auth.register_permited_path("/machine/sudo/password")
+        machine: Machine = self.server.lookup_component("machine")
+        machine.register_sudo_request(
+            self._on_password_received,
+            "Root access required to update Moonraker's systemd service."
+        )
+        if not machine.public_ip:
+            async def wrapper(pub_ip):
+                if not pub_ip:
+                    return
+                await self.remove_announcement()
+                self._announce_sudo_request()
+            self.server.register_event_handler(
+                "machine:public_ip_changed", wrapper
+            )
+        self._announce_sudo_request()
+
+    def _announce_sudo_request(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        host_info = self.server.get_host_info()
+        host_addr: str = host_info["address"]
+        if host_addr.lower() not in ["all", "0.0.0.0", "::"]:
+            address = host_addr
+        else:
+            address = machine.public_ip
+        if not address:
+            address = f"{host_info['hostname']}.local"
+        elif ":" in address:
+            # ipv6 address
+            address = f"[{address}]"
+        app: MoonrakerApp = self.server.lookup_component("application")
+        scheme = "https" if app.https_enabled() else "http"
+        host_info = self.server.get_host_info()
+        port = host_info["port"]
+        url = f"{scheme}://{address}:{port}/"
+        ancmp: Announcements = self.server.lookup_component("announcements")
+        entry = ancmp.add_internal_announcement(
+            "Sudo Password Required",
+            "Moonraker requires sudo access to finish updating. "
+            "Please click on the attached link and follow the "
+            "instructions.",
+            url, "high", "machine"
+        )
+        self.announcement_id = entry.get("entry_id", "")
+
+    async def remove_announcement(self):
+        if not self.announcement_id:
+            return
+        ancmp: Announcements = self.server.lookup_component("announcements")
+        # remove stale announcement
+        try:
+            await ancmp.remove_announcement(self.announcement_id)
+        except self.server.error:
+            pass
+        self.announcement_id = ""
+
+    async def _on_password_received(self) -> Tuple[str, bool]:
+        try:
+            name = "Service"
+            await self._check_service_file()
+            name = "Config"
+            await self._check_configuration()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            raise self.server.error(
+                f"{name} validation failed with error:\n{e}", 500
+            ) from e
+        await self.remove_announcement()
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        await db.insert_item(
+            "moonraker", "validate_install.install_version", INSTALL_VERSION
+        )
+        return "System update complete.", True
 
 def load_component(config: ConfigHelper) -> Machine:
     return Machine(config)
