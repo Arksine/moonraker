@@ -602,12 +602,15 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 args[key] = value
         return args
 
-    def _log_debug(self, header: str, args: Dict[str, Any]) -> None:
+    def _log_debug(self, header: str, args: Any) -> None:
         if self.server.is_debug_enabled():
-            if self.request.path.startswith('/access'):
-                resp = {key: "<sanitized>" for key in args}
-            else:
-                resp = args
+            resp = args
+            if isinstance(args, dict):
+                if self.request.path.startswith('/access'):
+                    resp = {key: "<sanitized>" for key in args}
+            elif isinstance(args, str):
+                if args.startswith("<html>"):
+                    resp = "<html>"
             logging.debug(f"{header}::{resp}")
 
     async def get(self, *args, **kwargs) -> None:
