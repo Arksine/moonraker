@@ -7,6 +7,7 @@ from __future__ import annotations
 import socket
 import asyncio
 import logging
+import ipaddress
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 
@@ -50,8 +51,13 @@ class ZeroconfRegistrar:
         self.server = config.get_server()
         self.runner = AsyncRunner(IPVersion.All)
         hi = self.server.get_host_info()
-        addresses: Optional[List[bytes]] = [socket.inet_aton(hi["address"])]
-        self.bound_all = hi["address"] == "0.0.0.0"
+        addr: str = hi["address"]
+        if addr.lower() == "all":
+            addr = "::"
+        host_ip = ipaddress.ip_address(addr)
+        fam = socket.AF_INET6 if host_ip.version == 6 else socket.AF_INET
+        addresses: List[bytes] = [(socket.inet_pton(fam, addr))]
+        self.bound_all = addr in ["0.0.0.0", "::"]
         self.service_info = self._build_service_info(addresses)
         if self.bound_all:
             self.server.register_event_handler(
