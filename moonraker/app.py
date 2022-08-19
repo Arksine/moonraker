@@ -262,7 +262,7 @@ class MoonrakerApp:
         self.http_server = self.app.listen(
             port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
-        if self.cert_path.exists() and self.key_path.exists():
+        if self.https_enabled():
             logging.info(f"Starting secure server on port {ssl_port}")
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(self.cert_path, self.key_path)
@@ -298,6 +298,9 @@ class MoonrakerApp:
 
     def get_asset_path(self) -> pathlib.Path:
         return ASSET_PATH
+
+    def https_enabled(self) -> bool:
+        return self.cert_path.exists() and self.key_path.exists()
 
     async def close(self) -> None:
         if self.http_server is not None:
