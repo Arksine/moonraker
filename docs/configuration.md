@@ -43,7 +43,8 @@ This section is required.
 [server]
 host: 0.0.0.0
 #  The host address in which to bind the HTTP server.  Default is to bind
-#  to all interfaces
+#  to all ipv4 interfaces.  If set to "all" the server will bind to all
+#  ipv4 an ipv6 interfaces.
 port: 7125
 #   The port the HTTP server will listen on.  Default is 7125
 ssl_port: 7130
