@@ -242,6 +242,8 @@ class MoonrakerApp:
         return expanded
 
     def listen(self, host: str, port: int, ssl_port: int) -> None:
+        if host.lower() == "all":
+            host = ""
         self.http_server = self.app.listen(
             port, address=host, max_body_size=MAX_BODY_SIZE,
             xheaders=True)
