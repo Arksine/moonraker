@@ -73,6 +73,7 @@ class Machine:
         sudo_template = config.gettemplate("sudo_password", None)
         if sudo_template is not None:
             self._sudo_password = sudo_template.render()
+        self._public_ip = ""
         self.system_info: Dict[str, Any] = {
             'python': {
                 "version": sys.version_info,
@@ -144,6 +145,10 @@ class Machine:
                 for key, val in info.items():
                     sys_info_msg += f"\n  {key}: {val}"
         self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
+
+    @property
+    def public_ip(self) -> str:
+        return self._public_ip
 
     def get_system_provider(self):
         return self.sys_provider
@@ -443,8 +448,10 @@ class Machine:
             logging.exception("Error processing network update")
             return
         prev_network = self.system_info.get('network', {})
-        if notify and network != prev_network:
-            self.server.send_event("machine:net_state_changed", network)
+        if network != prev_network:
+            self._find_public_ip()
+            if notify:
+                self.server.send_event("machine:net_state_changed", network)
         self.system_info['network'] = network
 
     async def get_public_network(self) -> Dict[str, Any]:
@@ -469,7 +476,7 @@ class Machine:
                     continue
                 fam = addrinfo["family"]
                 addr = addrinfo["address"]
-                if fam == "ipv6" and src_ip is None:
+                if fam == "ipv6" and not src_ip:
                     ip = ipaddress.ip_address(addr)
                     if ip.is_global:
                         return {
@@ -489,7 +496,7 @@ class Machine:
             "family": ""
         }
 
-    def _find_public_ip(self) -> Optional[str]:
+    def _find_public_ip(self) -> str:
         #  Check for an IPv4 Source IP
         # NOTE: It should also be possible to extract this from
         # the routing table, ie: ip -json route
@@ -497,23 +504,28 @@ class Machine:
         # metric.  Might also be able to get IPv6 info from this.
         # However, it would be better to use NETLINK for this rather
         # than run another shell command
-        src_ip: Optional[str] = None
+        src_ip: str = ""
         # First attempt: use "broadcast" to find the local IP
-        addr_info = [("<broadcast>", 0, True), ("10.255.255.255", 1, False)]
-        for (addr, port, bcast) in addr_info:
-            s = socket.socket(
-                socket.AF_INET, socket.SOCK_DGRAM | socket.SOCK_NONBLOCK
-            )
+        addr_info = [
+            ("<broadcast>", 0, socket.AF_INET),
+            ("10.255.255.255", 1, socket.AF_INET),
+            ("2001:db8::1234", 1, socket.AF_INET6),
+        ]
+        for (addr, port, fam) in addr_info:
+            s = socket.socket(fam, socket.SOCK_DGRAM | socket.SOCK_NONBLOCK)
             try:
-                if bcast:
+                if addr == "<broadcast>":
                     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 s.connect((addr, port))
                 src_ip = s.getsockname()[0]
             except Exception:
                 continue
             logging.info(f"Detected Local IP: {src_ip}")
-            return src_ip
-        if src_ip is None:
+            break
+        if src_ip != self._public_ip:
+            self._public_ip = src_ip
+            self.server.send_event("machine:public_ip_changed", src_ip)
+        if not src_ip:
             logging.info("Failed to detect local IP address")
         return src_ip
 
