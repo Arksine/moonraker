@@ -123,6 +123,137 @@
                     background-color: rgb(160, 64, 8);
                 }
             }
+
+            .modal {
+                display: none;
+                position: fixed;
+                z-index: 1;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+                background-color: rgb(0,0,0);
+                background-color: rgba(0,0,0,0.4);
+            }
+
+            .modal-card {
+                background: none;
+                position: relative;
+                border: 0px;
+                border-radius: 1rem;
+                background-color: #1a1a1a;
+                margin: 20% auto 2rem auto;
+                padding: 0rem;
+                border: 0px;
+                width: 50%;
+                animation-name: fadein;
+                animation-duration: .5s;
+            }
+
+            .modal-card h1 {
+                background-color: #006f7e;
+                text-align: center;
+                line-height: 3rem;
+                font-size: 1.1rem;
+                height: 3rem;
+                margin: 0;
+                border-top-left-radius: 1rem;
+                border-top-right-radius: 1rem;
+            }
+
+            .modal-content {
+                background-color: #3e3e3e;
+                padding: 1rem;
+                margin: 0;
+                height: auto
+            }
+
+            .modal-content .entry {
+                display: inline-block;
+                width: 100%;
+            }
+            .modal-content .entry:not(:last-child) {
+                margin-bottom: .5rem;
+            }
+            .modal-content .value {
+                float: right;
+                display: inline;
+            }
+            .modal-content input {
+                width: 100%;
+                padding: 8px;
+                border-radius: 4px;
+                -moz-border-radius: 4px;
+                -webkit-border-radius: 4px;
+                font-size: 1rem; color: #222;
+                background: #F7F7F7;
+
+            }
+
+            .modal-footer {
+                display: inline-block;
+                background-color: #3e3e3e;
+                margin: 0;
+                height: auto;
+                width: 100%;
+                border-bottom-left-radius: 1rem;
+                border-bottom-right-radius: 1rem;
+            }
+
+            .modal-button {
+                float: right;
+                background: #cecece;
+                border: none;
+                width: auto;
+                overflow: visible;
+                font-size: 1rem;
+                font-weight: bold;
+                color: rgb(0, 0, 0);
+                padding: .4rem .5rem;
+                margin: 0rem .5rem .5rem 0rem;
+                border-radius: .5rem;
+                -webkit-border-radius: .5rem;
+                -moz-border-radius: .5rem;
+            }
+
+            .modal-button:hover {
+                color: rgb(8, 154, 45);
+                text-decoration: none;
+                cursor: pointer;
+            }
+
+            .modal-status {
+                display: none;
+                position: relative;
+                border: 0;
+                border-radius: 1rem;
+                background-color: #3e3e3e;
+                margin: auto;
+                padding: 0rem;
+                width: 50%;
+                animation-name: fadebottom;
+                animation-duration: .5s;
+            }
+
+            .modal-status:hover {
+                cursor: pointer;
+            }
+
+            .modal-status .content {
+                display: inline-block;
+                margin: 1rem;
+            }
+
+            @keyframes fadebottom {
+                from {top: 10em; opacity: 0}
+                to {top: 0em; opacity: 1}
+            }
+
+            @keyframes fadein {
+                from {opacity: 0}
+                to {opacity: 1}
+            }
         </style>
         <script>
             function setClickable(id) {
@@ -162,11 +293,11 @@
                     <div class="content">
                         <div class="entry">
                             Request IP:
-                            <div class="value">{{ ip_address }}</div>
+                            <div class="value">{{ remote_ip }}</div>
                         </div>
                         <div class="entry">
-                            Trusted:
-                            <div class="value">{{ authorized}}</div>
+                            Authorized:
+                            <div class="value">{{ authorized }}</div>
                         </div>
                         <div class="entry">
                             CORS Enabled:
@@ -230,6 +361,140 @@
                     </article>
                 {% end %}
             </div>
+            <div id="update_modal" class="modal">
+                <div class="modal-card">
+                    <h1 id="modal_header_msg">
+                        Moonraker Root Request
+                    </h1>
+                    <div id="modal_body" class="modal-content">
+                        <div id="main_form">
+                            <div class="entry">
+                                Service Name:
+                                <div class="value">
+                                    {{ service_name }}
+                                </div>
+                            </div>
+                            <div class="entry">
+                                Host Name:
+                                <div class="value">
+                                    {{ hostname }}
+                                </div>
+                            </div>
+                            <div class="entry">
+                                Host IP Address:
+                                <div class="value">
+                                    {{ local_ip }}
+                                </div>
+                            </div>
+                            <div class="entry">
+                                {{ sudo_request_message }}
+                                Please enter the password for linux user <b>{{ linux_user }}</b>:
+                            </div>
+                            <div class="entry">
+                                <input id="sudo_passwd" name="sudo_passwd" type="password" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" id="modal_close" class="modal-button">Cancel</button>
+                        <button type="button" id="modal_submit" class="modal-button">Submit</button>
+                    </div>
+                </div>
+                <div id="modal_status" class="modal-status">
+                    <div id="status_msg" class="content">
+                        Status Text
+                    </div>
+                </div>
+            </div>
+            <script>
+                const modal = document.getElementById("update_modal");
+                {% if sudo_requested %}
+                    modal.style.display = "block";
+                {% end %}
+                const main_form = document.getElementById("main_form")
+                const status_item = document.getElementById("modal_status");
+                const status_div = document.getElementById("status_msg");
+
+                function update_modal(status_msg) {
+                    status_div.innerHTML = status_msg
+                    status_item.style.display = "block";
+                }
+
+                function dismiss_status() {
+                    status_item.style.display = "none";
+                }
+
+                function check_success(req) {
+                    return (req.status < 205 || req.status == 304);
+                }
+
+                function post_machine_password(passwd) {
+                    let pwd_req = new XMLHttpRequest();
+                    pwd_req.onload = () => {
+                        if (check_success(pwd_req)) {
+                            console.log("Successfully Set Sudo Password");
+                            let resp = JSON.parse(pwd_req.responseText)
+                            let msg = resp.result.sudo_responses.join("<br/>")
+                            msg += "<br/><br/>You may close this window and return to the front end.";
+                            update_modal(msg);
+                        } else {
+                            console.log("Password Request Error");
+                            let err_msg = `Code ${pwd_req.status}: `;
+                            let response = pwd_req.responseText;
+                            try {
+                                let json_resp = JSON.parse(response);
+                                err_msg = json_resp.error.message;
+                            } catch (error) {}
+                            update_modal(
+                                "Request failed with error:<br/><br/>" + err_msg +
+                                "<br/><br/>You may need to manually update your installation."
+                            );
+                        }
+                    };
+                    pwd_req.onerror = () => {
+                        console.log("Error setting password");
+                        update_modal(
+                            "Request to set root password failed with " +
+                            "a network error."
+                        )
+                    };
+                    pwd_req.open("POST", "/machine/sudo/password");
+                    pwd_req.setRequestHeader("Content-Type", "application/json");
+                    pwd_req.send(JSON.stringify({"password": passwd}));
+                }
+
+                const modal_submit = document.getElementById("modal_submit");
+                const pwd_input = document.getElementById("sudo_passwd");
+                const modal_close = document.getElementById("modal_close");
+
+                modal_submit.onclick = () => {
+                    let val = pwd_input.value;
+                    pwd_input.value = "";
+                    dismiss_status();
+                    post_machine_password(val);
+                };
+
+                pwd_input.addEventListener("keypress", (event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        modal_submit.click();
+                    }
+                });
+
+                modal_close.onclick = () => {
+                    modal.style.display = "none";
+                };
+
+                status_item.onclick = () => {
+                    dismiss_status();
+                }
+
+                window.onclick = (event) => {
+                    if (event.target == modal) {
+                        modal.style.display = "none";
+                    }
+                };
+            </script>
        </main>
    </body>
  </html>
