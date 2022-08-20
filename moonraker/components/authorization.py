@@ -251,6 +251,9 @@ class Authorization:
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
+    def register_permited_path(self, path: str) -> None:
+        self.permitted_paths.add(path)
+
     def _sync_user(self, username: str) -> None:
         self.user_db[username] = self.users[username]
 
