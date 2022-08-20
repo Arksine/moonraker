@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from klippy_connection import KlippyConnection as Klippy
     from components.file_manager.file_manager import FileManager
     from components.announcements import Announcements
+    from components.machine import Machine
     from io import BufferedReader
     import components.authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
@@ -623,7 +624,10 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         if self.server.is_debug_enabled():
             resp = args
             if isinstance(args, dict):
-                if self.request.path.startswith('/access'):
+                if (
+                    self.request.path.startswith("/access") or
+                    self.request.path.startswith("/machine/sudo/password")
+                ):
                     resp = {key: "<sanitized>" for key in args}
             elif isinstance(args, str):
                 if args.startswith("<html>"):
@@ -671,7 +675,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             result = await self._do_request(args, conn)
         except ServerError as e:
             raise tornado.web.HTTPError(
-                e.status_code, str(e)) from e
+                e.status_code, reason=str(e)) from e
         if self.wrap_result:
             result = {'result': result}
         if result is None:
@@ -1033,8 +1037,11 @@ class WelcomeHandler(tornado.web.RequestHandler):
         ancomp: Announcements
         ancomp = self.server.lookup_component("announcements")
         wsm: WebsocketManager = self.server.lookup_component("websockets")
+        machine: Machine = self.server.lookup_component("machine")
+        svc_info = machine.get_moonraker_service_info()
+        sudo_req_msg = "<br/>".join(machine.sudo_request_messages)
         context: Dict[str, Any] = {
-            "ip_address": self.request.remote_ip,
+            "remote_ip": self.request.remote_ip,
             "authorized": authorized,
             "cors_enabled": cors_enabled,
             "version": self.server.get_app_args()["software_version"],
@@ -1042,7 +1049,13 @@ class WelcomeHandler(tornado.web.RequestHandler):
             "klippy_state": kstate,
             "warnings": self.server.get_warnings(),
             "summary": summary,
-            "announcements": await ancomp.get_announcements()
+            "announcements": await ancomp.get_announcements(),
+            "sudo_requested": machine.sudo_requested,
+            "sudo_request_message": sudo_req_msg,
+            "linux_user": machine.linux_user,
+            "local_ip": machine.public_ip or "unknown",
+            "service_name": svc_info.get("unit_name", "unknown"),
+            "hostname": self.server.get_host_info()["hostname"],
         }
         self.render("welcome.html", **context)
 
