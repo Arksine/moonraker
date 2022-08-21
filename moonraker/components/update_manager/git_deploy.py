@@ -415,7 +415,8 @@ class GitRepo:
         client: HttpClient = self.server.lookup_component("http_client")
         check_url = detected_origin[:-4]
         logging.info(
-            f"Git repo {self.alias}: Performing moved origin check - {check_url}"
+            f"Git repo {self.alias}: Performing moved origin check - "
+            f"{check_url}"
         )
         resp = await client.get(check_url, enable_cache=False)
         if not resp.has_error():
