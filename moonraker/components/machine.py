@@ -114,6 +114,8 @@ class Machine:
             "/machine/system_info", ['GET'],
             self._handle_sysinfo_request)
         self.server.register_endpoint(
+            "/machine/sudo", ["GET"], self._handle_sudo_check)
+        self.server.register_endpoint(
             "/machine/sudo/password", ["POST"],
             self._set_sudo_password)
 
@@ -238,6 +240,12 @@ class Machine:
             raise self.server.error("Invalid password, sudo access was denied")
         self.server.send_event("machine:sudo_password_set")
         return "ok"
+
+    async def _handle_sudo_check(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        has_sudo = await self.check_sudo_access()
+        return {"sudo_access": has_sudo}
 
     def get_system_info(self) -> Dict[str, Any]:
         return self.system_info
