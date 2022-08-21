@@ -259,18 +259,22 @@ class Machine:
             cmds = ["systemctl --version", "ls /lost+found"]
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         for cmd in cmds:
-            proc_input = None
-            full_cmd = f"sudo {cmd}"
-            if self._sudo_password is not None:
-                proc_input = self._sudo_password
-                full_cmd = f"sudo -S {cmd}"
             try:
-                ret = await shell_cmd.exec_cmd(
-                    full_cmd, proc_input=proc_input, log_complete=False
-                )
+                await self.exec_sudo_command(cmd)
             except shell_cmd.error:
                 return False
         return True
+
+    async def exec_sudo_command(self, command: str) -> str:
+        proc_input = None
+        full_cmd = f"sudo {command}"
+        if self._sudo_password is not None:
+            proc_input = self._sudo_password
+            full_cmd = f"sudo -S {command}"
+        shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
+        return await shell_cmd.exec_cmd(
+            full_cmd, proc_input=proc_input, log_complete=False
+        )
 
     def _get_sdcard_info(self) -> Dict[str, Any]:
         sd_info: Dict[str, Any] = {}
@@ -576,11 +580,15 @@ class BaseProvider:
     async def initialize(self) -> None:
         pass
 
+    async def _exec_sudo_command(self, command: str):
+        machine: Machine = self.server.lookup_component("machine")
+        return await machine.exec_sudo_command(command)
+
     async def shutdown(self) -> None:
-        await self.shell_cmd.exec_cmd(f"sudo shutdown now")
+        await self._exec_sudo_command(f"shutdown now")
 
     async def reboot(self) -> None:
-        await self.shell_cmd.exec_cmd(f"sudo shutdown -r now")
+        await self._exec_sudo_command(f"shutdown -r now")
 
     async def do_service_action(self,
                                 action: str,
@@ -621,8 +629,7 @@ class SystemdCliProvider(BaseProvider):
                                 action: str,
                                 service_name: str
                                 ) -> None:
-        await self.shell_cmd.exec_cmd(
-            f'sudo systemctl {action} {service_name}')
+        await self._exec_sudo_command(f"systemctl {action} {service_name}")
 
     async def check_virt_status(self) -> Dict[str, Any]:
         # Fallback virtualization check
