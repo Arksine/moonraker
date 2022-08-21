@@ -127,6 +127,12 @@ provider: systemd_dbus
 #   and run service actions (ie: start, restart, stop).  This can be "none",
 #   "systemd_dbus", or "systemd_cli".  If the provider is set to "none" service
 #   action APIs will be disabled.  The default is systemd_dbus.
+sudo_password:
+#   The password for the linux user.  When set Moonraker can run linux commands
+#   that require elevated permissions.  This option accepts Jinja2 Templates,
+#   see the [secrets] section for details.  It is strongly recommended to only
+#   set this option when required and to use the aforementioned secrets module
+#   when doing so.  The default is no sudo password is set.
 ```
 
 !!! Note
@@ -138,7 +144,9 @@ provider: systemd_dbus
     service.  This service is necessary for the DBus provider to issue
     `reboot` and `shutdown` commands.  In this scenario, Moonraker will fall
     back to CLI based `reboot` and `shutdown` commands.  These commands require
-    that Moonraker be able to run `sudo` commands without a password.
+    that Moonraker be able to run `sudo` commands without a password or that the
+    `sudo_password` option is set.
+
     Alternatively it may be possible to enable the `systemd-logind` service,
     consult with your distributions's documentation.
 

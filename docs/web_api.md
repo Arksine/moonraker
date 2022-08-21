@@ -1356,6 +1356,63 @@ object reports total cpu usage, while each `cpuX` field is usage per core.
 The `websocket_connections` field reports the number of active websockets
 currently connected to moonraker.
 
+#### Check sudo access
+Checks if Moonraker has permission to run commands as root.
+
+HTTP request:
+```http
+GET /machine/sudo
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.sudo",
+    "id": 7896
+}
+```
+Returns:
+
+An object in the following format:
+
+```json
+{
+    "sudo_access": true
+}
+```
+
+#### Set sudo password
+Sets/updates the sudo password currently used by Moonraker.  When
+the password is set using this endpoint the change is not persistent
+across restarts.
+
+HTTP request:
+```http
+POST /machine/sudo/password
+Content-Type: application/json
+
+{
+    "password": "linux_user_password"
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.sudo.password",
+    "params": {
+        "password": "linux_user_password"
+    },
+    "id": 7896
+}
+```
+Returns:
+
+`ok` on success.  If the new password does not grant root permissions
+the request will return with an error.
+
 ### File Operations
 
 Most file operations are available over both APIs, however file upload and
