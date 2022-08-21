@@ -1367,36 +1367,61 @@ object reports total cpu usage, while each `cpuX` field is usage per core.
 The `websocket_connections` field reports the number of active websockets
 currently connected to moonraker.
 
-#### Check sudo access
-Checks if Moonraker has permission to run commands as root.
+#### Get Sudo Info
+Retrieve sudo information status.  Optionally checks if Moonraker has
+permission to run commands as root.
 
 HTTP request:
 ```http
-GET /machine/sudo
+GET /machine/sudo/info?check_access=false
 ```
 
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "machine.sudo",
+    "method": "machine.sudo.info",
+    "params": {
+        "check_access": false
+    },
     "id": 7896
 }
 ```
+
+Parameters:
+
+- `check_access`: A boolean value, when set to `true` Moonraker will
+  attempt to run a command with elevated permissions.  The result will
+  be returned in the `sudo_access` field of the response.  Defaults to
+  `false`.
+
 Returns:
 
 An object in the following format:
-
 ```json
 {
-    "sudo_access": true
+    "sudo_access": null,
+    "linux_user": "pi",
+    "sudo_requested": false,
+    "request_messages": []
 }
 ```
+
+- `sudo_access`:  The result of a request to check access.  Returns
+  `true` if Moonraker has sudo permission, `false` if it does not,
+  and `null` if `check_access` is `false`.
+- `linux_user`:  The current linux user running Moonraker.
+- `sudo_requested`:  Returns true if Moonraker is currently requesting
+  sudo access.
+- `request_messages`:  An array of strings, each string describing
+  a pending sudo request.  The array will be empty if no sudo
+  requests are pending.
 
 #### Set sudo password
 Sets/updates the sudo password currently used by Moonraker.  When
 the password is set using this endpoint the change is not persistent
-across restarts.
+across restarts.  If Moonraker has one or more pending sudo requests
+they will be processed.
 
 HTTP request:
 ```http
@@ -1419,10 +1444,32 @@ JSON-RPC request:
     "id": 7896
 }
 ```
+
+Parameters:
+
+- `password`:  The linux user password used to grant elevated
+  permission.  This parameter must be provided.
+
 Returns:
 
-`ok` on success.  If the new password does not grant root permissions
-the request will return with an error.
+An object in the following format:
+```json
+{
+    "sudo_responses": [
+        "Sudo password successfully set."
+    ],
+    "is_restarting": false
+}
+```
+
+- `sudo_responses`: An array of one or more sudo responses.
+  If there are pending sudo requests each request will provide
+  a response.
+- `is_restarting`: A boolean value indicating that a sudo request
+  prompted Moonraker to restart its service.
+
+This request will return an error if the supplied password is
+incorrect or if any pending sudo requests fail.
 
 ### File Operations
 
@@ -5353,6 +5400,33 @@ a specified `wake_time` for a dismissed announcement has expired.
 The `params` array will contain an object with the `entry_id` of the
 announcement that is no longer dismissed.
 
+#### Sudo alert event
+Moonraker will emit the `notify_sudo_alert` notification when
+a component has requested sudo access.  The event is also emitted
+when a sudo request has been granted.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_sudo_alert",
+    "params": [
+        {
+            "sudo_requested": true,
+            "sudo_messages": [
+                "Root access required to update Moonraker's systemd service."
+            ]
+        }
+    ]
+}
+```
+
+The `params` array contains an object with the following fields:
+
+- `sudo_requested`:  Returns true if Moonraker is currently requesting
+  sudo access.
+- `request_messages`:  An array of strings, each string describing
+  a pending sudo request.  The array will be empty if no sudo
+  requests are pending.
 
 #### Agent Events
 Moonraker will emit the `notify_agent_event` notification when it
@@ -5809,7 +5883,7 @@ each entry is an object containing the following fields:
   the announcement.
 
 When a client first connects to Moonraker it is recommended that the
-[list announcements](#list-announcements) API is called to retreive
+[list announcements](#list-announcements) API is called to retrieve
 the current list of entries.  A client may then watch for the
 [announcement update](#announcement-update-event) and
 [announcement dismissed](#announcement-dismissed-event) notifications

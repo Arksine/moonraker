@@ -124,6 +124,18 @@ sudo_password:
 #   see the [secrets] section for details.  It is strongly recommended to only
 #   set this option when required and to use the aforementioned secrets module
 #   when doing so.  The default is no sudo password is set.
+validate_service:
+#   Enables validation of Moonraker's systemd service unit.  If Moonraker
+#   detects that a change is necessary it will attempt to do so.  Custom
+#   installations and installations that do systemd should set this to False.
+#   The default is True.
+validate_config:
+#   Enables validation of Moonraker's configuration.  If Moonraker detects
+#   deprecated options it will attempt to correct them.  The default is True.
+force_validation:
+#   By default Moonraker will not attempt to revalidate if a previous attempt
+#   at validation successfully completed. Setting this value to True will force
+#   Moonraker to perform validation.  The default is False.
 ```
 
 !!! Note
