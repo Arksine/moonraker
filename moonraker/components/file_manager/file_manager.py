@@ -889,7 +889,8 @@ class InotifyNode:
             item_path = os.path.join(dir_path, fname)
             if os.path.isdir(item_path):
                 new_child = self.create_child_node(fname, False)
-                metadata_events.extend(new_child.scan_node(visited_dirs))
+                if new_child is not None:
+                    metadata_events.extend(new_child.scan_node(visited_dirs))
             elif os.path.isfile(item_path) and self.get_root() == "gcodes":
                 mevt = self.ihdlr.parse_gcode_metadata(item_path)
                 metadata_events.append(mevt)
@@ -972,11 +973,16 @@ class InotifyNode:
     def create_child_node(self,
                           name: str,
                           notify: bool = True
-                          ) -> InotifyNode:
+                          ) -> Optional[InotifyNode]:
         self.flush_delete()
         if name in self.child_nodes:
             return self.child_nodes[name]
-        new_child = InotifyNode(self.ihdlr, self, name)
+        try:
+            new_child = InotifyNode(self.ihdlr, self, name)
+        except Exception:
+            # This node is already watched under another root,
+            # bypass creation
+            return None
         self.child_nodes[name] = new_child
         if notify:
             pending_node = self.search_pending_event("create_node")
@@ -1153,8 +1159,8 @@ class INotifyHandler:
                  ) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.debug_enabled = config['server'].getboolean(
-            'enable_debug_logging', False)
+        self.debug_enabled = self.server.is_debug_enabled()
+        self.enable_warn = config.getboolean("enable_inotify_warnings", True)
         self.file_manager = file_manager
         self.gcode_metadata = gcode_metadata
         self.inotify = INotify(nonblocking=True)
@@ -1177,7 +1183,10 @@ class INotifyHandler:
             old_root = self.watched_roots.pop(root)
             old_root.clear_watches()
             old_root.clear_events()
-        root_node = InotifyRootNode(self, root, root_path)
+        try:
+            root_node = InotifyRootNode(self, root, root_path)
+        except Exception:
+            return
         self.watched_roots[root] = root_node
         if self.initialized:
             mevts = root_node.scan_node()
@@ -1213,9 +1222,31 @@ class INotifyHandler:
         dir_path = node.get_path()
         try:
             watch: int = self.inotify.add_watch(dir_path, WATCH_FLAGS)
-        except OSError:
-            logging.exception(
-                f"Error adding watch, already exists: {dir_path}")
+        except Exception:
+            msg = (
+                f"Error adding inotify watch to root '{node.get_root()}', "
+                f"path: {dir_path}"
+            )
+            logging.exception(msg)
+            if self.enable_warn:
+                msg = f"file_manager: {msg}"
+                self.server.add_warning(msg, log=False)
+            raise
+        if watch in self.watched_nodes:
+            root = node.get_root()
+            cur_node = self.watched_nodes[watch]
+            existing_root = cur_node.get_root()
+            msg = (
+                f"Inotify watch already exists for path '{dir_path}' in "
+                f"root '{existing_root}', cannot add watch to requested root "
+                f"'{root}'.  This indicates that the roots overlap."
+            )
+            if self.enable_warn:
+                msg = f"file_manager: {msg}"
+                self.server.add_warning(msg)
+            else:
+                logging.info(msg)
+            raise self.server.error("Watch already exists")
         self.watched_nodes[watch] = node
         return watch
 
