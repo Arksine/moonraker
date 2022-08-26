@@ -986,7 +986,10 @@ class FileSourceWrapper(ConfigSourceWrapper):
                         if section not in self.file_section_map:
                             self.file_section_map[section] = []
                         elif file_index in self.file_section_map[section]:
-                            self.file_section_map[section].remove(file_index)
+                            raise ConfigError(
+                                f"Duplicate section [{section}] in file "
+                                f"{file_path}"
+                            )
                         self.file_section_map[section].insert(0, file_index)
                 else:
                     # This line must specify an option
@@ -996,7 +999,10 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     if key not in self.file_option_map:
                         self.file_option_map[key] = []
                     elif file_index in self.file_option_map[key]:
-                        self.file_option_map[key].remove(file_index)
+                        raise ConfigError(
+                            f"Duplicate option '{option}' in section "
+                            f"[{last_section}], file {file_path} "
+                        )
                     self.file_option_map[key].insert(0, file_index)
                 buffer.append(line)
             self._write_buffer(buffer, file_path)
