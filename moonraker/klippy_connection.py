@@ -61,6 +61,7 @@ class KlippyConnection:
         self._peer_cred: Dict[str, int] = {}
         self.init_attempts: int = 0
         self._state: str = "disconnected"
+        self._state_message: str = "Klippy Disconnected"
         self.subscriptions: Dict[Subscribable, Dict[str, Any]] = {}
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
@@ -83,6 +84,10 @@ class KlippyConnection:
     @property
     def state(self) -> str:
         return self._state
+
+    @property
+    def state_message(self) -> str:
+        return self._state_message
 
     @property
     def klippy_info(self) -> Dict[str, Any]:
@@ -329,6 +334,8 @@ class KlippyConnection:
             msg = f"Klipper Version: {version}"
             self.server.add_log_rollover_item("klipper_version", msg)
         self._klippy_info = dict(result)
+        if "state_message" in self._klippy_info:
+            self._state_message = self._klippy_info["state_message"]
         state = result.get('state', "unknown")
         if state != "startup" and "endpoints_requested" not in self.init_list:
             await self._request_endpoints()
@@ -342,8 +349,7 @@ class KlippyConnection:
             await self.server.send_event("server:klippy_started",
                                          self._state)
             if self._state != "ready":
-                msg = result.get('state_message', "Klippy Not Ready")
-                logging.info("\n" + msg)
+                logging.info("\n" + self._state_message)
             else:
                 await self._verify_klippy_requirements()
                 # register methods with klippy
@@ -435,9 +441,12 @@ class KlippyConnection:
                                status: Dict[str, Any]
                                ) -> None:
         if 'webhooks' in status:
+            wh: Dict[str, str] = status['webhooks']
+            if "state_message" in wh:
+                self._state_message = wh["state_message"]
             # XXX - process other states (startup, ready, error, etc)?
-            state: Optional[str] = status['webhooks'].get('state', None)
-            if state is not None:
+            if "state" in wh:
+                state = wh["state"]
                 if state == "shutdown":
                     logging.info("Klippy has shutdown")
                     self.server.send_event("server:klippy_shutdown")
@@ -531,6 +540,7 @@ class KlippyConnection:
     async def _on_connection_closed(self) -> None:
         self.init_list = []
         self._state = "disconnected"
+        self._state_message = "Klippy Disconnected"
         for request in self.pending_requests.values():
             request.notify(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}
