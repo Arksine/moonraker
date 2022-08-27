@@ -338,9 +338,9 @@ class WebCam:
         webcam["flip_vertical"] = web_request.get_boolean(
             "flip_vertical", False
         )
-        webcam["rotation"] = web_request.get_str("rotation", 0)
+        webcam["rotation"] = web_request.get_int("rotation", 0)
         if webcam["rotation"] not in [0, 90, 180, 270]:
-            raise server.error("Invalid value for parameter 'rotate'")
+            raise server.error("Invalid value for parameter 'rotation'")
         webcam["source"] = "database"
         return cls(server, **webcam)
 
