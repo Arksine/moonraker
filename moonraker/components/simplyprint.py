@@ -630,13 +630,17 @@ class SimplyPrint(Subscribable):
     def _on_klippy_startup(self, state: str) -> None:
         if state != "ready":
             self._update_state("error")
-            self.send_sp("printer_error", None)
+            kconn: KlippyConnection
+            kconn = self.server.lookup_component("klippy_connection")
+            self.send_sp("printer_error", {"error": kconn.state_message})
         self.send_sp("connection", {"new": "connected"})
         self._send_firmware_data()
 
     def _on_klippy_shutdown(self) -> None:
         self._update_state("error")
-        self.send_sp("printer_error", None)
+        kconn: KlippyConnection
+        kconn = self.server.lookup_component("klippy_connection")
+        self.send_sp("printer_error", {"error": kconn.state_message})
 
     def _on_klippy_disconnected(self) -> None:
         self._update_state("offline")
@@ -701,7 +705,11 @@ class SimplyPrint(Subscribable):
 
     def _on_print_error(self, *args) -> None:
         self._check_job_started(*args)
-        self._send_job_event({"failed": True})
+        payload: Dict[str, Any] = {"failed": True}
+        new_stats: Dict[str, Any] = args[1]
+        msg = new_stats.get("message", "Unknown Error")
+        payload["error"] = msg
+        self._send_job_event(payload)
         self._update_state_from_klippy()
         self.cache.job_info = {}
         self.layer_detect.stop()
