@@ -1489,6 +1489,7 @@ class PrintHandler:
         self.pending_file = fpath.name
         if ret.get("print_started", False):
             state = "started"
+            self.last_started = self.pending_file
             self.pending_file = ""
         elif not start and await self._check_can_print():
             state = "ready"
@@ -1524,7 +1525,7 @@ class PrintHandler:
             data["state"] = "error"
             data["message"] = "Failed to start print"
         else:
-            self._last_started = pending
+            self.last_started = pending
         self.simplyprint.send_sp("file_progress", data)
 
     async def _check_can_print(self) -> bool:
