@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from app import MoonrakerApp
+    from klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager
@@ -269,7 +270,14 @@ class Machine:
     async def _handle_sysinfo_request(self,
                                       web_request: WebRequest
                                       ) -> Dict[str, Any]:
-        return {"system_info": self.system_info}
+        kconn: KlippyConnection
+        kconn = self.server.lookup_component("klippy_connection")
+        sys_info = self.system_info.copy()
+        sys_info["instance_ids"] = {
+            "moonraker": self.unit_name,
+            "klipper": kconn.unit_name
+        }
+        return {"system_info": sys_info}
 
     async def _set_sudo_password(
         self, web_request: WebRequest
