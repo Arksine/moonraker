@@ -1071,6 +1071,10 @@ Returns: Information about the host system in the following format:
             "klipper_mcu",
             "moonraker"
         ],
+        "instance_ids": {
+            "moonraker": "moonraker",
+            "klipper": "klipper"
+        },
         "service_state": {
             "klipper": {
                 "active_state": "active",
