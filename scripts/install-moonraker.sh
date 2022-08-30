@@ -67,19 +67,51 @@ create_virtualenv()
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
 }
 
-# Step 5: Install startup script
+# Step 5: Initialize data folder
+init_data_path()
+{
+    report_status "Initializing Moonraker Data Path at ${DATA_PATH}"
+    config_dir="${DATA_PATH}/config"
+    logs_dir="${DATA_PATH}/logs"
+    env_dir="${DATA_PATH}/systemd"
+    config_file="${DATA_PATH}/config/moonraker.conf"
+    [ ! -e "${DATA_PATH}" ] && mkdir ${DATA_PATH}
+    [ ! -e "${config_dir}" ] && mkdir ${config_dir}
+    [ ! -e "${logs_dir}" ] && mkdir ${logs_dir}
+    [ ! -e "${env_dir}" ] && mkdir ${env_dir}
+    [ -n "${CONFIG_PATH}" ] && config_file=${CONFIG_PATH}
+    if [ ! -e "${config_file}" ]; then
+        report_status "Writing Config File ${config_file}:\n"
+        /bin/sh -c "cat > ${config_file}" << EOF
+# Moonraker Configuration File
+
+[server]
+host: 0.0.0.0
+port: 7125
+# Make sure the klippy_uds_address is correct.  It is initialized
+# to the default address.
+klippy_uds_address: /tmp/klippy_uds
+
+[machine]
+provider: ${MACHINE_PROVIDER}
+
+EOF
+        cat ${config_file}
+    fi
+}
+
+# Step 6: Install startup script
 install_script()
 {
     # Create systemd service file
-    ENV_FILE="${SRCDIR}/${INSTANCE_ALIAS}.env"
+    ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
     SERVICE_FILE="${SYSTEMDDIR}/${INSTANCE_ALIAS}.service"
     if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
         rm -f $ENV_FILE
         args="MOONRAKER_ARGS=\"${SRCDIR}/moonraker/moonraker.py"
-        args="${args} -a ${INSTANCE_ALIAS}"
         [ -n "${CONFIG_PATH}" ] && args="${args} -c ${CONFIG_PATH}"
         [ -n "${LOG_PATH}" ] && args="${args} -l ${LOG_PATH}"
-        [ -n "${DATA_PATH}" ] && args="${args} -d ${DATA_PATH}"
+        args="${args} -d ${DATA_PATH}"
         args="${args}\""
         echo $args > $ENV_FILE
     fi
@@ -114,6 +146,7 @@ EOF
     fi
 }
 
+# Step 7: Validate/Install polkit rules
 check_polkit_rules()
 {
     if [ ! -x "$(command -v pkaction)" ]; then
@@ -150,39 +183,7 @@ check_polkit_rules()
     fi
 }
 
-# Step 6: Initialize data folder
-init_data_path()
-{
-    dpath="${DATA_PATH:-${HOME}/${INSTANCE_ALIAS}_data}"
-    report_status "Initializing Moonraker Data Path at ${dpath}"
-    config_dir="${dpath}/config"
-    logs_dir="${dpath}/logs"
-    config_file="${dpath}/config/${INSTANCE_ALIAS}.conf"
-    [ ! -e "${dpath}" ] && mkdir ${dpath}
-    [ ! -e "${config_dir}" ] && mkdir ${config_dir}
-    [ ! -e "${logs_dir}" ] && mkdir ${logs_dir}
-    [ -n "${CONFIG_PATH}" ] && config_file=${CONFIG_PATH}
-    if [ ! -e "${config_file}" ]; then
-        report_status "Writing Config File ${config_file}:\n"
-        /bin/sh -c "cat > ${config_file}" << EOF
-# Moonraker Configuration File
-
-[server]
-host: 0.0.0.0
-port: 7125
-# Make sure the klippy_uds_address is correct.  It is initialized
-# to the default address.
-klippy_uds_address: /tmp/klippy_uds
-
-[machine]
-provider: ${MACHINE_PROVIDER}
-
-EOF
-        cat ${config_file}
-    fi
-}
-
-# Step 7: Start server
+# Step 8: Start server
 start_software()
 {
     report_status "Launching Moonraker API Server..."
@@ -223,14 +224,26 @@ while getopts "rfzxc:l:d:a:" arg; do
     esac
 done
 
+if [ -z "${DATA_PATH}" ]; then
+    if [ "${INSTANCE_ALIAS}" = "moonraker" ]; then
+        DATA_PATH="${HOME}/printer_data"
+    else
+        num="$( echo ${INSTANCE_ALIAS} | grep  -Po "moonraker[-_]?\K\d+" || true )"
+        if [ -n "${num}" ]; then
+            DATA_PATH="${HOME}/printer_${num}_data"
+        else
+            DATA_PATH="${HOME}/${INSTANCE_ALIAS}_data"
+        fi
+    fi
+fi
 # Run installation steps defined above
 verify_ready
 cleanup_legacy
 install_packages
 create_virtualenv
+init_data_path
 install_script
 check_polkit_rules
-init_data_path
 if [ $DISABLE_SYSTEMCTL = "n" ]; then
     start_software
 fi
