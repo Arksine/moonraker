@@ -438,8 +438,7 @@ class Server:
 
 def main(cmd_line_args: argparse.Namespace) -> None:
     startup_warnings: List[str] = []
-    alias: str = cmd_line_args.alias or "moonraker"
-    dp: str = cmd_line_args.datapath or f"~/{alias}_data"
+    dp: str = cmd_line_args.datapath or "~/printer_data"
     data_path = pathlib.Path(dp).expanduser().resolve()
     if not data_path.exists():
         try:
@@ -451,11 +450,9 @@ def main(cmd_line_args: argparse.Namespace) -> None:
     if cmd_line_args.configfile is not None:
         cfg_file: str = cmd_line_args.configfile
     else:
-        cfg_file = str(data_path.joinpath(f"config/{alias}.conf"))
+        cfg_file = str(data_path.joinpath("config/moonraker.conf"))
     app_args = {
-        "alias": alias,
         "data_path": str(data_path),
-        "is_default_alias": cmd_line_args.alias is None,
         "is_default_data_path": cmd_line_args.datapath is None,
         "config_file": cfg_file,
         "startup_warnings": startup_warnings
@@ -469,7 +466,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         app_args["log_file"] = os.path.normpath(
             os.path.expanduser(cmd_line_args.logfile))
     else:
-        app_args["log_file"] = str(data_path.joinpath(f"logs/{alias}.log"))
+        app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["software_version"] = version
     app_args["python_version"] = sys.version.replace("\n", " ")
     ql, file_logger, warning = utils.setup_logging(app_args)
@@ -537,10 +534,6 @@ if __name__ == '__main__':
     # Parse start arguments
     parser = argparse.ArgumentParser(
         description="Moonraker - Klipper API Server")
-    parser.add_argument(
-        "-a", "--alias", default=None, metavar="<alias>",
-        help="Alternate name of instance"
-    )
     parser.add_argument(
         "-d", "--datapath", default=None,
         metavar='<data path>',

@@ -238,7 +238,6 @@ class MoonrakerApp:
         path: Optional[str] = config.get(option, None, deprecate=True)
         app_args = self.server.get_app_args()
         data_path = app_args["data_path"]
-        alias = app_args["alias"]
         certs_path = pathlib.Path(data_path).joinpath("certs")
         if not certs_path.exists():
             try:
@@ -246,7 +245,7 @@ class MoonrakerApp:
             except Exception:
                 pass
         ext = "key" if "key" in option else "cert"
-        item = certs_path.joinpath(f"{alias}.{ext}")
+        item = certs_path.joinpath(f"moonraker.{ext}")
         if item.exists() or path is None:
             return item
         item = pathlib.Path(path).expanduser().resolve()
