@@ -1924,7 +1924,8 @@ events: *
 body: "Your printer status has changed to {event_name}"
 #   The body of the notification. This option accepts Jinja2 templates.
 #   You can use {event_name} to print the current event trigger name. And {event_args} for
-#   the arguments that came with it.
+#   the arguments that came with it. When using the notify functionality in a macro context, you can
+#   use {event_message} to print out your message.
 title:
 #   The optional title of the notification. Just as the body, this option accepts Jinja2 templates.
 attach:
@@ -1953,6 +1954,25 @@ url: tgram://{bottoken}/{ChatID}
 events: error
 body: {event_args[1].message}
 attach: http://192.168.1.100/webcam/?action=snapshot
+
+[notifier gcode_telegram]
+url: tgram://{bottoken}/{ChatID}
+events: gcode
+body: {event_message}
+attach: http://192.168.1.100/webcam/?action=snapshot
+```
+
+#### Notifying from Klipper
+It is possible to invoke your notifiers from the Klippy host, this can be done
+with a gcode_macro, such as:
+```ini
+# printer.cfg
+
+[gcode_macro NOTIFY_FILAMENT_CHANGE]
+gcode:
+  {action_call_remote_method("notify",
+                             name="telegram",
+                             message="Filament change needed!")}
 ```
 
 ### `[simplyprint]`
