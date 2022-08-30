@@ -69,6 +69,9 @@ class FileManager:
         db_path = db.get_database_path()
         self.add_reserved_path("database", db_path, False)
         self.add_reserved_path("certs", self.datapath.joinpath("certs"), False)
+        self.add_reserved_path(
+            "systemd", self.datapath.joinpath("systemd"), False
+        )
         self.gcode_metadata = MetadataStorage(config, db)
         self.inotify_handler = INotifyHandler(config, self,
                                               self.gcode_metadata)

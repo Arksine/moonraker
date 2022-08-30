@@ -1184,7 +1184,6 @@ class InstallValidator:
         app_args = self.server.get_app_args()
         self.data_path = pathlib.Path(app_args["data_path"])
         self._update_backup_path()
-        self.alias = app_args["alias"]
         self.data_path_valid = True
         self._sudo_requested = False
         self.announcement_id = ""
@@ -1269,13 +1268,15 @@ class InstallValidator:
                 "Unable to retrieve service unit name.  Service file "
                 "must be updated manually."
             )
-        if unit != self.alias and self.alias == "moonraker":
-            # alias differs from unit name, current alias is set to default
-            self.alias = unit
+        if unit != "moonraker":
+            # Not using he default unit name
             if app_args["is_default_data_path"]:
-                # Using default datapath, switch to alias based path to
-                # avoid conflict
-                new_dp = pathlib.Path(f"~/{unit}_data").expanduser().resolve()
+                # No datapath set, create a new, unique data path
+                df = f"~/{unit}_data"
+                match = re.match(r"moonraker[-_]?(\d+)", unit)
+                if match is not None:
+                    df = f"~/printer_{match.group(1)}_data"
+                new_dp = pathlib.Path(df).expanduser().resolve()
                 if new_dp.exists() and not self._check_path_bare(new_dp):
                     raise ValidationError(
                         f"Cannot resolve data path for custom unit '{unit}', "
@@ -1308,8 +1309,11 @@ class InstallValidator:
         ).joinpath(f"{unit}-tmp.svc")
         src_path = pathlib.Path(MOONRAKER_PATH)
         # Create local environment file
-        env_file = src_path.joinpath(f"{unit}.env")
-        cmd_args = f"-a {unit} -d {self.data_path}"
+        sysd_data = self.data_path.joinpath("systemd")
+        if not sysd_data.exists():
+            sysd_data.mkdir()
+        env_file = sysd_data.joinpath("moonraker.env")
+        cmd_args = f"-d {self.data_path}"
         cfg_file = pathlib.Path(app_args["config_file"])
         fm: FileManager = self.server.lookup_component("file_manager")
         cfg_path = fm.get_directory("config")
@@ -1347,7 +1351,7 @@ class InstallValidator:
         )
         try:
             await machine.exec_sudo_command(f"cp -f {tmp_svc} {svc_dest}")
-            await machine.exec_sudo_command(f"systemctl daemon-reload")
+            await machine.exec_sudo_command("systemctl daemon-reload")
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -1492,7 +1496,7 @@ class InstallValidator:
             # Link individual files
             secrets_path = self.config["secrets"].get("secrets_path", None)
             if secrets_path is not None:
-                secrets_dest = self.data_path.joinpath(f"{self.alias}.secrets")
+                secrets_dest = self.data_path.joinpath("moonraker.secrets")
                 self._link_data_file(secrets_dest, secrets_path)
                 cfg_source.remove_option("secrets", "secrets_path")
             certs_path = self.data_path.joinpath("certs")
@@ -1500,12 +1504,12 @@ class InstallValidator:
                 certs_path.mkdir()
             ssl_cert = server_cfg.get("ssl_certificate_path", None)
             if ssl_cert is not None:
-                cert_dest = certs_path.joinpath(f"{self.alias}.cert")
+                cert_dest = certs_path.joinpath("moonraker.cert")
                 self._link_data_file(cert_dest, ssl_cert)
                 cfg_source.remove_option("server", "ssl_certificate_path")
             ssl_key = server_cfg.get("ssl_key_path", None)
             if ssl_key is not None:
-                key_dest = certs_path.joinpath(f"{self.alias}.key")
+                key_dest = certs_path.joinpath("moonraker.key")
                 self._link_data_file(key_dest, ssl_key)
                 cfg_source.remove_option("server", "ssl_key_path")
         except Exception:

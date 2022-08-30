@@ -82,7 +82,6 @@ class MoonrakerDatabase:
         dep_path = config.get("database_path", None, deprecate=True)
         db_path = pathlib.Path(app_args["data_path"]).joinpath("database")
         if (
-            app_args["is_default_alias"] and
             app_args["is_default_data_path"] and
             not (dep_path is None and db_path.exists())
         ):

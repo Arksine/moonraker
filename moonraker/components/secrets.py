@@ -24,9 +24,8 @@ class Secrets:
         self.secrets_file: Optional[pathlib.Path] = None
         path: Optional[str] = config.get("secrets_path", None, deprecate=True)
         app_args = server.get_app_args()
-        alias = app_args["alias"]
         data_path = app_args["data_path"]
-        fpath = pathlib.Path(data_path).joinpath(f"{alias}.secrets")
+        fpath = pathlib.Path(data_path).joinpath("moonraker.secrets")
         if not fpath.is_file() and path is not None:
             fpath = pathlib.Path(path).expanduser().resolve()
         self.type = "invalid"
