@@ -45,7 +45,7 @@ class OctoPrintCompat:
         self.software_version = self.server.get_app_args().get(
             'software_version')
         self.enable_ufp: bool = config.getboolean('enable_ufp', True)
-        
+
         # Get webcam settings from config
         self.webcam: Dict[str, Any] = {
             'flipH': config.getboolean('flip_h', False),
@@ -57,7 +57,6 @@ class OctoPrintCompat:
 
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
-
         self.heaters: Dict[str, Dict[str, Any]] = {}
         self.last_print_stats: Dict[str, Any] = {}
         self.display_status: Dict[str, Any] = {}
@@ -144,8 +143,6 @@ class OctoPrintCompat:
     def _handle_status_update(self, status: Dict[str, Any]) -> None:
         if 'print_stats' in status:
             self.last_print_stats.update(status['print_stats'])
-        if 'display_status' in status:
-            self.display_status.update(status['display_status'])
         for heater_name, data in self.heaters.items():
             if heater_name in status:
                 data.update(status[heater_name])
@@ -275,9 +272,10 @@ class OctoPrintCompat:
             job_info["time"] = est_time
         self.last_print_stats.update(job_info)
 
-    async def _handle_job(self,
-                       web_request: WebRequest
-                       ) -> Dict[str, Any]:
+    async def _handle_job(
+        self,
+        web_request: WebRequest
+    ) -> Dict[str, Any]:
         action = web_request.get_action()
         if web_request.get_action() == "GET":
             return await self._get_job()
@@ -291,7 +289,10 @@ class OctoPrintCompat:
         job_info: Dict[str, Any] = {}
         if self.last_print_stats.get('state') == "printing":
             try:
-                result = await self.klippy_apis.query_objects({'display_status': None, 'virtual_sdcard': None})
+                result = await self.klippy_apis.query_objects({
+                    'display_status': None,
+                    'virtual_sdcard': None
+                })
             except Exception:
                 pass
 
@@ -328,9 +329,10 @@ class OctoPrintCompat:
             'state': self.printer_state()
         }
 
-    async def _post_job(self,
-                            web_request: WebRequest
-                            ) -> Dict:
+    async def _post_job(
+        self,
+        web_request: WebRequest
+    ) -> Dict:
         """
         Request to run job operation
         """
@@ -338,8 +340,9 @@ class OctoPrintCompat:
         action: str = web_request.get('action', None)
         state: str = self.printer_state()
 
-        logging.info(f'Executing job operation: {command}, action={action}, current state={state}')
-        
+        msg = f'Job operation {command}, action={action}, last state={state}'
+        logging.info(msg)
+
         if command == "start":
             # moonraker does not have "selected" files
             if state == "Printing":
@@ -364,7 +367,7 @@ class OctoPrintCompat:
                 await self.klippy_apis.do_restart()
             except self.server.error as e:
                 logging.info(f'Error restarting print: {e}')
-                
+
         elif command == "pause":
             action: str = web_request.get('action', None)
             # cura-octoprint plugin does not send an action
