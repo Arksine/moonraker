@@ -37,6 +37,7 @@ class OctoPrintCompat:
     * Webcam config
     * Manual GCode submission
     * Heater temperatures
+    * Job status & operations
     """
 
     def __init__(self, config: ConfigHelper) -> None:
@@ -94,9 +95,8 @@ class OctoPrintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', ['GET'], self._get_job,
+            '/api/job', ['GET', 'POST'], self._handle_job,
             transports=['http'], wrap_result=False)
-        # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
@@ -275,9 +275,16 @@ class OctoPrintCompat:
             job_info["time"] = est_time
         self.last_print_stats.update(job_info)
 
-    async def _get_job(self,
+    async def _handle_job(self,
                        web_request: WebRequest
                        ) -> Dict[str, Any]:
+        action = web_request.get_action()
+        if web_request.get_action() == "GET":
+            return await self._get_job()
+        else:
+            return await self._post_job(web_request)
+
+    async def _get_job(self) -> Dict[str, Any]:
         """
         Get current job status
         """
@@ -320,6 +327,61 @@ class OctoPrintCompat:
             },
             'state': self.printer_state()
         }
+
+    async def _post_job(self,
+                            web_request: WebRequest
+                            ) -> Dict:
+        """
+        Request to run job operation
+        """
+        command: str = web_request.get('command', None)
+        action: str = web_request.get('action', None)
+        state: str = self.printer_state()
+
+        logging.info(f'Executing job operation: {command}, action={action}, current state={state}')
+        
+        if command == "start":
+            # moonraker does not have "selected" files
+            if state == "Printing":
+                # need to return a 409 error
+                pass
+            pass
+        elif command == "cancel":
+            if not state == "Printing":
+                # need to return 409 error
+                pass
+            try:
+                await self.klippy_apis.cancel_print()
+                logging.info("Cancelling print")
+            except self.server.error as e:
+                logging.info(f'Error cancelling print: {e}')
+
+        elif command == "restart":
+            if not state == "Paused":
+                # need to return 409 error
+                pass
+            try:
+                await self.klippy_apis.do_restart()
+            except self.server.error as e:
+                logging.info(f'Error restarting print: {e}')
+                
+        elif command == "pause":
+            action: str = web_request.get('action', None)
+            # cura-octoprint plugin does not send an action
+            toggle = action in ["toggle", None]
+
+            if action == "pause" or (toggle and state == "Printing"):
+                try:
+                    await self.klippy_apis.pause_print()
+                except self.server.error as e:
+                    logging.info(f'Error pausing print: {e}')
+            if action == "resume" or (toggle and state == "Paused"):
+                try:
+                    await self.klippy_apis.resume_print()
+                except self.server.error as e:
+                    logging.info(f'Error resuming print: {e}')
+
+        return {}
 
     async def _get_printer(self,
                            web_request: WebRequest
