@@ -35,6 +35,7 @@ class Notifier:
         prefix_sections = config.get_prefix_sections("notifier")
 
         self.register_events(config)
+        self.register_remote_actions()
 
         for section in prefix_sections:
             cfg = config[section]
@@ -52,6 +53,16 @@ class Notifier:
                 self.server.add_warning(msg)
                 continue
             self.notifiers[notifier.get_name()] = notifier
+
+    def register_remote_actions(self):
+        self.server.register_remote_method("notify", self.notify_action)
+
+    async def notify_action(self, name: str, message: str = ""):
+        if name not in self.notifiers:
+            raise self.server.error(f"Notifier '{name}' not found", 404)
+        notifier = self.notifiers[name]
+
+        await notifier.notify("remote_action", [], message)
 
     def register_events(self, config: ConfigHelper):
 
@@ -145,10 +156,13 @@ class NotifierInstance:
 
         self.apprise.add(self.url)
 
-    async def notify(self, event_name: str, event_args: List) -> None:
+    async def notify(
+        self, event_name: str, event_args: List, message: str = ""
+    ) -> None:
         context = {
             "event_name": event_name,
-            "event_args": event_args
+            "event_args": event_args,
+            "event_message": message
         }
 
         rendered_title = (
