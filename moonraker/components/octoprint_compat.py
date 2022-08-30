@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager
     from .job_queue import JobQueue
+    from components.file_manager.file_manager import FileManager
+
 
 OCTO_VERSION = '1.5.0'
 
@@ -42,7 +44,7 @@ class OctoPrintCompat:
         self.software_version = self.server.get_app_args().get(
             'software_version')
         self.enable_ufp: bool = config.getboolean('enable_ufp', True)
-
+        
         # Get webcam settings from config
         self.webcam: Dict[str, Any] = {
             'flipH': config.getboolean('flip_h', False),
@@ -54,14 +56,18 @@ class OctoPrintCompat:
 
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+
         self.heaters: Dict[str, Dict[str, Any]] = {}
         self.last_print_stats: Dict[str, Any] = {}
+        self.display_status: Dict[str, Any] = {}
 
         # Register status update event
         self.server.register_event_handler(
             'server:klippy_ready', self._init)
         self.server.register_event_handler(
             'server:status_update', self._handle_status_update)
+        self.server.register_event_handler(
+            "job_state:started", self._on_print_start)
 
         # Version & Server information
         self.server.register_endpoint(
@@ -138,6 +144,8 @@ class OctoPrintCompat:
     def _handle_status_update(self, status: Dict[str, Any]) -> None:
         if 'print_stats' in status:
             self.last_print_stats.update(status['print_stats'])
+        if 'display_status' in status:
+            self.display_status.update(status['display_status'])
         for heater_name, data in self.heaters.items():
             if heater_name in status:
                 data.update(status[heater_name])
@@ -249,25 +257,66 @@ class OctoPrintCompat:
             }
         return settings
 
+    def _on_print_start(
+        self,
+        prev_stats: Dict[str, Any],
+        new_stats: Dict[str, Any],
+        need_start_event: bool = True
+    ) -> None:
+        filename = new_stats["filename"]
+        job_info: Dict[str, Any] = {"filename": filename}
+        fm: FileManager = self.server.lookup_component("file_manager")
+        metadata = fm.get_file_metadata(filename)
+        filament = metadata.get("filament_total")
+        if filament is not None:
+            job_info["filament"] = round(filament)
+        est_time = metadata.get("estimated_time")
+        if est_time is not None:
+            job_info["time"] = est_time
+        self.last_print_stats.update(job_info)
+
     async def _get_job(self,
                        web_request: WebRequest
                        ) -> Dict[str, Any]:
         """
         Get current job status
         """
+        job_info: Dict[str, Any] = {}
+        if self.last_print_stats.get('state') == "printing":
+            try:
+                result = await self.klippy_apis.query_objects({'display_status': None, 'virtual_sdcard': None})
+            except Exception:
+                pass
+
+            if 'display_status' in result:
+                display_status = result.get("display_status")
+                job_info["completion"] = display_status.get("progress", None)
+            if 'virtual_sdcard' in result:
+                virtual_sdcard = result.get("virtual_sdcard")
+                job_info["filepos"] = virtual_sdcard.get("file_position", None)
+
+            job_info["file"] = self.last_print_stats.get("filename")
+            job_info["filament"] = self.last_print_stats.get("filament")
+            est_time = self.last_print_stats.get("time")
+            job_info["estimatedPrintTime"] = est_time
+            duration: float = self.last_print_stats.get("print_duration")
+            job_info["printTime"] = int(duration)
+            if est_time is not None:
+                time_left = max(0, int(est_time - duration + .5))
+                job_info["printTimeLeft"] = int(time_left)
+
         return {
             'job': {
-                'file': {'name': None},
-                'estimatedPrintTime': None,
-                'filament': {'length': None},
-                'user': None,
+                'file': {'name': job_info.get("file", None)},
+                'estimatedPrintTime': job_info.get("estimatedPrintTime", None),
+                'filament': {'length': job_info.get("filament", None)},
             },
             'progress': {
-                'completion': None,
-                'filepos': None,
-                'printTime': None,
-                'printTimeLeft': None,
-                'printTimeOrigin': None,
+                'completion': job_info.get("completion", None),
+                'filepos': job_info.get("filepos", None),
+                'printTime': job_info.get("printTime", None),
+                'printTimeLeft': job_info.get("printTimeLeft", None),
+                'printTimeLeftOrigin': "estimate",
             },
             'state': self.printer_state()
         }
