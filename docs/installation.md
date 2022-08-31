@@ -31,7 +31,7 @@ missing one or both, you can simply add the bare sections to `printer.cfg`:
 [display_status]
 
 [virtual_sdcard]
-path: ~/moonraker_data/gcodes
+path: ~/printer_data/gcodes
 ```
 
 ### Enabling the Unix Socket
@@ -79,17 +79,17 @@ KLIPPY_USER=pi
 
 KLIPPY_EXEC=/home/pi/klippy-env/bin/python
 
-KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/moonraker_data/config/printer.cfg -l /home/pi/moonraker_data/logs/klippy.log -a /tmp/klippy_uds"
+KLIPPY_ARGS="/home/pi/klipper/klippy/klippy.py /home/pi/printer_data/config/printer.cfg -l /home/pi/printer_data/logs/klippy.log -a /tmp/klippy_uds"
 ```
 
 Moonraker's install script will create the data folder, however you
 may wish to create it now and move `printer.cfg` to the correct
 location, ie:
 ```
-mkdir ~/moonraker_data
-mkdir ~/moonraker_data/logs
-mkdir ~/moonraker_data/config
-mv printer.cfg ~/moonraker_data/config
+mkdir ~/printer_data
+mkdir ~/printer_data/logs
+mkdir ~/printer_data/config
+mv printer.cfg ~/printer_data/config
 ```
 
 ### Installing Moonraker
@@ -105,7 +105,7 @@ The install script will attempt to create a basic configuration if
 `moonraker.conf` does not exist at the expected location, however if you
 prefer to have Moonraker start with a robust configuration you may create
 it now.  By default the configuration file should be located at
-`$HOME/moonraker_data/config/moonraker.conf`, however the location of the
+`$HOME/printer_data/config/moonraker.conf`, however the location of the
 data path may be configured using the script's command line options.
 The [sample moonraker.conf](./moonraker.conf) may be used as a starting
 point, full details can be found in the
@@ -124,23 +124,22 @@ particularly for those upgrading:
   Force an overwrite of Moonraker's systemd script. By default the
   the systemd script will not be modified if it exists.
 - `-a <alias>`:
-  The alias used for this instance of Moonraker.  Moonraker uses this option
-  when determining the file names for the configuration file, log file,
-  secrets file, etc.  This option is also used to name Moonraker's systemd
-  service unit and enviroment file.  If omitted this defaults to `moonraker`.
+  The installer uses this option to determine the name of the service
+  to install.  If `-d` is not provided then this options will also be
+  used to determine the name of the data path folder. If omitted this
+  defaults to `moonraker`.
 - `-d <path to data folder>`:
   Specifies the path to Moonraker's data folder.  This folder organizes
   files and directories used by moonraker.  See the `Data Folder Structure`
-  section for details.  If omitted this defaults to `$HOME/<alias>_data`,
-  ie: `/home/pi/moonraker_data`.
+  section for details.  If omitted this defaults to `$HOME/printer_data`.
 - `-c <path to configuration file>`
   Specifies the path to Moonraker's configuation file.  By default the
-  configuration is expected at `<data_folder>/config/<alias>.conf`. ie:
-  `/home/pi/moonraker_data/config/moonraker.conf`.
+  configuration is expected at `<data_folder>/config/moonraker.conf`. ie:
+  `/home/pi/printer_data/config/moonraker.conf`.
 - `-l <path to log file>`
    Specifies the path to Moonraker's log file.  By default Moonraker logs
-   to `<data_folder>/logs/<alias>.log`. ie:
-  `/home/pi/moonraker_data/logs/moonraker.log`.
+   to `<data_folder>/logs/moonraker.log`. ie:
+  `/home/pi/printer_data/logs/moonraker.log`.
 - `-z`:
   Disables `systemctl` commands during install (ie: daemon-reload, restart).
   This is useful for installations that occur outside of a standard environment
@@ -182,11 +181,10 @@ Now you may install a client, such as
 
 As mentioned previously, files and folders used by Moonraker are organized
 in a primary data folder.  The example below illustrates the folder
-structure using the default data path of `$HOME/moonraker_data` and the
-default alias of `moonraker`:
+structure using the default data path of `$HOME/printer_data`.
 
 ```
-/home/pi/moonraker_data
+/home/pi/printer_data
 ├── backup
 │   └── 20220822T202419Z
 │       ├── config
@@ -208,36 +206,9 @@ default alias of `moonraker`:
 ├── logs
 │   ├── klippy.log
 │   └── moonraker.log
+├── systemd
+│   └── moonraker.env
 └── moonraker.secrets (optional)
-```
-
-The next example illustrates how the `<data file path>` and `<alias>`
-command line options are used to populate the folder:
-
-```
-<data file path>
-├── backup
-│   └── <ISO8601_DATE>
-│       ├── config
-│       │   └── <full configuration backup>
-│       └── service
-│           └── <systemd service backup>
-├── certs
-│   ├── <alias>.cert (optional)
-│   └── <alias>.key (optional)
-├── config
-│   ├── <alias>.conf
-│   └── printer.cfg
-├── database
-│   ├── data.mdb
-│   └── lock.mdb
-├── gcodes
-│   ├── test_gcode_one.gcode
-│   └── test_gcode_two.gcode
-├── logs
-│   ├── klippy.log
-│   └── <alias>.log
-└── <alias>.secrets (optional)
 ```
 
 If it is not desirible for the files and folders to exist in these specific
@@ -248,8 +219,8 @@ reconfigure Klipper's `virtual_sdcard` it may be desirable to create a
 
 !!! Note
     It is still possible to directly configure the paths to the configuration
-    and log files if you do not wish to use the default `<alias>` naming
-    scheme or if you wish for them to exist outside of the data folder.
+    and log files if you do not wish to use the default file names of
+    `moonraker.conf` and `moonraker.log`
 
 When Moonraker attempts to update legacy installations symbolic links
 are used to avoid an unrecoverable error.  Additionally a `backup`
@@ -257,7 +228,7 @@ folder is created which contains the prior configuration and/or
 systemd service unit, ie:
 
 ```
-/home/pi/moonraker_data
+/home/pi/printer_data
 ├── backup
 │   └── 20220822T202419Z
 │       ├── config
@@ -275,6 +246,8 @@ systemd service unit, ie:
 ├── database -> /home/pi/.moonraker_database
 ├── gcodes -> /home/pi/gcode_files
 ├── logs -> /home/pi/logs
+├── systemd
+│   └── moonraker.env
 └── moonraker.secrets -> /home/pi/moonraker_secrets.ini
 ```
 
@@ -306,7 +279,7 @@ User=pi
 SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
 WorkingDirectory=/home/pi/moonraker
-EnvironmentFile=/home/pi/moonraker/moonraker.env
+EnvironmentFile=/home/pi/printer_data/systemd/moonraker.env
 ExecStart=/home/pi/moonraker-env/bin/python $MOONRAKER_ARGS
 Restart=always
 RestartSec=10
@@ -327,31 +300,24 @@ Following are some items to take note of:
 
 #### The Enivirorment File
 
-The environment file is created in Moonraker's source directory during
-installation.  By default the enviroment file is named `moonraker.env`.
-A default installation's enviroment file will contain the path
-to `moonraker.py` and the alias option, ie:
+The environment file, `moonraker.env`. is created in the data path during
+installation. A default installation's enviroment file will contain the path
+to `moonraker.py` and the data path option, ie:
 
 ```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -a moonraker"
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data"
 ```
 
 A legacy installation converted to the updated flexible service unit
 might contain the following:
 
 ```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -a moonraker -d /home/pi/moonraker_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
 ```
 
 Post installation it is simple to customize the [arguments](#command-line-usage)
 supplied to Moonraker by editing this file and restarting the service.
 
-!!! Note
-    The service unit and enviroment file are named based on the `alias`
-    option supplied to the install script, which is `moonraker` by default.
-    Supplying `-a moonraker_1` to the install script will result in a
-    service file named `moonraker_1.service` and an environment file
-    named `moonraker_1.env`.
 
 ### Command line usage
 
@@ -359,14 +325,12 @@ This section is intended for users that need to write their own
 installation script.  Detailed are the command line arguments
 available to Moonraker:
 ```
-usage: moonraker.py [-h] [-a <alias>] [-d <data path>] [-c <configfile>] [-l <logfile>] [-n]
+usage: moonraker.py [-h]p [-d <data path>] [-c <configfile>] [-l <logfile>] [-n]
 
 Moonraker - Klipper API Server
 
 options:
   -h, --help            show this help message and exit
-  -a <alias>, --alias <alias>
-                        Alternate name of instance
   -d <data path>, --datapath <data path>
                         Location of Moonraker Data File Path
   -c <configfile>, --configfile <configfile>
@@ -377,14 +341,13 @@ options:
 ```
 
 The default configuration is:
-- `data path`: `$HOME/moonraker_data`
-- `alias`: `moonraker`
-- `config file`: `$HOME/moonraker_data/config/moonraker.conf`
-- `log file`: `$HOME/moonraker_data/logs/moonraker.log`
+- `data path`: `$HOME/printer_data`
+- `config file`: `$HOME/printer_data/config/moonraker.conf`
+- `log file`: `$HOME/printer_data/logs/moonraker.log`
 - logging to a file is enabled
 
 !!! Tip
-    While the `alias` option may be omitted it is recommended that it
+    While the `data path` option may be omitted it is recommended that it
     always be included for new installations.  This allows Moonraker
     to differentiate between new and legacy installations.
 
