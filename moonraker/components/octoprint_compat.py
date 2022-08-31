@@ -295,7 +295,7 @@ class OctoPrintCompat:
         if self.last_print_stats.get('state') == "printing":
             if self.virtual_sdcard:
                 job_info["completion"] = self.virtual_sdcard.get(
-                    "progress", None)
+                    "progress", 0.) * 100
                 job_info["filepos"] = self.virtual_sdcard.get(
                     "file_position", None)
             job_info["file"] = self.last_print_stats.get("filename")
