@@ -59,7 +59,7 @@ class OctoPrintCompat:
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
         self.heaters: Dict[str, Dict[str, Any]] = {}
         self.last_print_stats: Dict[str, Any] = {}
-        self.display_status: Dict[str, Any] = {}
+        self.virtual_sdcard: Dict[str, Any] = {}
 
         # Register status update event
         self.server.register_event_handler(
@@ -135,14 +135,19 @@ class OctoPrintCompat:
         # subscribe objects
         sub: Dict[str, Any] = {s: None for s in sensors}
         sub['print_stats'] = None
+        sub['virtual_sdcard'] = None
         result = await self.klippy_apis.subscribe_objects(sub)
         self.last_print_stats = result.get('print_stats', {})
+        self.virtual_sdcard = result.get('virtual_sdcard', {})
         if sensors:
             self.heaters = {name: result.get(name, {}) for name in sensors}
 
     def _handle_status_update(self, status: Dict[str, Any]) -> None:
+        print(status)
         if 'print_stats' in status:
             self.last_print_stats.update(status['print_stats'])
+        if 'virtual_sdcard' in status:
+            self.virtual_sdcard.update(status['virtual_sdcard'])
         for heater_name, data in self.heaters.items():
             if heater_name in status:
                 data.update(status[heater_name])
@@ -288,21 +293,11 @@ class OctoPrintCompat:
         """
         job_info: Dict[str, Any] = {}
         if self.last_print_stats.get('state') == "printing":
-            try:
-                result = await self.klippy_apis.query_objects({
-                    'display_status': None,
-                    'virtual_sdcard': None
-                })
-            except Exception:
-                pass
-
-            if 'display_status' in result:
-                display_status = result.get("display_status")
-                job_info["completion"] = display_status.get("progress", None)
-            if 'virtual_sdcard' in result:
-                virtual_sdcard = result.get("virtual_sdcard")
-                job_info["filepos"] = virtual_sdcard.get("file_position", None)
-
+            if self.virtual_sdcard:
+                job_info["completion"] = self.virtual_sdcard.get(
+                    "progress", None)
+                job_info["filepos"] = self.virtual_sdcard.get(
+                    "file_position", None)
             job_info["file"] = self.last_print_stats.get("filename")
             job_info["filament"] = self.last_print_stats.get("filament")
             est_time = self.last_print_stats.get("time")
