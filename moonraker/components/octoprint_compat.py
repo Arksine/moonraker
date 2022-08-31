@@ -302,7 +302,7 @@ class OctoPrintCompat:
             job_info["filament"] = self.last_print_stats.get("filament")
             est_time = self.last_print_stats.get("time")
             job_info["estimatedPrintTime"] = est_time
-            duration: float = self.last_print_stats.get("print_duration")
+            duration: float = self.last_print_stats.get("print_duration", 0.)
             job_info["printTime"] = int(duration)
             if est_time is not None:
                 time_left = max(0, int(est_time - duration + .5))
@@ -331,20 +331,14 @@ class OctoPrintCompat:
         """
         Request to run job operation
         """
-        command: str = web_request.get('command', None)
-        action: str = web_request.get('action', None)
+        command = web_request.get('command', None)
+        action = web_request.get('action', None)
         state: str = self.printer_state()
 
         msg = f'Job operation {command}, action={action}, last state={state}'
         logging.info(msg)
 
-        if command == "start":
-            # moonraker does not have "selected" files
-            if state == "Printing":
-                # need to return a 409 error
-                pass
-            pass
-        elif command == "cancel":
+        if command == "cancel":
             if not state == "Printing":
                 # need to return 409 error
                 pass
@@ -354,17 +348,7 @@ class OctoPrintCompat:
             except self.server.error as e:
                 logging.info(f'Error cancelling print: {e}')
 
-        elif command == "restart":
-            if not state == "Paused":
-                # need to return 409 error
-                pass
-            try:
-                await self.klippy_apis.do_restart()
-            except self.server.error as e:
-                logging.info(f'Error restarting print: {e}')
-
         elif command == "pause":
-            action: str = web_request.get('action', None)
             # cura-octoprint plugin does not send an action
             toggle = action in ["toggle", None]
 
