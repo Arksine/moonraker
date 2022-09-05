@@ -22,6 +22,7 @@ from utils import LocalQueueHandler
 
 from typing import (
     TYPE_CHECKING,
+    Awaitable,
     Coroutine,
     Optional,
     Dict,
@@ -1044,7 +1045,7 @@ class SimplyPrint(Subscribable):
     def _check_setup_event(self, evt_name: str) -> bool:
         return self.is_set_up or evt_name in PRE_SETUP_EVENTS
 
-    def send_sp(self, evt_name: str, data: Any) -> asyncio.Future:
+    def send_sp(self, evt_name: str, data: Any) -> Awaitable[bool]:
         if (
             not self.connected or
             self.ws is None or
@@ -1055,19 +1056,21 @@ class SimplyPrint(Subscribable):
             fut.set_result(False)
             return fut
         packet = {"type": evt_name, "data": data}
-        if evt_name != "stream":
-            self._logger.info(f"sent: {packet}")
-        else:
-            self._logger.info("sent: webcam stream")
-        self._reset_keepalive()
+        return self.eventloop.create_task(self._send_wrapper(packet))
+
+    async def _send_wrapper(self, packet: Dict[str, Any]) -> bool:
         try:
-            fut = self.ws.write_message(json.dumps(packet))
-        except tornado.websocket.WebSocketClosedError:
-            fut = self.eventloop.create_future()
-            fut.set_result(False)
+            assert self.ws is not None
+            await self.ws.write_message(json.dumps(packet))
+        except Exception:
+            return False
         else:
+            if packet["type"] != "stream":
+                self._logger.info(f"sent: {packet}")
+            else:
+                self._logger.info("sent: webcam stream")
             self._reset_keepalive()
-        return fut
+        return True
 
     def _reset_keepalive(self):
         if self.keepalive_hdl is not None:
@@ -1096,10 +1099,7 @@ class SimplyPrint(Subscribable):
         self.webcam_stream.stop()
         self.amb_detect.stop()
         self.printer_info_timer.stop()
-        try:
-            await self.send_sp("shutdown", None)
-        except tornado.websocket.WebSocketClosedError:
-            pass
+        await self.send_sp("shutdown", None)
         self._logger.close()
         self.is_closing = True
         if self.ws is not None:
