@@ -562,7 +562,7 @@ class GitRepo:
 
     async def update_repo_status(self) -> bool:
         async with self.git_operation_lock:
-            if not self.git_path.joinpath(".git").is_dir():
+            if not self.git_path.joinpath(".git").exists():
                 logging.info(
                     f"Git Repo {self.alias}: path '{self.git_path}'"
                     " is not a valid git repo")
