@@ -1165,9 +1165,18 @@ This request will not return.  The machine will reboot
 and the socket connection will drop.
 
 #### Restart a system service
-Restarts a system service via `sudo systemctl restart {name}`. Currently
-the `moonraker`, `klipper`, `MoonCord`, `KlipperScreen` and `webcamd`
-services are supported.
+Uses: `sudo systemctl restart {name}`
+
+Services allowed:
+
+* `crowsnest`
+* `MoonCord`
+* `moonraker`
+* `moonraker-telegram-bot`
+* `klipper`
+* `KlipperScreen`
+* `sonar`
+* `webcamd`
 
 HTTP request:
 ```http
@@ -1186,8 +1195,10 @@ JSON-RPC request:
 
 Returns:
 
-`ok` when complete.  Note that if `moonraker` is chosen, the return
-value will be sent prior to the service restart.
+`ok` when complete.
+!!! note
+    If `moonraker` is chosen, the return
+    value will be sent prior to the service restart.
 
 #### Stop a system service
 Stops a system service via `sudo systemctl stop <name>`. Currently
