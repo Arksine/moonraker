@@ -242,7 +242,13 @@ class ProcStats:
                 parsed_stats = stats.strip().split()
                 net_stats[dev_name] = {
                     'rx_bytes': int(parsed_stats[0]),
-                    'tx_bytes': int(parsed_stats[8])
+                    'tx_bytes': int(parsed_stats[8]),
+                    'rx_packets': int(parsed_stats[1]),
+                    'tx_packets': int(parsed_stats[9]),
+                    'rx_errs': int(parsed_stats[2]),
+                    'tx_errs': int(parsed_stats[10]),
+                    'rx_drop': int(parsed_stats[3]),
+                    'tx_drop': int(parsed_stats[11])
                 }
             return net_stats
         except Exception:
