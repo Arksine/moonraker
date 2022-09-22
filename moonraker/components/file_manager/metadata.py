@@ -91,7 +91,7 @@ def _regex_find_int(pattern: str, data: str) -> Optional[int]:
 def _regex_find_string(pattern: str, data: str) -> Optional[str]:
     match = re.search(pattern, data)
     if match:
-        return match.group(1)
+        return match.group(1).strip('"')
     return None
 
 # Slicer parsing implementations
