@@ -321,11 +321,12 @@ class PowerDevice:
     def _setup_bound_service(self) -> None:
         if self.bound_service is None:
             return
-        if self.bound_service.startswith("moonraker"):
-            raise self.server.error(
-                f"Cannot bind to '{self.bound_service}' "
-                "service")
         machine_cmp: Machine = self.server.lookup_component("machine")
+        if machine_cmp.unit_name == self.bound_service.split(".", 1)[0]:
+            raise self.server.error(
+                f"Power Device {self.name}: Cannot bind to Moonraker "
+                f"service, {self.bound_service}."
+            )
         sys_info = machine_cmp.get_system_info()
         avail_svcs: List[str] = sys_info.get('available_services', [])
         if self.bound_service not in avail_svcs:
