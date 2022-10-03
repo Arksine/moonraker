@@ -352,6 +352,10 @@ class Machine:
     def sudo_password(self) -> Optional[str]:
         return self._sudo_password
 
+    @sudo_password.setter
+    def sudo_password(self, pwd: Optional[str]) -> None:
+        self._sudo_password = pwd
+
     @property
     def sudo_requested(self) -> bool:
         return len(self.sudo_requests) > 0
@@ -1292,9 +1296,15 @@ class InstallValidator:
                 # A non-default datapath requires successful update of the
                 # service
                 self.data_path_valid = False
+        user: str = props["User"]
+        has_sudo = False
         if await machine.check_sudo_access():
+            has_sudo = True
             logging.info("Moonraker has sudo access")
-        else:
+        elif user == "pi" and machine.sudo_password is None:
+            machine.sudo_password = "raspberry"
+            has_sudo = await machine.check_sudo_access()
+        if not has_sudo:
             self._request_sudo_access()
             raise ValidationError(
                 "Moonraker requires sudo permission to update the system "
@@ -1303,7 +1313,6 @@ class InstallValidator:
             )
         self._sudo_requested = False
         svc_dest = pathlib.Path(props["FragmentPath"])
-        user: str = props["User"]
         tmp_svc = pathlib.Path(
             tempfile.gettempdir()
         ).joinpath(f"{unit}-tmp.svc")
