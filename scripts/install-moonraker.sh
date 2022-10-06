@@ -80,7 +80,8 @@ init_data_path()
     [ ! -e "${logs_dir}" ] && mkdir ${logs_dir}
     [ ! -e "${env_dir}" ] && mkdir ${env_dir}
     [ -n "${CONFIG_PATH}" ] && config_file=${CONFIG_PATH}
-    if [ ! -e "${config_file}" ]; then
+    # Write initial configuration for first time installs
+    if [ ! -f $SERVICE_FILE ] && [ ! -e "${config_file}" ]; then
         report_status "Writing Config File ${config_file}:\n"
         /bin/sh -c "cat > ${config_file}" << EOF
 # Moonraker Configuration File
@@ -105,7 +106,6 @@ install_script()
 {
     # Create systemd service file
     ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
-    SERVICE_FILE="${SYSTEMDDIR}/${INSTANCE_ALIAS}.service"
     if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
         rm -f $ENV_FILE
         args="MOONRAKER_ARGS=\"${SRCDIR}/moonraker/moonraker.py"
@@ -236,6 +236,9 @@ if [ -z "${DATA_PATH}" ]; then
         fi
     fi
 fi
+
+SERVICE_FILE="${SYSTEMDDIR}/${INSTANCE_ALIAS}.service"
+
 # Run installation steps defined above
 verify_ready
 cleanup_legacy
