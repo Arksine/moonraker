@@ -506,9 +506,6 @@ class CommandHelper:
     def get_umdb(self) -> NamespaceWrapper:
         return self.umdb
 
-    def is_debug_enabled(self) -> bool:
-        return self.debug_enabled
-
     def set_update_info(self, app: str, uid: int) -> None:
         self.cur_update_app = app
         self.cur_update_id = uid

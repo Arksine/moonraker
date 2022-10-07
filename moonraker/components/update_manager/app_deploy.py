@@ -41,7 +41,6 @@ class AppDeploy(BaseDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
         super().__init__(config, cmd_helper, prefix="Application")
         self.config = config
-        self.debug = self.cmd_helper.is_debug_enabled()
         type_choices = list(TYPE_TO_CHANNEL.keys())
         self.type = config.get('type').lower()
         if self.type not in type_choices:
@@ -224,7 +223,7 @@ class AppDeploy(BaseDeploy):
     def get_update_status(self) -> Dict[str, Any]:
         return {
             'channel': self.channel,
-            'debug_enabled': self.debug,
+            'debug_enabled': self.server.is_debug_enabled(),
             'need_channel_update': self.need_channel_update,
             'is_valid': self._is_valid,
             'configured_type': self.type,

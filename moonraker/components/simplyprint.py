@@ -1404,7 +1404,7 @@ class WebcamStream:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            if not self.server.is_debug_enabled():
+            if not self.server.is_verbose_enabled():
                 return
             logging.exception("SimplyPrint WebCam Stream Error")
 
@@ -1628,7 +1628,7 @@ class ProtoLogger:
     def __init__(self, config: ConfigHelper) -> None:
         server = config.get_server()
         self._logger: Optional[logging.Logger] = None
-        if not config["server"].getboolean("enable_debug_logging", False):
+        if not server.is_verbose_enabled():
             return
         fm: FileManager = server.lookup_component("file_manager")
         log_root = fm.get_directory("logs")

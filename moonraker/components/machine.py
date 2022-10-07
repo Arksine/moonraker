@@ -1521,6 +1521,10 @@ class InstallValidator:
                 key_dest = certs_path.joinpath("moonraker.key")
                 self._link_data_file(key_dest, ssl_key)
                 cfg_source.remove_option("server", "ssl_key_path")
+
+            # Remove deprecated debug option
+            if server_cfg.has_option("enable_debug_logging"):
+                cfg_source.remove_option("server", "enable_debug_logging")
         except Exception:
             cfg_source.cancel()
             raise

@@ -67,7 +67,7 @@ class GitDeploy(AppDeploy):
             msgs = '\n'.join(invalids)
             self.log_info(
                 f"Repo validation checks failed:\n{msgs}")
-            if self.debug:
+            if self.server.is_debug_enabled():
                 self._is_valid = True
                 self.log_info(
                     "Repo debug enabled, overriding validity checks")
@@ -402,7 +402,7 @@ class GitRepo:
         if not detected_origin.endswith(".git"):
             detected_origin += ".git"
         if (
-            self.cmd_helper.is_debug_enabled() or
+            self.server.is_debug_enabled() or
             not detected_origin.startswith("http") or
             detected_origin == self.origin_url.lower()
         ):
@@ -703,7 +703,7 @@ class GitRepo:
                 f"Git Repo {self.alias}: Cannot perform pull on a "
                 "detached HEAD")
         cmd = "pull --progress"
-        if self.cmd_helper.is_debug_enabled():
+        if self.server.is_debug_enabled():
             cmd = f"{cmd} --rebase"
         if self.is_beta:
             cmd = f"{cmd} {self.git_remote} {self.upstream_commit}"
