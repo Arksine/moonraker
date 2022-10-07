@@ -1162,7 +1162,6 @@ class INotifyHandler:
                  ) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.debug_enabled = self.server.is_debug_enabled()
         self.enable_warn = config.getboolean("enable_inotify_warnings", True)
         self.file_manager = file_manager
         self.gcode_metadata = gcode_metadata
@@ -1306,7 +1305,7 @@ class INotifyHandler:
         return True
 
     def log_nodes(self) -> None:
-        if self.debug_enabled:
+        if self.server.is_verbose_enabled():
             debug_msg = f"Inotify Watches After Scan:"
             for wdesc, node in self.watched_nodes.items():
                 wdir = node.get_path()

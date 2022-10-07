@@ -64,6 +64,11 @@ class Server:
         self.event_loop = event_loop
         self.file_logger = file_logger
         self.app_args = args
+        self.events: Dict[str, List[FlexCallback]] = {}
+        self.components: Dict[str, Any] = {}
+        self.failed_components: List[str] = []
+        self.warnings: Dict[str, str] = {}
+
         self.config = config = self._parse_config()
         self.host: str = config.get('host', "0.0.0.0")
         self.port: int = config.getint('port', 7125)
@@ -72,17 +77,12 @@ class Server:
         self.server_running: bool = False
 
         # Configure Debug Logging
-        self.debug = config.getboolean('enable_debug_logging', False)
-        asyncio_debug = config.getboolean('enable_asyncio_debug', False)
-        log_level = logging.DEBUG if self.debug else logging.INFO
+        config.getboolean('enable_debug_logging', False, deprecate=True)
+        self.debug = args["debug"]
+        log_level = logging.DEBUG if args["verbose"] else logging.INFO
         logging.getLogger().setLevel(log_level)
-        self.event_loop.set_debug(asyncio_debug)
+        self.event_loop.set_debug(args["asyncio_debug"])
 
-        # Event initialization
-        self.events: Dict[str, List[FlexCallback]] = {}
-        self.components: Dict[str, Any] = {}
-        self.failed_components: List[str] = []
-        self.warnings: Dict[str, str] = {}
         self.klippy_connection = KlippyConnection(config)
 
         # Tornado Application/Server
@@ -124,6 +124,9 @@ class Server:
 
     def is_debug_enabled(self) -> bool:
         return self.debug
+
+    def is_verbose_enabled(self) -> bool:
+        return self.app_args["verbose"]
 
     def _parse_config(self) -> confighelper.ConfigHelper:
         config = confighelper.get_configuration(self, self.app_args)
@@ -455,7 +458,10 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         "data_path": str(data_path),
         "is_default_data_path": cmd_line_args.datapath is None,
         "config_file": cfg_file,
-        "startup_warnings": startup_warnings
+        "startup_warnings": startup_warnings,
+        "verbose": cmd_line_args.verbose,
+        "debug": cmd_line_args.debug,
+        "asyncio_debug": cmd_line_args.asyncio_debug
     }
 
     # Setup Logging
@@ -548,4 +554,16 @@ if __name__ == '__main__':
     parser.add_argument(
         "-n", "--nologfile", action='store_true',
         help="disable logging to a file")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Enable verbose logging"
+    )
+    parser.add_argument(
+        "-g", "--debug", action="store_true",
+        help="Enable Moonraker debug features"
+    )
+    parser.add_argument(
+        "-o", "--asyncio-debug", action="store_true",
+        help="Enable asyncio debug flag"
+    )
     main(parser.parse_args())

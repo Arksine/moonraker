@@ -194,9 +194,8 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
 
-        self.debug = self.server.is_debug_enabled()
         app_args: Dict[str, Any] = {
-            'serve_traceback': self.debug,
+            'serve_traceback': self.server.is_verbose_enabled(),
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
             'server': self.server,
@@ -275,7 +274,10 @@ class MoonrakerApp:
 
     def log_request(self, handler: tornado.web.RequestHandler) -> None:
         status_code = handler.get_status()
-        if not self.debug and status_code in [200, 204, 206, 304]:
+        if (
+            not self.server.is_verbose_enabled()
+            and status_code in [200, 204, 206, 304]
+        ):
             # don't log successful requests in release mode
             return
         if status_code < 400:
@@ -620,7 +622,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         return args
 
     def _log_debug(self, header: str, args: Any) -> None:
-        if self.server.is_debug_enabled():
+        if self.server.is_verbose_enabled():
             resp = args
             if isinstance(args, dict):
                 if (
