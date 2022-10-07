@@ -88,6 +88,7 @@ class Server:
         # Tornado Application/Server
         self.moonraker_app = app = MoonrakerApp(config)
         self.register_endpoint = app.register_local_handler
+        self.register_debug_endpoint = app.register_debug_handler
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
         self.register_api_transport = app.register_api_transport
