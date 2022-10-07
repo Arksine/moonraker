@@ -154,12 +154,18 @@ class MoonrakerDatabase:
         self.forbidden_namespaces = set(self.get_item(
             "moonraker", "database.forbidden_namespaces",
             []).result())
-        # Remove stale debug counter
+        # Initialize Debug Counter
         config.getboolean("enable_database_debug", False, deprecate=True)
-        try:
-            self.delete_item("moonraker", "database.debug_counter")
-        except Exception:
-            pass
+        self.debug_counter: Dict[str, int] = {"get": 0, "post": 0, "delete": 0}
+        db_counter: Optional[Dict[str, int]] = self.get_item(
+            "moonraker", "database.debug_counter", None
+        ).result()
+        if isinstance(db_counter, dict):
+            self.debug_counter.update(db_counter)
+            self.server.add_log_rollover_item(
+                "database_debug_counter",
+                f"Database Debug Counter: {self.debug_counter}"
+            )
         # Track unsafe shutdowns
         unsafe_shutdowns: int = self.get_item(
             "moonraker", "database.unsafe_shutdowns", 0).result()
@@ -174,6 +180,11 @@ class MoonrakerDatabase:
             "/server/database/list", ['GET'], self._handle_list_request)
         self.server.register_endpoint(
             "/server/database/item", ["GET", "POST", "DELETE"],
+            self._handle_item_request)
+        self.server.register_debug_endpoint(
+            "/debug/database/list", ['GET'], self._handle_list_request)
+        self.server.register_debug_endpoint(
+            "/debug/database/item", ["GET", "POST", "DELETE"],
             self._handle_item_request)
 
     def get_database_path(self) -> str:
@@ -714,9 +725,12 @@ class MoonrakerDatabase:
     async def _handle_list_request(self,
                                    web_request: WebRequest
                                    ) -> Dict[str, List[str]]:
+        path = web_request.get_endpoint()
         await self.eventloop.run_in_thread(self.thread_lock.acquire)
         try:
-            ns_list = set(self.namespaces.keys()) - self.forbidden_namespaces
+            ns_list = set(self.namespaces.keys())
+            if not path.startswith("/debug/"):
+                ns_list -= self.forbidden_namespaces
         finally:
             self.thread_lock.release()
         return {'namespaces': list(ns_list)}
@@ -725,15 +739,16 @@ class MoonrakerDatabase:
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
         action = web_request.get_action()
+        is_debug = web_request.get_endpoint().startswith("/debug/")
         namespace = web_request.get_str("namespace")
-        if namespace in self.forbidden_namespaces:
+        if namespace in self.forbidden_namespaces and not is_debug:
             raise self.server.error(
                 f"Read/Write access to namespace '{namespace}'"
                 " is forbidden", 403)
         key: Any
         valid_types: Tuple[type, ...]
         if action != "GET":
-            if namespace in self.protected_namespaces:
+            if namespace in self.protected_namespaces and not is_debug:
                 raise self.server.error(
                     f"Write access to namespace '{namespace}'"
                     " is forbidden", 403)
@@ -753,6 +768,17 @@ class MoonrakerDatabase:
             await self.insert_item(namespace, key, val)
         elif action == "DELETE":
             val = await self.delete_item(namespace, key, drop_empty_db=True)
+
+        if is_debug:
+            self.debug_counter[action.lower()] += 1
+            await self.insert_item(
+                "moonraker", "database.debug_counter", self.debug_counter
+            )
+            self.server.add_log_rollover_item(
+                "database_debug_counter",
+                f"Database Debug Counter: {self.debug_counter}",
+                log=False
+            )
         return {'namespace': namespace, 'key': key, 'value': val}
 
     async def close(self) -> None:
