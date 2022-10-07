@@ -395,6 +395,24 @@ class MoonrakerApp:
             params['location_prefix'] = location_prefix
         self.mutable_router.add_handler(pattern, FileUploadHandler, params)
 
+    def register_debug_handler(
+        self,
+        uri: str,
+        request_methods: List[str],
+        callback: APICallback,
+        transports: List[str] = ALL_TRANSPORTS,
+        wrap_result: bool = True
+    ) -> None:
+        if not self.server.is_debug_enabled():
+            return
+        if not uri.startswith("/debug"):
+            raise self.server.error(
+                "Debug Endpoints must be registerd in the '/debug' path"
+            )
+        self.register_local_handler(
+            uri, request_methods, callback, transports, wrap_result
+        )
+
     def remove_handler(self, endpoint: str) -> None:
         api_def = self.api_cache.pop(endpoint, None)
         if api_def is not None:
