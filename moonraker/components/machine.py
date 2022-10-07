@@ -1522,9 +1522,12 @@ class InstallValidator:
                 self._link_data_file(key_dest, ssl_key)
                 cfg_source.remove_option("server", "ssl_key_path")
 
-            # Remove deprecated debug option
+            # Remove deprecated debug options
             if server_cfg.has_option("enable_debug_logging"):
                 cfg_source.remove_option("server", "enable_debug_logging")
+            um_cfg = server_cfg["update_manager"]
+            if um_cfg.has_option("enable_repo_debug"):
+                cfg_source.remove_option("update_manager", "enable_repo_debug")
         except Exception:
             cfg_source.cancel()
             raise
