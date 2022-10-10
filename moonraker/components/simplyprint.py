@@ -53,7 +53,8 @@ PROD_ENDPOINT = f"wss://ws.simplyprint.io/{SP_VERSION}/p"
 # TODO: Increase this time to something greater, perhaps 30 minutes
 CONNECTION_ERROR_LOG_TIME = 60.
 PRE_SETUP_EVENTS = [
-    "connection", "state_change", "shutdown", "machine_data", "firmware"
+    "connection", "state_change", "shutdown", "machine_data", "firmware",
+    "ping"
 ]
 
 class SimplyPrint(Subscribable):
@@ -86,7 +87,8 @@ class SimplyPrint(Subscribable):
             "temps": 1.,
             "temps_target": .25,
             "cpu": 10.,
-            "ai": 0.
+            "ai": 0.,
+            "ping": 20.,
         }
         self.printer_status: Dict[str, Dict[str, Any]] = {}
         self.heaters: Dict[str, str] = {}
@@ -95,6 +97,8 @@ class SimplyPrint(Subscribable):
         self.connection_task: Optional[asyncio.Task] = None
         self.reconnect_delay: float = 1.
         self.reconnect_token: Optional[str] = None
+        self._last_sp_ping: float = 0.
+        self.ping_sp_timer = self.eventloop.register_timer(self._handle_sp_ping)
         self.printer_info_timer = self.eventloop.register_timer(
             self._handle_printer_info_update)
         self._print_request_event: asyncio.Event = asyncio.Event()
@@ -239,6 +243,7 @@ class SimplyPrint(Subscribable):
                 self._process_message(message)
             elif message is None:
                 self.webcam_stream.stop()
+                self.ping_sp_timer.stop()
                 cur_time = self.eventloop.get_loop_time()
                 ping_time: float = cur_time - self._last_ping_received
                 reason = code = None
@@ -289,6 +294,7 @@ class SimplyPrint(Subscribable):
                     self.save_item("printer_name", name)
             self.reconnect_delay = 1.
             self._push_initial_state()
+            self.ping_sp_timer.start()
         elif event == "error":
             logging.info(f"SimplyPrint Connection Error: {data}")
             self.reconnect_delay = 30.
@@ -336,6 +342,9 @@ class SimplyPrint(Subscribable):
         elif event == "interval_change":
             if isinstance(data, dict):
                 self._update_intervals(data)
+        elif event == "pong":
+            diff = self.eventloop.get_loop_time() - self._last_sp_ping
+            self.send_sp("latency", {"ms": int(diff * 1000 + .5)})
         else:
             # TODO: It would be good for the backend to send an
             # event indicating that it is ready to recieve printer
@@ -808,6 +817,11 @@ class SimplyPrint(Subscribable):
             self._update_job_progress()
         return eventtime + self.intervals["job"]
 
+    def _handle_sp_ping(self, eventtime: float) -> float:
+        self._last_sp_ping = eventtime
+        self.send_sp("ping", None)
+        return eventtime + self.intervals["ping"]
+
     def _update_job_progress(self) -> None:
         job_info: Dict[str, Any] = {}
         est_time = self.cache.metadata.get("estimated_time")
@@ -1081,6 +1095,7 @@ class SimplyPrint(Subscribable):
         self.webcam_stream.stop()
         self.amb_detect.stop()
         self.printer_info_timer.stop()
+        self.ping_sp_timer.stop()
         await self.send_sp("shutdown", None)
         self._logger.close()
         self.is_closing = True
