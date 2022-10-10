@@ -64,7 +64,7 @@ RESERVED_ENDPOINTS = [
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
-AUTHORIZED_EXTS = [".png"]
+AUTHORIZED_EXTS = [".png", ".jpg"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
 ASSET_PATH = pathlib.Path(__file__).parent.joinpath("assets")
