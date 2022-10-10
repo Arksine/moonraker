@@ -50,12 +50,10 @@ COMPONENT_VERSION = "0.0.1"
 SP_VERSION = "0.1"
 TEST_ENDPOINT = f"wss://testws.simplyprint.io/{SP_VERSION}/p"
 PROD_ENDPOINT = f"wss://ws.simplyprint.io/{SP_VERSION}/p"
-KEEPALIVE_TIME = 96.0
 # TODO: Increase this time to something greater, perhaps 30 minutes
 CONNECTION_ERROR_LOG_TIME = 60.
 PRE_SETUP_EVENTS = [
-    "connection", "state_change", "shutdown", "machine_data", "keepalive",
-    "firmware"
+    "connection", "state_change", "shutdown", "machine_data", "firmware"
 ]
 
 class SimplyPrint(Subscribable):
@@ -94,7 +92,6 @@ class SimplyPrint(Subscribable):
         self.heaters: Dict[str, str] = {}
         self.missed_job_events: List[Dict[str, Any]] = []
         self.announce_mutex = asyncio.Lock()
-        self.keepalive_hdl: Optional[asyncio.TimerHandle] = None
         self.connection_task: Optional[asyncio.Task] = None
         self.reconnect_delay: float = 1.
         self.reconnect_token: Optional[str] = None
@@ -256,9 +253,6 @@ class SimplyPrint(Subscribable):
                 logging.info(msg)
                 self.connected = False
                 self.ws = None
-                if self.keepalive_hdl is not None:
-                    self.keepalive_hdl.cancel()
-                    self.keepalive_hdl = None
                 break
 
     def _on_ws_ping(self, data: bytes = b"") -> None:
@@ -266,7 +260,6 @@ class SimplyPrint(Subscribable):
 
     def _process_message(self, msg: str) -> None:
         self._logger.info(f"received: {msg}")
-        self._reset_keepalive()
         try:
             packet: Dict[str, Any] = json.loads(msg)
         except json.JSONDecodeError:
@@ -1069,18 +1062,7 @@ class SimplyPrint(Subscribable):
                 self._logger.info(f"sent: {packet}")
             else:
                 self._logger.info("sent: webcam stream")
-            self._reset_keepalive()
         return True
-
-    def _reset_keepalive(self):
-        if self.keepalive_hdl is not None:
-            self.keepalive_hdl.cancel()
-        self.keepalive_hdl = self.eventloop.delay_callback(
-            KEEPALIVE_TIME, self._do_keepalive)
-
-    def _do_keepalive(self):
-        self.keepalive_hdl = None
-        self.send_sp("keepalive", None)
 
     def _get_object_diff(
         self, new_obj: Dict[str, Any], cached_obj: Dict[str, Any]
@@ -1104,9 +1086,6 @@ class SimplyPrint(Subscribable):
         self.is_closing = True
         if self.ws is not None:
             self.ws.close(1001, "Client Shutdown")
-        if self.keepalive_hdl is not None:
-            self.keepalive_hdl.cancel()
-            self.keepalive_hdl = None
         if (
             self.connection_task is not None and
             not self.connection_task.done()
