@@ -13,6 +13,7 @@ import time
 import pathlib
 import base64
 import tornado.websocket
+from tornado.escape import url_escape
 from websockets import Subscribable, WebRequest
 
 import logging.handlers
@@ -23,7 +24,6 @@ from utils import LocalQueueHandler
 from typing import (
     TYPE_CHECKING,
     Awaitable,
-    Coroutine,
     Optional,
     Dict,
     List,
@@ -242,7 +242,6 @@ class SimplyPrint(Subscribable):
             if isinstance(message, str):
                 self._process_message(message)
             elif message is None:
-                self.webcam_stream.stop()
                 self.ping_sp_timer.stop()
                 cur_time = self.eventloop.get_loop_time()
                 ping_time: float = cur_time - self._last_ping_received
@@ -369,11 +368,8 @@ class SimplyPrint(Subscribable):
                 script = "\n".join(script_list)
                 coro = self.klippy_apis.run_gcode(script, None)
                 self.eventloop.create_task(coro)
-        elif demand == "stream_on":
-            interval: float = args.get("interval", 1000) / 1000
-            self.webcam_stream.start(interval)
-        elif demand == "stream_off":
-            self.webcam_stream.stop()
+        elif demand == "webcam_snapshot":
+            self.eventloop.create_task(self.webcam_stream.post_image(args))
         elif demand == "file":
             url: Optional[str] = args.get("url")
             if not isinstance(url, str):
@@ -1271,6 +1267,7 @@ class LayerDetect:
 # Ideally we will always fetch from the localhost rather than
 # go through the reverse proxy
 FALLBACK_URL = "http://127.0.0.1:8080/?action=snapshot"
+SP_SNAPSHOT_URL = "https://apirewrite.simplyprint.io/jobs/ReceiveSnapshot"
 
 class WebcamStream:
     def __init__(
@@ -1282,9 +1279,6 @@ class WebcamStream:
         self.webcam_name = config.get("webcam_name", "")
         self.url = FALLBACK_URL
         self.client: HttpClient = self.server.lookup_component("http_client")
-        self.running = False
-        self.interval: float = 1.
-        self.stream_task: Optional[asyncio.Task] = None
         self.cam: Optional[WebCam] = None
         self._connected = False
 
@@ -1324,44 +1318,74 @@ class WebcamStream:
             return {}
         return self.cam.as_dict()
 
-    async def extract_image(self) -> bytes:
+    async def extract_image(self) -> str:
         headers = {"Accept": "image/jpeg"}
         resp = await self.client.get(self.url, headers, enable_cache=False)
-        if resp.has_error():
-            # TODO: We should probably log an error and quit the
-            # stream here
-            return b""
-        return resp.content
+        resp.raise_for_status()
+        return await self.eventloop.run_in_thread(
+            self._encode_image, resp.content
+        )
 
-    def encode_image(self, image: bytes) -> str:
+    def _encode_image(self, image: bytes) -> str:
         return base64.b64encode(image).decode()
 
-    def _send_image(self, base_image: str) -> Optional[Coroutine]:
-        self.simplyprint.send_sp("stream", {"base": base_image})
-        return None
+    async def post_image(self, payload: Dict[str, Any]) -> None:
+        uid: Optional[str] = payload.get("id")
+        timer: Optional[int] = payload.get("timer")
+        try:
+            if uid is not None:
+                url = payload.get("endpoint", SP_SNAPSHOT_URL)
+                img = await self.extract_image()
+                headers = {
+                    "User-Agent": "Mozilla/5.0",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+                body = f"id={url_escape(uid)}&image={url_escape(img)}"
+                resp = await self.client.post(
+                    url, body=body, headers=headers, enable_cache=False
+                )
+                resp.raise_for_status()
+            elif timer is not None:
+                await asyncio.sleep(timer / 1000)
+                img = await self.extract_image()
+                self.simplyprint.send_sp("stream", {"base": img})
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            if not self.server.is_debug_enabled():
+                return
+            logging.exception(f"SimplyPrint WebCam Stream Error")
+
+class AIStream(WebcamStream):
+    ai_url = "https://ai.simplyprint.io/api/v2/infer"
+    def __init__(self, config: ConfigHelper, simplyprint: SimplyPrint) -> None:
+        super().__init__(config, simplyprint)
+        self.running = False
+        self.interval: float = 1.
+        self.stream_task: Optional[asyncio.Task] = None
+
+    async def _send_image(self, base_image: str) -> None:
+        token = self.simplyprint.sp_info["printer_token"]
+        headers = {"User-Agent": "Mozilla/5.0"}
+        data = {
+            "api_key": token,
+            "image_array": base_image,
+            "interval": self.interval
+        }
+        resp = await self.client.post(
+            self.ai_url, body=data, headers=headers, enable_cache=False
+        )
+        resp.raise_for_status()
 
     async def _stream(self) -> None:
-        last_err = Exception()
         while self.running:
-            await asyncio.sleep(self.interval)
             try:
-                ret = await self.extract_image()
-                if ret:
-                    encoded = await self.eventloop.run_in_thread(
-                        self.encode_image, ret
-                    )
-                    coro = self._send_image(encoded)
-                    if coro is not None:
-                        await coro
+                img = await self.extract_image()
+                await self._send_image(img)
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
-                if not self.server.is_debug_enabled():
-                    continue
-                if type(last_err) != type(e) or last_err.args != e.args:
-                    last_err = e
-                    cname = self.__class__.__name__
-                    logging.exception(f"SimplyPrint {cname} Error")
+            except Exception:
+                logging.exception(f"SimplyPrint AI Stream Error")
 
     def start(self, interval: float) -> None:
         if self.running:
@@ -1379,22 +1403,6 @@ class WebcamStream:
         if self.stream_task is not None:
             self.stream_task.cancel()
             self.stream_task = None
-
-class AIStream(WebcamStream):
-    ai_url = "https://ai.simplyprint.io/api/v2/infer"
-
-    async def _send_image(self, base_image: str) -> None:
-        token = self.simplyprint.sp_info["printer_token"]
-        headers = {"User-Agent": "Mozilla/5.0"}
-        data = {
-            "api_key": token,
-            "image_array": base_image,
-            "interval": self.interval
-        }
-        resp = await self.client.post(
-            self.ai_url, body=data, headers=headers, enable_cache=False
-        )
-        resp.raise_for_status()
 
 class PrintHandler:
     def __init__(self, simplyprint: SimplyPrint) -> None:
