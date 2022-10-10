@@ -2333,6 +2333,7 @@ HTTP request:
 ```http
 GET /server/database/list
 ```
+
 JSON-RPC request:
 ```json
 {
@@ -4935,6 +4936,133 @@ Returns:
 `ok` if an `id` was present in the request, otherwise no response is
 returned.  Once received, Moonraker will broadcast this event via
 the [agent event notification](#agent-events) to all other connections.
+
+### Debug APIs
+
+The APIs in this section are available when Moonraker the debug argument
+(`-g`) has been supplied via the command line.  Some API may also depend
+on Moonraker's configuration, ie: an optional component may choose to
+register a debug API.
+
+!!! Warning
+    Debug APIs may expose security vulnerabilities.  They should only be
+    enabled by developers on secured machines.
+
+#### List Database Namespaces (debug)
+
+Debug version of [List Namespaces](#list-namespaces). Return value includes
+namespaces exlusively reserved for Moonraker. Only availble when Moonraker's
+debug features are enabled.
+
+
+HTTP request:
+```http
+GET /debug/database/list
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "debug.database.list",
+    "id": 8694
+}
+```
+
+#### Get Database Item (debug)
+
+Debug version of [Get Database Item](#get-database-item).  Keys within
+protected and forbidden namespaces are accessible. Only availble when
+Moonraker's debug features are enabled.
+
+!!! Warning
+    Moonraker's forbidden namespaces include items such as user credentials.
+    This endpoint should NOT be implemented in front ends directly.
+
+HTTP request:
+```http
+GET /debug/database/item?namespace={namespace}&key={key}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "debug.database.get_item",
+    "params": {
+        "namespace": "{namespace}",
+        "key": "{key}"
+    },
+    "id": 5644
+}
+```
+
+#### Add Database Item (debug)
+
+Debug version of [Add Database Item](#add-database-item).  Keys within
+protected and forbidden namespaces may be added. Only availble when
+Moonraker's debug features are enabled.
+
+!!! Warning
+    This endpoint should be used for testing/debugging purposes only.
+    Modifying protected namespaces outside of Moonraker can result in
+    broken functionality and is not supported for production environments.
+    Issues opened with reports/queries related to this endpoint will be
+    redirected to this documentation and closed.
+
+```http
+POST /debug/database/item
+Content-Type: application/json
+
+{
+    "namespace": "my_client",
+    "key": "settings.some_count",
+    "value": 100
+}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "debug.database.post_item",
+    "params": {
+        "namespace": "{namespace}",
+        "key": "{key}",
+        "value": 100
+    },
+    "id": 4654
+}
+```
+
+#### Delete Database Item (debug)
+
+Debug version of [Delete Database Item](#delete-database-item).  Keys within
+protected and forbidden namespaces may be removed. Only availble when
+Moonraker's debug features are enabled.
+
+!!! Warning
+    This endpoint should be used for testing/debugging purposes only.
+    Modifying protected namespaces outside of Moonraker can result in
+    broken functionality and is not supported for production environments.
+    Issues opened with reports/queries related to this endpoint will be
+    redirected to this documentation and closed.
+
+HTTP request:
+```http
+DELETE /debug/database/item?namespace={namespace}&key={key}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "debug.database.delete_item",
+    "params": {
+        "namespace": "{namespace}",
+        "key": "{key}"
+    },
+    "id": 4654
+}
+```
 
 ### Websocket notifications
 Printer generated events are sent over the websocket as JSON-RPC 2.0

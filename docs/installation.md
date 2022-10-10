@@ -298,7 +298,7 @@ Following are some items to take note of:
   by the enviroment variable `MOONRAKER_ARGS`.  This variable is set in
   the environment file.
 
-#### The Enivirorment File
+#### The Enivironment File
 
 The environment file, `moonraker.env`. is created in the data path during
 installation. A default installation's enviroment file will contain the path
@@ -338,6 +338,9 @@ options:
   -l <logfile>, --logfile <logfile>
                         log file name and location
   -n, --nologfile       disable logging to a file
+  -v, --verbose         Enable verbose logging
+  -g, --debug           Enable Moonraker debug features
+  -o, --asyncio-debug   Enable asyncio debug flag
 ```
 
 The default configuration is:
@@ -345,6 +348,9 @@ The default configuration is:
 - `config file`: `$HOME/printer_data/config/moonraker.conf`
 - `log file`: `$HOME/printer_data/logs/moonraker.log`
 - logging to a file is enabled
+- Verbose logging is disabled
+- Moonraker's debug features are disabled
+- The asyncio debug flag is set to false
 
 !!! Tip
     While the `data path` option may be omitted it is recommended that it
@@ -354,7 +360,7 @@ The default configuration is:
 If is necessary to run Moonraker without logging to a file the
 `-n` option may be used, for example:
 ```
-~/moonraker-env/bin/python ~/moonraker/moonraker/moonraker.py -n
+~/moonraker-env/bin/python ~/moonraker/moonraker/moonraker.py -d ~/printer_data -n
 ```
 
 In general it is not recommended to install Moonraker with file logging
@@ -431,6 +437,37 @@ enable_system_updates: False
     Previously installed PolicyKit rules can be removed by running
     `set-policykit-rules.sh -c`
 
+### Completing Privileged Upgrades
+
+At times an update to Moonraker may require a change to the systemd service
+file, which requires sudo permission to complete.  Moonraker will present
+an announcement when it need's the user's password and the process can
+be completed by entering the password through Moonraker's landing page.
+
+Some users prefer not to provide these credentials via the web browser and
+instead would like to do so over ssh.  These users may run
+ `scripts/finish-upgrade.sh` to provide Moonraker the necessary credentials
+ via ssh:
+
+```
+Utility to complete privileged upgrades for Moonraker
+
+usage: finish-upgrade.sh [-h] [-a <address>] [-p <port>] [-k <api_key>]
+
+optional arguments:
+  -h                show this message
+  -a <address>      address for Moonraker instance
+  -p <port>         port for Moonraker instance
+  -k <api_key>      API Key for authorization
+```
+
+By default the script will connect to a Moonraker instances on the local
+machine at port 7125.  If the instance is not bound to localhost or is
+bound to another port the user may specify a custom address and port.
+
+The API Key (`-k`) option is only necessary if the localhost is not authorized
+to access Moonraker's API.
+
 ### Retrieving the API Key
 
 Some clients may require an API Key to connect to Moonraker.  After the
@@ -489,4 +526,46 @@ cd ~
 rm -rf klipper
 git clone https://github.com/Klipper3d/klipper.git
 sudo systemctl restart klipper
+```
+
+### Debug options for developers
+
+Moonraker accepts several command line arguments that can be used to
+assist both front end developers and developers interested in extending
+Moonraker.
+
+- The `-v` (`--verbose`) argument enables verbose logging.  This includes
+  logging that reports information on all requests received and responses.
+- The `-g` (`--debug`) argument enables Moonraker's debug features,
+  including:
+    - Debug endpoints
+    - The `update_manager` will bypass strict git repo validation, allowing
+      updates from unofficial remotes and repos in a `detached HEAD` state.
+- The `-o` (`--asyncio-debug`) argument enables the asyncio debug flag.  This
+  will substantially increase logging and is intended for low level debugging
+  of the asyncio event loop.
+
+!!! Warning
+    The debug option should not be enabled in production environments.  The
+    database debug endpoints grant read/write access to all namespaces,
+    including those typically exclusive to Moonraker.  Items such as user
+    credentials are exposed.
+
+Installations using systemd can enable debug options by editing `moonraker.env`
+via ssh:
+
+```
+nano ~/printer_data/systemd/moonraker.env
+```
+
+Once the file is open, append the debug option(s) (`-v` and `-g` in this example) to the
+value of `MOONRAKER_ARGS`:
+```
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log -v -g"
+```
+
+Save the file, exit the text editor, and restart the Moonraker service:
+
+```
+sudo systemctl restart moonraker
 ```

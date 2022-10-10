@@ -57,8 +57,8 @@ klippy_uds_address: /tmp/klippy_uds
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
 enable_debug_logging: False
-#   When set to True Moonraker will log in verbose mode.  During this stage
-#   of development the default is False.
+#   ***DEPRECATED***
+#   Verbose logging is enabled by the '-v' command line option.
 ```
 
 !!! Note:
@@ -1201,11 +1201,8 @@ disk or cloned from unofficial sources are not supported.
 
 [update_manager]
 enable_repo_debug: False
-#   When set to True moonraker will bypass repo validation and allow
-#   updates from unofficial remotes and/or branches.  Updates on
-#   detached repos are also allowed.  This option is intended for
-#   developers and should not be used on production machines.  The
-#   default is False.
+#  ***DEPRECATED***
+#   Debug features are now enabled by the '-g' command line option
 enable_auto_refresh: False
 #   When set to True Moonraker will attempt to fetch status about
 #   available updates roughly every 24 hours, between 12am-4am.
@@ -2105,12 +2102,10 @@ for core component configuration if no section was present.
 
 On April 6th 2022 the fallback was deprecated.  Moonraker will still function
 normally if `core components` are configured in the `[server]` section,
-however Moonraker now generates warnings when it detected this condition,
+however Moonraker now generates warnings when it detects this condition,
 such as:
 
 ```
-[server]: Option 'config_path' has been moved to section [file_manager]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
-[server]: Option 'log_path' has been moved to section [file_manager]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
 [server]: Option 'temperature_store_size' has been moved to section [data_store]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation.
 [server]: Option 'gcode_store_size' has been moved to section [data_store]. Please correct your configuration, see https://moonraker.readthedocs.io/en/latest/configuration for detailed documentation
 ```
@@ -2126,8 +2121,6 @@ host: 0.0.0.0
 port: 7125
 temperature_store_size: 600
 gcode_store_size: 1000
-config_path: ~/klipper_config
-log_path: ~/klipper_logs
 
 ```
 
@@ -2139,10 +2132,6 @@ You will need to change it to the following;
 [server]
 host: 0.0.0.0
 port: 7125
-
-[file_manager]
-config_path: ~/klipper_config
-log_path: ~/klipper_logs
 
 [data_store]
 temperature_store_size: 600
@@ -2159,8 +2148,3 @@ make the changes.
 
 Once the changes are complete you may use the UI to restart Moonraker and
 the warnings should clear.
-
-!!! Note
-    Some users have asked why Moonraker does not automate these changes.
-    Currently Moonraker has no mechanism to modify the configuration directly,
-    however this functionality will be added in the future.
