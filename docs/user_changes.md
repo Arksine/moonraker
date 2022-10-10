@@ -2,6 +2,30 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### October 14th 2022
+- The systemd service file is now versioned.  Moonraker can now detect when
+  the file is out of date and automate corrections as necessary.
+- Moonraker's command line options are now specified in an environment file,
+  making it possible to change these options without modifying the service file
+  and reloading the systemd daemon.  The default location of the environment
+  file is `~/printer_data/systemd/moonraker.env`.
+- Moonraker now manages files and folders in a primary data folder supplied
+  by the `-d` (`--data-path`) command line option.  As a result, the following
+  options have been deprecated:
+    - `ssl_certificate_path` in `[server]`
+    - `ssl_key_path` in `[server]`
+    - `database_path` in `[database]`
+    - `config_path` in `[file_manager]`
+    - `log_path` in `[file_manager]`
+    - `secrets_path` in `[secrets]`
+- Debugging options are now supplied to Moonraker via the command line.
+  The `-v` (`--verbose`) option enables verbose logging, while the `-g`
+  (`--debug`) option enables debug features, including access to debug
+  endpoints and the repo debug feature in `update_manager`.  As a result,
+  the following options are deprecated:
+    - `enable_debug_logging` in `[server]`
+    - `enable_repo_debug` in `[update_manager]`
+
 ### July 27th 2022
 - The behavior of `[include]` directives has changed.  Included files
   are now parsed as they are encountered.  If sections are duplicated
