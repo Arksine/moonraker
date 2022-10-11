@@ -240,8 +240,9 @@ class KlippyConnection:
             return
         data: bytes = b""
         try:
-            data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-            pid, uid, gid = struct.unpack("@LLL", data)
+            size = struct.calcsize("3I")
+            data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, size)
+            pid, uid, gid = struct.unpack("3I", data)
         except asyncio.CancelledError:
             raise
         except Exception:
