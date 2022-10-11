@@ -844,8 +844,8 @@ class SimplyPrint(Subscribable):
     def _update_job_progress(self) -> None:
         job_info: Dict[str, Any] = {}
         est_time = self.cache.metadata.get("estimated_time")
+        last_stats: Dict[str, Any] = self.job_state.get_last_stats()
         if est_time is not None:
-            last_stats: Dict[str, Any] = self.job_state.get_last_stats()
             duration: float = last_stats["print_duration"]
             time_left = max(0, int(est_time - duration + .5))
             last_time_left = self.cache.job_info.get("time", time_left + 60.)
@@ -860,7 +860,9 @@ class SimplyPrint(Subscribable):
             pct_prog = int(progress * 100 + .5)
             if pct_prog != self.cache.job_info.get("progress", 0):
                 job_info["progress"] = int(progress * 100 + .5)
-        layer = self.layer_detect.layer
+        layer: Optional[int] = last_stats.get("info", {}).get("current_layer")
+        if layer is None:
+            layer = self.layer_detect.layer
         if layer != self.cache.job_info.get("layer", -1):
             job_info["layer"] = layer
         if job_info:
