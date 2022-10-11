@@ -69,6 +69,13 @@ class JobState:
                 )
                 self.server.send_event(
                     f"job_state:{new_state}", prev_ps, new_ps)
+        if "info" in ps:
+            cur_layer: Optional[int] = ps["info"].get("current_layer")
+            if cur_layer is not None:
+                total: int = ps["info"].get("total_layer", 0)
+                self.server.send_event(
+                    "job_state:layer_changed", cur_layer, total
+                )
         self.last_print_stats.update(ps)
 
     def _check_resumed(self,
