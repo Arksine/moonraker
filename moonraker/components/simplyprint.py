@@ -538,6 +538,8 @@ class SimplyPrint(Subscribable):
             "gcode_move": ["gcode_position"]
         }
         # Add Heater Subscriptions
+        has_amb_sensor: bool = False
+        cfg_amb_sensor = self.amb_detect.sensor_name
         if query is not None:
             heaters: Dict[str, Any] = query.get("heaters", {})
             avail_htrs: List[str]
@@ -554,6 +556,16 @@ class SimplyPrint(Subscribable):
                 elif htr == "heater_bed":
                     sub_objs[htr] = ["temperature", "target"]
                     self.heaters[htr] = "bed"
+            sensors: List[str] = heaters.get("available_sensors", [])
+            if cfg_amb_sensor:
+                if cfg_amb_sensor in sensors:
+                    has_amb_sensor = True
+                    sub_objs[cfg_amb_sensor] = ["temperature"]
+                else:
+                    logging.info(
+                        f"SimplyPrint: Ambient sensor {cfg_amb_sensor} not "
+                        "configured in Klipper"
+                    )
         if self.filament_sensor:
             objects: List[str]
             objects = await self.klippy_apis.get_object_list(default=[])
@@ -591,7 +603,10 @@ class SimplyPrint(Subscribable):
                 fstate = "loaded" if detected else "runout"
                 self.cache.filament_state = fstate
                 self.send_sp("filament_sensor", {"state": fstate})
-        self.amb_detect.start()
+            if has_amb_sensor and cfg_amb_sensor in status:
+                self.amb_detect.update_ambient(status[cfg_amb_sensor])
+        if not has_amb_sensor:
+            self.amb_detect.start()
         self.printer_info_timer.start(delay=1.)
 
     def _on_power_changed(self, device_info: Dict[str, Any]) -> None:
@@ -798,6 +813,10 @@ class SimplyPrint(Subscribable):
     def send_status(self, status: Dict[str, Any], eventtime: float) -> None:
         for printer_obj, vals in status.items():
             self.printer_status[printer_obj].update(vals)
+        if self.amb_detect.sensor_name in status:
+            self.amb_detect.update_ambient(
+                status[self.amb_detect.sensor_name], eventtime
+            )
         self._update_temps(eventtime)
         if "bed_mesh" in status:
             self._send_mesh_data()
@@ -1152,12 +1171,33 @@ class AmbientDetect:
         self._ambient = initial_ambient
         self._last_sample_time: float = 0.
         self._update_interval = AMBIENT_CHECK_TIME
-        eventloop = self.server.get_event_loop()
-        self._detect_timer = eventloop.register_timer(self._handle_detect_timer)
+        self.eventloop = self.server.get_event_loop()
+        self._detect_timer = self.eventloop.register_timer(
+            self._handle_detect_timer
+        )
+        self._sensor_name: str = config.get("ambient_sensor", "")
 
     @property
     def ambient(self) -> int:
         return self._ambient
+
+    @property
+    def sensor_name(self) -> str:
+        return self._sensor_name
+
+    def update_ambient(
+        self, sensor_info: Dict[str, Any], eventtime: float = SAMPLE_CHECK_TIME
+    ) -> None:
+        if "temperature" not in sensor_info:
+            return
+        if eventtime < self._last_sample_time + SAMPLE_CHECK_TIME:
+            return
+        self._last_sample_time = eventtime
+        new_amb = int(sensor_info["temperature"] + .5)
+        if abs(new_amb - self._ambient) < 2:
+            return
+        self._ambient = new_amb
+        self._on_ambient_changed(self._ambient)
 
     def _handle_detect_timer(self, eventtime: float) -> float:
         if "tool0" not in self.cache.temps:
@@ -1206,6 +1246,7 @@ class AmbientDetect:
 
     def stop(self) -> None:
         self._detect_timer.stop()
+        self._last_sample_time = 0.
 
 class LayerDetect:
     def __init__(self) -> None:
