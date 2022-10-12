@@ -1995,18 +1995,25 @@ webcam_name:
 #   to autodetect a webcam.
 power_device:
 #   The name of a configured [power] device available to toggle over using
-#   the SimplyPrint service.  For example, to toggle a device configured
-#   as `[power printer]` this may be configured as:
+#   the SimplyPrint service.  For example, to toggle a device specified
+#   as [power printer] may be configured as:
 #       power_device: printer
 #   By default no power device is configured.
 filament_sensor:
-#   The full name of a configured filament sensor to be monitored by
-#   SimplyPrint.  The filament sensor must be configured in Klipper and
-#   the full name, including the prefix, must be specified.  For example,
-#   to monitor a sensor configured as `[filament_switch_sensor fsensor],
-#   this may be configured as:
+#   The name of a configured filament sensor to be monitored by SimplyPrint.
+#   The filament sensor must be configured in Klipper and the full name,
+#   including the prefix, must be specified.  For example, to monitor a sensor
+#   specified as [filament_switch_sensor fsensor] may be configured as:
 #       filament_sensor:  filament_switch_sensor fsensor
 #   By default no filament sensor is monitored.
+ambient_sensor:
+#   The name of a configured temperature sensor used to report the ambient
+#   temperature.  The sensor must be configured in Klipper and the full name,
+#   including the prefix, must be specified.  For example, an ambient sensor
+#   specified in Klipper as [temperature_sensor chamber] may be configured as:
+#       ambient_sensor: temperature_sensor chamber
+#   If no ambient_sensor is configured then SimplyPrint will use the extruder
+#   to estimate ambient temperature when the heater is idle and cool.
 ```
 
 !!! Note
