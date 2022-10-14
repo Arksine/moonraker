@@ -83,7 +83,7 @@ class MoonrakerDatabase:
         db_path = pathlib.Path(app_args["data_path"]).joinpath("database")
         if (
             app_args["is_default_data_path"] and
-            not (dep_path is None and db_path.exists())
+            not db_path.joinpath("data.mdb").exists()
         ):
             # Allow configured DB fallback
             dep_path = dep_path or "~/.moonraker_database"
