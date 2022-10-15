@@ -1457,7 +1457,7 @@ class UhubctlDevice(PowerDevice):
 
         return
 
-    async def set_power(self, state str) -> None:
+    async def set_power(self, state: str) -> None:
         self.refresh_status(self._port_status(state))
         return
 
