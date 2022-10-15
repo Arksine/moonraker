@@ -23,7 +23,8 @@ from typing import (
     Dict,
     Coroutine,
     Union,
-    cast
+    cast,
+    Tuple
 )
 
 if TYPE_CHECKING:
@@ -1406,7 +1407,7 @@ class UhubctlDevice(PowerDevice):
         try:
             out, err = proc.communicate(timeout=5)
 
-        except TimeoutExpired:
+        except subprocess.TimeoutExpired:
             proc.kill()
             out, err = proc.communicate()
 
@@ -1420,7 +1421,7 @@ class UhubctlDevice(PowerDevice):
 
         if err:
             logging.exception("uhubctl returned error: " + "\n".join(err))
-            return
+            return []
 
         ports = {}
 
@@ -1442,7 +1443,7 @@ class UhubctlDevice(PowerDevice):
         if id in ports:
             return ports[id]
 
-        return
+        return []
 
     async def init_state(self) -> None:
         await self.set_power("on" if self.initial_state else "off")
