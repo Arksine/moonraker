@@ -878,6 +878,8 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
     def prepare(self) -> None:
         super(FileUploadHandler, self).prepare()
+        fm: FileManager = self.server.lookup_component("file_manager")
+        fm.check_write_enabled()
         if self.request.method == "POST":
             assert isinstance(self.request.connection, HTTP1Connection)
             self.request.connection.set_max_body_size(self.max_upload_size)

@@ -1207,6 +1207,7 @@ class InstallValidator:
         if INSTALL_VERSION <= install_ver and not self.force_validation:
             logging.debug("Installation version in database up to date")
             return False
+        fm: FileManager = self.server.lookup_component("file_manager")
         need_restart: bool = False
         has_error: bool = False
         try:
@@ -1219,11 +1220,13 @@ class InstallValidator:
         except ValidationError as ve:
             has_error = True
             self.server.add_warning(str(ve))
+            fm.disable_write_access()
         except Exception as e:
             has_error = True
             msg = f"Failed to validate {name}: {e}"
             logging.exception(msg)
             self.server.add_warning(msg, log=False)
+            fm.disable_write_access()
         else:
             await db.insert_item(
                 "moonraker", "validate_install.install_version", INSTALL_VERSION
@@ -1469,8 +1472,18 @@ class InstallValidator:
             await cfg_source.write_config(cfg_bkp_path)
             # Create symbolic links for configured folders
             server_cfg = self.config["server"]
-            fm_cfg = self.config["file_manager"]
+
             db_cfg = self.config["database"]
+            # symlink database path first
+            db_path = db_cfg.get("database_path", None)
+            default_db = pathlib.Path("~/.moonraker_database").expanduser()
+            if db_path is None and default_db.exists():
+                self._link_data_subfolder("database", default_db)
+            elif db_path is not None:
+                self._link_data_subfolder("database", db_path)
+                cfg_source.remove_option("database", "database_path")
+
+            fm_cfg = self.config["file_manager"]
             cfg_path = fm_cfg.get("config_path", None)
             if cfg_path is None:
                 cfg_path = server_cfg.get("config_path", None)
@@ -1493,14 +1506,6 @@ class InstallValidator:
             if gc_path is not None:
                 self._link_data_subfolder("gcodes", gc_path)
                 db.delete_item("moonraker", "file_manager.gcode_path")
-
-            db_path = db_cfg.get("database_path", None)
-            default_db = pathlib.Path("~/.moonraker_database").expanduser()
-            if db_path is None and default_db.exists():
-                self._link_data_subfolder("database", default_db)
-            elif db_path is not None:
-                self._link_data_subfolder("database", db_path)
-                cfg_source.remove_option("database", "database_path")
 
             # Link individual files
             secrets_path = self.config["secrets"].get("secrets_path", None)

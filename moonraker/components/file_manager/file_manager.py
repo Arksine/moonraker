@@ -193,6 +193,16 @@ class FileManager:
         self.register_directory(folder_name, str(new_path), full_access)
         return new_path
 
+    def disable_write_access(self):
+        self.full_access_roots.clear()
+
+    def check_write_enabled(self):
+        if not self.full_access_roots:
+            raise self.server.error(
+                "Write access is currently disabled.  Check notifications "
+                "for warnings."
+            )
+
     def register_directory(self,
                            root: str,
                            path: Optional[str],
@@ -548,12 +558,12 @@ class FileManager:
                 upload_info = self._parse_upload_args(form_args)
                 self.check_reserved_path(upload_info["dest_path"], True)
                 root = upload_info['root']
+                if root not in self.full_access_roots:
+                    raise self.server.error(f"Invalid root request: {root}")
                 if root == "gcodes" and upload_info['ext'] in VALID_GCODE_EXTS:
                     result = await self._finish_gcode_upload(upload_info)
-                elif root in self.full_access_roots:
-                    result = await self._finish_standard_upload(upload_info)
                 else:
-                    raise self.server.error(f"Invalid root request: {root}")
+                    result = await self._finish_standard_upload(upload_info)
             except Exception:
                 try:
                     os.remove(form_args['tmp_file_path'])
