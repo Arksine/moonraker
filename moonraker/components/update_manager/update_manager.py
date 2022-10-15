@@ -245,6 +245,10 @@ class UpdateManager:
                 return eventtime + UPDATE_REFRESH_INTERVAL
         vinfo: Dict[str, Any] = {}
         need_notify = False
+        machine: Machine = self.server.lookup_component("machine")
+        if machine.validation_enabled():
+            self.initial_refresh_complete = True
+            return eventtime + UPDATE_REFRESH_INTERVAL
         async with self.cmd_request_lock:
             try:
                 for name, updater in list(self.updaters.items()):
@@ -389,7 +393,10 @@ class UpdateManager:
         # Override a request to refresh if:
         #   - An update is in progress
         #   - Klippy is printing
+        #   - Validation is pending
+        machine: Machine = self.server.lookup_component("machine")
         if (
+            machine.validation_enabled() or
             self.cmd_helper.is_update_busy() or
             await self._check_klippy_printing() or
             not self.initial_refresh_complete
