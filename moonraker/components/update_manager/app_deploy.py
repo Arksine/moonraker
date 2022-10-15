@@ -103,7 +103,7 @@ class AppDeploy(BaseDeploy):
             if svc not in svc_choices:
                 raw = " ".join(services)
                 self.server.add_warning(
-                    f"[{config.get_name()}]: Option 'restart_action: {raw}' "
+                    f"[{config.get_name()}]: Option 'managed_services: {raw}' "
                     f"contains an invalid value '{svc}'.  All values must be "
                     f"one of the following choices: {svc_choices}"
                 )
