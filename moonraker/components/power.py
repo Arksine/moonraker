@@ -1459,8 +1459,6 @@ class UhubctlDevice(PowerDevice):
         else:
             self.state = "error"
 
-        logging.info(f"uhubctl device {self.name} entered {self.state} state")
-
         return
 
     async def set_power(self, state: str) -> None:
