@@ -1398,7 +1398,8 @@ class UhubctlDevice(PowerDevice):
         proc = subprocess.Popen(
             [ self.bin_path ] + args,
             stdout = subprocess.PIPE,
-            stderr = subprocess.PIPE
+            stderr = subprocess.PIPE,
+            text = True
         )
 
         try:
