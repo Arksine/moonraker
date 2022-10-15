@@ -11,6 +11,7 @@ import struct
 import socket
 import asyncio
 import time
+import subprocess
 
 # Annotation imports
 from typing import (
@@ -53,7 +54,8 @@ class PrinterPower:
             "rf": RFDevice,
             "mqtt": MQTTDevice,
             "smartthings": SmartThings,
-            "hue": HueDevice
+            "hue": HueDevice,
+            "uhubctl": UhubctlDevice
         }
 
         for section in prefix_sections:
@@ -1380,6 +1382,84 @@ class HueDevice(HTTPDevice):
         ret = await self.client.request("GET", url)
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"]["on"] else "off"
+
+
+# USB Hub Control
+# https://github.com/mvp/uhubctl
+# apt install uhubctl
+class UhubctlDevice(PowerDevice):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+
+        self.bin_path = config.get("bin_path", "uhubctl")
+        self.hub, self.port = tuple(config.getint("port").split("."))
+
+    def _uhubctl(self, args: List[str] = []) -> Tuple:
+        proc = subprocess.Popen(
+            [ self.bin_path ] + args,
+            stdout = subprocess.PIPE,
+            stderr = subprocess.PIPE
+        )
+
+        try:
+            out, err = proc.communicate(timeout = 5)
+
+        except TimeoutExpired:
+            proc.kill()
+            out, err = proc.communicate()
+
+        return (out.strip().splitlines(), err.strip().splitlines())
+
+    def _port_status(self, toggle: str) -> List[str]:
+        result, err = self._uhubctl(
+            [ "-l", self.hub, "-p", self.port ] +
+            ([ "-a", toggle ] if toggle else [])
+        )
+
+        if err:
+            logging.exception("uhubctl returned error: " + err.join("\n"))
+            return
+
+        ports = {}
+
+        for line in result:
+            if line[:6] == "Current":
+                hub = line.split(" ")[4]
+                continue
+
+            port, info = tuple(line.strip().[4:].split(": "))
+            ports[hub + "." + port] = info.split(" ")
+
+        id = self.hub + "." + self.port
+
+        if id in ports
+            return ports[id]
+
+        return
+
+    async def init_state(self) -> None:
+        return
+
+    async def refresh_status(self, result = False) -> None:
+        if not result:
+            result = self._uhubctl()
+
+        if not result
+            self.state = "error"
+            return
+
+        if result[1] == "power":
+            self.state = "on"
+        elif result[1] == "off":
+            self.state = "off"
+        else:
+            self.state = "error"
+
+        return
+
+    async def set_power(self, state str) -> None:
+        self.refresh_status(self._port_status(state))
+        return
 
 
 # The power component has multiple configuration sections
