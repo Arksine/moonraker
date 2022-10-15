@@ -1393,6 +1393,7 @@ class UhubctlDevice(PowerDevice):
 
         self.bin_path = config.get("bin_path", "uhubctl")
         self.hub, self.port = tuple(config.get("port").split("."))
+        self.initial_state = config.getboolean("initial_state", True)
 
     def _uhubctl(self, args: List[str] = []) -> Tuple:
         proc = subprocess.Popen(
@@ -1444,6 +1445,7 @@ class UhubctlDevice(PowerDevice):
         return
 
     async def init_state(self) -> None:
+        await self.set_power("on" if self.initial_state else "off")
         return
 
     async def refresh_status(self, result = False) -> None:
