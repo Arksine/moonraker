@@ -1424,8 +1424,13 @@ class UhubctlDevice(PowerDevice):
         ports = {}
 
         for line in result:
-            if line[:6] == "Current":
+            first_word = line.split(" ")[0]
+
+            if first_word in [ "Current", "New" ]:
                 hub = line.split(" ")[4]
+                continue
+
+            if first_word == "Sent":
                 continue
 
             port, info = tuple(line.strip()[4:].split(": "))
