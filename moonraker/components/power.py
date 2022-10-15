@@ -1452,14 +1452,14 @@ class UhubctlDevice(PowerDevice):
 
         if not result:
             self.state = "error"
-            return
-
-        if result[1] == "power":
+        elif result[1] == "power":
             self.state = "on"
         elif result[1] == "off":
             self.state = "off"
         else:
             self.state = "error"
+
+        logging.info(f"uhubctl device {self.name} entered {self.state} state")
 
         return
 
