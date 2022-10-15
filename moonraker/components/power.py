@@ -1397,14 +1397,14 @@ class UhubctlDevice(PowerDevice):
 
     def _uhubctl(self, args: List[str] = []) -> Tuple:
         proc = subprocess.Popen(
-            [ self.bin_path ] + args,
-            stdout = subprocess.PIPE,
-            stderr = subprocess.PIPE,
-            text = True
+            [self.bin_path] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
         )
 
         try:
-            out, err = proc.communicate(timeout = 5)
+            out, err = proc.communicate(timeout=5)
 
         except TimeoutExpired:
             proc.kill()
@@ -1414,8 +1414,8 @@ class UhubctlDevice(PowerDevice):
 
     def _port_status(self, toggle: str = "") -> List[str]:
         result, err = self._uhubctl(
-            [ "-l", self.hub, "-p", self.port ] +
-            ([ "-a", toggle ] if toggle else [])
+            ["-l", self.hub, "-p", self.port] +
+            (["-a", toggle] if toggle else [])
         )
 
         if err:
@@ -1427,7 +1427,7 @@ class UhubctlDevice(PowerDevice):
         for line in result:
             first_word = line.split(" ")[0]
 
-            if first_word in [ "Current", "New" ]:
+            if first_word in ["Current", "New"]:
                 hub = line.split(" ")[4]
                 continue
 
@@ -1448,7 +1448,7 @@ class UhubctlDevice(PowerDevice):
         await self.set_power("on" if self.initial_state else "off")
         return
 
-    async def refresh_status(self, result = False) -> None:
+    async def refresh_status(self, result=False) -> None:
         if not result:
             result = self._port_status()
 
