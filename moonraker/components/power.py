@@ -1411,7 +1411,7 @@ class UhubctlDevice(PowerDevice):
 
         return (out.strip().splitlines(), err.strip().splitlines())
 
-    def _port_status(self, toggle: str) -> List[str]:
+    def _port_status(self, toggle: str = "") -> List[str]:
         result, err = self._uhubctl(
             [ "-l", self.hub, "-p", self.port ] +
             ([ "-a", toggle ] if toggle else [])
@@ -1448,7 +1448,7 @@ class UhubctlDevice(PowerDevice):
 
     async def refresh_status(self, result = False) -> None:
         if not result:
-            result = self._uhubctl()
+            result = self._port_status()
 
         if not result:
             self.state = "error"
