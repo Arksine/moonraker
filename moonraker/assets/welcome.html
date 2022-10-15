@@ -364,7 +364,7 @@
             <div id="update_modal" class="modal">
                 <div class="modal-card">
                     <h1 id="modal_header_msg">
-                        Moonraker Root Request
+                        Moonraker Sudo Password Request
                     </h1>
                     <div id="modal_body" class="modal-content">
                         <div id="main_form">
@@ -454,7 +454,7 @@
                     pwd_req.onerror = () => {
                         console.log("Error setting password");
                         update_modal(
-                            "Request to set root password failed with " +
+                            "Request to set sudo password failed with " +
                             "a network error."
                         )
                     };

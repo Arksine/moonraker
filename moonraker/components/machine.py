@@ -1402,7 +1402,7 @@ class InstallValidator:
         if not source_dir.is_dir():
             raise ValidationError(
                 f"Failed to link subfolder '{folder_name}' to source path "
-                f"'{source_dir}'.  The requusted path is not a valid directory."
+                f"'{source_dir}'.  The requested path is not a valid directory."
             )
         subfolder = self.data_path.joinpath(folder_name)
         if subfolder.is_symlink():
@@ -1552,7 +1552,7 @@ class InstallValidator:
         machine: Machine = self.server.lookup_component("machine")
         machine.register_sudo_request(
             self._on_password_received,
-            "Root access required to update Moonraker's systemd service."
+            "Sudo password required to update Moonraker's systemd service."
         )
         if not machine.public_ip:
             async def wrapper(pub_ip):
