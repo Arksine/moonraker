@@ -1417,7 +1417,7 @@ class UhubctlDevice(PowerDevice):
         )
 
         if err:
-            logging.exception("uhubctl returned error: " + err.join("\n"))
+            logging.exception("uhubctl returned error: " + "\n".join(err))
             return
 
         ports = {}
