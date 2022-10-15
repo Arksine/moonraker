@@ -1427,7 +1427,7 @@ class UhubctlDevice(PowerDevice):
                 hub = line.split(" ")[4]
                 continue
 
-            port, info = tuple(line.strip().[4:].split(": "))
+            port, info = tuple(line.strip()[4:].split(": "))
             ports[hub + "." + port] = info.split(" ")
 
         id = self.hub + "." + self.port
