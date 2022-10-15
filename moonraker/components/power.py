@@ -1444,7 +1444,7 @@ class UhubctlDevice(PowerDevice):
         if not result:
             result = self._uhubctl()
 
-        if not result
+        if not result:
             self.state = "error"
             return
 
