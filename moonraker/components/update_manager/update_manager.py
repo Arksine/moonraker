@@ -247,6 +247,10 @@ class UpdateManager:
         need_notify = False
         machine: Machine = self.server.lookup_component("machine")
         if machine.validation_enabled():
+            logging.info(
+                "update_manger: Install validation pending, bypassing "
+                "initial refresh"
+            )
             self.initial_refresh_complete = True
             return eventtime + UPDATE_REFRESH_INTERVAL
         async with self.cmd_request_lock:
@@ -401,6 +405,8 @@ class UpdateManager:
             await self._check_klippy_printing() or
             not self.initial_refresh_complete
         ):
+            if check_refresh:
+                logging.info("update_manager: bypassing refresh request")
             check_refresh = False
 
         if check_refresh:
@@ -411,6 +417,7 @@ class UpdateManager:
             lrt = max([upd.get_last_refresh_time()
                        for upd in self.updaters.values()])
             if time.time() < lrt + 60.:
+                logging.debug("update_manager: refresh bypassed due to spam")
                 check_refresh = False
                 self.cmd_request_lock.release()
         vinfo: Dict[str, Any] = {}
