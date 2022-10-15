@@ -1427,12 +1427,17 @@ class InstallValidator:
     ) -> None:
         if isinstance(source_dir, str):
             source_dir = pathlib.Path(source_dir).expanduser().resolve()
+        subfolder = self.data_path.joinpath(folder_name)
+        if not source_dir.exists():
+            logging.info(
+                f"Source path '{source_dir}' does not exist.  Falling "
+                f"back to default folder {subfolder}"
+            )
         if not source_dir.is_dir():
             raise ValidationError(
                 f"Failed to link subfolder '{folder_name}' to source path "
                 f"'{source_dir}'.  The requested path is not a valid directory."
             )
-        subfolder = self.data_path.joinpath(folder_name)
         if subfolder.is_symlink():
             if not subfolder.samefile(source_dir):
                 raise ValidationError(
@@ -1465,6 +1470,12 @@ class InstallValidator:
         if isinstance(target, str):
             target = pathlib.Path(target)
         target = target.expanduser().resolve()
+        if not target.exists():
+            logging.info(
+                f"Target file {target} does not exist.  Aborting symbolic "
+                f"link to {data_file.name}."
+            )
+            return
         if not target.is_file():
             raise ValidationError(
                 f"Failed to link data file {data_file.name}.  Target "
