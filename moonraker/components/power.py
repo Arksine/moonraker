@@ -1433,7 +1433,7 @@ class UhubctlDevice(PowerDevice):
             if first_word == "Sent":
                 continue
 
-            port, info = tuple(line.strip()[4:].split(": "))
+            port, info = tuple(line.strip()[5:].split(": "))
             ports[hub + "." + port] = info.split(" ")
 
         id = self.hub + "." + self.port
