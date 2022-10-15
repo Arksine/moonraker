@@ -1392,7 +1392,7 @@ class UhubctlDevice(PowerDevice):
         super().__init__(config)
 
         self.bin_path = config.get("bin_path", "uhubctl")
-        self.hub, self.port = tuple(config.getint("port").split("."))
+        self.hub, self.port = tuple(config.get("port").split("."))
 
     def _uhubctl(self, args: List[str] = []) -> Tuple:
         proc = subprocess.Popen(
