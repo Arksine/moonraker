@@ -179,6 +179,9 @@ class Machine:
         unit_name = svc_info.get("unit_name", "moonraker.service")
         return unit_name.split(".", 1)[0]
 
+    def validation_enabled(self) -> bool:
+        return self.validator.validation_enabled
+
     def get_system_provider(self):
         return self.sys_provider
 
@@ -198,6 +201,7 @@ class Machine:
             pass
 
     async def component_init(self):
+        await self.validator.validation_init()
         await self.sys_provider.initialize()
         if not self.inside_container:
             virt_info = await self.sys_provider.check_virt_status()
@@ -395,7 +399,9 @@ class Machine:
                 return False
         return True
 
-    async def exec_sudo_command(self, command: str, tries: int = 1) -> str:
+    async def exec_sudo_command(
+        self, command: str, tries: int = 1, timeout=2.
+    ) -> str:
         proc_input = None
         full_cmd = f"sudo {command}"
         if self._sudo_password is not None:
@@ -403,7 +409,8 @@ class Machine:
             full_cmd = f"sudo -S {command}"
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         return await shell_cmd.exec_cmd(
-            full_cmd, proc_input=proc_input, log_complete=False, retries=tries
+            full_cmd, proc_input=proc_input, log_complete=False, retries=tries,
+            timeout=timeout
         )
 
     def _get_sdcard_info(self) -> Dict[str, Any]:
@@ -865,7 +872,8 @@ class SystemdCliProvider(BaseProvider):
                 )
             prop_args = ",".join(properties)
             props: str = await self.shell_cmd.exec_cmd(
-                f"systemctl show -p {prop_args} {unit_name}", retries=5
+                f"systemctl show -p {prop_args} {unit_name}", retries=5,
+                timeout=10.
             )
             raw_props: Dict[str, Any] = {}
             lines = [p.strip() for p in props.split("\n") if p.strip]
@@ -1195,6 +1203,7 @@ class InstallValidator:
         self.data_path_valid = True
         self._sudo_requested = False
         self.announcement_id = ""
+        self.validation_enabled = False
 
     def _update_backup_path(self):
         str_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -1203,13 +1212,20 @@ class InstallValidator:
         elif not self.backup_path.exists():
             self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
 
-    async def perform_validation(self) -> bool:
+    async def validation_init(self):
         db: MoonrakerDatabase = self.server.lookup_component("database")
         install_ver: int = await db.get_item(
             "moonraker", "validate_install.install_version", 0
         )
         if INSTALL_VERSION <= install_ver and not self.force_validation:
             logging.debug("Installation version in database up to date")
+            self.validation_enabled = False
+        else:
+            self.validation_enabled = True
+
+    async def perform_validation(self) -> bool:
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        if not self.validation_enabled:
             return False
         fm: FileManager = self.server.lookup_component("file_manager")
         need_restart: bool = False
@@ -1232,6 +1248,7 @@ class InstallValidator:
             self.server.add_warning(msg, log=False)
             fm.disable_write_access()
         else:
+            self.validation_enabled = False
             await db.insert_item(
                 "moonraker", "validate_install.install_version", INSTALL_VERSION
             )
@@ -1372,9 +1389,9 @@ class InstallValidator:
             # write new environment
             env_file.write_text(ENVIRONMENT % (src_path, cmd_args))
             await machine.exec_sudo_command(
-                f"cp -f {tmp_svc} {svc_dest}", tries=5)
+                f"cp -f {tmp_svc} {svc_dest}", tries=5, timeout=60.)
             await machine.exec_sudo_command(
-                "systemctl daemon-reload", tries=5
+                "systemctl daemon-reload", tries=5, timeout=60.
             )
         except asyncio.CancelledError:
             raise
@@ -1632,6 +1649,7 @@ class InstallValidator:
         await db.insert_item(
             "moonraker", "validate_install.install_version", INSTALL_VERSION
         )
+        self.validation_enabled = False
         return "System update complete.", True
 
 def load_component(config: ConfigHelper) -> Machine:
