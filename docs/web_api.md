@@ -5545,7 +5545,7 @@ when a sudo request has been granted.
         {
             "sudo_requested": true,
             "sudo_messages": [
-                "Root access required to update Moonraker's systemd service."
+                "Sudo password required to update Moonraker's systemd service."
             ]
         }
     ]
