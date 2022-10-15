@@ -1432,7 +1432,7 @@ class UhubctlDevice(PowerDevice):
 
         id = self.hub + "." + self.port
 
-        if id in ports
+        if id in ports:
             return ports[id]
 
         return
