@@ -1392,13 +1392,12 @@ class UhubctlDevice(PowerDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
 
-        self.bin_path = config.get("bin_path", "uhubctl")
         self.hub, self.port = tuple(config.get("port").split("."))
         self.initial_state = config.getboolean("initial_state", True)
 
     def _uhubctl(self, args: List[str] = []) -> Tuple:
         proc = subprocess.Popen(
-            [self.bin_path] + args,
+            ["uhubctl"] + args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
