@@ -394,7 +394,7 @@ class Machine:
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         for cmd in cmds:
             try:
-                await self.exec_sudo_command(cmd)
+                await self.exec_sudo_command(cmd, timeout=10.)
             except shell_cmd.error:
                 return False
         return True
