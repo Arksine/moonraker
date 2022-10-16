@@ -11,10 +11,8 @@ GCODE_PATH="${HOME}/gcode_files"
 MOOONRAKER_CONF="${CONFIG_PATH}/moonraker.conf"
 MOONRAKER_LOG="${LOG_PATH}/moonraker.log"
 
-[ ! -d "${DB_PATH}" ] && echo "Error: unable to find database: ${DB_PATH}" && exit 1
 [ ! -f "${MOOONRAKER_CONF}" ] && echo "Error: unable to find config: ${MOOONRAKER_CONF}" && exit 1
 [ ! -d "${LOG_PATH}" ] && echo "Error: unable to find log path: ${LOG_PATH}" && exit 1
-[ ! -d "${GCODE_PATH}" ] && echo "Error: unable to find gcode path: ${GCODE_PATH}" && exit 1
 
 sudo systemctl stop moonraker
 
@@ -24,8 +22,8 @@ sudo systemctl stop moonraker
 mkdir ${DATA_PATH}
 
 echo "Creating symbolic links..."
-ln -s ${DB_PATH} "$DATA_PATH/database"
-ln -s ${GCODE_PATH} "$DATA_PATH/gcodes"
+[ -f "${DB_PATH}/data.mdb" ] && ln -s ${DB_PATH} "$DATA_PATH/database"
+[ -d "${GCODE_PATH}" ] && ln -s ${GCODE_PATH} "$DATA_PATH/gcodes"
 ln -s ${LOG_PATH} "$DATA_PATH/logs"
 ln -s ${CONFIG_PATH} "$DATA_PATH/config"
 
