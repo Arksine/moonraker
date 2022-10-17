@@ -1433,6 +1433,7 @@ class InstallValidator:
                 f"Source path '{source_dir}' does not exist.  Falling "
                 f"back to default folder {subfolder}"
             )
+            return
         if not source_dir.is_dir():
             raise ValidationError(
                 f"Failed to link subfolder '{folder_name}' to source path "
