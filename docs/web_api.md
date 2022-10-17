@@ -3375,6 +3375,65 @@ Returns: Test results in the following format
 }
 ```
 
+### Notifier APIs
+The following APIs are available to view and tests notifiers.
+
+#### List Notifiers
+
+HTTP request:
+```http
+GET /server/notifiers/list
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.notifiers.list",
+    "id": 4654
+}
+```
+
+Returns:
+
+A list of configured notifiers:
+
+```json
+{
+    "notifiers": [
+        {
+            "name": "print_start",
+            "url": "tgram://{bottoken}/{ChatID}",
+            "events": [
+                "started"
+            ],
+            "body": "Your printer started printing '{event_args[1].filename}'",
+            "title": null,
+            "attach": null
+        },
+        {
+            "name": "print_complete",
+            "url": "tgram://{bottoken}/{ChatID}",
+            "events": [
+                "complete"
+            ],
+            "body": "Your printer completed printing '{event_args[1].filename}",
+            "title": null,
+            "attach": "http://192.168.1.100/webcam/?action=snapshot"
+        },
+        {
+            "name": "print_error",
+            "url": "tgram://{bottoken}/{ChatID}",
+            "events": [
+                "error"
+            ],
+            "body": "{event_args[1].message}",
+            "title": null,
+            "attach": "http://192.168.1.100/webcam/?action=snapshot"
+        }
+    ]
+}
+```
+
 ### Update Manager APIs
 The following endpoints are available when the `[update_manager]` component has
 been configured:
@@ -5061,6 +5120,46 @@ JSON-RPC request:
         "key": "{key}"
     },
     "id": 4654
+}
+```
+
+#### Test a notifier (debug)
+
+You can trigger a notifier manually using this endpoint.
+
+HTTP request:
+```http
+POST /server/notifiers/test?name=notifier_name
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.notifiers.test",
+    "params": {
+        "name": "notifier_name"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `name`: The name of the notifier to test.
+
+Returns: Test results in the following format
+
+```json
+{
+    "status": "success",
+    "stats": {
+        "print_duration": 0.0,
+        "total_duration": 0.0,
+        "filament_used": 0.0,
+        "filename": "notifier_test.gcode",
+        "state": "standby",
+        "message": ""
+    }
 }
 ```
 

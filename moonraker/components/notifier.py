@@ -22,6 +22,8 @@ from typing import (
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
+    from websockets import WebRequest
+    from .http_client import HttpClient
     from . import klippy_apis
 
     APIComp = klippy_apis.KlippyAPI
@@ -53,6 +55,8 @@ class Notifier:
                 self.server.add_warning(msg)
                 continue
             self.notifiers[notifier.get_name()] = notifier
+
+        self.register_endpoints(config)
 
     def register_remote_actions(self):
         self.server.register_remote_method("notify", self.notify_action)
@@ -95,6 +99,45 @@ class Notifier:
             "resumed",
             "job_state:resumed",
             config)
+
+    def register_endpoints(self, config: ConfigHelper):
+        self.server.register_endpoint(
+            "/server/notifiers/list", ["GET"], self._handle_notifier_list
+        )
+        self.server.register_debug_endpoint(
+            "/debug/notifiers/test", ["POST"], self._handle_notifier_test
+        )
+
+    async def _handle_notifier_list(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        return {"notifiers": self._list_notifiers()}
+
+    def _list_notifiers(self) -> List[Dict[str, Any]]:
+        return [notifier.as_dict() for notifier in self.notifiers.values()]
+
+    async def _handle_notifier_test(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+
+        name = web_request.get_str("name")
+        if name not in self.notifiers:
+            raise self.server.error(f"Notifier '{name}' not found", 404)
+        client: HttpClient = self.server.lookup_component("http_client")
+        notifier = self.notifiers[name]
+
+        kapis: APIComp = self.server.lookup_component('klippy_apis')
+        result: Dict[str, Any] = await kapis.query_objects(
+            {'print_stats': None}, default={})
+        print_stats = result.get('print_stats', {})
+        print_stats["filename"] = "notifier_test.gcode"  # Mock the filename
+
+        await notifier.notify(notifier.events[0], [print_stats, print_stats])
+
+        return {
+            "status": "success",
+            "stats": print_stats
+        }
 
 
 class NotifierEvent:
@@ -156,9 +199,20 @@ class NotifierInstance:
 
         self.apprise.add(self.url)
 
+    def as_dict(self):
+        return {
+            "name": self.name,
+            "url": self.config.get("url"),
+            "title": self.config.get("title", None),
+            "body": self.config.get("body", None),
+            "events": self.events,
+            "attach": self.attach
+        }
+
     async def notify(
         self, event_name: str, event_args: List, message: str = ""
     ) -> None:
+
         context = {
             "event_name": event_name,
             "event_args": event_args,
