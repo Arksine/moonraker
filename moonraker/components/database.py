@@ -93,8 +93,8 @@ class MoonrakerDatabase:
             except Exception:
                 same = False
             if not same and legacy_db.exists():
-                self.server.add_warning(
-                    f"Reverting to legacy database path: {db_path}"
+                logging.info(
+                    f"Reverting to legacy database path: {legacy_db}"
                 )
                 db_path = legacy_db
         if not db_path.is_dir():
