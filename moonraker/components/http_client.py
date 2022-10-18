@@ -27,7 +27,7 @@ from typing import (
     Any
 )
 if TYPE_CHECKING:
-    from moonraker import Server
+    from server import Server
     from confighelper import ConfigHelper
     from io import BufferedWriter
     StrOrPath = Union[str, pathlib.Path]

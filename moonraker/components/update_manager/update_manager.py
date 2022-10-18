@@ -37,7 +37,7 @@ from typing import (
     cast
 )
 if TYPE_CHECKING:
-    from moonraker import Server
+    from server import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
     from klippy_connection import KlippyConnection

@@ -30,7 +30,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from moonraker import Server
+    from server import Server
     from app import APIDefinition
     from klippy_connection import KlippyConnection as Klippy
     from .components.extensions import ExtensionManager

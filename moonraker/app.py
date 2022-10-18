@@ -48,7 +48,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
-    from moonraker import Server
+    from server import Server
     from eventloop import EventLoop
     from confighelper import ConfigHelper
     from klippy_connection import KlippyConnection as Klippy

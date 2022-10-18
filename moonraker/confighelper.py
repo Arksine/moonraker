@@ -34,7 +34,7 @@ from typing import (
     Type,
 )
 if TYPE_CHECKING:
-    from moonraker import Server
+    from server import Server
     from components.gpio import GpioFactory, GpioOutputPin
     from components.template import TemplateFactory
     from io import TextIOWrapper
