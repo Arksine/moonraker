@@ -399,6 +399,7 @@ class Server:
     async def _handle_info_request(self,
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
+        raw = web_request.get_boolean("raw", False)
         file_manager: Optional[FileManager] = self.lookup_component(
             'file_manager', None)
         reg_dirs = []
@@ -406,13 +407,19 @@ class Server:
             reg_dirs = file_manager.get_registered_dirs()
         wsm: WebsocketManager = self.lookup_component('websockets')
         mreqs = self.klippy_connection.missing_requirements
+        if raw:
+            warnings = list(self.warnings.values())
+        else:
+            warnings = [
+                w.replace("\n", "<br/>") for w in self.warnings.values()
+            ]
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
             'klippy_state': self.klippy_connection.state,
             'components': list(self.components.keys()),
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,
-            'warnings': list(self.warnings.values()),
+            'warnings': warnings,
             'websocket_count': wsm.get_count(),
             'moonraker_version': self.app_args['software_version'],
             'missing_klippy_requirements': mreqs,
