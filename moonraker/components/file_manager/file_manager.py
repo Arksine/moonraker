@@ -164,18 +164,16 @@ class FileManager:
 
     def validate_gcode_path(self, gc_path: str) -> None:
         gc_dir = pathlib.Path(gc_path).expanduser()
-        if not gc_dir.exists():
-            self.server.add_warning(
-                f"GCode path received from Klipper does not exist: {gc_dir}",
-                warn_id="gcode_path"
-            )
-            return
         if "gcodes" in self.file_paths:
             expected = self.file_paths["gcodes"]
-            if not gc_dir.samefile(self.file_paths["gcodes"]):
+            if not gc_dir.exists() or not gc_dir.samefile(expected):
                 self.server.add_warning(
-                    "GCode path received from Klipper does not match "
-                    f"expected path: {expected}",
+                    "GCode path received from Klipper does not match expected "
+                    "location.\n\n"
+                    f"Received: '{gc_dir}'\nExpected: '{expected}'\n\n"
+                    "Modify the [virtual_sdcard] section Klipper's "
+                    "configuration to correct this error.\n\n"
+                    f"[virtual_sdcard]\npath: {expected}",
                     warn_id="gcode_path"
                 )
             else:
