@@ -14,8 +14,8 @@ import threading
 import copy
 import logging
 from io import StringIO
-from utils import SentinelClass
-from components.template import JinjaTemplate
+from .utils import SentinelClass
+from .components.template import JinjaTemplate
 
 # Annotation imports
 from typing import (
@@ -34,9 +34,9 @@ from typing import (
     Type,
 )
 if TYPE_CHECKING:
-    from server import Server
-    from components.gpio import GpioFactory, GpioOutputPin
-    from components.template import TemplateFactory
+    from .server import Server
+    from .components.gpio import GpioFactory, GpioOutputPin
+    from .components.template import TemplateFactory
     from io import TextIOWrapper
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]

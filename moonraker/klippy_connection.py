@@ -13,7 +13,7 @@ import json
 import getpass
 import asyncio
 import pathlib
-from utils import ServerError, get_unix_peer_credentials
+from .utils import ServerError, get_unix_peer_credentials
 
 # Annotation imports
 from typing import (
@@ -29,14 +29,14 @@ from typing import (
     Tuple
 )
 if TYPE_CHECKING:
-    from moonraker import Server
-    from app import MoonrakerApp
-    from websockets import WebRequest, Subscribable
-    from confighelper import ConfigHelper
-    from components.klippy_apis import KlippyAPI
-    from components.file_manager.file_manager import FileManager
-    from components.machine import Machine
-    from components.job_state import JobState
+    from .server import Server
+    from .app import MoonrakerApp
+    from .websockets import WebRequest, Subscribable
+    from .confighelper import ConfigHelper
+    from .components.klippy_apis import KlippyAPI
+    from .components.file_manager.file_manager import FileManager
+    from .components.machine import Machine
+    from .components.job_state import JobState
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 # These endpoints are reserved for klippy/moonraker communication only and are

@@ -22,8 +22,8 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from utils import ServerError
-from websockets import (
+from .utils import ServerError
+from .websockets import (
     WebRequest,
     WebsocketManager,
     WebSocket,
@@ -48,17 +48,17 @@ from typing import (
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
-    from server import Server
-    from eventloop import EventLoop
-    from confighelper import ConfigHelper
-    from klippy_connection import KlippyConnection as Klippy
-    from components.file_manager.file_manager import FileManager
-    from components.announcements import Announcements
-    from components.machine import Machine
+    from .server import Server
+    from .eventloop import EventLoop
+    from .confighelper import ConfigHelper
+    from .klippy_connection import KlippyConnection as Klippy
+    from .components.file_manager.file_manager import FileManager
+    from .components.announcements import Announcements
+    from .components.machine import Machine
     from io import BufferedReader
-    import components.authorization
+    from .components.authorization import Authorization
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
-    AuthComp = Optional[components.authorization.Authorization]
+    AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
 
 

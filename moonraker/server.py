@@ -16,13 +16,13 @@ import time
 import socket
 import logging
 import signal
-import confighelper
 import asyncio
-from eventloop import EventLoop
-from app import MoonrakerApp
-from klippy_connection import KlippyConnection
-from utils import ServerError, SentinelClass, get_software_version
-from loghelper import LogManager
+from . import confighelper
+from .eventloop import EventLoop
+from .app import MoonrakerApp
+from .klippy_connection import KlippyConnection
+from .utils import ServerError, SentinelClass, get_software_version
+from .loghelper import LogManager
 
 # Annotation imports
 from typing import (
@@ -38,10 +38,10 @@ from typing import (
     TypeVar,
 )
 if TYPE_CHECKING:
-    from websockets import WebRequest, WebsocketManager
-    from components.file_manager.file_manager import FileManager
-    from components.machine import Machine
-    from components.extensions import ExtensionManager
+    from .websockets import WebRequest, WebsocketManager
+    from .components.file_manager.file_manager import FileManager
+    from .components.machine import Machine
+    from .components.extensions import ExtensionManager
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
 
@@ -253,7 +253,8 @@ class Server:
         if component_name in self.components:
             return self.components[component_name]
         try:
-            module = importlib.import_module("components." + component_name)
+            full_name = f"moonraker.components.{component_name}"
+            module = importlib.import_module(full_name)
             is_core = component_name in CORE_COMPONENTS
             fallback: Optional[str] = "server" if is_core else None
             config = config.getsection(component_name, fallback)
@@ -458,7 +459,38 @@ class Server:
             'files': cfg_file_list
         }
 
-def main(cmd_line_args: argparse.Namespace) -> None:
+def main(from_package: bool = True) -> None:
+    # Parse start arguments
+    parser = argparse.ArgumentParser(
+        description="Moonraker - Klipper API Server")
+    parser.add_argument(
+        "-d", "--datapath", default=None,
+        metavar='<data path>',
+        help="Location of Moonraker Data File Path"
+    )
+    parser.add_argument(
+        "-c", "--configfile", default=None, metavar='<configfile>',
+        help="Location of moonraker configuration file")
+    parser.add_argument(
+        "-l", "--logfile", default=None, metavar='<logfile>',
+        help="log file name and location")
+    parser.add_argument(
+        "-n", "--nologfile", action='store_true',
+        help="disable logging to a file")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Enable verbose logging"
+    )
+    parser.add_argument(
+        "-g", "--debug", action="store_true",
+        help="Enable Moonraker debug features"
+    )
+    parser.add_argument(
+        "-o", "--asyncio-debug", action="store_true",
+        help="Enable asyncio debug flag"
+    )
+    cmd_line_args = parser.parse_args()
+
     startup_warnings: List[str] = []
     dp: str = cmd_line_args.datapath or "~/printer_data"
     data_path = pathlib.Path(dp).expanduser().resolve()
@@ -481,7 +513,8 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         "verbose": cmd_line_args.verbose,
         "debug": cmd_line_args.debug,
         "asyncio_debug": cmd_line_args.asyncio_debug,
-        "is_backup_config": False
+        "is_backup_config": False,
+        "is_python_package": from_package
     }
 
     # Setup Logging
@@ -554,36 +587,3 @@ def main(cmd_line_args: argparse.Namespace) -> None:
     logging.info("Server Shutdown")
     log_manager.stop_logging()
     exit(estatus)
-
-
-if __name__ == '__main__':
-    # Parse start arguments
-    parser = argparse.ArgumentParser(
-        description="Moonraker - Klipper API Server")
-    parser.add_argument(
-        "-d", "--datapath", default=None,
-        metavar='<data path>',
-        help="Location of Moonraker Data File Path"
-    )
-    parser.add_argument(
-        "-c", "--configfile", default=None, metavar='<configfile>',
-        help="Location of moonraker configuration file")
-    parser.add_argument(
-        "-l", "--logfile", default=None, metavar='<logfile>',
-        help="log file name and location")
-    parser.add_argument(
-        "-n", "--nologfile", action='store_true',
-        help="disable logging to a file")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true",
-        help="Enable verbose logging"
-    )
-    parser.add_argument(
-        "-g", "--debug", action="store_true",
-        help="Enable Moonraker debug features"
-    )
-    parser.add_argument(
-        "-o", "--asyncio-debug", action="store_true",
-        help="Enable asyncio debug flag"
-    )
-    main(parser.parse_args())

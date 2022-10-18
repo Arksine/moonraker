@@ -23,9 +23,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from moonraker import Server
-    from websockets import WebRequest
-    from klippy_connection import KlippyConnection
+    from .server import Server
+    from .websockets import WebRequest
+    from .klippy_connection import KlippyConnection
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:
 # https://www.zopatista.com/python/2019/05/11/asyncio-logging/

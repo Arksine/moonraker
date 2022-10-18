@@ -12,7 +12,7 @@ import asyncio
 import copy
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
-from utils import ServerError, SentinelClass
+from .utils import ServerError, SentinelClass
 
 # Annotation imports
 from typing import (
@@ -30,18 +30,18 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from server import Server
-    from app import APIDefinition
-    from klippy_connection import KlippyConnection as Klippy
+    from .server import Server
+    from .app import APIDefinition
+    from .klippy_connection import KlippyConnection as Klippy
     from .components.extensions import ExtensionManager
-    import components.authorization
+    from .components.authorization import Authorization
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
     IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
-    AuthComp = Optional[components.authorization.Authorization]
+    AuthComp = Optional[Authorization]
 
 CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 SENTINEL = SentinelClass.get_instance()
