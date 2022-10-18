@@ -21,10 +21,10 @@ from typing import (
     Union
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from http_client import HttpClient
-    from components.database import MoonrakerDatabase
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
+    from .http_client import HttpClient
+    from .database import MoonrakerDatabase
 
 
 MOONLIGHT_URL = "https://arksine.github.io/moonlight"

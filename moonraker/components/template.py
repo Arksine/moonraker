@@ -17,8 +17,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from server import Server
-    from confighelper import ConfigHelper
+    from ..server import Server
+    from ..confighelper import ConfigHelper
     from .secrets import Secrets
 
 class TemplateFactory:

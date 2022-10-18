@@ -19,8 +19,8 @@ from typing import (
     Union,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
     from .klippy_apis import KlippyAPI
     from .file_manager.file_manager import FileManager
 

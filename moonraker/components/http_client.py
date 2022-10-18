@@ -12,7 +12,7 @@ import asyncio
 import pathlib
 import tempfile
 import logging
-from utils import ServerError
+from ..utils import ServerError
 from tornado.escape import url_escape, url_unescape
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from tornado.httputil import HTTPHeaders
@@ -27,8 +27,8 @@ from typing import (
     Any
 )
 if TYPE_CHECKING:
-    from server import Server
-    from confighelper import ConfigHelper
+    from ..server import Server
+    from ..confighelper import ConfigHelper
     from io import BufferedWriter
     StrOrPath = Union[str, pathlib.Path]
 

@@ -15,7 +15,7 @@ from io import BytesIO
 from functools import reduce
 from threading import Lock as ThreadLock
 import lmdb
-from utils import SentinelClass, ServerError
+from ..utils import SentinelClass, ServerError
 
 # Annotation imports
 from typing import (
@@ -33,8 +33,8 @@ from typing import (
     cast
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
     DBRecord = Union[int, float, bool, str, List[Any], Dict[str, Any]]
     DBType = Optional[DBRecord]
     _T = TypeVar("_T")

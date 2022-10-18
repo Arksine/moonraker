@@ -13,7 +13,7 @@ import re
 import time
 import zipfile
 from .app_deploy import AppDeploy
-from utils import verify_source
+from ...utils import verify_source
 
 # Annotation imports
 from typing import (
@@ -25,7 +25,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
     from .update_manager import CommandHelper
 
 RINFO_KEYS = [

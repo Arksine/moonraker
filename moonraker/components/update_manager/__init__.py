@@ -9,7 +9,7 @@ from . import update_manager as um
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
 
 def load_component(config: ConfigHelper) -> um.UpdateManager:
     return um.load_component(config)

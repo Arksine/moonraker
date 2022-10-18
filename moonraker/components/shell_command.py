@@ -10,7 +10,7 @@ import shlex
 import logging
 import signal
 import asyncio
-from utils import ServerError
+from ..utils import ServerError
 
 # Annotation imports
 from typing import (
@@ -24,7 +24,7 @@ from typing import (
     Set,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     OutputCallback = Optional[Callable[[bytes], None]]
 
 class ShellCommandError(ServerError):

@@ -28,10 +28,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from . import klippy_apis
-    APIComp = klippy_apis.KlippyAPI
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
 
 class OnOff(str, Enum):
     on: str = "on"
@@ -447,9 +445,15 @@ class WLED:
     # Full control of wled
     # state: True, False, "on", "off"
     # preset: wled preset (int) to use (ignored if state False or "Off")
-    async def set_wled_state(self: WLED, strip: str, state: str = None,
-                             preset: int = -1, brightness: int = -1,
-                             intensity: int = -1, speed: int = -1) -> None:
+    async def set_wled_state(
+        self: WLED,
+        strip: str,
+        state: Optional[str] = None,
+        preset: int = -1,
+        brightness: int = -1,
+        intensity: int = -1,
+        speed: int = -1
+    ) -> None:
         status = None
 
         if isinstance(state, bool):

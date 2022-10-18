@@ -21,8 +21,8 @@ import distro
 import tempfile
 import getpass
 import configparser
-from confighelper import FileSourceWrapper
-from utils import MOONRAKER_PATH
+from ..confighelper import FileSourceWrapper
+from ..utils import MOONRAKER_PATH
 
 # Annotation imports
 from typing import (
@@ -39,10 +39,10 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from app import MoonrakerApp
-    from klippy_connection import KlippyConnection
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
+    from ..app import MoonrakerApp
+    from ..klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager

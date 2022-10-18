@@ -23,8 +23,8 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from components import shell_command
+    from ...confighelper import ConfigHelper
+    from ...components import shell_command
     from .update_manager import CommandHelper
     from ..http_client import HttpClient
 

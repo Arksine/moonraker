@@ -18,7 +18,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     from ldap3.abstract.entry import Entry
 
 class MoonrakerLDAP:

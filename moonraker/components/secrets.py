@@ -15,7 +15,7 @@ from typing import (
     Any
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     from .file_manager.file_manager import FileManager
 
 class Secrets:

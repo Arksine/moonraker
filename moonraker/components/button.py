@@ -6,7 +6,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from confighelper import SentinelClass
+from ..confighelper import SentinelClass
 
 from typing import (
     TYPE_CHECKING,
@@ -14,9 +14,9 @@ from typing import (
     Dict
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     from .gpio import GpioFactory
-    from app import InternalTransport as ITransport
+    from ..app import InternalTransport as ITransport
 
 SENTINEL = SentinelClass.get_instance()
 

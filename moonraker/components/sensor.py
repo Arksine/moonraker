@@ -27,8 +27,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
+    from .mqtt import MQTTClient
 
 SENSOR_UPDATE_TIME = 1.0
 SENSOR_EVENT_NAME = "sensors:sensor_update"
@@ -40,12 +41,6 @@ class SensorConfiguration:
     name: str
     type: str
     source: str = ""
-
-
-if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-
-    from .mqtt import MQTTClient
 
 
 def _set_result(

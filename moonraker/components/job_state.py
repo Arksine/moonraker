@@ -16,7 +16,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     from .klippy_apis import KlippyAPI
 
 class JobState:

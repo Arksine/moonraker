@@ -18,7 +18,7 @@ import time
 from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
-from utils import MOONRAKER_PATH
+from ...utils import MOONRAKER_PATH
 
 # Annotation imports
 from typing import (
@@ -40,14 +40,14 @@ from typing import (
 
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from klippy_connection import KlippyConnection
-    from components import database
-    from components import klippy_apis
-    from components import shell_command
-    from components.job_queue import JobQueue
-    from components.job_state import JobState
+    from ...confighelper import ConfigHelper
+    from ...websockets import WebRequest
+    from ...klippy_connection import KlippyConnection
+    from .. import database
+    from .. import klippy_apis
+    from .. import shell_command
+    from ..job_queue import JobQueue
+    from ..job_state import JobState
     StrOrPath = Union[str, pathlib.Path]
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI

@@ -13,7 +13,7 @@ import pathlib
 import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
-from websockets import Subscribable, WebRequest, JsonRPC, APITransport
+from ..websockets import Subscribable, WebRequest, JsonRPC, APITransport
 
 # Annotation imports
 from typing import (
@@ -30,9 +30,9 @@ from typing import (
     Deque,
 )
 if TYPE_CHECKING:
-    from app import APIDefinition
-    from confighelper import ConfigHelper
-    from klippy_connection import KlippyConnection as Klippy
+    from ..app import APIDefinition
+    from ..confighelper import ConfigHelper
+    from ..klippy_connection import KlippyConnection as Klippy
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 

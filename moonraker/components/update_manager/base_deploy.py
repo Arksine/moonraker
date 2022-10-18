@@ -10,8 +10,8 @@ import time
 
 from typing import TYPE_CHECKING, Dict, Any, Optional
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from utils import ServerError
+    from ...confighelper import ConfigHelper
+    from ...utils import ServerError
     from .update_manager import CommandHelper
 
 class BaseDeploy:

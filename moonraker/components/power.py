@@ -27,15 +27,14 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
     from .machine import Machine
-    from . import klippy_apis
+    from .klippy_apis import KlippyAPI as APIComp
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
     from .http_client import HttpClient
     from klippy_connection import KlippyConnection
-    APIComp = klippy_apis.KlippyAPI
 
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:

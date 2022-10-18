@@ -24,7 +24,7 @@ from typing import (
     Tuple
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
     from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager

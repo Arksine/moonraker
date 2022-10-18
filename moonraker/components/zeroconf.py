@@ -14,7 +14,7 @@ from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ..confighelper import ConfigHelper
     from .machine import Machine
 
 

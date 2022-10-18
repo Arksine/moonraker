@@ -5,8 +5,8 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-from utils import SentinelClass
-from websockets import WebRequest, Subscribable
+from ..utils import SentinelClass
+from ..websockets import WebRequest, Subscribable
 
 # Annotation imports
 from typing import (
@@ -20,9 +20,9 @@ from typing import (
     Mapping,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from klippy_connection import KlippyConnection as Klippy
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
+    from ..klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     _T = TypeVar("_T")
 

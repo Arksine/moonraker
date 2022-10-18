@@ -15,8 +15,8 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager
     from .job_queue import JobQueue

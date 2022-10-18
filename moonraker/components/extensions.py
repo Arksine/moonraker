@@ -8,8 +8,8 @@ import asyncio
 import pathlib
 import logging
 import json
-from websockets import BaseSocketClient
-from utils import get_unix_peer_credentials
+from ..websockets import BaseSocketClient
+from ..utils import get_unix_peer_credentials
 
 # Annotation imports
 from typing import (
@@ -22,10 +22,10 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from moonraker import Server
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from klippy_connection import KlippyConnection as Klippy
+    from ..server import Server
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
+    from ..klippy_connection import KlippyConnection as Klippy
 
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 

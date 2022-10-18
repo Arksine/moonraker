@@ -12,22 +12,16 @@ import logging
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Type,
-    Optional,
     Dict,
     Any,
     List,
-    Union,
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebRequest
     from .http_client import HttpClient
-    from . import klippy_apis
-
-    APIComp = klippy_apis.KlippyAPI
-
+    from .klippy_apis import KlippyAPI as APIComp
 
 class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
