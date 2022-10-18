@@ -1632,6 +1632,12 @@ class InstallValidator:
             url, "high", "machine"
         )
         self.announcement_id = entry.get("entry_id", "")
+        gc_announcement = (
+            "!! ATTENTION: Moonraker requires sudo access to complete "
+            "the update.  Go to the following URL and provide your linux "
+            f"password: {url}"
+        )
+        self.server.send_event("server:gcode_response", gc_announcement)
 
     async def remove_announcement(self):
         if not self.announcement_id:
