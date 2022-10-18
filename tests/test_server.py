@@ -6,12 +6,12 @@ import socket
 import pathlib
 from collections import namedtuple
 
-from moonraker import CORE_COMPONENTS, Server, API_VERSION
-from moonraker import main as servermain
-from eventloop import EventLoop
-from utils import ServerError
-from confighelper import ConfigError
-from components.klippy_apis import KlippyAPI
+from moonraker.server import CORE_COMPONENTS, Server, API_VERSION
+from moonraker.server import main as servermain
+from moonraker.eventloop import EventLoop
+from moonraker.utils import ServerError
+from moonraker.confighelper import ConfigError
+from moonraker.components.klippy_apis import KlippyAPI
 from mocks import MockComponent, MockWebsocket
 
 from typing import (

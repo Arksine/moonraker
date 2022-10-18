@@ -5,8 +5,8 @@ import pytest_asyncio
 import asyncio
 import copy
 from inspect import isawaitable
-from moonraker import Server
-from utils import ServerError
+from moonraker.server import Server
+from moonraker.utils import ServerError
 from typing import TYPE_CHECKING, AsyncIterator, Dict, Any, Iterator
 
 if TYPE_CHECKING:

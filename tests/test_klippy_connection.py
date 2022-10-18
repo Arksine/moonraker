@@ -3,12 +3,12 @@ import pytest
 import asyncio
 import pathlib
 from typing import TYPE_CHECKING, Dict
-from moonraker import ServerError
-from klippy_connection import KlippyRequest
+from moonraker.server import ServerError
+from moonraker.klippy_connection import KlippyRequest
 from mocks import MockReader, MockWriter
 
 if TYPE_CHECKING:
-    from moonraker import Server
+    from server import Server
     from conftest import KlippyProcess
 
 @pytest.mark.usefixtures("klippy")
