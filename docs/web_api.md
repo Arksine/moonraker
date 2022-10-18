@@ -5129,13 +5129,13 @@ You can trigger a notifier manually using this endpoint.
 
 HTTP request:
 ```http
-POST /server/notifiers/test?name=notifier_name
+POST /debug/notifiers/test?name=notifier_name
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "server.notifiers.test",
+    "method": "debug.notifiers.test",
     "params": {
         "name": "notifier_name"
     },
