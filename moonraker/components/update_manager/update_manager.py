@@ -1176,6 +1176,7 @@ class WebClientDeploy(BaseDeploy):
         storage = await super().initialize()
         self.version: str = storage.get('version', "?")
         self.remote_version: str = storage.get('remote_version', "?")
+        self.last_error: str = storage.get('last_error', "")
         dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
         self.dl_info: Tuple[str, str, int] = cast(
             Tuple[str, str, int], tuple(dl_info))
@@ -1208,7 +1209,9 @@ class WebClientDeploy(BaseDeploy):
         else:
             resource = f"repos/{self.repo}/releases?per_page=1"
         client = self.cmd_helper.get_http_client()
-        resp = await client.github_api_request(resource, attempts=3)
+        resp = await client.github_api_request(
+            resource, attempts=3, retry_pause_time=.5
+        )
         release: Union[List[Any], Dict[str, Any]] = {}
         if resp.status_code == 304:
             if self.remote_version == "?" and resp.content:
@@ -1221,6 +1224,8 @@ class WebClientDeploy(BaseDeploy):
         elif resp.has_error():
             logging.info(
                 f"Client {self.repo}: Github Request Error - {resp.error}")
+            self.last_error = str(resp.error)
+            return
         else:
             release = resp.json()
         result: Dict[str, Any] = {}
@@ -1229,6 +1234,7 @@ class WebClientDeploy(BaseDeploy):
                 result = release[0]
         else:
             result = release
+        self.last_error = ""
         self.remote_version = result.get('name', "?")
         release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
         dl_url: str = release_asset.get('browser_download_url', "?")
@@ -1249,6 +1255,7 @@ class WebClientDeploy(BaseDeploy):
         storage['version'] = self.version
         storage['remote_version'] = self.remote_version
         storage['dl_info'] = list(self.dl_info)
+        storage['last_error'] = self.last_error
         return storage
 
     async def update(self) -> bool:
@@ -1328,7 +1335,8 @@ class WebClientDeploy(BaseDeploy):
             'remote_version': self.remote_version,
             'configured_type': self.type,
             'channel': self.channel,
-            'info_tags': self.info_tags
+            'info_tags': self.info_tags,
+            'last_error': self.last_error
         }
 
 def load_component(config: ConfigHelper) -> UpdateManager:
