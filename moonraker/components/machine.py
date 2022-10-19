@@ -390,7 +390,7 @@ class Machine:
 
     async def check_sudo_access(self, cmds: List[str] = []) -> bool:
         if not cmds:
-            cmds = ["systemctl --version", "ls /lost+found"]
+            cmds = ["systemctl --version", "ls /root"]
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         for cmd in cmds:
             try:
