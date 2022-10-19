@@ -122,8 +122,9 @@ class PrinterPower:
                 fname = "unknown"
                 if len(queue):
                     fname = queue[0].get("filename", "unknown")
-                logging.debug(
-                    f"Job '{fname}' queued, powering on device [{name}]")
+                logging.info(
+                    f"Power Device {name}: Job '{fname}' queued, powering on"
+                )
                 await dev.process_request("on")
 
     async def _handle_list_devices(self,
@@ -258,8 +259,15 @@ class PowerDevice:
             return
         self.need_scheduled_restart = False
         if state == "ready":
-            logging.info("Klipper reports 'ready', aborting FIRMWARE_RESTART")
+            logging.info(
+                f"Power Device {self.name}: Klipper reports 'ready', "
+                "aborting FIRMWARE_RESTART"
+            )
             return
+        logging.info(
+            f"Power Device {self.name}: Sending FIRMWARE_RESTART command "
+            "to Klippy"
+        )
         event_loop = self.server.get_event_loop()
         kapis: APIComp = self.server.lookup_component("klippy_apis")
         event_loop.delay_callback(
@@ -286,6 +294,10 @@ class PowerDevice:
         if self.bound_service is not None:
             machine_cmp: Machine = self.server.lookup_component("machine")
             action = "start" if self.state == "on" else "stop"
+            logging.info(
+                f"Power Device {self.name}: Performing {action} action "
+                f"on bound service {self.bound_service}"
+            )
             await machine_cmp.do_service_action(action, self.bound_service)
         if self.state == "on" and self.klipper_restart:
             self.need_scheduled_restart = True
@@ -437,6 +449,10 @@ class HTTPDevice(PowerDevice):
                     ):
                         new_state = "on" if self.initial_state else "off"
                         if new_state != state:
+                            logging.info(
+                                f"Power Device {self.name}: setting initial "
+                                f"state to {new_state}"
+                            )
                             await self.set_power(new_state)
                     self.notify_power_changed()
                     return
@@ -600,6 +616,10 @@ class KlipperDevice(PowerDevice):
             ):
                 new_state = "on" if self.initial_state else "off"
                 if new_state != self.state:
+                    logging.info(
+                        f"Power Device {self.name}: setting initial "
+                        f"state to {new_state}"
+                    )
                     await self.set_power(new_state)
             self.notify_power_changed()
 
@@ -875,6 +895,10 @@ class TPLinkSmartPlug(PowerDevice):
                     ):
                         new_state = "on" if self.initial_state else "off"
                         if new_state != self.state:
+                            logging.info(
+                                f"Power Device {self.name}: setting initial "
+                                f"state to {new_state}"
+                            )
                             await self.set_power(new_state)
                     self.notify_power_changed()
                     return
@@ -1254,6 +1278,10 @@ class MQTTDevice(PowerDevice):
             ):
                 new_state = "on" if self.initial_state else "off"
                 if new_state != self.state:
+                    logging.info(
+                        f"Power Device {self.name}: setting initial "
+                        f"state to {new_state}"
+                    )
                     await self.set_power(new_state)
                 # Don't reset on next connection
                 self.initial_state = None
