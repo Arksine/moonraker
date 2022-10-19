@@ -285,7 +285,7 @@ class GitRepo:
             'commits_behind', [])
         self.tag_data: Dict[str, Any] = storage.get('tag_data', {})
         self.diverged: bool = storage.get("diverged", False)
-        self.repo_veriified: bool = storage.get(
+        self.repo_verified: bool = storage.get(
             "verified", storage.get("is_valid", False)
         )
 
@@ -309,7 +309,7 @@ class GitRepo:
             'commits_behind': self.commits_behind,
             'tag_data': self.tag_data,
             'diverged': self.diverged,
-            'verified': self.repo_veriified
+            'verified': self.repo_verified
         }
 
     async def initialize(self, need_fetch: bool = True) -> None:
@@ -664,7 +664,7 @@ class GitRepo:
         if self.diverged:
             invalids.append("Repo has diverged from remote")
         if not invalids:
-            self.repo_veriified = True
+            self.repo_verified = True
         return invalids
 
     def _verify_repo(self, check_remote: bool = False) -> None:
@@ -763,7 +763,7 @@ class GitRepo:
 
     async def clone(self) -> None:
         async with self.git_operation_lock:
-            if not self.repo_veriified:
+            if not self.repo_verified:
                 raise self.server.error(
                     "Repo has not been verified, clone aborted"
                 )
@@ -924,7 +924,11 @@ class GitRepo:
                 return
         await self._check_lock_file_exists(remove=True)
 
-    async def _repair_loose_objects(self) -> bool:
+    async def _repair_loose_objects(self, notify: bool = False) -> bool:
+        if notify:
+            self.cmd_helper.notify_update_response(
+                "Attempting to repair loose objects..."
+            )
         try:
             await self.cmd_helper.run_cmd_with_response(
                 "find .git/objects/ -type f -empty | xargs rm",
@@ -933,8 +937,16 @@ class GitRepo:
                 "fetch --all -p", retries=1, fix_loose=False)
             await self._run_git_cmd("fsck --full", timeout=300., retries=1)
         except Exception:
-            logging.exception("Attempt to repair loose objects failed")
+            msg = (
+                "Attempt to repair loose objects failed, "
+                "hard recovery is required"
+            )
+            logging.exception(msg)
+            if notify:
+                self.cmd_helper.notify_update_response(msg)
             return False
+        if notify:
+            self.cmd_helper.notify_update_response("Loose objects repaired")
         return True
 
     async def _run_git_cmd_async(self,
@@ -974,7 +986,7 @@ class GitRepo:
                 return
             elif fix_loose:
                 if GIT_OBJ_ERR in "\n".join(self.git_messages):
-                    ret = await self._repair_loose_objects()
+                    ret = await self._repair_loose_objects(notify=True)
                     if ret:
                         break
                     # since the attept to repair failed, bypass retries
