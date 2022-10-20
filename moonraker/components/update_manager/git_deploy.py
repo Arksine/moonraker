@@ -159,7 +159,7 @@ class GitDeploy(AppDeploy):
                 await self.repo.reset()
             else:
                 await self.repo.pull()
-        except Exception:
+        except Exception as e:
             if self.repo.repo_corrupt:
                 self._is_valid = False
                 self._save_state()
@@ -167,7 +167,7 @@ class GitDeploy(AppDeploy):
                 event_loop.delay_callback(
                     .2, self.cmd_helper.notify_update_refreshed
                 )
-            raise self.log_exc("Error updating git repo")
+            raise self.log_exc(str(e))
 
     async def _update_dependencies(self,
                                    inst_hash: Optional[str],

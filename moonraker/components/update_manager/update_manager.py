@@ -285,9 +285,7 @@ class UpdateManager:
                     await updater.update()
             except Exception as e:
                 self.cmd_helper.notify_update_response(
-                    f"Error updating {app}")
-                self.cmd_helper.notify_update_response(
-                    str(e), is_complete=True)
+                    f"Error updating {app}: {e}", is_complete=True)
                 raise
             finally:
                 self.cmd_helper.clear_update_info()
@@ -352,11 +350,9 @@ class UpdateManager:
                 self.cmd_helper.notify_update_response(
                     "Full Update Complete", is_complete=True)
             except Exception as e:
-                self.cmd_helper.notify_update_response(
-                    f"Error updating {app_name}")
                 self.cmd_helper.set_full_complete(True)
                 self.cmd_helper.notify_update_response(
-                    str(e), is_complete=True)
+                    f"Error updating {app_name}: {e}", is_complete=True)
             finally:
                 self.cmd_helper.clear_update_info()
             return "ok"
