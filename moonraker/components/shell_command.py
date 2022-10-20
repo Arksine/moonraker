@@ -265,7 +265,7 @@ class ShellCommand:
                 await asyncio.sleep(.5)
             self.factory.remove_running_command(self)
             raise ShellCommandError(
-                f"Error running shell command: '{self.command}'",
+                f"Error running shell command: '{self.name}'",
                 self.return_code, stdout, stderr)
 
     async def _create_subprocess(self,
