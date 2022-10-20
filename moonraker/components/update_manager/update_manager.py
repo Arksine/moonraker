@@ -26,6 +26,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Awaitable,
+    Callable,
     Optional,
     Set,
     Tuple,
@@ -76,7 +77,7 @@ class UpdateManager:
             config, self.channel
         )
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
-        self.cmd_helper = CommandHelper(config)
+        self.cmd_helper = CommandHelper(config, self.get_updaters)
         self.updaters: Dict[str, BaseDeploy] = {}
         if config.getboolean('enable_system_updates', True):
             self.updaters['system'] = PackageDeploy(config, self.cmd_helper)
@@ -165,6 +166,9 @@ class UpdateManager:
         self.server.register_event_handler(
             "server:klippy_identified", self._set_klipper_repo)
 
+    def get_updaters(self) -> Dict[str, BaseDeploy]:
+        return self.updaters
+
     async def component_init(self) -> None:
         # Prune stale data from the database
         umdb = self.cmd_helper.get_umdb()
@@ -218,13 +222,7 @@ class UpdateManager:
             await self.updaters['klipper'].initialize()
             await self.updaters['klipper'].refresh()
         if notify:
-            vinfo: Dict[str, Any] = {}
-            for name, updater in self.updaters.items():
-                vinfo[name] = updater.get_update_status()
-            uinfo = self.cmd_helper.get_rate_limit_stats()
-            uinfo['version_info'] = vinfo
-            uinfo['busy'] = self.cmd_helper.is_update_busy()
-            self.server.send_event("update_manager:update_refreshed", uinfo)
+            self.cmd_helper.notify_update_refreshed()
 
     async def _check_klippy_printing(self) -> bool:
         kapi: APIComp = self.server.lookup_component('klippy_apis')
@@ -243,7 +241,6 @@ class UpdateManager:
                 # Don't Refresh during a print
                 logging.info("Klippy is printing, auto refresh aborted")
                 return eventtime + UPDATE_REFRESH_INTERVAL
-        vinfo: Dict[str, Any] = {}
         need_notify = False
         machine: Machine = self.server.lookup_component("machine")
         if machine.validation_enabled():
@@ -259,17 +256,13 @@ class UpdateManager:
                     if updater.needs_refresh():
                         await updater.refresh()
                         need_notify = True
-                    vinfo[name] = updater.get_update_status()
             except Exception:
                 logging.exception("Unable to Refresh Status")
                 return eventtime + UPDATE_REFRESH_INTERVAL
             finally:
                 self.initial_refresh_complete = True
         if need_notify:
-            uinfo = self.cmd_helper.get_rate_limit_stats()
-            uinfo['version_info'] = vinfo
-            uinfo['busy'] = self.cmd_helper.is_update_busy()
-            self.server.send_event("update_manager:update_refreshed", uinfo)
+            self.cmd_helper.notify_update_refreshed()
         return eventtime + UPDATE_REFRESH_INTERVAL
 
     async def _handle_update_request(self,
@@ -437,8 +430,8 @@ class UpdateManager:
         if check_refresh:
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
-                .2, self.server.send_event,
-                "update_manager:update_refreshed", ret)
+                .2, self.cmd_helper.notify_update_refreshed
+            )
         return ret
 
     async def _handle_repo_recovery(self,
@@ -474,8 +467,13 @@ class UpdateManager:
             self.refresh_timer.stop()
 
 class CommandHelper:
-    def __init__(self, config: ConfigHelper) -> None:
+    def __init__(
+        self,
+        config: ConfigHelper,
+        get_updater_cb: Callable[[], Dict[str, BaseDeploy]]
+    ) -> None:
         self.server = config.get_server()
+        self.get_updaters = get_updater_cb
         self.http_client: HttpClient
         self.http_client = self.server.lookup_component("http_client")
         config.getboolean('enable_repo_debug', False, deprecate=True)
@@ -587,6 +585,15 @@ class CommandHelper:
         result = await scmd.run_with_response(timeout, retries,
                                               sig_idx=sig_idx)
         return result
+
+    def notify_update_refreshed(self):
+        vinfo: Dict[str, Any] = {}
+        for name, updater in self.get_updaters().items():
+            vinfo[name] = updater.get_update_status()
+        uinfo = self.get_rate_limit_stats()
+        uinfo['version_info'] = vinfo
+        uinfo['busy'] = self.is_update_busy()
+        self.server.send_event("update_manager:update_refreshed", uinfo)
 
     def notify_update_response(self,
                                resp: Union[str, bytes],

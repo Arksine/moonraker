@@ -160,6 +160,13 @@ class GitDeploy(AppDeploy):
             else:
                 await self.repo.pull()
         except Exception:
+            if self.repo.repo_corrupt:
+                self._is_valid = False
+                self._save_state()
+                event_loop = self.server.get_event_loop()
+                event_loop.delay_callback(
+                    .2, self.cmd_helper.notify_update_refreshed
+                )
             raise self.log_exc("Error updating git repo")
 
     async def _update_dependencies(self,
@@ -219,7 +226,6 @@ GIT_MAX_LOG_CNT = 100
 GIT_LOG_FMT = (
     "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
 )
-GIT_OBJ_ERR = "fatal: loose object"
 GIT_REF_FMT = (
     "'%(if)%(*objecttype)%(then)%(*objecttype) (*objectname)"
     "%(else)%(objecttype) %(objectname)%(end) %(refname)'"
@@ -288,6 +294,7 @@ class GitRepo:
         self.repo_verified: bool = storage.get(
             "verified", storage.get("is_valid", False)
         )
+        self.repo_corrupt: bool = storage.get('corrupt', False)
 
     def get_persistent_data(self) -> Dict[str, Any]:
         return {
@@ -309,7 +316,8 @@ class GitRepo:
             'commits_behind': self.commits_behind,
             'tag_data': self.tag_data,
             'diverged': self.diverged,
-            'verified': self.repo_verified
+            'verified': self.repo_verified,
+            'corrupt': self.repo_corrupt
         }
 
     async def initialize(self, need_fetch: bool = True) -> None:
@@ -562,13 +570,15 @@ class GitRepo:
 
     async def update_repo_status(self) -> bool:
         async with self.git_operation_lock:
+            self.valid_git_repo = False
+            if self.repo_corrupt:
+                return False
             if not self.git_path.joinpath(".git").exists():
                 logging.info(
                     f"Git Repo {self.alias}: path '{self.git_path}'"
                     " is not a valid git repo")
                 return False
             await self._wait_for_lock_release()
-            self.valid_git_repo = False
             retries = 3
             while retries:
                 self.git_messages.clear()
@@ -579,9 +589,8 @@ class GitRepo:
                     retries -= 1
                     resp = None
                     # Attempt to recover from "loose object" error
-                    if retries and GIT_OBJ_ERR in "\n".join(self.git_messages):
-                        ret = await self._repair_loose_objects()
-                        if not ret:
+                    if retries and self.repo_corrupt:
+                        if not await self._repair_loose_objects():
                             # Since we are unable to recover, immediately
                             # return
                             return False
@@ -620,10 +629,19 @@ class GitRepo:
                 "merge-base --is-ancestor HEAD "
                 f"{self.git_remote}/{self.git_branch}"
             )
-            try:
-                await self._run_git_cmd(cmd, retries=1)
-            except self.cmd_helper.scmd_error:
-                return True
+            for _ in range(3):
+                try:
+                    await self._run_git_cmd(
+                        cmd, retries=1, corrupt_msg="error: "
+                    )
+                except self.cmd_helper.scmd_error as err:
+                    if err.return_code == 1:
+                        return True
+                    if self.repo_corrupt:
+                        raise
+                else:
+                    break
+                await asyncio.sleep(.5)
             return False
 
     def log_repo_info(self) -> None:
@@ -684,6 +702,7 @@ class GitRepo:
             if self.is_beta:
                 reset_cmd = f"reset --hard {self.upstream_commit}"
             await self._run_git_cmd(reset_cmd, retries=2)
+            self.repo_corrupt = False
 
     async def fetch(self) -> None:
         self._verify_repo(check_remote=True)
@@ -784,6 +803,7 @@ class GitRepo:
                 await event_loop.run_in_thread(shutil.rmtree, self.git_path)
             await event_loop.run_in_thread(
                 shutil.move, str(self.backup_path), str(self.git_path))
+            self.repo_corrupt = False
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Git Clone Complete")
 
@@ -865,7 +885,8 @@ class GitRepo:
             'commits_behind': self.commits_behind,
             'git_messages': self.git_messages,
             'full_version_string': self.full_version_string,
-            'pristine': not self.dirty
+            'pristine': not self.dirty,
+            'corrupt': self.repo_corrupt
         }
 
     def get_version(self, upstream: bool = False) -> Tuple[Any, ...]:
@@ -947,6 +968,7 @@ class GitRepo:
             return False
         if notify:
             self.cmd_helper.notify_update_response("Loose objects repaired")
+        self.repo_corrupt = False
         return True
 
     async def _run_git_cmd_async(self,
@@ -984,11 +1006,13 @@ class GitRepo:
             if ret == 0:
                 self.git_messages.clear()
                 return
-            elif fix_loose:
-                if GIT_OBJ_ERR in "\n".join(self.git_messages):
-                    ret = await self._repair_loose_objects(notify=True)
-                    if ret:
-                        break
+            elif self.repo_corrupt and fix_loose:
+                if await self._repair_loose_objects(notify=True):
+                    # Only attempt to repair loose objects once. Re-run
+                    # the command once.
+                    fix_loose = False
+                    retries = 2
+                else:
                     # since the attept to repair failed, bypass retries
                     # and immediately raise an exception
                     raise self.server.error(
@@ -1002,6 +1026,8 @@ class GitRepo:
         self.fetch_input_recd = True
         out = output.decode().strip()
         if out:
+            if out.startswith("fatal: "):
+                self.repo_corrupt = True
             self.git_messages.append(out)
             self.cmd_helper.notify_update_response(out)
             logging.debug(
@@ -1034,7 +1060,8 @@ class GitRepo:
                            git_args: str,
                            timeout: float = 20.,
                            retries: int = 5,
-                           env: Optional[Dict[str, str]] = None
+                           env: Optional[Dict[str, str]] = None,
+                           corrupt_msg: str = "fatal: "
                            ) -> str:
         try:
             return await self.cmd_helper.run_cmd_with_response(
@@ -1043,8 +1070,16 @@ class GitRepo:
         except self.cmd_helper.scmd_error as e:
             stdout = e.stdout.decode().strip()
             stderr = e.stderr.decode().strip()
+            msg_lines: List[str] = []
             if stdout:
+                msg_lines.extend(stdout.split("\n"))
                 self.git_messages.append(stdout)
             if stderr:
+                msg_lines.extend(stdout.split("\n"))
                 self.git_messages.append(stderr)
+            for line in msg_lines:
+                line = line.strip().lower()
+                if line.startswith(corrupt_msg):
+                    self.repo_corrupt = True
+                    break
             raise
