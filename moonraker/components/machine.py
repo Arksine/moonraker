@@ -1226,6 +1226,14 @@ class InstallValidator:
                 msg += ", force is enabled"
             logging.info(msg)
             self.validation_enabled = self.force_validation
+        is_bkp_cfg = self.server.get_app_args().get("is_backup_config", False)
+        if self.validation_enabled and is_bkp_cfg:
+            self.server.add_warning(
+                "Backup configuration loaded, aborting install validation. "
+                "Please correct the configuration issue and restart moonraker."
+            )
+            self.validation_enabled = False
+            return
 
     async def perform_validation(self) -> bool:
         db: MoonrakerDatabase = self.server.lookup_component("database")

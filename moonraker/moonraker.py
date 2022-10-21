@@ -469,7 +469,8 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         "startup_warnings": startup_warnings,
         "verbose": cmd_line_args.verbose,
         "debug": cmd_line_args.debug,
-        "asyncio_debug": cmd_line_args.asyncio_debug
+        "asyncio_debug": cmd_line_args.asyncio_debug,
+        "is_backup_config": False
     }
 
     # Setup Logging
@@ -502,6 +503,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
                 estatus = 1
                 break
             app_args["config_file"] = backup_cfg
+            app_args["is_backup_config"] = True
             warn_list = list(startup_warnings)
             app_args["startup_warnings"] = warn_list
             warn_list.append(
@@ -531,6 +533,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         if alt_config_loaded:
             app_args["config_file"] = cfg_file
             app_args["startup_warnings"] = startup_warnings
+            app_args["is_backup_config"] = False
             alt_config_loaded = False
         event_loop.close()
         # Since we are running outside of the the server
