@@ -1686,7 +1686,7 @@ pin: gpiochip0/gpio26
 #      ^!gpiochip0/gpio26
 #      ~!gpiochip0/gpio26
 #   This parameter must be provided
-min_event_time: .05
+minimum_event_time: .05
 #   The minimum time (in seconds) between events to trigger a response.  This is
 #   is used to debounce buttons.  This value must be at least .01 seconds.
 #   The default is .05 seconds (50 milliseconds).
