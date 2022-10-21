@@ -13,7 +13,7 @@ MOONRAKER_LOG="${LOG_PATH}/moonraker.log"
 ALIAS="moonraker"
 
 # Parse command line arguments
-while getopts "c:l:d:a:m:" arg; do
+while getopts "c:l:d:a:m:g:" arg; do
     case $arg in
         c)
             MOONRAKER_CONF=$OPTARG
@@ -34,6 +34,10 @@ while getopts "c:l:d:a:m:" arg; do
         m)
             DB_PATH=$OPTARG
             [ ! -f "${DB_PATH}/data.mdb" ] && echo "No valid database found at ${DB_PATH}" && exit 1
+            ;;
+        g)
+            GCODE_PATH=$OPTARG
+            [ ! -d "${GCODE_PATH}" ] && echo "No GCode Path found at ${GCODE_PATH}" && exit 1
             ;;
     esac
 done
