@@ -46,6 +46,15 @@ class MoonrakerLDAP:
                     "required when 'bind_dn' is provided"
                 )
             self.bind_password = bind_pass_template.render()
+        self.user_filter: Optional[str] = None
+        user_filter_template = config.gettemplate('user_filter', None)
+        if user_filter_template is not None:
+            self.user_filter = user_filter_template.render()
+            if "USERNAME" not in self.user_filter:
+                raise config.error(
+                    "Section [ldap]: Option 'user_filter' is "
+                    "is missing required token USERNAME"
+                )
         self.lock = asyncio.Lock()
 
     async def authenticate_ldap_user(self, username, password) -> None:
@@ -67,6 +76,8 @@ class MoonrakerLDAP:
         }
         attr_name = "sAMAccountName" if self.active_directory else "uid"
         ldfilt = f"(&(objectClass=Person)({attr_name}={username}))"
+        if self.user_filter:
+            ldfilt = self.user_filter.replace("USERNAME", username)
         try:
             with ldap3.Connection(server, **conn_args) as conn:
                 ret = conn.search(
