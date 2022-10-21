@@ -1217,11 +1217,15 @@ class InstallValidator:
         install_ver: int = await db.get_item(
             "moonraker", "validate_install.install_version", 0
         )
-        if INSTALL_VERSION <= install_ver and not self.force_validation:
-            logging.debug("Installation version in database up to date")
-            self.validation_enabled = False
-        else:
+        if install_ver < INSTALL_VERSION:
+            logging.info("Validation version in database out of date")
             self.validation_enabled = True
+        else:
+            msg = "Installation version in database up to date"
+            if self.force_validation:
+                msg += ", force is enabled"
+            logging.info(msg)
+            self.validation_enabled = self.force_validation
 
     async def perform_validation(self) -> bool:
         db: MoonrakerDatabase = self.server.lookup_component("database")
