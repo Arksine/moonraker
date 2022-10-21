@@ -33,7 +33,7 @@ while getopts "c:l:d:a:m:" arg; do
             ;;
         m)
             DB_PATH=$OPTARG
-            [ -f "${DB_PATH}/data.mdb" ] && echo "No valid database found at ${DB_PATH}" && exit 1
+            [ ! -f "${DB_PATH}/data.mdb" ] && echo "No valid database found at ${DB_PATH}" && exit 1
             ;;
     esac
 done
@@ -41,7 +41,7 @@ done
 [ ! -f "${MOOONRAKER_CONF}" ] && echo "Error: unable to find config: ${MOOONRAKER_CONF}" && exit 1
 [ ! -d "${LOG_PATH}" ] && echo "Error: unable to find log path: ${LOG_PATH}" && exit 1
 
-sudo systemctl stop moonraker
+sudo systemctl stop ${ALIAS}
 
 [ -d "${DATA_PATH_BKP}" ] && rm -rf ${DATA_PATH_BKP}
 [ -d "${DATA_PATH}" ] && echo "Moving broken datapath to ${DATA_PATH_BKP}" && mv ${DATA_PATH} ${DATA_PATH_BKP}
