@@ -198,7 +198,8 @@ class GpioOutputPin(GpioBase):
         self.line.set_value(self.value)
 
 
-MAX_ERRORS = 20
+MAX_ERRORS = 50
+ERROR_RESET_TIME = 5.
 
 class GpioEvent(GpioBase):
     EVENT_FALLING_EDGE = 0
@@ -217,6 +218,7 @@ class GpioEvent(GpioBase):
         self.min_evt_time = 0.
         self.last_event_time = 0.
         self.error_count = 0
+        self.last_error_reset = 0.
         self.started = False
 
     @classmethod
@@ -259,7 +261,7 @@ class GpioEvent(GpioBase):
         eventtime = self.event_loop.get_loop_time()
         evt_duration = eventtime - self.last_event_time
         if last_val == self.value or evt_duration < self.min_evt_time:
-            self._increment_error()
+            self._increment_error(eventtime)
             return
         self.last_event_time = eventtime
         self.error_count = 0
@@ -267,7 +269,10 @@ class GpioEvent(GpioBase):
         if ret is not None:
             self.event_loop.create_task(ret)
 
-    def _increment_error(self) -> None:
+    def _increment_error(self, eventtime: float) -> None:
+        if eventtime - self.last_error_reset > ERROR_RESET_TIME:
+            self.error_count = 0
+            self.last_error_reset = eventtime
         self.error_count += 1
         if self.error_count >= MAX_ERRORS:
             self.stop()
