@@ -10,6 +10,33 @@ LOG_PATH="${HOME}/klipper_logs"
 GCODE_PATH="${HOME}/gcode_files"
 MOOONRAKER_CONF="${CONFIG_PATH}/moonraker.conf"
 MOONRAKER_LOG="${LOG_PATH}/moonraker.log"
+ALIAS="moonraker"
+
+# Parse command line arguments
+while getopts "c:l:d:a:m:" arg; do
+    case $arg in
+        c)
+            MOONRAKER_CONF=$OPTARG
+            CONFIG_PATH="$( dirname $OPTARG )"
+            ;;
+        l)
+            MOONRAKER_LOG=$OPTARG
+            LOG_PATH="$( dirname $OPTARG )"
+            ;;
+        d)
+            DATA_PATH=$OPTARG
+            dpbase="$( basename $OPTARG )"
+            DATA_PATH_BKP="${HOME}/.broken_${dpbase}"
+            ;;
+        a)
+            ALIAS=$OPTARG
+            ;;
+        m)
+            DB_PATH=$OPTARG
+            [ -f "${DB_PATH}/data.mdb" ] && echo "No valid database found at ${DB_PATH}" && exit 1
+            ;;
+    esac
+done
 
 [ ! -f "${MOOONRAKER_CONF}" ] && echo "Error: unable to find config: ${MOOONRAKER_CONF}" && exit 1
 [ ! -d "${LOG_PATH}" ] && echo "Error: unable to find log path: ${LOG_PATH}" && exit 1
@@ -27,8 +54,8 @@ echo "Creating symbolic links..."
 ln -s ${LOG_PATH} "$DATA_PATH/logs"
 ln -s ${CONFIG_PATH} "$DATA_PATH/config"
 
-~/moonraker-env/bin/python -mlmdb -e ${DB_PATH} -d moonraker edit --delete=validate_install
+[ -f "${DB_PATH}/data.mdb" ] && ~/moonraker-env/bin/python -mlmdb -e ${DB_PATH} -d moonraker edit --delete=validate_install
 
-echo "Running install script"
+echo "Running Moonraker install script..."
 
-~/moonraker/scripts/install-moonraker.sh -f -c ${MOOONRAKER_CONF} -l ${MOONRAKER_LOG}
+~/moonraker/scripts/install-moonraker.sh -f -a ${ALIAS} -d ${DATA_PATH} -c ${MOOONRAKER_CONF} -l ${MOONRAKER_LOG}
