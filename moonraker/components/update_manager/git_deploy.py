@@ -401,6 +401,8 @@ class GitRepo:
             raise
         else:
             self.initialized = True
+            # If no exception was raised assume the repo is not corrupt
+            self.repo_corrupt = False
         finally:
             self.init_evt.set()
             self.init_evt = None
@@ -571,8 +573,6 @@ class GitRepo:
     async def update_repo_status(self) -> bool:
         async with self.git_operation_lock:
             self.valid_git_repo = False
-            if self.repo_corrupt:
-                return False
             if not self.git_path.joinpath(".git").exists():
                 logging.info(
                     f"Git Repo {self.alias}: path '{self.git_path}'"
