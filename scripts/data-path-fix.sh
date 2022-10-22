@@ -8,7 +8,7 @@ DB_PATH="${HOME}/.moonraker_database"
 CONFIG_PATH="${HOME}/klipper_config"
 LOG_PATH="${HOME}/klipper_logs"
 GCODE_PATH="${HOME}/gcode_files"
-MOOONRAKER_CONF="${CONFIG_PATH}/moonraker.conf"
+MOONRAKER_CONF="${CONFIG_PATH}/moonraker.conf"
 MOONRAKER_LOG="${LOG_PATH}/moonraker.log"
 ALIAS="moonraker"
 
@@ -42,7 +42,7 @@ while getopts "c:l:d:a:m:g:" arg; do
     esac
 done
 
-[ ! -f "${MOOONRAKER_CONF}" ] && echo "Error: unable to find config: ${MOOONRAKER_CONF}" && exit 1
+[ ! -f "${MOONRAKER_CONF}" ] && echo "Error: unable to find config: ${MOONRAKER_CONF}" && exit 1
 [ ! -d "${LOG_PATH}" ] && echo "Error: unable to find log path: ${LOG_PATH}" && exit 1
 
 sudo systemctl stop ${ALIAS}
@@ -62,4 +62,4 @@ ln -s ${CONFIG_PATH} "$DATA_PATH/config"
 
 echo "Running Moonraker install script..."
 
-~/moonraker/scripts/install-moonraker.sh -f -a ${ALIAS} -d ${DATA_PATH} -c ${MOOONRAKER_CONF} -l ${MOONRAKER_LOG}
+~/moonraker/scripts/install-moonraker.sh -f -a ${ALIAS} -d ${DATA_PATH} -c ${MOONRAKER_CONF} -l ${MOONRAKER_LOG}
