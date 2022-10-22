@@ -15,6 +15,7 @@ import confighelper
 import asyncio
 import socket
 import struct
+import pathlib
 from utils import ServerError
 
 # Annotation imports
@@ -46,8 +47,9 @@ UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 class KlippyConnection:
     def __init__(self, config: confighelper.ConfigHelper) -> None:
         self.server = config.get_server()
-        self.uds_address: str = config.get(
+        uds_addr: str = config.get(
             'klippy_uds_address', "/tmp/klippy_uds")
+        self.uds_address = pathlib.Path(uds_addr).expanduser().resolve()
         self.writer: Optional[asyncio.StreamWriter] = None
         self.connection_mutex: asyncio.Lock = asyncio.Lock()
         self.event_loop = self.server.get_event_loop()
@@ -217,9 +219,9 @@ class KlippyConnection:
                 await asyncio.sleep(INIT_TIME)
                 if self.closing or not self.server.is_running():
                     return False
-                if not os.path.exists(self.uds_address):
+                if not self.uds_address.exists():
                     continue
-                if not os.access(self.uds_address, os.R_OK | os.W_OK):
+                if not os.access(str(self.uds_address), os.R_OK | os.W_OK):
                     if self.log_no_access:
                         user = getpass.getuser()
                         logging.info(
@@ -231,7 +233,7 @@ class KlippyConnection:
                 self.log_no_access = True
                 try:
                     reader, writer = await asyncio.open_unix_connection(
-                        self.uds_address, limit=UNIX_BUFFER_LIMIT)
+                        str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
