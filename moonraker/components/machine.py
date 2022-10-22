@@ -1440,7 +1440,10 @@ class InstallValidator:
         return empty
 
     def _link_data_subfolder(
-        self, folder_name: str, source_dir: Union[str, pathlib.Path]
+        self,
+        folder_name: str,
+        source_dir: Union[str, pathlib.Path],
+        exist_ok: bool = False
     ) -> None:
         if isinstance(source_dir, str):
             source_dir = pathlib.Path(source_dir).expanduser().resolve()
@@ -1458,6 +1461,12 @@ class InstallValidator:
             )
         if subfolder.is_symlink():
             if not subfolder.samefile(source_dir):
+                if exist_ok:
+                    logging.info(
+                        f"Folder {subfolder} already linked, aborting link "
+                        f"to {source_dir}"
+                    )
+                    return
                 raise ValidationError(
                     f"Failed to link subfolder '{folder_name}' to "
                     f"'{source_dir}'.  '{folder_name}' already exists and is "
@@ -1471,6 +1480,11 @@ class InstallValidator:
         if subfolder.is_dir() and next(subfolder.iterdir(), None) is None:
             subfolder.rmdir()
             subfolder.symlink_to(source_dir)
+            return
+        if exist_ok:
+            logging.info(
+                f"Path at {subfolder} exists, aborting link to {source_dir}"
+            )
             return
         raise ValidationError(
             f"Failed to link subfolder '{folder_name}' to '{source_dir}'.  "
@@ -1535,7 +1549,9 @@ class InstallValidator:
             db_path = db_cfg.get("database_path", None)
             default_db = pathlib.Path("~/.moonraker_database").expanduser()
             if db_path is None and default_db.exists():
-                self._link_data_subfolder("database", default_db)
+                self._link_data_subfolder(
+                    "database", default_db, exist_ok=True
+                )
             elif db_path is not None:
                 self._link_data_subfolder("database", db_path)
                 cfg_source.remove_option("database", "database_path")
