@@ -87,6 +87,8 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/metadata", ['GET'], self._handle_metadata_request)
         self.server.register_endpoint(
+            "/server/files/roots", ['GET'], self._handle_list_roots)
+        self.server.register_endpoint(
             "/server/files/directory", ['GET', 'POST', 'DELETE'],
             self._handle_directory_request)
         self.server.register_endpoint(
@@ -333,6 +335,19 @@ class FileManager:
                 f"Metadata not available for <{requested_file}>", 404)
         metadata['filename'] = requested_file
         return metadata
+
+    async def _handle_list_roots(
+        self, web_request: WebRequest
+    ) -> List[Dict[str, Any]]:
+        root_list: List[Dict[str, Any]] = []
+        for name, path in self.file_paths.items():
+            perms = "rw" if name in self.full_access_roots else "r"
+            root_list.append({
+                "name": name,
+                "path": path,
+                "permissions": perms
+            })
+        return root_list
 
     async def _handle_directory_request(self,
                                         web_request: WebRequest
