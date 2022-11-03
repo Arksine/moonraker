@@ -15,6 +15,7 @@ import copy
 import logging
 from io import StringIO
 from utils import SentinelClass
+from components.template import JinjaTemplate
 
 # Annotation imports
 from typing import (
@@ -35,7 +36,7 @@ from typing import (
 if TYPE_CHECKING:
     from moonraker import Server
     from components.gpio import GpioFactory, GpioOutputPin
-    from components.template import TemplateFactory, JinjaTemplate
+    from components.template import TemplateFactory
     from io import TextIOWrapper
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
@@ -404,6 +405,18 @@ class ConfigHelper:
             template: TemplateFactory
             template = self.server.lookup_component('template')
             return template.create_template(val.strip(), is_async)
+        return val
+
+    def getpath(self,
+                option: str,
+                default: Union[SentinelClass, _T] = SENTINEL,
+                deprecate: bool = False
+                ) -> Union[pathlib.Path, _T]:
+        val = self.gettemplate(option, default, deprecate=deprecate)
+        if isinstance(val, JinjaTemplate):
+            ctx = {"data_path": self.server.get_app_args()["data_path"]}
+            strpath = val.render(ctx)
+            return pathlib.Path(strpath).expanduser().resolve()
         return val
 
     def read_supplemental_dict(self, obj: Dict[str, Any]) -> ConfigHelper:
