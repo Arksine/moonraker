@@ -1943,7 +1943,7 @@ events: error
 body: {event_args[1].message}
 attach: http://192.168.1.100/webcam/?action=snapshot
 
-[notifier gcode_telegram]
+[notifier my_telegram_notifier]
 url: tgram://{bottoken}/{ChatID}
 events: gcode
 body: {event_message}
@@ -1959,7 +1959,7 @@ with a gcode_macro, such as:
 [gcode_macro NOTIFY_FILAMENT_CHANGE]
 gcode:
   {action_call_remote_method("notify",
-                             name="telegram",
+                             name="my_telegram_notifier",
                              message="Filament change needed!")}
 ```
 
