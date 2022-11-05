@@ -748,7 +748,8 @@ class FileManager:
                 key = (st.st_dev, st.st_ino)
                 if key not in visited_dirs:
                     visited_dirs.add(key)
-                    scan_dirs.append(dname)
+                    if not self.check_reserved_path(full_path, False, False):
+                        scan_dirs.append(dname)
             dir_names[:] = scan_dirs
             for name in files:
                 ext = os.path.splitext(name)[-1].lower()
@@ -915,6 +916,9 @@ class InotifyNode:
         for fname in os.listdir(dir_path):
             item_path = os.path.join(dir_path, fname)
             if os.path.isdir(item_path):
+                fm = self.ihdlr.file_manager
+                if fm.check_reserved_path(item_path, True, False):
+                    continue
                 new_child = self.create_child_node(fname, False)
                 if new_child is not None:
                     metadata_events.extend(new_child.scan_node(visited_dirs))
