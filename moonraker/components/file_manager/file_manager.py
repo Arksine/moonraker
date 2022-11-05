@@ -491,6 +491,7 @@ class FileManager:
         if not os.path.isdir(path):
             raise self.server.error(
                 f"Directory does not exist ({path})")
+        self.check_reserved_path(path, False)
         flist: Dict[str, Any] = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
