@@ -1618,7 +1618,7 @@ class InstallValidator:
             return
         self._sudo_requested = True
         auth: Optional[Authorization]
-        auth = self.server.lookup_component("authorizaton", None)
+        auth = self.server.lookup_component("authorization", None)
         if auth is not None:
             # Bypass authentication requirements
             auth.register_permited_path("/machine/sudo/password")
