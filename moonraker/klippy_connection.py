@@ -11,7 +11,6 @@ import time
 import logging
 import json
 import getpass
-import confighelper
 import asyncio
 import socket
 import struct
@@ -31,8 +30,10 @@ from typing import (
     Set,
 )
 if TYPE_CHECKING:
+    from moonraker import Server
     from app import MoonrakerApp
     from websockets import WebRequest, Subscribable
+    from confighelper import ConfigHelper
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
     from components.machine import Machine
@@ -45,11 +46,9 @@ MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 
 class KlippyConnection:
-    def __init__(self, config: confighelper.ConfigHelper) -> None:
-        self.server = config.get_server()
-        uds_addr: str = config.get(
-            'klippy_uds_address', "/tmp/klippy_uds")
-        self.uds_address = pathlib.Path(uds_addr).expanduser().resolve()
+    def __init__(self, server: Server) -> None:
+        self.server = server
+        self.uds_address = pathlib.Path("/tmp/klippy_uds")
         self.writer: Optional[asyncio.StreamWriter] = None
         self.connection_mutex: asyncio.Lock = asyncio.Lock()
         self.event_loop = self.server.get_event_loop()
@@ -80,6 +79,11 @@ class KlippyConnection:
             'process_status_update', self._process_status_update,
             need_klippy_reg=False)
         self.server.register_component("klippy_connection", self)
+
+    def configure(self, config: ConfigHelper):
+        self.uds_address = config.getpath(
+            "klippy_uds_address", self.uds_address
+        )
 
     @property
     def klippy_apis(self) -> KlippyAPI:

@@ -82,8 +82,7 @@ class Server:
         log_level = logging.DEBUG if args["verbose"] else logging.INFO
         logging.getLogger().setLevel(log_level)
         self.event_loop.set_debug(args["asyncio_debug"])
-
-        self.klippy_connection = KlippyConnection(config)
+        self.klippy_connection = KlippyConnection(self)
 
         # Tornado Application/Server
         self.moonraker_app = app = MoonrakerApp(config)
@@ -232,6 +231,7 @@ class Server:
         for section in cfg_sections:
             self.load_component(config, section, None)
 
+        self.klippy_connection.configure(config)
         config.validate_config()
 
     def load_component(self,
