@@ -1559,6 +1559,58 @@ A list of objects, where each object contains file data.
 ]
 ```
 
+Returns:
+A list of objects, where each object contains file data:
+
+```json
+[
+    {
+        "name": "config",
+        "path": "/home/pi/printer_data/config",
+        "permissions": "rw"
+    },
+    {
+        "name": "logs",
+        "path": "/home/pi/printer_data/logs",
+        "permissions": "r"
+    },
+    {
+        "name": "gcodes",
+        "path": "/home/pi/printer_data/gcodes",
+        "permissions": "rw"
+    },
+    {
+        "name": "config_examples",
+        "path": "/home/pi/klipper/config",
+        "permissions": "r"
+    },
+    {
+        "name": "docs",
+        "path": "/home/pi/klipper/docs",
+        "permissions": "r"
+    }
+]
+```
+
+
+#### List registered roots
+Reports all "root" directories registered with Moonraker.  Information
+such as location on disk and permissions are included.
+
+HTTP request:
+```http
+GET /server/files/roots
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.files.roots",
+    "id": 4644
+}
+```
+
 #### Get gcode metadata
 Get metadata for a specified gcode file.  If the file is located in
 a subdirectory, then the file name should include the path relative to
@@ -3490,6 +3542,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "need_channel_update": false,
             "is_valid": true,
             "configured_type": "git_repo",
+            "corrupt": false,
             "info_tags": [],
             "detected_type": "git_repo",
             "remote_alias": "arksine",
@@ -3534,6 +3587,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "need_channel_update": false,
             "is_valid": true,
             "configured_type": "git_repo",
+            "corrupt": false,
             "info_tags": [],
             "detected_type": "git_repo",
             "remote_alias": "origin",
@@ -3614,6 +3668,11 @@ as applications have the following fields:
     and an "origin" set to the official remote.  For `zip` and `zip_beta`
     types this will report false if Moonraker is unable to fetch the
     current repo state from GitHub.
+- `corrupt`: Indicates that the git repo has been corrupted.  When a repo
+  is in this state it a hard recovery (ie: re-cloning the repo) is necessary.
+  Note that the most common cause of repo corruption is removing power from
+  the host machine without safely shutting down.  Damaged storage can also
+  lead to repo corruption.
 - `is_dirty`: true if the repo has been modified.  This will always be false
   for `zip` and `zip_beta` types.
 - `detached`: true if the repo is currently in a detached state.  For `zip`

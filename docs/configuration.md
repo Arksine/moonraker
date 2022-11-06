@@ -52,8 +52,12 @@ ssl_port: 7130
 #   server will only be started of the certificate and key options outlined
 #   below are provided.  The default is 7130.
 klippy_uds_address: /tmp/klippy_uds
-#   The address of Unix Domain Socket used to communicate with Klippy. Default
-#   is /tmp/klippy_uds
+#   The address of Unix Domain Socket used to communicate with Klippy. This
+#   option accepts Jinja2 Templates, where the configured data path is
+#   passed to the template context, for example:
+#     klippy_uds_address: {data_path}/comms/klippy.sock
+#
+#   Default is /tmp/klippy_uds.
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
 enable_debug_logging: False
