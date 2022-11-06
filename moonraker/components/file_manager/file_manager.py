@@ -251,6 +251,8 @@ class FileManager:
         if isinstance(req_path, str):
             req_path = pathlib.Path(req_path)
         req_path = req_path.expanduser().resolve()
+        if ".git" in req_path.parts:
+            return True
         for name, (res_path, can_read) in self.reserved_paths.items():
             if (
                 (res_path == req_path or res_path in req_path.parents) and
@@ -543,18 +545,21 @@ class FileManager:
             path = pathlib.Path(path)
         real_path = path.resolve()
         fstat = path.stat()
-        permissions = "rw"
-        if (
-            root not in self.full_access_roots or
-            (path.is_symlink() and path.is_file())
-        ):
-            permissions = "r"
-        for name, (res_path, can_read) in self.reserved_paths.items():
-            if (res_path == real_path or res_path in real_path.parents):
-                if not can_read:
-                    permissions = ""
-                    break
+        if ".git" in real_path.parts:
+            permissions = ""
+        else:
+            permissions = "rw"
+            if (
+                root not in self.full_access_roots or
+                (path.is_symlink() and path.is_file())
+            ):
                 permissions = "r"
+            for name, (res_path, can_read) in self.reserved_paths.items():
+                if (res_path == real_path or res_path in real_path.parents):
+                    if not can_read:
+                        permissions = ""
+                        break
+                    permissions = "r"
         return {
             'modified': fstat.st_mtime,
             'size': fstat.st_size,
