@@ -549,8 +549,12 @@ class FileManager:
             (path.is_symlink() and path.is_file())
         ):
             permissions = "r"
-        if self.check_reserved_path(real_path, permissions == "rw", False):
-            permissions = ""
+        for name, (res_path, can_read) in self.reserved_paths.items():
+            if (res_path == real_path or res_path in real_path.parents):
+                if not can_read:
+                    permissions = ""
+                    break
+                permissions = "r"
         return {
             'modified': fstat.st_mtime,
             'size': fstat.st_size,
