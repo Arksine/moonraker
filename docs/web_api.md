@@ -1559,6 +1559,24 @@ A list of objects, where each object contains file data.
 ]
 ```
 
+#### List registered roots
+Reports all "root" directories registered with Moonraker.  Information
+such as location on disk and permissions are included.
+
+HTTP request:
+```http
+GET /server/files/roots
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.files.roots",
+    "id": 4644
+}
+```
+
 Returns:
 A list of objects, where each object contains file data:
 
@@ -1590,25 +1608,6 @@ A list of objects, where each object contains file data:
         "permissions": "r"
     }
 ]
-```
-
-
-#### List registered roots
-Reports all "root" directories registered with Moonraker.  Information
-such as location on disk and permissions are included.
-
-HTTP request:
-```http
-GET /server/files/roots
-```
-
-JSON-RPC request:
-```json
-{
-    "jsonrpc": "2.0",
-    "method": "server.files.roots",
-    "id": 4644
-}
 ```
 
 #### Get gcode metadata
