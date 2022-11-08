@@ -18,6 +18,8 @@ import hashlib
 import json
 import shlex
 import re
+import struct
+import socket
 from queue import SimpleQueue as Queue
 
 # Annotation imports
@@ -33,6 +35,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from types import ModuleType
+    from asyncio.trsock import TransportSocket
 
 MOONRAKER_PATH = str(pathlib.Path(__file__).parent.parent.resolve())
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
@@ -230,3 +233,33 @@ def load_system_module(name: str) -> ModuleType:
     else:
         raise ServerError(f"Unable to import module {name}")
     return module
+
+def get_unix_peer_credentials(
+    writer: asyncio.StreamWriter, name: str
+) -> Dict[str, int]:
+    sock: TransportSocket
+    sock = writer.get_extra_info("socket", None)
+    if sock is None:
+        logging.debug(
+            f"Unable to get underlying Unix Socket for {name}, "
+            "cant fetch peer credentials"
+        )
+        return {}
+    data: bytes = b""
+    try:
+        size = struct.calcsize("3I")
+        data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, size)
+        pid, uid, gid = struct.unpack("3I", data)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logging.exception(
+            f"Failed to get Unix Socket Peer Credentials for {name}"
+            f", raw: 0x{data.hex()}"
+        )
+        return {}
+    return {
+        "process_id": pid,
+        "user_id": uid,
+        "group_id": gid
+    }

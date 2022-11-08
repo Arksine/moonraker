@@ -12,10 +12,8 @@ import logging
 import json
 import getpass
 import asyncio
-import socket
-import struct
 import pathlib
-from utils import ServerError
+from utils import ServerError, get_unix_peer_credentials
 
 # Annotation imports
 from typing import (
@@ -37,7 +35,6 @@ if TYPE_CHECKING:
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
     from components.machine import Machine
-    from asyncio.trsock import TransportSocket
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 INIT_TIME = .25
@@ -258,30 +255,9 @@ class KlippyConnection:
             return await self._init_klippy_connection()
 
     def _get_peer_credentials(self, writer: asyncio.StreamWriter) -> bool:
-        sock: TransportSocket
-        sock = writer.get_extra_info("socket", None)
-        if sock is None:
-            logging.debug(
-                "Unable to get Unix Socket, cant fetch peer credentials"
-            )
+        self._peer_cred = get_unix_peer_credentials(writer, "Klippy")
+        if not self._peer_cred:
             return False
-        data: bytes = b""
-        try:
-            size = struct.calcsize("3I")
-            data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, size)
-            pid, uid, gid = struct.unpack("3I", data)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception(
-                f"Failed to get Klippy Peer Credentials, raw: 0x{data.hex()}"
-            )
-            return False
-        self._peer_cred = {
-            "process_id": pid,
-            "user_id": uid,
-            "group_id": gid
-        }
         logging.debug(
             f"Klippy Connection: Received Peer Credentials: {self._peer_cred}"
         )
