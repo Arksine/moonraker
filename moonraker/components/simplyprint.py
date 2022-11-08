@@ -33,7 +33,7 @@ from typing import (
 if TYPE_CHECKING:
     from app import InternalTransport
     from confighelper import ConfigHelper
-    from websockets import WebsocketManager, WebSocket
+    from websockets import WebsocketManager, BaseSocketClient
     from tornado.websocket import WebSocketClientConnection
     from components.database import MoonrakerDatabase
     from components.klippy_apis import KlippyAPI
@@ -183,11 +183,9 @@ class SimplyPrint(Subscribable):
             "proc_stats:cpu_throttled", self._on_cpu_throttled
         )
         self.server.register_event_handler(
-            "websockets:websocket_identified",
-            self._on_websocket_identified)
+            "websockets:client_identified", self._on_websocket_identified)
         self.server.register_event_handler(
-            "websockets:websocket_removed",
-            self._on_websocket_removed)
+            "websockets:client_removed", self._on_websocket_removed)
         self.server.register_event_handler(
             "server:gcode_response", self._on_gcode_response)
         self.server.register_event_handler(
@@ -614,7 +612,7 @@ class SimplyPrint(Subscribable):
             is_on = device_info["status"] == "on"
             self.send_sp("power_controller", {"on": is_on})
 
-    def _on_websocket_identified(self, ws: WebSocket) -> None:
+    def _on_websocket_identified(self, ws: BaseSocketClient) -> None:
         if (
             self.cache.current_wsid is None and
             ws.client_data.get("type", "") == "web"
@@ -627,7 +625,7 @@ class SimplyPrint(Subscribable):
             self.cache.current_wsid = ws.uid
             self.send_sp("machine_data", ui_data)
 
-    def _on_websocket_removed(self, ws: WebSocket) -> None:
+    def _on_websocket_removed(self, ws: BaseSocketClient) -> None:
         if self.cache.current_wsid is None or self.cache.current_wsid != ws.uid:
             return
         ui_data = self._get_ui_info()
@@ -952,7 +950,7 @@ class SimplyPrint(Subscribable):
         self.cache.current_wsid = None
         websockets: WebsocketManager
         websockets = self.server.lookup_component("websockets")
-        conns = websockets.get_websockets_by_type("web")
+        conns = websockets.get_clients_by_type("web")
         if conns:
             longest = conns[0]
             ui_data["ui"] = longest.client_data["name"]

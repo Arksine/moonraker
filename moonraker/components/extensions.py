@@ -4,7 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
-from websockets import WebSocket
+from websockets import BaseSocketClient
 
 
 # Annotation imports
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.agents: Dict[str, WebSocket] = {}
+        self.agents: Dict[str, BaseSocketClient] = {}
         self.server.register_endpoint(
             "/connection/send_event", ["POST"], self._handle_agent_event,
             transports=["websocket"]
@@ -36,7 +36,7 @@ class ExtensionManager:
             "/server/extensions/request", ["POST"], self._handle_call_agent
         )
 
-    def register_agent(self, connection: WebSocket) -> None:
+    def register_agent(self, connection: BaseSocketClient) -> None:
         data = connection.client_data
         name = data["name"]
         client_type = data["type"]
@@ -55,7 +55,7 @@ class ExtensionManager:
         }
         connection.send_notification("agent_event", [evt])
 
-    def remove_agent(self, connection: WebSocket) -> None:
+    def remove_agent(self, connection: BaseSocketClient) -> None:
         name = connection.client_data["name"]
         if name in self.agents:
             del self.agents[name]
@@ -64,7 +64,7 @@ class ExtensionManager:
 
     async def _handle_agent_event(self, web_request: WebRequest) -> str:
         conn = web_request.get_connection()
-        if not isinstance(conn, WebSocket):
+        if not isinstance(conn, BaseSocketClient):
             raise self.server.error("No connection detected")
         if conn.client_data["type"] != "agent":
             raise self.server.error(

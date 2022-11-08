@@ -501,7 +501,9 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             else:
                 wsm: WebsocketManager = self.server.lookup_component(
                     "websockets")
-                conn = wsm.get_websocket(conn_id)
+                conn = wsm.get_client(conn_id)
+        if not isinstance(conn, WebSocket):
+            return None
         return conn
 
     def write_error(self, status_code: int, **kwargs) -> None:
