@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from websockets import WebRequest, WebsocketManager
     from components.file_manager.file_manager import FileManager
     from components.machine import Machine
+    from components.extensions import ExtensionManager
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T")
 
@@ -174,6 +175,10 @@ class Server:
             await self.start_server()
 
     async def start_server(self, connect_to_klippy: bool = True) -> None:
+        # Open Unix Socket Server
+        extm: ExtensionManager = self.lookup_component("extensions")
+        await extm.start_unix_server()
+
         # Start HTTP Server
         logging.info(
             f"Starting Moonraker on ({self.host}, {self.port}), "
