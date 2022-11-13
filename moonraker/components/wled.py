@@ -154,10 +154,10 @@ class Strip():
         await self._send_wled_command({"on": False})
 
     async def wled_control(self: Strip, brightness: int, intensity: int,
-                           speed: int) -> None:
+                           speed: int, id: int) -> None:
         logging.debug(
             f"WLED: {self.name} control {self.onoff} BRIGHTNESS={brightness} "
-            f"INTENSITY={intensity} SPEED={speed} CURRENTPRESET={self.preset}")
+            f"INTENSITY={intensity} SPEED={speed} ID={id} CURRENTPRESET={self.preset}")
 
         if self.onoff == OnOff.off:
             logging.info("wled control only permitted when strip is on")
@@ -178,11 +178,17 @@ class Strip():
                 logging.info("BRIGHTNESS should be between 1 and 255")
             else:
                 shouldSend = True
+                self.id = id
                 self.brightness = brightness
-                control["bri"] = self.brightness
                 # Brightness in seg {} - only if a preset is on
                 if self.preset != -1:
-                    control["seg"]["bri"] = self.brightness
+                    if self.id != -1:
+                        # Set specific segment (id) brightness
+                        control["seg"]["id"] = self.id
+                        control["seg"]["bri"] = self.brightness
+                    else:
+                        # No segment id specified, so set master brightness
+                        control["bri"] = self.brightness
 
         # Intensity - only if a preset is on
         if intensity > -1 and self.preset != -1:
@@ -190,8 +196,11 @@ class Strip():
                 logging.info("INTENSITY should be between 0 and 255")
             else:
                 shouldSend = True
+                self.id = id
                 self.intensity = intensity
                 control["seg"]["ix"] = self.intensity
+                if self.id != -1:
+                    control["seg"]["id"] = self.id
 
         # Speed - only if a preset is on
         if speed > -1 and self.preset != -1:
@@ -199,8 +208,11 @@ class Strip():
                 logging.info("SPEED should be between 0 and 255")
             else:
                 shouldSend = True
+                self.id = id
                 self.speed = speed
                 control["seg"]["sx"] = self.speed
+                if self.id != -1:
+                    control["seg"]["id"] = self.id
 
         # Control brightness, intensity, and speed for segment
         # This will allow full control for effects such as "Percent"
@@ -448,7 +460,7 @@ class WLED:
     # state: True, False, "on", "off"
     # preset: wled preset (int) to use (ignored if state False or "Off")
     async def set_wled_state(self: WLED, strip: str, state: str = None,
-                             preset: int = -1, brightness: int = -1,
+                             preset: int = -1, id: int = -1, brightness: int = -1,
                              intensity: int = -1, speed: int = -1) -> None:
         status = None
 
@@ -479,7 +491,7 @@ class WLED:
 
         # Control
         if brightness != -1 or intensity != -1 or speed != -1:
-            await self.strips[strip].wled_control(brightness, intensity, speed)
+            await self.strips[strip].wled_control(brightness, intensity, speed, id)
 
     # Individual pixel control, for compatibility with SET_LED
     async def set_wled(self: WLED,
