@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from moonraker import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
-    AsyncioServer = asyncio.base_events.Server
 
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 
@@ -33,7 +32,7 @@ class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.agents: Dict[str, BaseSocketClient] = {}
-        self.uds_server: Optional[AsyncioServer] = None
+        self.uds_server: Optional[asyncio.AbstractServer] = None
         self.server.register_endpoint(
             "/connection/send_event", ["POST"], self._handle_agent_event,
             transports=["websocket"]
