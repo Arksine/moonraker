@@ -135,6 +135,24 @@ test interface with example usage for most of the requests below.  It also
 includes a basic JSON-RPC implementation that uses promises to return responses
 and errors (see json-rpc.js).
 
+### Unix Socket Connection
+
+All JSON-RPC APIs available over the websocket are also made available over a
+Unix Domain Socket.  Moonraker creates the socket file at
+`<datapath>/comms/moonraker.sock` (ie: `~/printer_data/comms/moonraker.sock`).
+The Unix Socket does not use the websocket transport protocol, instead
+it expects UTF-8 encoded JSON-RPC strings. Each JSON-RPC request must be
+terminated with an ETX character (`0x03`).
+
+The Unix Socket is desirable for front ends and extensions running on the
+local machine as authentication is not necessary.  There should be a small
+performance improvement due to the simplified transport protocol, however
+the impact of this is likely negligible.
+
+The `moontest` repo contains a
+[python script](https://github.com/Arksine/moontest/blob/master/scripts/unix_socket_test.py)
+to test comms over the unix socket.
+
 ### Jinja2 Template API Calls
 
 Some template options in Moonraker's configuration, such as those in the
@@ -174,12 +192,12 @@ This method provides a way for persistent clients to identify
 themselves to Moonraker.  This information may be used by Moonraker
 perform an action or present information based on if a specific
 client is connected.  Currently this method is only available
-to websocket connections.  This endpoint should only be called
-once per session, repeated calls will result in an error.
+to websocket and unix socket connections.  This endpoint should only
+be called once per session, repeated calls will result in an error.
 
 HTTP request: `Not Available`
 
-JSON-RPC request (Websocket Only):
+JSON-RPC request (Websocket/Unix Socket Only):
 ```json
 {
     "jsonrpc": "2.0",
@@ -229,7 +247,7 @@ The connection's unique identifier.
 
 HTTP request: `Not Available`
 
-JSON-RPC request (Websocket Only):
+JSON-RPC request (Websocket/Unix Socket Only):
 ```json
 {
     "jsonrpc": "2.0",
