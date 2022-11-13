@@ -153,7 +153,7 @@ class Strip:
             self.brightness = -1
             self.intensity = -1
             self.speed = -1
-            await self._send_wled_command({"on": True, "ps": preset})
+            await self._send_wled_command({"ps": preset})
 
     async def wled_off(self) -> None:
         logging.debug(f"WLED: {self.name} off")
