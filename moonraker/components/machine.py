@@ -1161,7 +1161,7 @@ class SystemdDbusProvider(BaseProvider):
 # sudo_cmd is not needed.
 class SuperisordProvider(BaseProvider):
     async def initialize(self) -> None:
-        self.spv_conf=self.server.config.get(
+        self.spv_conf = self.server.config.get(
             "supervisord_config_path", None
         )
         self.spv_conf = f'-c {self.spv_conf} ' if self.spv_conf else ' '
@@ -1198,9 +1198,9 @@ class SuperisordProvider(BaseProvider):
         # slow reaction for supervisord, timeout set to 6.0
         await self._exec_command(
             f"supervisorctl {self.spv_conf}"
-            f"{action} {service_name}", 
+            f"{action} {service_name}",
             timeout=6.
-            )
+        )
 
     async def check_virt_status(self) -> Dict[str, Any]:
         virt_id = virt_type = "none"
