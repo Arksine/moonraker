@@ -1236,8 +1236,8 @@ class SuperisordProvider(BaseProvider):
             resp = await self.svc_cmd.run_with_response(
                 log_complete=False, timeout=6.
             )
-            resp = resp.strip().split("\n")  # drop lengend
-            for svc, state in zip(svcs, resp):
+            resp_l = resp.strip().split("\n")  # drop lengend
+            for svc, state in zip(svcs, resp_l):
                 sub_state = state.split()[1].lower()
                 new_state: Dict[str, str] = {
                     'active_state': "active",
