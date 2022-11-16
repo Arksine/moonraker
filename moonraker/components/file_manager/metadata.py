@@ -551,6 +551,16 @@ class Cura(BaseSlicer):
             return None
         return thumbs
 
+class CrealitySlicer(Cura):
+    def check_identity(self, data: str) -> Optional[Dict[str, str]]:
+        match = re.search("Creality Slicer\s(.*)", data)
+        if match:
+            return {
+                'slicer': "Creality Slicer",
+                'slicer_version': match.group(1)
+            }
+        return None
+
 class Simplify3D(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"Simplify3D\(R\)\sVersion\s(.*)", data)
@@ -899,7 +909,7 @@ class KiriMoto(BaseSlicer):
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
-    PrusaSlicer, Slic3rPE, Slic3r, Cura, Simplify3D,
+    PrusaSlicer, Slic3rPE, Slic3r, Cura, CrealitySlicer, Simplify3D,
     KISSlicer, IdeaMaker, IceSL, KiriMoto
 ]
 SUPPORTED_DATA = [
