@@ -54,21 +54,35 @@ class ExtPahoClient(paho_mqtt.Client):
         if self._port <= 0:
             raise ValueError('Invalid port number.')
 
-        self._in_packet = {
-            "command": 0,
-            "have_remaining": 0,
-            "remaining_count": [],
-            "remaining_mult": 1,
-            "remaining_length": 0,
-            "packet": b"",
-            "to_process": 0,
-            "pos": 0}
+        if hasattr(self, "_out_packet_mutex"):
+            # Paho Mqtt Version < 1.6.x
+            self._in_packet = {
+                "command": 0,
+                "have_remaining": 0,
+                "remaining_count": [],
+                "remaining_mult": 1,
+                "remaining_length": 0,
+                "packet": b"",
+                "to_process": 0,
+                "pos": 0
+            }
+            with self._out_packet_mutex:
+                self._out_packet = deque()  # type: ignore
 
-        with self._out_packet_mutex:
+            with self._current_out_packet_mutex:
+                self._current_out_packet = None
+        else:
+            self._in_packet = {
+                "command": 0,
+                "have_remaining": 0,
+                "remaining_count": [],
+                "remaining_mult": 1,
+                "remaining_length": 0,
+                "packet": bytearray(b""),
+                "to_process": 0,
+                "pos": 0
+            }
             self._out_packet = deque()  # type: ignore
-
-        with self._current_out_packet_mutex:
-            self._current_out_packet = None
 
         with self._msgtime_mutex:
             self._last_msg_in = paho_mqtt.time_func()
