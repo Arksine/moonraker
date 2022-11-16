@@ -1160,11 +1160,11 @@ class SystemdDbusProvider(BaseProvider):
 # since in container, all command is launched by normal user,
 # sudo_cmd is not needed.
 class SuperisordProvider(BaseProvider):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        self.spv_conf: str = config.get("supervisord_config_path", "")
+
     async def initialize(self) -> None:
-        self.spv_conf = self.server.config.get(
-            "supervisord_config_path", None
-        )
-        self.spv_conf = f'-c {self.spv_conf} ' if self.spv_conf else ' '
         for svc in ("klipper", "moonraker"):
             self.available_services[svc] = {
                 'active_state': "none",
@@ -1179,14 +1179,14 @@ class SuperisordProvider(BaseProvider):
         pstats.register_stat_callback(self._update_service_status)
 
     async def shutdown(self) -> None:
-        self.server.add_warning(
+        raise self.server.error(
             "[machine]: Supervisord manager can not process SHUTDOWN."
             "Please try KILL container or stop Supervisord via ssh terminal."
         )
         return
 
     async def reboot(self) -> None:
-        self.server.add_warning(
+        raise self.server.error(
             "[machine]: Supervisord manager can not process REBOOT."
             "Please try KILL container or stop Supervisord via ssh terminal."
         )
