@@ -1142,6 +1142,18 @@ Returns: Information about the host system in the following format:
                     }
                 ]
             }
+        },
+        "canbus": {
+            "can0": {
+                "tx_queue_len": 128,
+                "bitrate": 500000,
+                "driver": "mcp251x"
+            },
+            "can1": {
+                "tx_queue_len": 128,
+                "bitrate": 500000,
+                "driver": "gs_usb"
+            }
         }
     }
 }
