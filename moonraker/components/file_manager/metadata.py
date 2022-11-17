@@ -553,7 +553,7 @@ class Cura(BaseSlicer):
 
 class CrealitySlicer(Cura):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
-        match = re.search("Creality Slicer\s(.*)", data)
+        match = re.search(r"Creality Slicer\s(.*)", data)
         if match:
             return {
                 'slicer': "Creality Slicer",
