@@ -142,9 +142,10 @@ force_validation:
 #   at validation successfully completed. Setting this value to True will force
 #   Moonraker to perform validation.  The default is False.
 supervisord_config_path:
-#   Path to the superrvisord config file. In case for multi supervisord instance
-#   running on single machine, the default '/var/run/supervisord.sock' is occupied
-#   by other services.
+#   Path to the supervisord config file. This is required when for multiple
+#   supervisord are instances running on single machine and the default
+#  '/var/run/supervisord.sock' is occupied by other services.
+#   The default is no path.
 ```
 
 !!! Note
