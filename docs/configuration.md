@@ -120,8 +120,9 @@ with system services such as systemd.
 provider: systemd_dbus
 #   The provider implementation used to collect system service information
 #   and run service actions (ie: start, restart, stop).  This can be "none",
-#   "systemd_dbus", or "systemd_cli".  If the provider is set to "none" service
-#   action APIs will be disabled.  The default is systemd_dbus.
+#   "supervisord", "systemd_dbus", or "systemd_cli".  If the provider is set
+#   to "none" service action APIs will be disabled.
+#   The default is systemd_dbus.
 sudo_password:
 #   The password for the linux user.  When set Moonraker can run linux commands
 #   that require elevated permissions.  This option accepts Jinja2 Templates,
@@ -140,6 +141,10 @@ force_validation:
 #   By default Moonraker will not attempt to revalidate if a previous attempt
 #   at validation successfully completed. Setting this value to True will force
 #   Moonraker to perform validation.  The default is False.
+supervisord_config_path:
+#   Path to the superrvisord config file. In case for multi supervisord instance
+#   running on single machine, the default '/var/run/supervisord.sock' is occupied
+#   by other services.
 ```
 
 !!! Note
