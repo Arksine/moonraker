@@ -106,8 +106,7 @@ class SimplyPrint(Subscribable):
         self.gcode_terminal_enabled: bool = False
         self.connected = False
         self.is_set_up = False
-        # TODO: default use_test_endpoint to false upon release
-        self.test = config.get("use_test_endpoint", True)
+        self.test = config.get("use_test_endpoint", False)
         connect_url = config.get("url", None)
         if connect_url is not None:
             self.connect_url = connect_url
@@ -1312,7 +1311,7 @@ class LayerDetect:
 # Ideally we will always fetch from the localhost rather than
 # go through the reverse proxy
 FALLBACK_URL = "http://127.0.0.1:8080/?action=snapshot"
-SP_SNAPSHOT_URL = "https://apirewrite.simplyprint.io/jobs/ReceiveSnapshot"
+SP_SNAPSHOT_URL = "https://api.simplyprint.io/jobs/ReceiveSnapshot"
 SP_AI_URL = "https://ai.simplyprint.io/api/v2/infer"
 
 class WebcamStream:
