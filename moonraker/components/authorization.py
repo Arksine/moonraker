@@ -76,6 +76,7 @@ class Authorization:
         self.login_timeout = config.getint('login_timeout', 90)
         self.force_logins = config.getboolean('force_logins', False)
         self.default_source = config.get('default_source', "moonraker").lower()
+        self.enable_api_key = config.getboolean('enable_api_key', True)
         if self.default_source not in AUTH_SOURCES:
             raise config.error(
                 "[authorization]: option 'default_source' - Invalid "
@@ -734,9 +735,10 @@ class Authorization:
                 return ost_user
 
         # Check API Key Header
-        key: Optional[str] = request.headers.get("X-Api-Key")
-        if key and key == self.api_key:
-            return self.users[API_USER]
+        if self.enable_api_key:
+            key: Optional[str] = request.headers.get("X-Api-Key")
+            if key and key == self.api_key:
+                return self.users[API_USER]
 
         # If the force_logins option is enabled and at least one
         # user is created this is an unauthorized request
