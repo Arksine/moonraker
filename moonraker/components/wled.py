@@ -157,7 +157,8 @@ class Strip():
                            speed: int, id: int) -> None:
         logging.debug(
             f"WLED: {self.name} control {self.onoff} BRIGHTNESS={brightness} "
-            f"INTENSITY={intensity} SPEED={speed} ID={id} CURRENTPRESET={self.preset}")
+            f"INTENSITY={intensity} SPEED={speed} "
+            f"ID={id}CURRENTPRESET={self.preset}")
 
         if self.onoff == OnOff.off:
             logging.info("wled control only permitted when strip is on")
@@ -460,8 +461,9 @@ class WLED:
     # state: True, False, "on", "off"
     # preset: wled preset (int) to use (ignored if state False or "Off")
     async def set_wled_state(self: WLED, strip: str, state: str = None,
-                             preset: int = -1, id: int = -1, brightness: int = -1,
-                             intensity: int = -1, speed: int = -1) -> None:
+                             preset: int = -1, id: int = -1,
+                             brightness: int = -1, intensity: int = -1,
+                             speed: int = -1) -> None:
         status = None
 
         if isinstance(state, bool):
@@ -491,7 +493,8 @@ class WLED:
 
         # Control
         if brightness != -1 or intensity != -1 or speed != -1:
-            await self.strips[strip].wled_control(brightness, intensity, speed, id)
+            await self.strips[strip].wled_control(
+                brightness, intensity, speed, id)
 
     # Individual pixel control, for compatibility with SET_LED
     async def set_wled(self: WLED,
