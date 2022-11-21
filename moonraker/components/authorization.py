@@ -224,36 +224,39 @@ class Authorization:
         self.permitted_paths.add("/access/info")
         self.server.register_endpoint(
             "/access/login", ['POST'], self._handle_login,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/logout", ['POST'], self._handle_logout,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request, transports=['http'])
+            self._handle_user_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/users/list", ['GET'], self._handle_list_request,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/user/password", ['POST'], self._handle_password_reset,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, transports=['http'])
+            self._handle_apikey_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
-            self._handle_oneshot_request, transports=['http'])
+            self._handle_oneshot_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/info", ['GET'],
-            self._handle_info_request, transports=['http'])
+            self._handle_info_request, transports=['http', 'websocket'])
         self.server.register_notification("authorization:user_created")
         self.server.register_notification("authorization:user_deleted")
 
     def register_permited_path(self, path: str) -> None:
         self.permitted_paths.add(path)
+
+    def is_path_permitted(self, path: str) -> bool:
+        return path in self.permitted_paths
 
     def _sync_user(self, username: str) -> None:
         self.user_db[username] = self.users[username]
@@ -311,7 +314,7 @@ class Authorization:
                                   ) -> Dict[str, str]:
         refresh_token: str = web_request.get_str('refresh_token')
         try:
-            user_info = self._decode_jwt(refresh_token, token_type="refresh")
+            user_info = self.decode_jwt(refresh_token, token_type="refresh")
         except Exception:
             raise self.server.error("Invalid Refresh Token", 401)
         username: str = user_info['username']
@@ -474,12 +477,15 @@ class Authorization:
         refresh_token = self._generate_jwt(
             username, jwk_id, private_key, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
+        conn = web_request.get_client_connection()
         if create:
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
                 .005, self.server.send_event,
                 "authorization:user_created",
                 {'username': username})
+        elif conn is not None:
+            conn.user_info = user_info
         return {
             'username': username,
             'token': token,
@@ -541,10 +547,9 @@ class Authorization:
         jwt_sig = base64url_encode(sig)
         return b".".join([jwt_msg, jwt_sig]).decode()
 
-    def _decode_jwt(self,
-                    token: str,
-                    token_type: str = "access"
-                    ) -> Dict[str, Any]:
+    def decode_jwt(
+        self, token: str, token_type: str = "access"
+    ) -> Dict[str, Any]:
         message, sig = token.rsplit('.', maxsplit=1)
         enc_header, enc_payload = message.split('.')
         header: Dict[str, Any] = json.loads(base64url_decode(enc_header))
@@ -653,7 +658,7 @@ class Authorization:
                     401, f"Invalid Authorization Header: {auth_token}")
         if auth_token:
             try:
-                return self._decode_jwt(auth_token)
+                return self.decode_jwt(auth_token)
             except Exception:
                 logging.exception(f"JWT Decode Error {auth_token}")
                 raise HTTPError(401, f"Error decoding JWT: {auth_token}")

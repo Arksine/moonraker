@@ -494,7 +494,7 @@ class KlippyConnection:
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
         args = web_request.get_args()
-        conn = web_request.get_connection()
+        conn = web_request.get_subscribable()
 
         # Build the subscription request from a superset of all client
         # subscriptions

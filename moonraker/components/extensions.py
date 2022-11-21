@@ -71,8 +71,8 @@ class ExtensionManager:
             connection.send_notification("agent_event", [evt])
 
     async def _handle_agent_event(self, web_request: WebRequest) -> str:
-        conn = web_request.get_connection()
-        if not isinstance(conn, BaseSocketClient):
+        conn = web_request.get_client_connection()
+        if conn is None:
             raise self.server.error("No connection detected")
         if conn.client_data["type"] != "agent":
             raise self.server.error(
