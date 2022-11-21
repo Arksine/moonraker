@@ -530,6 +530,7 @@ class WLED:
         brightness: int = web_request.get_int('brightness', -1)
         intensity: int = web_request.get_int('intensity', -1)
         speed: int = web_request.get_int('speed', -1)
+        id: int = web_request.get_int('id', -1)
 
         req_action = web_request.get_action()
         if strip_name not in self.strips:
@@ -543,7 +544,8 @@ class WLED:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
             result = await self._process_request(strip, action, preset,
-                                                 brightness, intensity, speed)
+                                                 brightness, intensity,
+                                                 speed, id)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self: WLED,
@@ -559,7 +561,7 @@ class WLED:
         for name, strip in requested_strips.items():
             if strip is not None:
                 result[name] = await self._process_request(strip, req, -1,
-                                                           -1, -1, -1)
+                                                           -1, -1, -1, -1)
             else:
                 result[name] = {"error": "strip_not_found"}
         return result
@@ -570,7 +572,8 @@ class WLED:
                                preset: int,
                                brightness: int,
                                intensity: int,
-                               speed: int
+                               speed: int,
+                               id: int
                                ) -> Dict[str, Any]:
         strip_onoff = strip.onoff
 
@@ -588,7 +591,7 @@ class WLED:
                     await strip.wled_on(preset)
 
                 if brightness != -1 or intensity != -1 or speed != -1:
-                    await strip.wled_control(brightness, intensity, speed)
+                    await strip.wled_control(brightness, intensity, speed, id)
             else:
                 strip_onoff = OnOff.off
                 await strip.wled_off()
