@@ -58,6 +58,7 @@ if TYPE_CHECKING:
 
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
+MAX_WS_CONNS_DEFAULT = 50
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png", ".jpg"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
@@ -169,6 +170,9 @@ class MoonrakerApp:
         self.registered_base_handlers: List[str] = []
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
+        max_ws_conns = config.getint(
+            'max_websocket_connections', MAX_WS_CONNS_DEFAULT
+        )
 
         # SSL config
         self.cert_path: pathlib.Path = self._get_path_option(
@@ -193,6 +197,7 @@ class MoonrakerApp:
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
             'server': self.server,
+            'max_websocket_connections': max_ws_conns,
             'default_handler_class': AuthorizedErrorHandler,
             'default_handler_args': {},
             'log_function': self.log_request,

@@ -650,6 +650,8 @@ class BaseSocketClient(Subscribable):
         raise NotImplementedError("Children must implement close_socket()")
 
 class WebSocket(WebSocketHandler, BaseSocketClient):
+    connection_count: int = 0
+
     def initialize(self) -> None:
         self.on_create(self.settings['server'])
         self.ip_addr: str = self.request.remote_ip or ""
@@ -663,6 +665,7 @@ class WebSocket(WebSocketHandler, BaseSocketClient):
         return self._user_info
 
     def open(self, *args, **kwargs) -> None:
+        self.__class__.connection_count += 1
         self.set_nodelay(True)
         self._connected_time = self.eventloop.get_loop_time()
         agent = self.request.headers.get("User-Agent", "")
@@ -686,6 +689,7 @@ class WebSocket(WebSocketHandler, BaseSocketClient):
 
     def on_close(self) -> None:
         self.is_closed = True
+        self.__class__.connection_count -= 1
         self.message_buf = []
         now = self.eventloop.get_loop_time()
         pong_elapsed = now - self.last_pong_time
@@ -725,7 +729,12 @@ class WebSocket(WebSocketHandler, BaseSocketClient):
         return True
 
     # Check Authorized User
-    def prepare(self):
+    def prepare(self) -> None:
+        max_conns = self.settings["max_websocket_connections"]
+        if self.__class__.connection_count >= max_conns:
+            raise self.server.error(
+                "Maximum Number of Websocket Connections Reached"
+            )
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
             try:
