@@ -232,7 +232,8 @@ class Machine:
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
         if self.inside_container:
-            virt_id = self.system_info['virtualization'].get('virt_id', "none")
+            virt_id = self.system_info['virtualization'].get(
+                'virt_identifier', "none")
             raise self.server.error(
                 f"Cannot {ep.split('/')[-1]} from within a "
                 f"{virt_id} container")
