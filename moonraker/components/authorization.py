@@ -648,20 +648,16 @@ class Authorization:
                 qtoken = request.query_arguments.get('access_token', None)
                 if qtoken is not None:
                     auth_token = qtoken[-1].decode()
+        elif auth_token.startswith("Bearer "):
+            auth_token = auth_token[7:]
         else:
-            if auth_token.startswith("Bearer "):
-                auth_token = auth_token[7:]
-            elif auth_token.startswith("Basic "):
-                raise HTTPError(401, "Basic Auth is not supported")
-            else:
-                raise HTTPError(
-                    401, f"Invalid Authorization Header: {auth_token}")
+            return None
         if auth_token:
             try:
                 return self.decode_jwt(auth_token)
             except Exception:
                 logging.exception(f"JWT Decode Error {auth_token}")
-                raise HTTPError(401, f"Error decoding JWT: {auth_token}")
+                raise HTTPError(401, "JWT Decode Error")
         return None
 
     def _check_authorized_ip(self, ip: IPAddr) -> bool:
