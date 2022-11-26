@@ -308,7 +308,8 @@ class PrusaSlicer(BaseSlicer):
             'PrusaSlicer': r"PrusaSlicer\s(.*)\son",
             'SuperSlicer': r"SuperSlicer\s(.*)\son",
             'SliCR-3D': r"SliCR-3D\s(.*)\son",
-            'BambuStudio': r"BambuStudio[^ ]*\s(.*)\n"
+            'BambuStudio': r"BambuStudio[^ ]*\s(.*)\n",
+            'A3dp-Slicer': r"A3dp-Slicer\s(.*)\son",
         }
         for name, expr in aliases.items():
             match = re.search(expr, data)
