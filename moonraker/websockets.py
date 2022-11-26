@@ -576,14 +576,7 @@ class BaseSocketClient(Subscribable):
         if auth is None:
             return
         if token is not None:
-            try:
-                user_info = auth.decode_jwt(token)
-            except self.server.error:
-                raise
-            except Exception as e:
-                raise self.server.error(
-                    f"Failed to decode JWT: {e}", 401
-                ) from e
+            user_info = auth.validate_jwt(token)
             self.user_info = user_info
         elif not auth.is_path_permitted(path):
             raise self.server.error("Unauthorized", 401)
