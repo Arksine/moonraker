@@ -164,6 +164,23 @@ class FileManager:
             self.server.register_static_file_handler(
                 "klippy.log", log_path, force=True)
 
+        # Validate config file
+        cfg_file: Optional[str] = paths.get("config_file")
+        cfg_parent = self.file_paths.get("config")
+        if cfg_file is not None and cfg_parent is not None:
+            cfg_path = pathlib.Path(cfg_file).resolve()
+            par_path = pathlib.Path(cfg_parent).resolve()
+            if par_path not in cfg_path.parents:
+                self.server.add_warning(
+                    "file_manager: Klipper configuration file not located in "
+                    "'config' folder.\n\n"
+                    f"Klipper Config Path: {cfg_path}\n\n"
+                    f"Config Folder: {par_path}",
+                    warn_id="klipper_config"
+                )
+            else:
+                self.server.remove_warning("klipper_config")
+
     def validate_gcode_path(self, gc_path: str) -> None:
         gc_dir = pathlib.Path(gc_path).expanduser()
         if "gcodes" in self.file_paths:
