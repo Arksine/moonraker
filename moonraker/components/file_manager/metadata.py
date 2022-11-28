@@ -101,6 +101,7 @@ class BaseSlicer(object):
         self.header_data: str = ""
         self.footer_data: str = ""
         self.layer_height: Optional[float] = None
+        self.has_m486_objects: bool = False
 
     def set_data(self,
                  header_data: str,
@@ -146,6 +147,7 @@ class BaseSlicer(object):
             patterns.append(pattern)
         for regex in patterns:
             if re.search(regex, data) is not None:
+                self.has_m486_objects = regex == r"\nM486"
                 return True
         return False
 
@@ -921,19 +923,46 @@ SUPPORTED_DATA = [
     'filament_weight_total',
     'thumbnails']
 
-def process_objects(file_path: str) -> bool:
+def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
     try:
-        from preprocess_cancellation import preprocessor
+        from preprocess_cancellation import (
+            preprocess_slicer,
+            preprocess_cura,
+            preprocess_ideamaker,
+            preprocess_m486
+        )
     except ImportError:
         log_to_stderr("Module 'preprocess-cancellation' failed to load")
         return False
     fname = os.path.basename(file_path)
-    log_to_stderr(f"Performing Object Processing on file: {fname}")
+    log_to_stderr(
+        f"Performing Object Processing on file: {fname}, "
+        f"sliced by {name}"
+    )
     with tempfile.TemporaryDirectory() as tmp_dir_name:
         tmp_file = os.path.join(tmp_dir_name, fname)
         with open(file_path, 'r') as in_file:
             with open(tmp_file, 'w') as out_file:
-                preprocessor(in_file, out_file)
+                try:
+                    if slicer.has_m486_objects:
+                        processor = preprocess_m486
+                    elif isinstance(slicer, PrusaSlicer):
+                        processor = preprocess_slicer
+                    elif isinstance(slicer, Cura):
+                        processor = preprocess_cura
+                    elif isinstance(slicer, IdeaMaker):
+                        processor = preprocess_ideamaker
+                    else:
+                        log_to_stderr(
+                            f"Object Processing Failed, slicer {name}"
+                            "not supported"
+                        )
+                        return False
+                    for line in processor(in_file):
+                        out_file.write(line)
+                except Exception as e:
+                    log_to_stderr(f"Object processing failed: {e}")
+                    return False
         shutil.move(tmp_file, file_path)
     return True
 
@@ -972,7 +1001,8 @@ def extract_metadata(
     metadata: Dict[str, Any] = {}
     slicer, ident = get_slicer(file_path)
     if check_objects and slicer.has_objects():
-        if process_objects(file_path):
+        name = ident.get("slicer", "unknown")
+        if process_objects(file_path, slicer, name):
             slicer, ident = get_slicer(file_path)
     metadata['size'] = os.path.getsize(file_path)
     metadata['modified'] = os.path.getmtime(file_path)
