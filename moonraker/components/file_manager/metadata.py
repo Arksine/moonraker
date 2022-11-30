@@ -138,11 +138,21 @@ class BaseSlicer(object):
                            pattern: Optional[str] = None
                            ) -> bool:
         match = re.search(
-            r"\n(DEFINE_OBJECT)|(EXCLUDE_OBJECT_DEFINE) NAME=",
+            r"\n((DEFINE_OBJECT)|(EXCLUDE_OBJECT_DEFINE)) NAME=",
             data
         )
         if match is not None:
-            # Objects alread processed
+            # Objects already processed
+            fname = os.path.basename(self.path)
+            log_to_stderr(
+                f"File '{fname}' currently supports cancellation, "
+                "processing aborted"
+            )
+            if match.group(1).startswith("DEFINE_OBJECT"):
+                log_to_stderr(
+                    "Legacy object processing detected.  This is not "
+                    "compatible with official versions of Klipper."
+                )
             return False
         # Always check M486
         patterns = [r"\nM486"]
