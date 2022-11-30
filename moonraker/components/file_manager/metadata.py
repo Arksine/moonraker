@@ -137,7 +137,10 @@ class BaseSlicer(object):
                            data: str,
                            pattern: Optional[str] = None
                            ) -> bool:
-        match = re.search(r"\nDEFINE_OBJECT NAME=", data)
+        match = re.search(
+            r"\n(DEFINE_OBJECT)|(EXCLUDE_OBJECT_DEFINE) NAME=",
+            data
+        )
         if match is not None:
             # Objects alread processed
             return False
