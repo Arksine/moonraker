@@ -280,8 +280,10 @@ class MQTTClient(APITransport, Subscribable):
             raise config.error(
                 "Option 'default_qos' in section [mqtt] must be "
                 "between 0 and 2")
-        self.publish_split_status = config.getboolean("publish_split_status", False)
-        self.publish_combined_status = config.getboolean("publish_combined_status", True)
+        self.publish_split_status = \
+            config.getboolean("publish_split_status", False)
+        self.publish_combined_status = \
+            config.getboolean("publish_combined_status", True)
         self.client = ExtPahoClient(protocol=self.protocol)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -736,8 +738,11 @@ class MQTTClient(APITransport, Subscribable):
             for objkey in status:
                 objval = status[objkey]
                 for statekey in objval:
-                    payload = {'eventtime': eventtime, 'value': objval[statekey]}
-                    self.publish_topic(f"{self.klipper_state_prefix}/{objkey}/{statekey}", payload)
+                    payload = {'eventtime': eventtime,
+                               'value': objval[statekey]}
+                    self.publish_topic(
+                        f"{self.klipper_state_prefix}/{objkey}/{statekey}",
+                        payload)
 
     def get_instance_name(self) -> str:
         return self.instance_name
