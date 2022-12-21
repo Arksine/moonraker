@@ -742,7 +742,7 @@ class MQTTClient(APITransport, Subscribable):
                                'value': objval[statekey]}
                     self.publish_topic(
                         f"{self.klipper_state_prefix}/{objkey}/{statekey}",
-                        payload)
+                        payload, retain=True)
 
     def get_instance_name(self) -> str:
         return self.instance_name
