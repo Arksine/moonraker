@@ -159,7 +159,8 @@ class JobQueue:
 
     async def queue_job(self,
                         filenames: Union[str, List[str]],
-                        check_exists: bool = True
+                        check_exists: bool = True,
+                        reset: bool = False
                         ) -> None:
         async with self.lock:
             # Make sure that the file exists
@@ -169,6 +170,8 @@ class JobQueue:
                 # Make sure all files exist before adding them to the queue
                 for fname in filenames:
                     self._check_job_file(fname)
+            if reset:
+                self.queued_jobs.clear()
             for fname in filenames:
                 queued_job = QueuedJob(fname)
                 self.queued_jobs[queued_job.job_id] = queued_job
@@ -249,10 +252,11 @@ class JobQueue:
         action = web_request.get_action()
         if action == "POST":
             files: Union[List[str], str] = web_request.get('filenames')
+            reset = web_request.get_boolean("reset", False)
             if isinstance(files, str):
                 files = [f.strip() for f in files.split(',') if f.strip()]
             # Validate that all files exist before queueing
-            await self.queue_job(files)
+            await self.queue_job(files, reset=reset)
         elif action == "DELETE":
             if web_request.get_boolean("all", False):
                 await self.delete_job([], all=True)
