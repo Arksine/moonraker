@@ -2665,7 +2665,8 @@ Content-Type: application/json
         "job1.gcode",
         "job2.gcode",
         "subdir/job3.gcode"
-    ]
+    ],
+    "reset": false
 }
 ```
 
@@ -2679,11 +2680,17 @@ JSON-RPC request:
             "job1.gcode",
             "job2.gcode",
             "subdir/job3.gcode"
-        ]
+        ],
+        "reset": false
     },
     "id": 4654
 }
 ```
+
+Parameters:
+
+- `reset`: A boolean value indicating whether Moonraker should clear the
+  existing queued jobs before adding the new jobs. Defaults to `false`.
 
 Returns:
 
