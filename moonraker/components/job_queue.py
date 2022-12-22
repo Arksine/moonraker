@@ -66,6 +66,8 @@ class JobQueue:
             "/server/job_queue/start", ['POST'], self._handle_start_queue)
         self.server.register_endpoint(
             "/server/job_queue/status", ['GET'], self._handle_queue_status)
+        self.server.register_endpoint(
+            "/server/job_queue/jump", ['POST'], self._handle_jump)
 
     async def _handle_ready(self) -> None:
         async with self.lock:
@@ -288,6 +290,20 @@ class JobQueue:
     async def _handle_queue_status(self,
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
+        return {
+            'queued_jobs': self._job_map_to_list(),
+            'queue_state': self.queue_state
+        }
+
+    async def _handle_jump(self, web_request: WebRequest) -> Dict[str, Any]:
+        job_id: str = web_request.get("job_id")
+        async with self.lock:
+            job = self.queued_jobs.pop(job_id, None)
+            if job is None:
+                raise self.server.error(f"Invalid job id: {job_id}")
+            new_queue = {job_id: job}
+            new_queue.update(self.queued_jobs)
+            self.queued_jobs = new_queue
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state
