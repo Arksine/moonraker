@@ -2866,6 +2866,56 @@ The current state of the job queue:
 }
 ```
 
+#### Perform a Queue Jump
+
+Jumps a job to the front of the queue.
+
+HTTP request:
+```http
+POST /server/job_queue/jump?job_id=0000000066D991F0
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.job_queue.jump",
+    "params" {
+        "job_id": "0000000066D991F0"
+    },
+    "id": 4654
+}
+```
+
+Returns:
+
+The current state of the job queue:
+
+```json
+{
+    "queued_jobs": [
+        {
+            "filename": "job2.gcode",
+            "job_id": "0000000066D991F0",
+            "time_added": 1636151050.7766452,
+            "time_in_queue": 21.88680004119873
+        },
+        {
+            "filename": "job1.gcode",
+            "job_id": "0000000066D99C90",
+            "time_added": 1636151050.7666452,
+            "time_in_queue": 21.89680004119873
+        },
+        {
+            "filename": "subdir/job3.gcode",
+            "job_id": "0000000066D99D80",
+            "time_added": 1636151050.7866452,
+            "time_in_queue": 21.90680004119873
+        }
+    ],
+    "queue_state": "loading"
+}
+```
+
 ### Announcement APIs
 The following endpoints are available to manage announcements.  See
 [the appendix](#announcements) for details on how
