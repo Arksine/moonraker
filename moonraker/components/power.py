@@ -169,7 +169,9 @@ class PrinterPower:
                 result[name] = "device_not_found"
         return result
 
-    def set_device_power(self, device: str, state: Union[bool, str]) -> None:
+    def set_device_power(
+        self, device: str, state: Union[bool, str], force: bool = False
+    ) -> None:
         request: str = ""
         if isinstance(state, bool):
             request = "on" if state else "off"
@@ -185,7 +187,8 @@ class PrinterPower:
             return
         event_loop = self.server.get_event_loop()
         event_loop.register_callback(
-            self.devices[device].process_request, request)
+            self.devices[device].process_request, request, force=force
+        )
 
     async def add_device(self, name: str, device: PowerDevice) -> None:
         if name in self.devices:
@@ -361,7 +364,7 @@ class PowerDevice:
             self.init_task = eventloop.create_task(ret)
         return self.state != "error"
 
-    async def process_request(self, req: str) -> str:
+    async def process_request(self, req: str, force: bool = False) -> str:
         if self.state == "init" and self.request_lock.locked():
             # return immediately if the device is initializing,
             # otherwise its possible for this to block indefinitely
@@ -381,11 +384,12 @@ class PowerDevice:
                     if base_state != cur_state:
                         self.notify_power_changed()
                     return cur_state
-                printing = await self._check_klippy_printing()
-                if self.locked_while_printing and printing:
-                    raise self.server.error(
-                        f"Unable to change power for {self.name} "
-                        "while printing")
+                if not force:
+                    printing = await self._check_klippy_printing()
+                    if self.locked_while_printing and printing:
+                        raise self.server.error(
+                            f"Unable to change power for {self.name} "
+                            "while printing")
                 ret = self.set_power(req)
                 if ret is not None:
                     await ret
