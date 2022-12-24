@@ -1142,9 +1142,19 @@ gcode:
                              device="printer",
                              state="off")}
 ```
+
+The `device` parameter should be the name of a configured power device.  In
+the example above a device configured as `[power printer]` will be toggled.
+
+The `state` parameter may be one of the following:
+- `on`
+- `off`
+- `toggle`
+
 The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
 printer off when idle with a configuration similar to that of below:
+
 ```ini
 # printer.cfg
 
@@ -1162,13 +1172,37 @@ gcode:
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
 
+The following example illustrates one way to "force" a power device on
+during a print.  It presumes that the user has a `[power heaters]` device
+configured in `moonraker.conf` with the `locked_when_printing` option
+set to `True`:
+
+```ini
+# printer.cfg
+
+[gcode_macro POWER_ON_HEATERS]
+gcode:
+  {action_call_remote_method("set_device_power",
+                             device="heaters",
+                             state="on",
+                             force=True)}
+
+[gcode_macro PRINT_START]
+gcode:
+  # Turn on power supply for extruders/bed
+  POWER_ON_HEATERS
+  # Add a bit of delay to give the switch time
+  G4 P2000
+  # Add the rest of your "Start G-Code"...
+```
+
+
 #### Power on G-Code Uploads
 
 To power on a device after an upload, `queue_gcode_uploads: True` must
 be set in the `[file_manager]`, `load_on_startup: True` must be set in
 `[job_queue]` and `one_when_job_queued: True` must be set in `[power dev_name]`,
 where "dev_name" the the name of your power device.  For example:
-
 
 ```ini
 # moonraker.conf
