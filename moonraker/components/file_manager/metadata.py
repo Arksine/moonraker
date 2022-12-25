@@ -186,6 +186,9 @@ class BaseSlicer(object):
     def parse_first_layer_height(self) -> Optional[float]:
         return None
 
+    def parse_first_layer_dimension(self) -> Optional[str]:
+        return None
+
     def parse_layer_height(self) -> Optional[float]:
         return None
 
@@ -480,6 +483,15 @@ class Cura(BaseSlicer):
 
     def parse_first_layer_height(self) -> Optional[float]:
         return _regex_find_first(r";MINZ:(\d+\.?\d*)", self.header_data)
+
+    def parse_first_layer_dimension(self) -> Optional[str]:
+        maxx = _regex_find_first(r";MAXX:(\d+\.?\d*)", self.header_data)
+        maxy = _regex_find_first(r";MAXY:(\d+\.?\d*)", self.header_data)
+        minx = _regex_find_first(r";MINX:(\d+\.?\d*)", self.header_data)
+        miny = _regex_find_first(r";MINY:(\d+\.?\d*)", self.header_data)
+
+        # Frix_x adaptive bed mesh script format
+        return (f"{minx}_{miny}_{maxx}_{maxy}")
 
     def parse_layer_height(self) -> Optional[float]:
         self.layer_height = _regex_find_first(
@@ -929,6 +941,7 @@ SUPPORTED_DATA = [
     'first_layer_height',
     'first_layer_extr_temp',
     'first_layer_bed_temp',
+    'first_layer_dimension',
     'chamber_temp',
     'filament_name',
     'filament_type',
