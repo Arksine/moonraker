@@ -1138,18 +1138,15 @@ with a gcode_macro, such as:
 
 [gcode_macro POWER_OFF_PRINTER]
 gcode:
-  {action_call_remote_method("set_device_power",
-                             device="printer",
-                             state="off")}
+  {action_call_remote_method(
+    "set_device_power", device="printer", state="off"
+  )}
 ```
 
-The `device` parameter should be the name of a configured power device.  In
-the example above a device configured as `[power printer]` will be toggled.
+The `device` parameter must be the name of a configured power device.
+The `state` parameter must be `on`, `off`, or `toggle`.  In the example above
+a device configured as `[power printer]` will be powered off.
 
-The `state` parameter may be one of the following:
-- `on`
-- `off`
-- `toggle`
 
 The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
@@ -1172,27 +1169,73 @@ gcode:
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
 
-The following example illustrates one way to "force" a power device on
-during a print.  It presumes that the user has a `[power heaters]` device
-configured in `moonraker.conf` with the `locked_when_printing` option
-set to `True`:
+##### Power on a device when a print starts
+
+Some users have their logic wired to a separate power supply from heaters,
+fans, etc.  This keeps Klipper in the "ready" state when power is removed
+from such devices.  It is possible to configure Klipper to power up such
+devices when a print is started by overriding the `SDCARD_PRINT_FILE` gcode
+command. The following example presumes that the user a `[power heaters]`
+device configured in `moonraker.conf`:
 
 ```ini
 # printer.cfg
 
+# Create a Macro to Power on the Heaters.  This is necessary to be
+# sure that the template evaluates the call in the correct order.
 [gcode_macro POWER_ON_HEATERS]
 gcode:
-  {action_call_remote_method("set_device_power",
-                             device="heaters",
-                             state="on",
-                             force=True)}
+  {action_call_remote_method(
+    "set_device_power", device="heaters", state="on"
+  )}
+
+# Override SDCARD_PRINT_FILE
+[gcode_macro SDCARD_PRINT_FILE]
+rename_existing: SDCPF
+gcode:
+   # Step 1: Call the remote method to turn on the power device
+   POWER_ON_HEATERS
+   # Step 2: Pause while the device powers up.  The following example
+   # pauses for 4 seconds.  It may be necessary to tweak this value.
+   G4 P4000
+   # Step 3: Call the renamed command to start the print
+   SDCPF {rawparams}
+
+```
+
+
+##### Force a power device to change state during a print
+
+Another exotic use case is the addition of a "conditional" peripheral,
+such as an MMU device.  The user may not wish to power on this device
+for every print, and instead power it on from within the "Start G-GCode"
+conditionally.  Additionaly we do not want this device to be turned on/off
+unintentionally during a print.  The `set_device_power` remote method takes
+an optional `force` argument that can be used to accommodate this scenario.
+
+The following example presumes that the user has a `[power mmu]` device
+configured in `moonraker.conf` with the `locked_when_printing` option
+set to `True`.  The slicer would be configured to set `USE_MMU=1` for
+the print start macro when the MMU is in use.
+
+```ini
+# printer.cfg
+
+[gcode_macro POWER_ON_MMU]
+gcode:
+  {action_call_remote_method(
+    "set_device_power", device="mmu", state="on", force=True
+  )}
 
 [gcode_macro PRINT_START]
 gcode:
-  # Turn on power supply for extruders/bed
-  POWER_ON_HEATERS
-  # Add a bit of delay to give the switch time
-  G4 P2000
+  {% set use_mmu = params.USE_MMU|default(0)|int %}
+  {% if use_mmu $}
+    # Turn on power supply for extruders/bed
+    POWER_ON_MMU
+    # Add a bit of delay to give the switch time
+    G4 P2000
+  {% endif %}
   # Add the rest of your "Start G-Code"...
 ```
 
@@ -1211,9 +1254,7 @@ where "dev_name" the the name of your power device.  For example:
 # is set and Klipper cannot immediately start the print.
 [file_manager]
 queue_gcode_uploads: True
-# Set the config_path and log_path options to the correct locations
-#config_path:
-#log_path:
+
 
 # Configure the Job Queue to start a queued print when Klipper reports as
 # ready.
