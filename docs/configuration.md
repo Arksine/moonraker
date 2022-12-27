@@ -1174,8 +1174,10 @@ gcode:
 Some users have their logic wired to a separate power supply from heaters,
 fans, etc.  This keeps Klipper in the "ready" state when power is removed
 from such devices.  It is possible to configure Klipper to power up such
-devices when a print is started by overriding the `SDCARD_PRINT_FILE` gcode
-command. The following example presumes that the user a `[power heaters]`
+devices just before a print is started by overriding the `SDCARD_PRINT_FILE`
+gcode command.
+
+The following example presumes that the user a `[power heaters]`
 device configured in `moonraker.conf`:
 
 ```ini
@@ -1202,6 +1204,12 @@ gcode:
    SDCPF {rawparams}
 
 ```
+
+!!! Warning
+    The `SDCARD_PRINT_FILE` G-Code command will be executed when a Moonraker
+    forwards a request to start a print.  Do not put this command in a G-Code
+    file or in a macro that is run from a G-Code file.  This will result in an
+    `SD Busy` error and abort the print.
 
 
 ##### Force a power device to change state during a print
