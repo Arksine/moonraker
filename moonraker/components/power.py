@@ -240,7 +240,18 @@ class PowerDevice:
             self.server.register_event_handler(
                 "server:klippy_started", self._schedule_firmware_restart
             )
-        self.bound_service: Optional[str] = config.get('bound_service', None)
+        self.bound_services: List[str] = []
+        bound_services: List[str] = config.getlist('bound_services', [])
+        if config.has_option('bound_service'):
+            # The `bound_service` option is deprecated, however this minimal
+            # change does not require a warning as it can be reliably resolved
+            bound_services.append(config.get('bound_service'))
+        for svc in bound_services:
+            if svc.endswith(".service"):
+                svc = svc.rsplit(".", 1)[0]
+            if svc in self.bound_services:
+                continue
+            self.bound_services.append(svc)
         self.need_scheduled_restart = False
         self.on_when_queued = config.getboolean('on_when_job_queued', False)
         if config.has_option('on_when_upload_queued'):
@@ -294,14 +305,15 @@ class PowerDevice:
 
     async def process_power_changed(self) -> None:
         self.notify_power_changed()
-        if self.bound_service is not None:
+        if self.bound_services:
             machine_cmp: Machine = self.server.lookup_component("machine")
             action = "start" if self.state == "on" else "stop"
-            logging.info(
-                f"Power Device {self.name}: Performing {action} action "
-                f"on bound service {self.bound_service}"
-            )
-            await machine_cmp.do_service_action(action, self.bound_service)
+            for svc in self.bound_services:
+                logging.info(
+                    f"Power Device {self.name}: Performing {action} action "
+                    f"on bound service {svc}"
+                )
+                await machine_cmp.do_service_action(action, svc)
         if self.state == "on" and self.klipper_restart:
             self.need_scheduled_restart = True
             klippy_state = self.server.get_klippy_state()
@@ -336,28 +348,30 @@ class PowerDevice:
     def should_turn_on_when_queued(self) -> bool:
         return self.on_when_queued and self.state == "off"
 
-    def _setup_bound_service(self) -> None:
-        if self.bound_service is None:
+    def _setup_bound_services(self) -> None:
+        if not self.bound_services:
             return
         machine_cmp: Machine = self.server.lookup_component("machine")
-        if machine_cmp.unit_name == self.bound_service.split(".", 1)[0]:
-            raise self.server.error(
-                f"Power Device {self.name}: Cannot bind to Moonraker "
-                f"service, {self.bound_service}."
-            )
         sys_info = machine_cmp.get_system_info()
         avail_svcs: List[str] = sys_info.get('available_services', [])
-        if self.bound_service not in avail_svcs:
-            raise self.server.error(
-                f"Bound Service {self.bound_service} is not available")
-        logging.info(f"Power Device '{self.name}' bound to "
-                     f"service '{self.bound_service}'")
+        for svc in self.bound_services:
+            if machine_cmp.unit_name == svc:
+                raise self.server.error(
+                    f"Power Device {self.name}: Cannot bind to Moonraker "
+                    f"service {svc}."
+                )
+            if svc not in avail_svcs:
+                raise self.server.error(
+                    f"Bound Service {svc} is not available"
+                )
+        svcs = ", ".join(self.bound_services)
+        logging.info(f"Power Device '{self.name}' bound to services: {svcs}")
 
     def init_state(self) -> Optional[Coroutine]:
         return None
 
     def initialize(self) -> bool:
-        self._setup_bound_service()
+        self._setup_bound_services()
         ret = self.init_state()
         if ret is not None:
             eventloop = self.server.get_event_loop()
@@ -566,15 +580,13 @@ class KlipperDevice(PowerDevice):
             raise config.error(
                 "Option 'restart_klipper_when_powered' in section "
                 f"[{config.get_name()}] is unsupported for 'klipper_device'")
-        if (
-            self.bound_service is not None and
-            self.bound_service.startswith("klipper")
-        ):
-            # Klipper devices cannot be bound to an instance of klipper or
-            # klipper_mcu
-            raise config.error(
-                f"Option 'bound_service' cannot be set to {self.bound_service}"
-                f" for 'klipper_device' [{config.get_name()}]")
+        for svc in self.bound_services:
+            if svc.startswith("klipper"):
+                # Klipper devices cannot be bound to an instance of klipper or
+                # klipper_mcu
+                raise config.error(
+                    f"Option 'bound_services' must not contain service '{svc}'"
+                    f" for 'klipper_device' [{config.get_name()}]")
         self.is_shutdown: bool = False
         self.update_fut: Optional[asyncio.Future] = None
         self.timer: Optional[float] = config.getfloat(
