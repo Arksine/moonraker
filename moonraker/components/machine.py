@@ -54,10 +54,14 @@ if TYPE_CHECKING:
     SudoReturn = Union[Awaitable[Tuple[str, bool]], Tuple[str, bool]]
     SudoCallback = Callable[[], SudoReturn]
 
-ALLOWED_SERVICES = [
-    "moonraker", "klipper", "webcamd", "MoonCord",
-    "KlipperScreen", "moonraker-telegram-bot",
-    "sonar", "crowsnest"
+DEFAULT_ALLOWED_SERVICES = [
+    "klipper_mcu",
+    "webcamd",
+    "MoonCord",
+    "KlipperScreen",
+    "moonraker-telegram-bot",
+    "sonar",
+    "crowsnest"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
@@ -80,6 +84,8 @@ SERVICE_PROPERTIES = [
 class Machine:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self._allowed_services: List[str] = []
+        self._init_allowed_services()
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
@@ -161,15 +167,39 @@ class Machine:
         self.iwgetid_cmd = shell_cmd.build_shell_command(iwgetbin)
         self.init_evt = asyncio.Event()
 
+    def _init_allowed_services(self) -> None:
+        app_args = self.server.get_app_args()
+        data_path = app_args["data_path"]
+        fpath = pathlib.Path(data_path).joinpath("moonraker.asvc")
+        fm: FileManager = self.server.lookup_component("file_manager")
+        fm.add_reserved_path("allowed_services", fpath, False)
+        try:
+            if not fpath.exists():
+                fpath.write_text("\n".join(DEFAULT_ALLOWED_SERVICES))
+            data = fpath.read_text()
+        except Exception:
+            logging.exception("Failed to read allowed_services.txt")
+            self._allowed_services = DEFAULT_ALLOWED_SERVICES
+        else:
+            svcs = [svc.strip() for svc in data.split("\n") if svc.strip()]
+            for svc in svcs:
+                if svc.endswith(".service"):
+                    svc = svc.rsplit(".", 1)[0]
+                if svc not in self._allowed_services:
+                    self._allowed_services.append(svc)
+
     def _update_log_rollover(self, log: bool = False) -> None:
         sys_info_msg = "\nSystem Info:"
         for header, info in self.system_info.items():
             sys_info_msg += f"\n\n***{header}***"
             if not isinstance(info, dict):
-                sys_info_msg += f"\n {repr(info)}"
+                sys_info_msg += f"\n  {repr(info)}"
             else:
                 for key, val in info.items():
                     sys_info_msg += f"\n  {key}: {val}"
+        sys_info_msg += f"\n\n***Allowed Services***"
+        for svc in self._allowed_services:
+            sys_info_msg += f"\n  {svc}"
         self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
 
     @property
@@ -181,6 +211,13 @@ class Machine:
         svc_info = self.moonraker_service_info
         unit_name = svc_info.get("unit_name", "moonraker.service")
         return unit_name.split(".", 1)[0]
+
+    def is_service_allowed(self, service: str) -> bool:
+        return (
+            service in self._allowed_services or
+            re.match(r"moonraker[_-]?\d*", service) is not None or
+            re.match(r"klipper[_-]?\d*", service) is not None
+        )
 
     def validation_enabled(self) -> bool:
         return self.validator.validation_enabled
@@ -270,7 +307,7 @@ class Machine:
         elif self.sys_provider.is_service_available(name):
             await self.do_service_action(action, name)
         else:
-            if name in ALLOWED_SERVICES:
+            if name in self._allowed_services:
                 raise self.server.error(f"Service '{name}' not installed")
             raise self.server.error(
                 f"Service '{name}' not allowed")
@@ -822,7 +859,8 @@ class SystemdCliProvider(BaseProvider):
             'virt_identifier': virt_id
         }
 
-    async def _detect_active_services(self):
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
         try:
             resp: str = await self.shell_cmd.exec_cmd(
                 "systemctl list-units --all --type=service --plain"
@@ -834,12 +872,11 @@ class SystemdCliProvider(BaseProvider):
             services = []
         for svc in services:
             sname = svc.rsplit('.', 1)[0]
-            for allowed in ALLOWED_SERVICES:
-                if sname.startswith(allowed):
-                    self.available_services[sname] = {
-                        'active_state': "unknown",
-                        'sub_state': "unknown"
-                    }
+            if machine.is_service_allowed(sname):
+                self.available_services[sname] = {
+                    'active_state': "unknown",
+                    'sub_state': "unknown"
+                }
 
     async def _update_service_status(self,
                                      sequence: int,
@@ -1050,11 +1087,13 @@ class SystemdDbusProvider(BaseProvider):
     async def _detect_active_services(self) -> None:
         # Get loaded service
         mgr = self.systemd_mgr
-        patterns = [f"{svc}*.service" for svc in ALLOWED_SERVICES]
-        units = await mgr.call_list_units_by_patterns(  # type: ignore
-            ["loaded"], patterns)
+        machine: Machine = self.server.lookup_component("machine")
+        units: List[str]
+        units = await mgr.call_list_units_filtered(["loaded"])  # type: ignore
         for unit in units:
             name: str = unit[0].split('.')[0]
+            if not machine.is_service_allowed(name):
+                continue
             state: str = unit[3]
             substate: str = unit[4]
             dbus_path: str = unit[6]
