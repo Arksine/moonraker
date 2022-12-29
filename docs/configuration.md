@@ -1486,8 +1486,7 @@ status_objects:
 #   A newline separated list of Klipper objects whose state will be
 #   published.  There are two different ways to publish the states - you
 #   can use either or both depending on your need.  See the 
-#   "publish_combined_status" and "publish_split_status" options for
-#   details.
+#   "publish_split_status" options for details.
 #
 #   For example, this option could be set as follows:
 #
@@ -1509,12 +1508,14 @@ status_objects:
 #
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
-publish_combined_status: True
-#   Defaults to True. All Klipper object state updates will be published to
-#   a single mqtt state with the following topic:
-#     {instance_name}/klipper/status
 publish_split_status: False
-#   Defaults to False. All Klipper object state updates will be published to
+#   Configures how to publish status updates to MQTT.  
+#
+#   When set to False (default), all Klipper object state updates will be
+#   published to a single mqtt state with the following topic:
+#     {instance_name}/klipper/status
+#
+#   When set to True, all Klipper object state updates will be published to
 #   separate mqtt topics derived from the object and item in the following
 #   format:
 #     {instance_name}/klipper/state/{objectname}/{statename}

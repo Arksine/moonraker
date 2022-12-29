@@ -282,8 +282,6 @@ class MQTTClient(APITransport, Subscribable):
                 "between 0 and 2")
         self.publish_split_status = \
             config.getboolean("publish_split_status", False)
-        self.publish_combined_status = \
-            config.getboolean("publish_combined_status", True)
         self.client = ExtPahoClient(protocol=self.protocol)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -731,9 +729,6 @@ class MQTTClient(APITransport, Subscribable):
                     ) -> None:
         if not status or not self.is_connected():
             return
-        if self.publish_combined_status:
-            payload = {'eventtime': eventtime, 'status': status}
-            self.publish_topic(self.klipper_status_topic, payload)
         if self.publish_split_status:
             for objkey in status:
                 objval = status[objkey]
@@ -743,6 +738,10 @@ class MQTTClient(APITransport, Subscribable):
                     self.publish_topic(
                         f"{self.klipper_state_prefix}/{objkey}/{statekey}",
                         payload, retain=True)
+        else:
+            payload = {'eventtime': eventtime, 'status': status}
+            self.publish_topic(self.klipper_status_topic, payload)
+
 
     def get_instance_name(self) -> str:
         return self.instance_name
