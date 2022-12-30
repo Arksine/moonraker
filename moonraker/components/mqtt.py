@@ -280,6 +280,8 @@ class MQTTClient(APITransport, Subscribable):
             raise config.error(
                 "Option 'default_qos' in section [mqtt] must be "
                 "between 0 and 2")
+        self.publish_split_status = \
+            config.getboolean("publish_split_status", False)
         self.client = ExtPahoClient(protocol=self.protocol)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -308,6 +310,7 @@ class MQTTClient(APITransport, Subscribable):
         self.api_request_topic = f"{self.instance_name}/moonraker/api/request"
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
+        self.klipper_state_prefix = f"{self.instance_name}/klipper/state"
         self.moonraker_status_topic = f"{self.instance_name}/moonraker/status"
         status_cfg: Dict[str, Any] = config.getdict("status_objects", {},
                                                     allow_empty_fields=True)
@@ -726,8 +729,19 @@ class MQTTClient(APITransport, Subscribable):
                     ) -> None:
         if not status or not self.is_connected():
             return
-        payload = {'eventtime': eventtime, 'status': status}
-        self.publish_topic(self.klipper_status_topic, payload)
+        if self.publish_split_status:
+            for objkey in status:
+                objval = status[objkey]
+                for statekey in objval:
+                    payload = {'eventtime': eventtime,
+                               'value': objval[statekey]}
+                    self.publish_topic(
+                        f"{self.klipper_state_prefix}/{objkey}/{statekey}",
+                        payload, retain=True)
+        else:
+            payload = {'eventtime': eventtime, 'status': status}
+            self.publish_topic(self.klipper_status_topic, payload)
+
 
     def get_instance_name(self) -> str:
         return self.instance_name

@@ -1567,8 +1567,10 @@ instance_name:
 #   The default is the machine's hostname.
 status_objects:
 #   A newline separated list of Klipper objects whose state will be
-#   published in the payload of the following topic:
-#      {instance_name}/klipper/status
+#   published.  There are two different ways to publish the states - you
+#   can use either or both depending on your need.  See the 
+#   "publish_split_status" options for details.
+#
 #   For example, this option could be set as follows:
 #
 #     status_objects:
@@ -1589,6 +1591,23 @@ status_objects:
 #
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
+publish_split_status: False
+#   Configures how to publish status updates to MQTT.  
+#
+#   When set to False (default), all Klipper object state updates will be
+#   published to a single mqtt state with the following topic:
+#     {instance_name}/klipper/status
+#
+#   When set to True, all Klipper object state updates will be published to
+#   separate mqtt topics derived from the object and item in the following
+#   format:
+#     {instance_name}/klipper/state/{objectname}/{statename}
+#
+#   The actual value of the state is published as "value" to the topic above.
+#   For example, if the heater_bed temperature was 24.0, this is the payload:
+#     {"eventtime": {timestamp}, "value": 24.0}
+#   It would be published to this topic:
+#     {instance_name}/klipper/state/heater_bed/temperature
 default_qos: 0
 #   The default QOS level used when publishing or subscribing to topics.
 #   Must be an integer value from 0 to 2.  The default is 0.
