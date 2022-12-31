@@ -163,6 +163,25 @@ supervisord_config_path:
     Alternatively it may be possible to enable the `systemd-logind` service,
     consult with your distributions's documentation.
 
+#### Allowed Services
+
+The `machine` component uses the configured provider to manage services
+on the system (ie: restart a service).  Moonraker is authorized to manage
+the `moonraker` and `klipper` services, including those that match common
+multi-instance patterns, such as `moonraker-1`, `klipper_2`, and `moonraker1`.
+
+Moonraker may be authorized to manage additional services by modifying
+`<data_folder>/moonraker.asvc`.  By default this file includes the
+following services:
+
+- `klipper_mcu`
+- `webcamd`
+- `MoonCord`
+- `KlipperScreen`
+- `moonraker-telegam-bot`
+- `sonar`
+- `crowsnest`
+
 #### Reboot / Shutdown from Klipper
 
 It is possible to call the `shutdown_machine` and `reboot_machine`
@@ -552,21 +571,18 @@ restart_klipper_when_powered: False
 restart_delay: 1.
 #   If "restart_klipper_when_powered" is set, this option specifies the amount
 #   of time (in seconds) to delay the restart.  Default is 1 second.
-bound_service:
-#   Can be set to any service Moonraker is authorized to manage with the
-#   exception of the moonraker service itself. See the tip below this section
-#   for details on what services are authorized.  When a bound service has
-#   been set the service will be started when the device powers on and stopped
-#   when the device powers off.  The default is no service is bound to the
-#   device.
+bound_services:
+#   A newline separated list of services that are "bound" to the state of this
+#   device.  When the device is powered on all bound services will be started.
+#   When the device is powered off all bound services are stopped.
+#
+#   The items in this list are limited to those specified in the allow list,
+#   see the [machine] configuration documentation for details.  Additionally,
+#   the Moonraker service can not be bound to a power device.  Note that
+#   service names are case sensitive.
+#
+#   The default is no services are bound to the device.
 ```
-
-!!! Tip
-    Moonraker is authorized to manage the `klipper`, `klipper_mcu`,
-    `webcamd`, `MoonCord`, `KlipperScreen`, and `moonraker-telegram-bot`
-    services.  It can also manage multiple instances of a service, ie:
-    `klipper_1`, `klipper_2`.  Keep in mind that service names are case
-    sensitive.
 
 !!! Note
     If a device has been bound to the `klipper` service and the

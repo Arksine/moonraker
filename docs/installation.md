@@ -208,7 +208,8 @@ structure using the default data path of `$HOME/printer_data`.
 │   └── moonraker.log
 ├── systemd
 │   └── moonraker.env
-└── moonraker.secrets (optional)
+├── moonraker.secrets (optional)
+└── moonraker.asvc
 ```
 
 If it is not desirible for the files and folders to exist in these specific
