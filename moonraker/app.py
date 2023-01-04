@@ -55,12 +55,6 @@ if TYPE_CHECKING:
     AuthComp = Optional[components.authorization.Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
 
-# These endpoints are reserved for klippy/server communication only and are
-# not exposed via http or the websocket
-RESERVED_ENDPOINTS = [
-    "list_endpoints", "gcode/subscribe_output",
-    "register_remote_method"
-]
 
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
@@ -321,8 +315,6 @@ class MoonrakerApp:
         return self.api_cache
 
     def register_remote_handler(self, endpoint: str) -> None:
-        if endpoint in RESERVED_ENDPOINTS:
-            return
         api_def = self._create_api_definition(endpoint)
         if api_def.uri in self.registered_base_handlers:
             # reserved handler or already registered

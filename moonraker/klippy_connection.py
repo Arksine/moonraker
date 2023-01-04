@@ -37,6 +37,14 @@ if TYPE_CHECKING:
     from components.machine import Machine
     FlexCallback = Callable[..., Optional[Coroutine]]
 
+# These endpoints are reserved for klippy/moonraker communication only and are
+# not exposed via http or the websocket
+RESERVED_ENDPOINTS = [
+    "list_endpoints",
+    "gcode/subscribe_output",
+    "register_remote_method",
+]
+
 INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
@@ -318,7 +326,8 @@ class KlippyConnection:
         endpoints = result.get('endpoints', [])
         app: MoonrakerApp = self.server.lookup_component("application")
         for ep in endpoints:
-            app.register_remote_handler(ep)
+            if ep not in RESERVED_ENDPOINTS:
+                app.register_remote_handler(ep)
 
     async def _check_ready(self) -> None:
         send_id = "identified" not in self.init_list
