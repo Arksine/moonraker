@@ -956,6 +956,7 @@ Example:
 
 [power homeassistant_switch]
 type: homeassistant
+protocol: http
 address: 192.168.1.126
 port: 8123
 device: switch.1234567890abcdefghij
