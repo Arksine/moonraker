@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
-    from components.klippy_apis import KlippyAPI as APIComp
+    from klippy_connection import KlippyConnection
     from components.shell_command import ShellCommandFactory as SCMDComp
     from components.database import MoonrakerDatabase as DBComp
     from components.database import NamespaceWrapper
@@ -68,6 +68,8 @@ class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
+        self.kconn: KlippyConnection
+        self.kconn = self.server.lookup_component("klippy_connection")
         self.channel = config.get('channel', "dev")
         if self.channel not in ["dev", "beta"]:
             raise config.error(
@@ -224,20 +226,13 @@ class UpdateManager:
         if notify:
             self.cmd_helper.notify_update_refreshed()
 
-    async def _check_klippy_printing(self) -> bool:
-        kapi: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapi.query_objects(
-            {'print_stats': None}, default={})
-        pstate: str = result.get('print_stats', {}).get('state', "")
-        return pstate.lower() == "printing"
-
     async def _handle_auto_refresh(self, eventtime: float) -> float:
         cur_hour = time.localtime(time.time()).tm_hour
         if self.initial_refresh_complete:
             # Update when the local time is between 12AM and 5AM
             if cur_hour >= MAX_UPDATE_HOUR:
                 return eventtime + UPDATE_REFRESH_INTERVAL
-            if await self._check_klippy_printing():
+            if self.kconn.is_printing():
                 # Don't Refresh during a print
                 logging.info("Klippy is printing, auto refresh aborted")
                 return eventtime + UPDATE_REFRESH_INTERVAL
@@ -268,7 +263,7 @@ class UpdateManager:
     async def _handle_update_request(self,
                                      web_request: WebRequest
                                      ) -> str:
-        if await self._check_klippy_printing():
+        if self.kconn.is_printing():
             raise self.server.error("Update Refused: Klippy is printing")
         app: str = web_request.get_endpoint().split("/")[-1]
         if app == "client":
@@ -391,7 +386,7 @@ class UpdateManager:
         if (
             machine.validation_enabled() or
             self.cmd_helper.is_update_busy() or
-            await self._check_klippy_printing() or
+            self.kconn.is_printing() or
             not self.initial_refresh_complete
         ):
             if check_refresh:
@@ -433,7 +428,7 @@ class UpdateManager:
     async def _handle_repo_recovery(self,
                                     web_request: WebRequest
                                     ) -> str:
-        if await self._check_klippy_printing():
+        if self.kconn.is_printing():
             raise self.server.error(
                 "Recovery Attempt Refused: Klippy is printing")
         app: str = web_request.get_str('name')

@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from components.klippy_apis import KlippyAPI
     from components.file_manager.file_manager import FileManager
     from components.machine import Machine
+    from components.job_state import JobState
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 # These endpoints are reserved for klippy/moonraker communication only and are
@@ -549,6 +550,16 @@ class KlippyConnection:
 
     def is_connected(self) -> bool:
         return self.writer is not None and not self.closing
+
+    def is_ready(self) -> bool:
+        return self.state == "ready"
+
+    def is_printing(self) -> bool:
+        if not self.is_ready():
+            return False
+        job_state: JobState = self.server.lookup_component("job_state")
+        stats = job_state.get_last_stats()
+        return stats.get("state", "") == "printing"
 
     async def _on_connection_closed(self) -> None:
         self.init_list = []

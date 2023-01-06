@@ -38,10 +38,12 @@ if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
     from confighelper import ConfigHelper
     from websockets import WebRequest
+    from klippy_connection import KlippyConnection
     from components import database
     from components import klippy_apis
     from components import shell_command
     from components.job_queue import JobQueue
+    from components.job_state import JobState
     StrOrPath = Union[str, pathlib.Path]
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI
@@ -403,7 +405,7 @@ class FileManager:
                 if force:
                     # Make sure that the directory does not contain a file
                     # loaded by the virtual_sdcard
-                    await self._handle_operation_check(dir_path)
+                    self._handle_operation_check(dir_path)
                     self.notify_sync_lock = NotifySyncLock(dir_path)
                     try:
                         await self.event_loop.run_in_thread(
@@ -423,20 +425,19 @@ class FileManager:
                 raise self.server.error("Operation Not Supported", 405)
         return result
 
-    async def _handle_operation_check(self, requested_path: str) -> bool:
+    def _handle_operation_check(self, requested_path: str) -> bool:
         if not self.get_relative_path("gcodes", requested_path):
             # Path not in the gcodes path
             return True
-        # Get virtual_sdcard status
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any]
-        result = await kapis.query_objects({'print_stats': None}, {})
-        pstats = result.get('print_stats', {})
-        loaded_file: str = pstats.get('filename', "")
-        state: str = pstats.get('state', "")
+        kconn: KlippyConnection
+        kconn = self.server.lookup_component("klippy_connection")
+        job_state: JobState = self.server.lookup_component("job_state")
+        last_stats = job_state.get_last_stats()
+        loaded_file: str = last_stats.get('filename', "")
+        state: str = last_stats.get('state', "")
         gc_path = self.file_paths.get('gcodes', "")
         full_path = os.path.join(gc_path, loaded_file)
-        is_printing = state in ["printing", "paused"]
+        is_printing = kconn.is_ready() and state in ["printing", "paused"]
         if loaded_file and is_printing:
             if os.path.isdir(requested_path):
                 # Check to see of the loaded file is in the request
@@ -482,13 +483,13 @@ class FileManager:
                 raise self.server.error(f"File {source_path} does not exist")
             # make sure the destination is not in use
             if os.path.exists(dest_path):
-                await self._handle_operation_check(dest_path)
+                self._handle_operation_check(dest_path)
             if ep == "/server/files/move":
                 if source_root not in self.full_access_roots:
                     raise self.server.error(
                         f"Source path is read-only, cannot move: {source_root}")
                 # if moving the file, make sure the source is not in use
-                await self._handle_operation_check(source_path)
+                self._handle_operation_check(source_path)
                 op_func: Callable[..., str] = shutil.move
                 result['source_item'] = {
                     'path': source,
@@ -665,7 +666,7 @@ class FileManager:
         can_start: bool = False
         try:
             check_path: str = upload_info['dest_path']
-            can_start = await self._handle_operation_check(check_path)
+            can_start = self._handle_operation_check(check_path)
         except self.server.error as e:
             if e.status_code == 403:
                 raise self.server.error(
@@ -857,7 +858,7 @@ class FileManager:
             if not os.path.isfile(full_path):
                 raise self.server.error(f"Invalid file path: {path}")
             try:
-                await self._handle_operation_check(full_path)
+                self._handle_operation_check(full_path)
             except self.server.error as e:
                 if e.status_code == 403:
                     raise
@@ -1683,7 +1684,7 @@ class MetadataStorage:
 
     def get(self,
             key: str,
-            default: _T = None
+            default: Optional[_T] = None
             ) -> Union[_T, Dict[str, Any]]:
         return deepcopy(self.metadata.get(key, default))
 

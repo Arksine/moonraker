@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
     from .http_client import HttpClient
+    from klippy_connection import KlippyConnection
     APIComp = klippy_apis.KlippyAPI
 
 class PrinterPower:
@@ -93,13 +94,6 @@ class PrinterPower:
         self.server.register_event_handler(
             "job_queue:job_queue_changed", self._handle_job_queued)
         self.server.register_notification("power:power_changed")
-
-    async def _check_klippy_printing(self) -> bool:
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapis.query_objects(
-            {'print_stats': None}, default={})
-        pstate = result.get('print_stats', {}).get('state', "").lower()
-        return pstate == "printing"
 
     async def component_init(self) -> None:
         for dev in self.devices.values():
@@ -261,13 +255,6 @@ class PowerDevice:
             'initial_state', None
         )
 
-    async def _check_klippy_printing(self) -> bool:
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapis.query_objects(
-            {'print_stats': None}, default={})
-        pstate = result.get('print_stats', {}).get('state', "").lower()
-        return pstate == "printing"
-
     def _schedule_firmware_restart(self, state: str = "") -> None:
         if not self.need_scheduled_restart:
             return
@@ -399,8 +386,9 @@ class PowerDevice:
                         self.notify_power_changed()
                     return cur_state
                 if not force:
-                    printing = await self._check_klippy_printing()
-                    if self.locked_while_printing and printing:
+                    kconn: KlippyConnection
+                    kconn = self.server.lookup_component("klippy_connection")
+                    if self.locked_while_printing and kconn.is_printing():
                         raise self.server.error(
                             f"Unable to change power for {self.name} "
                             "while printing")
