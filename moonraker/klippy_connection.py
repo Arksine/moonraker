@@ -561,6 +561,37 @@ class KlippyConnection:
         stats = job_state.get_last_stats()
         return stats.get("state", "") == "printing"
 
+    async def rollover_log(self) -> None:
+        if "unit_name" not in self._service_info:
+            raise self.server.error(
+                "Unable to detect Klipper Service, cannot perform "
+                "manual rollover"
+            )
+        logfile: Optional[str] = self._klippy_info.get("log_file", None)
+        if logfile is None:
+            raise self.server.error(
+                "Unable to detect path to Klipper log file"
+            )
+        if self.is_printing():
+            raise self.server.error("Cannot rollover log while printing")
+        logpath = pathlib.Path(logfile).expanduser().resolve()
+        if not logpath.is_file():
+            raise self.server.error(
+                f"No file at {logpath} exists, cannot perform rollover"
+            )
+        machine: Machine = self.server.lookup_component("machine")
+        await machine.do_service_action("stop", self.unit_name)
+        suffix = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        new_path = pathlib.Path(f"{logpath}.{suffix}")
+
+        def _do_file_op() -> None:
+            if new_path.exists():
+                new_path.unlink()
+            logpath.rename(new_path)
+
+        await self.event_loop.run_in_thread(_do_file_op)
+        await machine.do_service_action("start", self.unit_name)
+
     async def _on_connection_closed(self) -> None:
         self.init_list = []
         self._state = "disconnected"
