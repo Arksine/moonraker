@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import logging
-import logging.handlers
 import os
 import glob
 import importlib
@@ -20,7 +19,6 @@ import shlex
 import re
 import struct
 import socket
-from queue import SimpleQueue as Queue
 
 # Annotation imports
 from typing import (
@@ -30,7 +28,6 @@ from typing import (
     ClassVar,
     Tuple,
     Dict,
-    Any,
 )
 
 if TYPE_CHECKING:
@@ -55,40 +52,6 @@ class SentinelClass:
         if SentinelClass._instance is None:
             SentinelClass._instance = SentinelClass()
         return SentinelClass._instance
-
-# Coroutine friendly QueueHandler courtesy of Martjin Pieters:
-# https://www.zopatista.com/python/2019/05/11/asyncio-logging/
-class LocalQueueHandler(logging.handlers.QueueHandler):
-    def emit(self, record: logging.LogRecord) -> None:
-        # Removed the call to self.prepare(), handle task cancellation
-        try:
-            self.enqueue(record)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            self.handleError(record)
-
-# Timed Rotating File Handler, based on Klipper's implementation
-class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
-    def __init__(self, app_args: Dict[str, Any], **kwargs) -> None:
-        super().__init__(app_args['log_file'], **kwargs)
-        self.rollover_info: Dict[str, str] = {
-            'header': f"{'-'*20}Moonraker Log Start{'-'*20}"
-        }
-        self.rollover_info['application_args'] = "\n".join(
-            [f"{k}: {v}" for k, v in app_args.items()])
-        lines = [line for line in self.rollover_info.values() if line]
-        if self.stream is not None:
-            self.stream.write("\n".join(lines) + "\n")
-
-    def set_rollover_info(self, name: str, item: str) -> None:
-        self.rollover_info[name] = item
-
-    def doRollover(self) -> None:
-        super().doRollover()
-        lines = [line for line in self.rollover_info.values() if line]
-        if self.stream is not None:
-            self.stream.write("\n".join(lines) + "\n")
 
 def _run_git_command(cmd: str) -> str:
     prog = shlex.split(cmd)
@@ -139,45 +102,6 @@ def get_software_version() -> str:
                 version = "?"
     return version
 
-def setup_logging(app_args: Dict[str, Any]
-                  ) -> Tuple[logging.handlers.QueueListener,
-                             Optional[MoonrakerLoggingHandler],
-                             Optional[str]]:
-    root_logger = logging.getLogger()
-    queue: Queue = Queue()
-    queue_handler = LocalQueueHandler(queue)
-    root_logger.addHandler(queue_handler)
-    root_logger.setLevel(logging.INFO)
-    stdout_hdlr = logging.StreamHandler(sys.stdout)
-    stdout_fmt = logging.Formatter(
-        '[%(filename)s:%(funcName)s()] - %(message)s')
-    stdout_hdlr.setFormatter(stdout_fmt)
-    for name, val in app_args.items():
-        logging.info(f"{name}: {val}")
-    warning: Optional[str] = None
-    file_hdlr: Optional[MoonrakerLoggingHandler] = None
-    listener: Optional[logging.handlers.QueueListener] = None
-    log_file: str = app_args.get('log_file', "")
-    if log_file:
-        try:
-            file_hdlr = MoonrakerLoggingHandler(
-                app_args, when='midnight', backupCount=2)
-            formatter = logging.Formatter(
-                '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
-            file_hdlr.setFormatter(formatter)
-            listener = logging.handlers.QueueListener(
-                queue, file_hdlr, stdout_hdlr)
-        except Exception:
-            log_file = os.path.normpath(log_file)
-            dir_name = os.path.dirname(log_file)
-            warning = f"Unable to create log file at '{log_file}'. " \
-                      f"Make sure that the folder '{dir_name}' exists " \
-                      f"and Moonraker has Read/Write access to the folder. "
-    if listener is None:
-        listener = logging.handlers.QueueListener(
-            queue, stdout_hdlr)
-    listener.start()
-    return listener, file_hdlr, warning
 
 def hash_directory(dir_path: str,
                    ignore_exts: List[str],

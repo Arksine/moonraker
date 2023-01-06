@@ -17,12 +17,12 @@ import socket
 import logging
 import signal
 import confighelper
-import utils
 import asyncio
 from eventloop import EventLoop
 from app import MoonrakerApp
 from klippy_connection import KlippyConnection
-from utils import ServerError, SentinelClass
+from utils import ServerError, SentinelClass, get_software_version
+from loghelper import LogManager
 
 # Annotation imports
 from typing import (
@@ -59,11 +59,11 @@ class Server:
     error = ServerError
     def __init__(self,
                  args: Dict[str, Any],
-                 file_logger: Optional[utils.MoonrakerLoggingHandler],
+                 log_manager: LogManager,
                  event_loop: EventLoop
                  ) -> None:
         self.event_loop = event_loop
-        self.file_logger = file_logger
+        self.log_manager = log_manager
         self.app_args = args
         self.events: Dict[str, List[FlexCallback]] = {}
         self.components: Dict[str, Any] = {}
@@ -92,6 +92,7 @@ class Server:
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
         self.register_api_transport = app.register_api_transport
+        self.log_manager.set_server(self)
 
         for warning in args.get("startup_warnings", []):
             self.add_warning(warning)
@@ -190,8 +191,7 @@ class Server:
 
     def add_log_rollover_item(self, name: str, item: str,
                               log: bool = True) -> None:
-        if self.file_logger is not None:
-            self.file_logger.set_rollover_info(name, item)
+        self.log_manager.set_rollover_info(name, item)
         if log and item is not None:
             logging.info(item)
 
@@ -479,7 +479,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
     }
 
     # Setup Logging
-    version = utils.get_software_version()
+    version = get_software_version()
     if cmd_line_args.nologfile:
         app_args["log_file"] = ""
     elif cmd_line_args.logfile:
@@ -489,9 +489,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["software_version"] = version
     app_args["python_version"] = sys.version.replace("\n", " ")
-    ql, file_logger, warning = utils.setup_logging(app_args)
-    if warning is not None:
-        startup_warnings.append(warning)
+    log_manager = LogManager(app_args, startup_warnings)
 
     # Start asyncio event loop and server
     event_loop = EventLoop()
@@ -499,7 +497,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
     estatus = 0
     while True:
         try:
-            server = Server(app_args, file_logger, event_loop)
+            server = Server(app_args, log_manager, event_loop)
             server.load_components()
         except confighelper.ConfigError as e:
             backup_cfg = confighelper.find_config_backup(cfg_file)
@@ -548,7 +546,7 @@ def main(cmd_line_args: argparse.Namespace) -> None:
         event_loop.reset()
     event_loop.close()
     logging.info("Server Shutdown")
-    ql.stop()
+    log_manager.stop_logging()
     exit(estatus)
 
 
