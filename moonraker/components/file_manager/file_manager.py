@@ -275,6 +275,10 @@ class FileManager:
             req_path = pathlib.Path(req_path)
         req_path = req_path.expanduser().resolve()
         if ".git" in req_path.parts:
+            if raise_error:
+                raise self.server.error(
+                    "Access to .git folders is forbidden", 403
+                )
             return True
         for name, (res_path, can_read) in self.reserved_paths.items():
             if (
