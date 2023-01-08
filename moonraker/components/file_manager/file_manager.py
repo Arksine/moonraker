@@ -334,7 +334,7 @@ class FileManager:
         for registered in self.file_paths.values():
             reg_root_path = pathlib.Path(registered).resolve()
             if reg_root_path in path.parents:
-                return True
+                return not self.check_reserved_path(path, False, False)
         return False
 
     def upload_queue_enabled(self) -> bool:
