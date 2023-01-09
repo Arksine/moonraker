@@ -552,7 +552,7 @@ class KlippyConnection:
         return self.writer is not None and not self.closing
 
     def is_ready(self) -> bool:
-        return self.state == "ready"
+        return self._state == "ready"
 
     def is_printing(self) -> bool:
         if not self.is_ready():
