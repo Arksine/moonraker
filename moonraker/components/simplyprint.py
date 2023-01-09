@@ -19,7 +19,7 @@ from websockets import Subscribable, WebRequest
 import logging.handlers
 import tempfile
 from queue import SimpleQueue
-from utils import LocalQueueHandler
+from loghelper import LocalQueueHandler
 
 from typing import (
     TYPE_CHECKING,
