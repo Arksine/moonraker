@@ -60,6 +60,7 @@ DEFAULT_ALLOWED_SERVICES = [
     "MoonCord",
     "KlipperScreen",
     "moonraker-telegram-bot",
+    "moonraker-obico",
     "sonar",
     "crowsnest"
 ]
@@ -234,13 +235,15 @@ class Machine:
     def get_moonraker_service_info(self):
         return dict(self.moonraker_service_info)
 
-    async def wait_for_init(self, timeout: float = None) -> None:
+    async def wait_for_init(
+        self, timeout: Optional[float] = None
+    ) -> None:
         try:
             await asyncio.wait_for(self.init_evt.wait(), timeout)
         except asyncio.TimeoutError:
             pass
 
-    async def component_init(self):
+    async def component_init(self) -> None:
         await self.validator.validation_init()
         await self.sys_provider.initialize()
         if not self.inside_container:
@@ -931,7 +934,7 @@ class SystemdCliProvider(BaseProvider):
                 timeout=10.
             )
             raw_props: Dict[str, Any] = {}
-            lines = [p.strip() for p in props.split("\n") if p.strip]
+            lines = [p.strip() for p in props.split("\n") if p.strip()]
             for line in lines:
                 parts = line.split("=", 1)
                 if len(parts) == 2:
@@ -1369,14 +1372,14 @@ class InstallValidator:
         self.announcement_id = ""
         self.validation_enabled = False
 
-    def _update_backup_path(self):
+    def _update_backup_path(self) -> None:
         str_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         if not hasattr(self, "backup_path"):
             self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
         elif not self.backup_path.exists():
             self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
 
-    async def validation_init(self):
+    async def validation_init(self) -> None:
         db: MoonrakerDatabase = self.server.lookup_component("database")
         install_ver: int = await db.get_item(
             "moonraker", "validate_install.install_version", 0
@@ -1836,7 +1839,7 @@ class InstallValidator:
         )
         self.server.send_event("server:gcode_response", gc_announcement)
 
-    async def remove_announcement(self):
+    async def remove_announcement(self) -> None:
         if not self.announcement_id:
             return
         ancmp: Announcements = self.server.lookup_component("announcements")
