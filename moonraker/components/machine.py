@@ -780,10 +780,10 @@ class BaseProvider:
         return await machine.exec_sudo_command(command)
 
     async def shutdown(self) -> None:
-        await self._exec_sudo_command(f"shutdown now")
+        await self._exec_sudo_command("systemctl halt")
 
     async def reboot(self) -> None:
-        await self._exec_sudo_command(f"shutdown -r now")
+        await self._exec_sudo_command("systemctl reboot")
 
     async def do_service_action(self,
                                 action: str,
