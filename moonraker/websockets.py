@@ -376,7 +376,10 @@ class WebsocketManager(APITransport):
 
     async def _handle_identify(self, args: Dict[str, Any]) -> Dict[str, int]:
         sc: BaseSocketClient = args["_socket_"]
-        sc.authenticate(token=args.get("access_token", None))
+        sc.authenticate(
+            token=args.get("access_token", None),
+            api_key=args.get("api_key", None)
+        )
         if sc.identified:
             raise self.server.error(
                 f"Connection already identified: {sc.client_data}"
@@ -569,15 +572,20 @@ class BaseSocketClient(Subscribable):
         self.queue_busy = True
         self.eventloop.register_callback(self._write_messages)
 
-    def authenticate(self, path: str = "", token: Optional[str] = None) -> None:
+    def authenticate(
+        self, path: str = "",
+        token: Optional[str] = None,
+        api_key: Optional[str] = None
+    ) -> None:
         if not self._need_auth:
             return
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is None:
             return
         if token is not None:
-            user_info = auth.validate_jwt(token)
-            self.user_info = user_info
+            self.user_info = auth.validate_jwt(token)
+        elif api_key is not None:
+            self.user_info = auth.validate_api_key(api_key)
         elif not auth.is_path_permitted(path):
             raise self.server.error("Unauthorized", 401)
 

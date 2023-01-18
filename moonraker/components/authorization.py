@@ -615,6 +615,13 @@ class Authorization:
             ) from e
         return user_info
 
+    def validate_api_key(self, api_key: str) -> Dict[str, Any]:
+        if not self.enable_api_key:
+            raise self.server.error("API Key authentication is disabled", 401)
+        if api_key and api_key == self.api_key:
+            return self.users[API_USER]
+        raise self.server.error("Invalid API Key", 401)
+
     def _load_private_key(self, secret: str) -> Signer:
         try:
             key = Signer(bytes.fromhex(secret))
