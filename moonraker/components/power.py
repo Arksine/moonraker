@@ -442,7 +442,7 @@ class HTTPDevice(PowerDevice):
                     raise
                 except Exception as e:
                     if type(last_err) != type(e) or last_err.args != e.args:
-                        logging.info(f"Device Init Error: {self.name}\n{e}")
+                        logging.exception(f"Device Init Error: {self.name}")
                         last_err = e
                     await asyncio.sleep(5.)
                     continue
@@ -886,7 +886,7 @@ class TPLinkSmartPlug(PowerDevice):
                     raise
                 except Exception as e:
                     if type(last_err) != type(e) or last_err.args != e.args:
-                        logging.info(f"Device Init Error: {self.name}\n{e}")
+                        logging.exception(f"Device Init Error: {self.name}")
                         last_err = e
                     await asyncio.sleep(5.)
                     continue
