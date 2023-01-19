@@ -317,17 +317,22 @@ class WebsocketManager(APITransport):
         self.rpc.register_method(
             "server.connection.identify", self._handle_identify)
 
-    def register_notification(self,
-                              event_name: str,
-                              notify_name: Optional[str] = None
-                              ) -> None:
+    def register_notification(
+        self,
+        event_name: str,
+        notify_name: Optional[str] = None,
+        event_type: Optional[str] = None
+    ) -> None:
         if notify_name is None:
             notify_name = event_name.split(':')[-1]
-
-        def notify_handler(*args):
-            self.notify_clients(notify_name, args)
-        self.server.register_event_handler(
-            event_name, notify_handler)
+        if event_type == "logout":
+            def notify_handler(*args):
+                self.notify_clients(notify_name, args)
+                self._process_logout(*args)
+        else:
+            def notify_handler(*args):
+                self.notify_clients(notify_name, args)
+        self.server.register_event_handler(event_name, notify_handler)
 
     def register_api_handler(self, api_def: APIDefinition) -> None:
         if api_def.callback is None:
@@ -416,6 +421,13 @@ class WebsocketManager(APITransport):
         )
         self.server.send_event("websockets:client_identified", sc)
         return {'connection_id': sc.uid}
+
+    def _process_logout(self, user: Dict[str, Any]) -> None:
+        if "username" not in user:
+            return
+        name = user["username"]
+        for sc in self.clients.values():
+            sc.on_user_logout(name)
 
     def has_socket(self, ws_id: int) -> bool:
         return ws_id in self.clients
@@ -589,6 +601,14 @@ class BaseSocketClient(Subscribable):
         elif not auth.is_path_permitted(path):
             raise self.server.error("Unauthorized", 401)
 
+    def on_user_logout(self, user: str) -> bool:
+        if self._user_info is None:
+            return False
+        if user == self._user_info.get("username", ""):
+            self._user_info = None
+            return True
+        return False
+
     async def _write_messages(self):
         if self.is_closed:
             self.message_buf = []
@@ -728,6 +748,12 @@ class WebSocket(WebSocketHandler, BaseSocketClient):
                 return auth.check_cors(origin)
             return False
         return True
+
+    def on_user_logout(self, user: str) -> bool:
+        if super().on_user_logout(user):
+            self._need_auth = True
+            return True
+        return False
 
     # Check Authorized User
     def prepare(self) -> None:

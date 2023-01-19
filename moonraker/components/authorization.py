@@ -35,7 +35,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from websockets import WebRequest, WebsocketManager
     from tornado.httputil import HTTPServerRequest
     from tornado.web import RequestHandler
     from .database import MoonrakerDatabase as DBComp
@@ -251,8 +251,14 @@ class Authorization:
         self.server.register_endpoint(
             "/access/info", ['GET'],
             self._handle_info_request, transports=['http', 'websocket'])
-        self.server.register_notification("authorization:user_created")
-        self.server.register_notification("authorization:user_deleted")
+        wsm: WebsocketManager = self.server.lookup_component("websockets")
+        wsm.register_notification("authorization:user_created")
+        wsm.register_notification(
+            "authorization:user_deleted", event_type="logout"
+        )
+        wsm.register_notification(
+            "authorization:user_logged_out", event_type="logout"
+        )
 
     def register_permited_path(self, path: str) -> None:
         self.permitted_paths.add(path)
@@ -311,6 +317,11 @@ class Authorization:
         jwk_id: str = self.users[username].pop("jwk_id", None)
         self._sync_user(username)
         self.public_jwks.pop(jwk_id, None)
+        eventloop = self.server.get_event_loop()
+        eventloop.delay_callback(
+            .005, self.server.send_event, "authorization:user_logged_out",
+            {'username': username}
+        )
         return {
             "username": username,
             "action": "user_logged_out"
