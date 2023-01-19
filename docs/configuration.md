@@ -1928,18 +1928,18 @@ separate from `moonraker.conf`.  This allows users to safely distribute
 their configuration and log files without revealing credentials and
 other sensitive information.
 
-!!! Note:
-    This section no long has configuration options.  Previously the
+!!! Note
+    This section no longer has configuration options.  Previously the
     `secrets_path` option was used to specify the location of the file.
     The secrets file name and location is now determined by the `data path`
-    and `alias` command line options, ie: `<data_base_path>/<alias>.secrets`.
-    By default this resolves to `$HOME/moonraker_data/moonraker.secrets`.
-    This may be a symbolic link.
+    and `alias` command line options, ie: `<data_base_path>/moonraker.secrets`.
+    For a typical single instance installation this resolves to
+    `$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
 
 Example ini secrets file:
 
 ```ini
-# moonraker_secrets.ini
+# /home/pi/printer_data/moonraker.secrets
 
 [mqtt_credentials]
 username: mqtt_user
