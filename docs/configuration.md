@@ -60,6 +60,9 @@ klippy_uds_address: /tmp/klippy_uds
 #   Default is /tmp/klippy_uds.
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
+max_websocket_connections:
+#   The maximum number of concurrently open websocket connections.
+#   The default is 50.
 enable_debug_logging: False
 #   ***DEPRECATED***
 #   Verbose logging is enabled by the '-v' command line option.
@@ -332,11 +335,18 @@ authorization module.
 # moonraker.conf
 
 [authorization]
+enable_api_key: True
+#   Enables API Key authentication.  The default is True.
 login_timeout:
 #   The time, in days, after which a user is forced to re-enter their
 #   credentials to log in.  This period begins when a logged out user
 #   first logs in.  Successive logins without logging out will not
 #   renew the timeout.  The default is 90 days.
+max_login_attempts:
+#   Maximum number of consecutive failed login attempts before an IP address
+#   is locked out.  Failed logins are tracked per IP and are reset upon a
+#   successful login.  Locked out IPs are reset when Moonraker restarts.
+#   By default there is no maximum number of logins.
 trusted_clients:
  192.168.1.30
  192.168.1.0/24

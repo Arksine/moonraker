@@ -614,8 +614,8 @@ This method provides a way for persistent clients to identify
 themselves to Moonraker.  This information may be used by Moonraker
 perform an action or present information based on if a specific
 client is connected.  Currently this method is only available
-to websocket and unix socket connections.  This endpoint should only
-be called once per session, repeated calls will result in an error.
+to websocket and unix socket connections.  Once this endpoint returns
+success it cannot be called again, repeated calls will result in an error.
 
 HTTP request: `Not Available`
 
@@ -628,25 +628,35 @@ JSON-RPC request (Websocket/Unix Socket Only):
         "client_name": "moontest",
         "version": "0.0.1",
         "type": "web",
-        "url": "http://github.com/arksine/moontest"
+        "url": "http://github.com/arksine/moontest",
+        "access_token": "<base64 encoded token>",
+        "api_key": "<system API key>"
     },
     "id": 4656
 }
 ```
 
-All parameters are required. Below is an explanation of each parameter.
+Parameters:
 
-- `client_name`: The name of your client, such as `Mainsail`, `Fluidd`,
-  `KlipperScreen`, `MoonCord`, etc.
-- `version`: The current version of the connected client
-- `type`:  Application type. May be one of `web`, `mobile`, `desktop`,
-  `display`, `bot`, `agent` or `other`.  These should be self explanatory,
-  use `other` if your client does not fit any of the prescribed options.
-- `url`: The url for your client's homepage
+- `client_name`: (required) The name of your client, such as `Mainsail`,
+  `Fluidd`, `KlipperScreen`, `MoonCord`, etc.
+- `version`: (required) The current version of the connected client
+- `type`: (required)  Application type. May be one of `web`, `mobile`,
+  `desktop`, `display`, `bot`, `agent` or `other`.  These should be self
+  explanatory, use `other` if your client does not fit any of the prescribed
+  options.
+- `url`: (required) The url for your client's homepage
+- `access_token`: (optional) A JSON Web Token that may be used to assign a
+  logged in user to the connection. See the [authorization](#authorization)
+  section for APIs used to create and refresh the access token.
+- `api_key`:. (optional) The system API Key.  This key may be used to grant
+  access to clients that do not wish to implement user authentication.  Note
+  that if the `access_token` is also supplied then this parameter will be
+  ignored.
 
 !!! Note
     When identifying as an `agent`, only one instance should be connected
-    to moonraker at a time.  If multiple agents of the same `client_name`
+    to Moonraker at a time.  If multiple agents of the same `client_name`
     attempt to identify themselves this endpoint will return an error.
     See the [extension APIs](#extension-apis) for more information about
     `agents`.
@@ -2214,11 +2224,22 @@ Moonraker's HTTP APIs.  JWTs should be included in the `Authorization`
 header as a `Bearer` type for each HTTP request.  If using an API Key it
 should be included in the `X-Api-Key` header for each HTTP Request.
 
+Websocket authentication can be achieved via the request itself or
+post connection.  Unlike HTTP requests it is not necessasry to pass a
+token and/or API Key to each request.  The
+[identify connection](#identify-connection) endpoint takes optional
+`access_token` and `api_key` parameters that may be used to authentiate
+a user already logged in, otherwise the `login` API may be used for
+authentication.  Websocket connections will stay authenticated until
+the connection is closed or the user logs out.
+
 !!! note
-    For requests in which clients cannot modify headers it is acceptable
-    to pass the JWT via the query string's `access_token` argument.
-    Alternatively client developers may request a `oneshot_token` and
-    send the result via the `token` query string argument.
+    ECMAScript imposes limitations on certain requests that prohibit the
+    developer from modifying the HTTP headers (ie: The request to open a
+    websocket, "download" requests that open a dialog).  In these cases
+    it is recommended for the developer to request a `oneshot_token`, then
+    send the result via the `token` query string argument in the desired
+    request.
 
 !!! warning
     It is strongly recommended that arguments for the below APIs are
@@ -2236,7 +2257,20 @@ Content-Type: application/json
     "source": "moonraker"
 }
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.login",
+    "params": {
+        "username": "my_user",
+        "password": "my_password",
+        "source": "moonraker"
+    },
+    "id": 1323
+}
+```
 
 Arguments:
 - `username`: The user login name.  This argument is required.
@@ -2271,7 +2305,15 @@ HTTP Request:
 ```http
 POST /access/logout
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.logout",
+    "id": 1323
+}
+```
 
 Returns: An object containing the logged out username and action summary.
 ```json
@@ -2287,7 +2329,15 @@ HTTP Request:
 ```http
 GET /access/user
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.get_user",
+    "id": 1323
+}
+```
 
 Returns: An object containing the currently logged in user name, the source and
 the date on which the user was created (in unix time).
@@ -2310,7 +2360,19 @@ Content-Type: application/json
     "password": "my_password"
 }
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.post_user",
+    "params": {
+        "username": "my_user",
+        "password": "my_password"
+    },
+    "id": 1323
+}
+```
 
 Returns: An object containing the created user name, an auth token,
 a refresh token, the source, and an action summary.  Creating a user also
@@ -2347,7 +2409,18 @@ Content-Type: application/json
     "username": "my_username"
 }
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.delete_user",
+    "params": {
+        "username": "my_username"
+    },
+    "id": 1323
+}
+```
 
 Returns: The username of the deleted user and an action summary.  This
 effectively logs the user out, as all outstanding tokens will be invalid.
@@ -2363,7 +2436,15 @@ HTTP Request:
 ```http
 GET /access/users/list
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.users.list",
+    "id": 1323
+}
+```
 
 Returns: A list of created users on the system
 ```json
@@ -2394,7 +2475,19 @@ Content-Type: application/json
     "new_password": "my_new_pass"
 }
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.user.password",
+    "params": {
+        "password": "my_current_password",
+        "new_password": "my_new_pass"
+    },
+    "id": 1323
+}
+```
 
 Returns:  The username and action summary.
 ```json
@@ -2419,7 +2512,17 @@ Content-Type: application/json
 }
 ```
 
-JSON-RPC request: Not Available
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.refresh_jwt",
+    "params": {
+        "refresh_token": "eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJpc3MiOiAiTW9vbnJha2VyIiwgImlhdCI6IDE2MTg4Nzc0ODUuNzcyMjg5OCwgImV4cCI6IDE2MjY2NTM0ODUuNzcyMjg5OCwgInVzZXJuYW1lIjogInRlc3R1c2VyIiwgInRva2VuX3R5cGUiOiAicmVmcmVzaCJ9.Y5YxGuYSzwJN2WlunxlR7XNa2Y3GWK-2kt-MzHvLbP8"
+    },
+    "id": 1323
+}
+```
 
 Returns:  The username, new auth token, the source and action summary.
 ```json
@@ -2447,7 +2550,15 @@ HTTP request:
 ```http
 GET /access/oneshot_token
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.oneshot_token",
+    "id": 1323
+}
+```
 
 Returns:
 
@@ -2462,7 +2573,15 @@ HTTP Request:
 ```http
 GET /access/info
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.info",
+    "id": 1323
+}
+```
 
 Returns: An object containing information about authorization endpoints, such as
 default_source and available_sources.
@@ -2481,7 +2600,15 @@ HTTP request:
 ```http
 GET /access/api_key
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.get_api_key",
+    "id": 1323
+}
+```
 
 Returns:
 
@@ -2492,13 +2619,22 @@ HTTP request:
 ```http
 POST /access/api_key
 ```
-JSON-RPC request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "access.post_api_key",
+    "id": 1323
+}
+```
 
 Returns:
 
 The newly generated API key.  This overwrites the previous key.  Note that
 the API key change is applied immediately, all subsequent HTTP requests
-from untrusted clients must use the new key.
+from untrusted clients must use the new key.  Changing the API Key will
+not affect open websockets authenticated using the previous API Key.
 
 ### Database APIs
 The following endpoints provide access to Moonraker's lmdb database.  The
@@ -5707,6 +5843,21 @@ sent when an existing user is deleted.
 {
     "jsonrpc": "2.0",
     "method": "notify_user_deleted",
+    "params": [
+        {
+            "username": "<username>"
+        }
+    ]
+}
+```
+
+#### Authorized User Logged Out
+If the `[authorization]` module is enabled the following notification is
+sent when an existing user is logged out.
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_user_logged_out",
     "params": [
         {
             "username": "<username>"
