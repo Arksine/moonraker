@@ -367,7 +367,7 @@ class WebsocketManager(APITransport):
     ) -> RPCCallback:
         async def func(args: Dict[str, Any]) -> Any:
             sc: BaseSocketClient = args.pop("_socket_")
-            sc.authenticate(path=endpoint)
+            sc.check_authenticated(path=endpoint)
             result = await callback(
                 WebRequest(endpoint, args, request_method, sc,
                            ip_addr=sc.ip_addr, user=sc.user_info))
@@ -376,7 +376,7 @@ class WebsocketManager(APITransport):
 
     async def _handle_id_request(self, args: Dict[str, Any]) -> Dict[str, int]:
         sc: BaseSocketClient = args["_socket_"]
-        sc.authenticate()
+        sc.check_authenticated()
         return {'websocket_id': sc.uid}
 
     async def _handle_identify(self, args: Dict[str, Any]) -> Dict[str, int]:
@@ -585,20 +585,27 @@ class BaseSocketClient(Subscribable):
         self.eventloop.register_callback(self._write_messages)
 
     def authenticate(
-        self, path: str = "",
+        self,
         token: Optional[str] = None,
         api_key: Optional[str] = None
     ) -> None:
-        if not self._need_auth:
-            return
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is None:
             return
         if token is not None:
             self.user_info = auth.validate_jwt(token)
-        elif api_key is not None:
+        elif api_key is not None and self.user_info is None:
             self.user_info = auth.validate_api_key(api_key)
-        elif not auth.is_path_permitted(path):
+        else:
+            self.check_authenticated()
+
+    def check_authenticated(self, path: str = "") -> None:
+        if not self._need_auth:
+            return
+        auth: AuthComp = self.server.lookup_component("authorization", None)
+        if auth is None:
+            return
+        if not auth.is_path_permitted(path):
             raise self.server.error("Unauthorized", 401)
 
     def on_user_logout(self, user: str) -> bool:
