@@ -305,7 +305,7 @@ stream_url:
 #   same host as Moonraker at port 80.  This parameter must be provided.
 snapshot_url:
 #   The url for the camera snapshot request.  This may be a full url or a
-#   relative path (ie: /webcam?action=stream) if the stream is served on the
+#   relative path (ie: /webcam?action=snapshot) if the stream is served on the
 #   same host as Moonraker at port 80.  This parameter must be provided.
 flip_horizontal: False
 #   A boolean value indicating whether the stream should be flipped
@@ -438,12 +438,19 @@ enable_ufp: True
 #   upload files in .gcode format.  This setting has no impact on other
 #   slicers.  The default is True.
 
+webcam_rotation: 0
+#   Set the webcam rotation in degrees. Valid values are 0, 90, 180, and 270.
+#   The `flip_h`, `flip_v`, and `rotate_90` values below will override whatever 
+#   is set here. The default is 0.
 flip_h: False
-#   Set the webcam horizontal flip.  The default is False.
+#   Flip the webcam image horizontally, overriding `webcam_rotation`.
+#   The default is False.
 flip_v: False
-#   Set the webcam vertical flip.  The default is False.
+#   Flip the webcam image vertically, overriding `webcam_rotation`.
+#   The default is False.
 rotate_90: False
-#   Set the webcam rotation by 90 degrees.  The default is False.
+#   Set the webcam rotation to 90 degrees, overriding `webcam_rotation`.
+#   The default is False.
 stream_url: /webcam/?action=stream
 #   The URL to use for streaming the webcam.  It can be set to an absolute
 #   URL if needed. In order to get the webcam to work in Cura through
