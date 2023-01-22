@@ -306,7 +306,7 @@ class MQTTClient(APITransport, Subscribable):
             transports=["http", "websocket", "internal"])
 
         # Subscribe to API requests
-        self.json_rpc = JsonRPC(transport="MQTT")
+        self.json_rpc = JsonRPC(self.server, transport="MQTT")
         self.api_request_topic = f"{self.instance_name}/moonraker/api/request"
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
