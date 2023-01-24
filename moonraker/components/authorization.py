@@ -754,14 +754,9 @@ class Authorization:
         else:
             return None
 
-    def check_logins_maxed(self, ip_addr: Union[str, IPAddr]) -> bool:
+    def check_logins_maxed(self, ip_addr: IPAddr) -> bool:
         if self.max_logins is None:
             return False
-        if isinstance(ip_addr, str):
-            try:
-                ip_addr = ipaddress.ip_address(ip_addr)  # type: ignore
-            except ValueError:
-                return False
         return self.failed_logins.get(ip_addr, 0) >= self.max_logins
 
     def check_authorized(self,
