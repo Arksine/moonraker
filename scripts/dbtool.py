@@ -17,7 +17,9 @@ MAX_NAMESPACES = 100
 MAX_DB_SIZE = 200 * 2**20
 HEADER_KEY = b"MOONRAKER_DATABASE_START"
 
-LINE_MATCH = re.compile(r"\+(\d+),(\d+):(.+?)->(.+)")
+LINE_MATCH = re.compile(
+    r"^\+(\d+),(\d+):([A-Za-z0-9+/]+={0,2})->([A-Za-z0-9+/]+={0,2})$"
+)
 
 class DBToolError(Exception):
     pass
