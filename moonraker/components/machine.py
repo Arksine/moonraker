@@ -258,7 +258,7 @@ class Machine:
         self.system_info['available_services'] = avail_list
         self.system_info['service_state'] = available_svcs
         svc_info = await self.sys_provider.extract_service_info(
-            "moonraker", os.getpid(), SERVICE_PROPERTIES
+            "moonraker", os.getpid()
         )
         self.moonraker_service_info = svc_info
         self.log_service_info(svc_info)
@@ -805,7 +805,11 @@ class BaseProvider:
         return self.available_services
 
     async def extract_service_info(
-        self, service: str, pid: int, properties: List[str], raw: bool = False
+        self,
+        service: str,
+        pid: int,
+        properties: Optional[List[str]] = None,
+        raw: bool = False
     ) -> Dict[str, Any]:
         return {}
 
@@ -911,11 +915,13 @@ class SystemdCliProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             resp: str = await self.shell_cmd.exec_cmd(
                 f"systemctl status {pid}"
@@ -1153,7 +1159,7 @@ class SystemdDbusProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         if not hasattr(self, "systemd_mgr"):
@@ -1161,6 +1167,8 @@ class SystemdDbusProvider(BaseProvider):
         mgr = self.systemd_mgr
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             dbus_path: str
             dbus_path = await mgr.call_get_unit_by_pid(pid)  # type: ignore
@@ -1344,7 +1352,7 @@ class SupervisordProvider(BaseProvider):
         self,
         service: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         return {}

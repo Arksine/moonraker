@@ -257,9 +257,8 @@ class KlippyConnection:
                 if self._get_peer_credentials(writer):
                     machine: Machine = self.server.lookup_component("machine")
                     provider = machine.get_system_provider()
-                    props = ["Description", "ExecStart", "FragmentPath"]
                     svc_info = await provider.extract_service_info(
-                        "klipper", self._peer_cred["process_id"], props
+                        "klipper", self._peer_cred["process_id"]
                     )
                     if svc_info != self._service_info:
                         self._service_info = svc_info
