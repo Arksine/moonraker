@@ -1227,9 +1227,11 @@ class SupervisordProvider(BaseProvider):
     async def initialize(self) -> None:
         await self._detect_active_services()
         keys = ' '.join(list(self.available_services.keys()))
-        self.svc_cmd = self.shell_cmd.build_shell_command(
-            f"supervisorctl {self.spv_conf} status {keys}"
-        )
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} status {keys}"
+        else:
+            cmd = f"supervisorctl status {keys}"
+        self.svc_cmd = self.shell_cmd.build_shell_command(cmd)
         await self._update_service_status(0, notify=True)
         pstats: ProcStats = self.server.lookup_component('proc_stats')
         pstats.register_stat_callback(self._update_service_status)
@@ -1252,9 +1254,8 @@ class SupervisordProvider(BaseProvider):
         self, action: str, service_name: str
     ) -> None:
         # slow reaction for supervisord, timeout set to 6.0
-        await self._exec_command(
-            f"supervisorctl {self.spv_conf} {action} {service_name}",
-            timeout=6.
+        await self._exec_supervisorctl_command(
+            f"{action} {service_name}", timeout=6.
         )
 
     async def check_virt_status(self) -> Dict[str, Any]:
@@ -1270,11 +1271,15 @@ class SupervisordProvider(BaseProvider):
             'virt_identifier': virt_id
         }
 
-    async def _exec_command(
-        self, command: str, tries: int = 1, timeout=2.
+    async def _exec_supervisorctl_command(
+        self, args: str, tries: int = 1, timeout=2.
     ) -> str:
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} {args}"
+        else:
+            cmd = f"supervisorctl {args}"
         return await self.shell_cmd.exec_cmd(
-            command, proc_input=None, log_complete=False, retries=tries,
+            cmd, proc_input=None, log_complete=False, retries=tries,
             timeout=timeout
         )
 
@@ -1291,10 +1296,7 @@ class SupervisordProvider(BaseProvider):
     async def _list_processes(self) -> Dict[str, Any]:
         units: Dict[str, Any] = {}
         try:
-            resp = await self._exec_command(
-                f"supervisorctl {self.spv_conf} status",
-                timeout=6.
-            )
+            resp = await self._exec_supervisorctl_command("status", timeout=6.)
             lines = [line.strip() for line in resp.split("\n") if line.strip()]
         except Exception:
             return {}
