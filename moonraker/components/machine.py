@@ -1225,14 +1225,10 @@ class SupervisordProvider(BaseProvider):
         self.spv_conf: str = config.get("supervisord_config_path", "")
 
     async def initialize(self) -> None:
-        for svc in ("klipper", "moonraker"):
-            self.available_services[svc] = {
-                'active_state': "none",
-                'sub_state': "unknown"
-            }
+        await self._detect_active_services()
+        keys = ' '.join(list(self.available_services.keys()))
         self.svc_cmd = self.shell_cmd.build_shell_command(
-            f"supervisorctl {self.spv_conf}"
-            f"status {' '.join(list(self.available_services.keys()))}"
+            f"supervisorctl {self.spv_conf} status {keys}"
         )
         await self._update_service_status(0, notify=True)
         pstats: ProcStats = self.server.lookup_component('proc_stats')
@@ -1257,8 +1253,7 @@ class SupervisordProvider(BaseProvider):
     ) -> None:
         # slow reaction for supervisord, timeout set to 6.0
         await self._exec_command(
-            f"supervisorctl {self.spv_conf}"
-            f"{action} {service_name}",
+            f"supervisorctl {self.spv_conf} {action} {service_name}",
             timeout=6.
         )
 
@@ -1282,6 +1277,35 @@ class SupervisordProvider(BaseProvider):
             command, proc_input=None, log_complete=False, retries=tries,
             timeout=timeout
         )
+
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        units: Dict[str, Any] = await self._list_processes()
+        for unit, info in units.items():
+            if machine.is_service_allowed(unit):
+                self.available_services[unit] = {
+                    'active_state': "active",
+                    'sub_state': info["state"]
+                }
+
+    async def _list_processes(self) -> Dict[str, Any]:
+        units: Dict[str, Any] = {}
+        try:
+            resp = await self._exec_command(
+                f"supervisorctl {self.spv_conf} status",
+                timeout=6.
+            )
+            lines = [line.strip() for line in resp.split("\n") if line.strip()]
+        except Exception:
+            return {}
+        for line in lines:
+            parts = line.split()
+            units[parts[0]] = {
+                "state": parts[1].lower(),
+                "pid": int(parts[3].rstrip(",")),
+                "uptime": parts[5]
+            }
+        return units
 
     async def _update_service_status(self,
                                      sequence: int,
