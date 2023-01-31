@@ -1712,18 +1712,14 @@ A list of objects, where each object contains file data:
 ```
 
 #### Get gcode metadata
-Get metadata for a specified gcode file.  If the file is located in
-a subdirectory, then the file name should include the path relative to
-the "gcodes" root.  For example, if the file is located at:
-```
-http://host.local/server/files/gcodes/my_sub_dir/my_print.gcode
-```
-Then the `{filename}` argument should be `my_sub_dir/my_print.gcode`.
+
+Get metadata for a specified gcode file.
 
 HTTP request:
 ```http
 GET /server/files/metadata?filename={filename}
 ```
+
 JSON-RPC request:
 ```json
 {
@@ -1735,6 +1731,13 @@ JSON-RPC request:
     "id": 3545
 }
 ```
+
+Parameters:
+
+- `filename`: Path to the gcode file, relative to the `gcodes` root.
+  For example, if the file is located at
+  `http://host/server/files/gcodes/tools/drill_head.gcode`,
+  the `filename` should be specified as `tools/drill_head.gcode`
 
 Returns:
 
@@ -1780,6 +1783,65 @@ modified time, and size.
     The `print_start_time` and `job_id` fields are initialized to
     `null`.  They will be updated for each print job if the user has the
     `[history]` component configured
+
+#### Get Gcode Thumbnails
+
+Returns thumbnail information for a supplied gcode file. If no thumbnail
+information is available
+
+HTTP request:
+```http
+GET /server/files/thumbnails?filename={filename}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.files.thumbnails",
+    "params": {
+        "filename": "{filename}"
+    },
+    "id": 3545
+}
+```
+
+Parameters:
+
+- `filename`: Path to the gcode file, relative to the `gcodes` root.
+  For example, if the file is located at
+  `http://host/server/files/gcodes/tools/drill_head.gcode`,
+  the `filename` should be specified as `tools/drill_head.gcode`
+
+Returns:
+
+An array of objects containing thumbnail information.  If no
+thumbnail information exists for the specified file then the
+returned array wil be empty.
+
+```json
+[
+    {
+        "width": 32,
+        "height": 32,
+        "size": 1551,
+        "thumbnail_path": "test/.thumbs/CE2_FanCover-120mm-Mesh-32x32.png"
+    },
+    {
+        "width": 300,
+        "height": 300,
+        "size": 31819,
+        "thumbnail_path": "test/.thumbs/CE2_FanCover-120mm-Mesh.png"
+    }
+]
+```
+
+!!! Note
+    This information is the same as reported in the `thumbnails` field
+    of a [metadata](#get-gcode-metadata) object, with one exception.
+    The `thumbnail_path` field in the result above contains a
+    path relative to the `gcodes` root, whereas the `relative_path`
+    field reported in the metadata is relative to the gcode file's
+    parent folder.
 
 #### Get directory information
 Returns a list of files and subdirectories given a supplied path.
