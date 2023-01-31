@@ -850,8 +850,10 @@ class PackageKitProvider(BasePackageProvider):
                                ) -> None:
         notify: bool = kwargs.get('notify', False)
         await self.refresh_packages(notify=notify)
-        flags = PkEnum.Filter.NEWEST | PkEnum.Filter.NOT_INSTALLED | \
-            PkEnum.Filter.BASENAME
+        flags = (
+            PkEnum.Filter.NEWEST | PkEnum.Filter.NOT_INSTALLED |
+            PkEnum.Filter.BASENAME | PkEnum.Filter.ARCH
+        )
         pkgs = await self.run_transaction("resolve", flags.value, package_list)
         pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
         if pkg_ids:
