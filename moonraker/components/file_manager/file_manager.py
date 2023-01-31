@@ -91,6 +91,8 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/metadata", ['GET'], self._handle_metadata_request)
         self.server.register_endpoint(
+            "/server/files/thumbnails", ['GET'], self._handle_list_thumbs)
+        self.server.register_endpoint(
             "/server/files/roots", ['GET'], self._handle_list_roots)
         self.server.register_endpoint(
             "/server/files/directory", ['GET', 'POST', 'DELETE'],
@@ -103,9 +105,6 @@ class FileManager:
             "/server/files/zip", ['POST'], self._handle_zip_files)
         self.server.register_endpoint(
             "/server/files/delete_file", ['DELETE'], self._handle_file_delete,
-            transports=["websocket"])
-        self.server.register_endpoint(
-            "/server/files/thumbnails", ['GET'], self._handle_list_thumbs,
             transports=["websocket"])
         # register client notificaitons
         self.server.register_notification("file_manager:filelist_changed")
