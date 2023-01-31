@@ -855,6 +855,7 @@ class PackageKitProvider(BasePackageProvider):
         pkgs = await self.run_transaction("resolve", flags.value, package_list)
         pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
         if pkg_ids:
+            logging.debug(f"Installing Packages: {pkg_ids}")
             tflag = PkEnum.TransactionFlag.ONLY_TRUSTED
             await self.run_transaction("install_packages", tflag.value,
                                        pkg_ids, notify=notify)
@@ -865,6 +866,7 @@ class PackageKitProvider(BasePackageProvider):
         pkgs = await self.run_transaction("get_updates", flags.value)
         pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
         if pkg_ids:
+            logging.debug(f"Upgrading Packages: {pkg_ids}")
             tflag = PkEnum.TransactionFlag.ONLY_TRUSTED
             await self.run_transaction("update_packages", tflag.value,
                                        pkg_ids, notify=True)
