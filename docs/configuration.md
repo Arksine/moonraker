@@ -1160,8 +1160,8 @@ device_id:
 #   An explanation on how you could get the device id, can be found here:
 #   https://developers.meethue.com/develop/get-started-2/#turning-a-light-on-and-off
 device_type: light
-#   Set to light to control a single hue light, or group to control a hue light gorup. 
-#   If device_type is set to light, the device_id should be the light id, 
+#   Set to light to control a single hue light, or group to control a hue light gorup.
+#   If device_type is set to light, the device_id should be the light id,
 #   and if the device_type is group, the device_id should be the group id.
 #   The default is "light.
 
@@ -1610,7 +1610,7 @@ instance_name:
 status_objects:
 #   A newline separated list of Klipper objects whose state will be
 #   published.  There are two different ways to publish the states - you
-#   can use either or both depending on your need.  See the 
+#   can use either or both depending on your need.  See the
 #   "publish_split_status" options for details.
 #
 #   For example, this option could be set as follows:
@@ -1634,7 +1634,7 @@ status_objects:
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
 publish_split_status: False
-#   Configures how to publish status updates to MQTT.  
+#   Configures how to publish status updates to MQTT.
 #
 #   When set to False (default), all Klipper object state updates will be
 #   published to a single mqtt state with the following topic:
@@ -2186,6 +2186,85 @@ ambient_sensor:
 
 More on how your data is used in the SimplyPrint privacy policy here;
 [https://simplyprint.io/legal/privacy](https://simplyprint.io/legal/privacy)
+
+### `[sensor]`
+
+Enables data collection from additional sensor sources.  Multiple "sensor"
+sources may be configured, each with their own section, ie: `[sensor current]`,
+`[sensor voltage]`.
+
+#### Options common to all sensor devices
+
+The following configuration options are available for all sensor types:
+
+```ini
+# moonraker.conf
+
+[sensor my_sensor]
+type:
+#   The type of device.  Supported types: mqtt
+#   This parameter must be provided.
+name:
+#   The display name of the sensor.
+#   The default is the sensor source name.
+unit:
+#   The unit for the values that are being collected, e.g. °C, W, A or kWh.
+#   The default is unitless.
+```
+
+#### MQTT Sensor Configuration
+
+The following options are available for `mqtt` sensor types:
+
+```ini
+# moonraker.conf
+
+qos:
+#  The MQTT QOS level to use when publishing and subscribing to topics.
+#  The default is to use the setting supplied in the [mqtt] section.
+state_topic:
+#  The mqtt topic to subscribe to for sensor state updates.  This parameter
+#  must be provided.
+state_response_template:
+#  A template used to parse the payload received with the state topic.  A
+#  "payload" variable is provided the template's context.  This template
+#  must resolve to a float value.  For example:
+#    {% set resp = payload|fromjson %}
+#    {resp["power"]|float}
+#  The above example assumes a json response is received, with a "power" field
+#  that is coerced to a float value. The default is the payload.
+```
+
+!!! Note
+    Moonraker's MQTT client must be properly configured to add a MQTT sensor.
+    See the [mqtt](#mqtt) section for details.
+
+!!! Tip
+    MQTT is the most robust way of collecting sensor data from networked
+    devices through Moonraker.  A well implemented MQTT sensor will publish all
+    changes in state to the `state_topic`.  Moonraker receives these changes,
+    updates its internal state, and notifies connected clients.
+
+Example:
+
+```ini
+# moonraker.conf
+
+# Example configuration for a Shelly Pro 1PM (Gen2) switch with
+# integrated power meter running the Shelly firmware over MQTT.
+[sensor mqtt_powermeter]
+type: mqtt
+name: active_power
+# Use a different display name
+unit: W
+# The values collected are in Watt
+state_topic: shellypro1pm-8cb113caba09/status/switch:0
+# The response is a JSON object with a "apower" field that we convert to
+# a float value
+state_response_template:
+  {% set resp = payload|fromjson %}
+  {resp["apower"]|float}
+```
 
 ## Include directives
 
