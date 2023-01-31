@@ -90,12 +90,10 @@ class GitDeploy(AppDeploy):
             return False
         self.cmd_helper.notify_update_response(
             f"Updating Application {self.name}...")
-        inst_hash = await self._get_file_hash(self.install_script)
-        pyreqs_hash = await self._get_file_hash(self.python_reqs)
-        npm_hash = await self._get_file_hash(self.npm_pkg_json)
+        dep_info = await self._collect_dependency_info()
         await self._pull_repo()
         # Check Semantic Versions
-        await self._update_dependencies(inst_hash, pyreqs_hash, npm_hash)
+        await self._update_dependencies(dep_info)
         # Refresh local repo state
         await self._update_repo_state(need_fetch=False)
         await self.restart_service()
@@ -107,10 +105,7 @@ class GitDeploy(AppDeploy):
                       force_dep_update: bool = False
                       ) -> None:
         self.notify_status("Attempting Repo Recovery...")
-        inst_hash = await self._get_file_hash(self.install_script)
-        pyreqs_hash = await self._get_file_hash(self.python_reqs)
-        npm_hash = await self._get_file_hash(self.npm_pkg_json)
-
+        dep_info = await self._collect_dependency_info()
         if hard:
             await self.repo.clone()
             await self._update_repo_state()
@@ -122,8 +117,7 @@ class GitDeploy(AppDeploy):
         if self.repo.is_dirty() or not self._is_valid:
             raise self.server.error(
                 "Recovery attempt failed, repo state not pristine", 500)
-        await self._update_dependencies(inst_hash, pyreqs_hash, npm_hash,
-                                        force=force_dep_update)
+        await self._update_dependencies(dep_info, force=force_dep_update)
         await self.restart_service()
         self.notify_status("Reinstall Complete", is_complete=True)
 
@@ -169,21 +163,45 @@ class GitDeploy(AppDeploy):
                 )
             raise self.log_exc(str(e))
 
-    async def _update_dependencies(self,
-                                   inst_hash: Optional[str],
-                                   pyreqs_hash: Optional[str],
-                                   npm_hash: Optional[str],
-                                   force: bool = False
-                                   ) -> None:
-        ret = await self._check_need_update(inst_hash, self.install_script)
-        if force or ret:
-            package_list = await self._parse_install_script()
-            if package_list is not None:
-                await self._install_packages(package_list)
-        ret = await self._check_need_update(pyreqs_hash, self.python_reqs)
-        if force or ret:
-            if self.python_reqs is not None:
-                await self._update_virtualenv(self.python_reqs)
+    async def _collect_dependency_info(self) -> Dict[str, Any]:
+        pkg_deps = await self._parse_install_script()
+        pyreqs = await self._parse_python_reqs()
+        npm_hash = await self._get_file_hash(self.npm_pkg_json)
+        logging.debug(
+            f"\nApplication {self.name}: Pre-update dependencies:\n"
+            f"Packages: {pkg_deps}\n"
+            f"Python Requirements: {pyreqs}"
+        )
+        return {
+            "system_packages": pkg_deps,
+            "python_modules": pyreqs,
+            "npm_hash": npm_hash
+        }
+
+    async def _update_dependencies(
+        self, dep_info: Dict[str, Any], force: bool = False
+    ) -> None:
+        packages = await self._parse_install_script()
+        modules = await self._parse_python_reqs()
+        logging.debug(
+            f"\nApplication {self.name}: Post-update dependencies:\n"
+            f"Packages: {packages}\n"
+            f"Python Requirements: {modules}"
+        )
+        if not force:
+            packages = list(set(packages) - set(dep_info["system_packages"]))
+            modules = list(set(modules) - set(dep_info["python_modules"]))
+        logging.debug(
+            f"\nApplication {self.name}: Dependencies to install:\n"
+            f"Packages: {packages}\n"
+            f"Python Requirements: {modules}\n"
+            f"Force All: {force}"
+        )
+        if packages:
+            await self._install_packages(packages)
+        if modules:
+            await self._update_virtualenv(modules)
+        npm_hash: Optional[str] = dep_info["npm_hash"]
         ret = await self._check_need_update(npm_hash, self.npm_pkg_json)
         if force or ret:
             if self.npm_pkg_json is not None:
@@ -195,14 +213,14 @@ class GitDeploy(AppDeploy):
                 except Exception:
                     self.notify_status("Node Package Update failed")
 
-    async def _parse_install_script(self) -> Optional[List[str]]:
+    async def _parse_install_script(self) -> List[str]:
         if self.install_script is None:
-            return None
+            return []
         # Open install file file and read
         inst_path: pathlib.Path = self.install_script
         if not inst_path.is_file():
-            self.log_info(f"Unable to open install script: {inst_path}")
-            return None
+            self.log_info(f"Failed to open install script: {inst_path}")
+            return []
         event_loop = self.server.get_event_loop()
         data = await event_loop.run_in_thread(inst_path.read_text)
         plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
@@ -212,9 +230,23 @@ class GitDeploy(AppDeploy):
             packages.extend(line.split())
         if not packages:
             self.log_info(f"No packages found in script: {inst_path}")
-            return None
-        logging.debug(f"Repo {self.name}: Detected Packages: {repr(packages)}")
         return packages
+
+    async def _parse_python_reqs(self) -> List[str]:
+        if self.python_reqs is None:
+            return []
+        pyreqs = self.python_reqs
+        if not pyreqs.is_file():
+            self.log_info(f"Failed to open python requirements file: {pyreqs}")
+            return []
+        eventloop = self.server.get_event_loop()
+        data = await eventloop.run_in_thread(pyreqs.read_text)
+        modules = [mdl.strip() for mdl in data.split("\n") if mdl.strip()]
+        if not modules:
+            self.log_info(
+                f"No modules found in python requirements file: {pyreqs}"
+            )
+        return modules
 
 
 GIT_ASYNC_TIMEOUT = 300.
