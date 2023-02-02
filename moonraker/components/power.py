@@ -1370,7 +1370,6 @@ class HueDevice(HTTPDevice):
             self.state_key = "state"
             self.on_state = "on"
 
-
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
