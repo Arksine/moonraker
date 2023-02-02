@@ -1373,8 +1373,8 @@ class HueDevice(HTTPDevice):
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
-            f"http://{self.addr}/api/{self.user}/{self.device_type}s/"
-            "{self.device_id}/{self.state_key}"
+            f"http://{self.addr}/api/{self.user}/{self.device_type}s"
+            f"/{self.device_id}/{self.state_key}"
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("PUT", url, body={"on": new_state})
@@ -1390,7 +1390,7 @@ class HueDevice(HTTPDevice):
     async def _send_status_request(self) -> str:
         url = (
             f"http://{self.addr}/api/{self.user}/{self.device_type}s"
-            "/{self.device_id}"
+            f"/{self.device_id}"
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("GET", url)
