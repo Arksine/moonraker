@@ -1362,7 +1362,7 @@ class HueDevice(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
         self.device_id = config.get("device_id")
-        self.device_type = config.get("device_type","light")
+        self.device_type = config.get("device_type", "light")
         if self.device_type == "group":
             self.state_key = "action"
             self.on_state = "all_on"
@@ -1373,19 +1373,24 @@ class HueDevice(HTTPDevice):
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
-            f"http://{self.addr}/api/{self.user}/{self.device_type}s/{self.device_id}/{self.state_key}"
+            f"http://{self.addr}/api/{self.user}/{self.device_type}s/"
+            "{self.device_id}/{self.state_key}"
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("PUT", url, body={"on": new_state})
         resp = cast(List[Dict[str, Dict[str, Any]]], ret.json())
+        state_url = (
+            f"/{self.device_type}s/{self.device_id}/{self.state_key}/on"
+        )
         return (
-            "on" if resp[0]["success"][f"/{self.device_type}s/{self.device_id}/{self.state_key}/on"]
+            "on" if resp[0]["success"][state_url]
             else "off"
         )
 
     async def _send_status_request(self) -> str:
         url = (
-            f"http://{self.addr}/api/{self.user}/{self.device_type}s/{self.device_id}"
+            f"http://{self.addr}/api/{self.user}/{self.device_type}s"
+            "/{self.device_id}"
         )
         url = self.client.escape_url(url)
         ret = await self.client.request("GET", url)
