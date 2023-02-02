@@ -91,6 +91,8 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/metadata", ['GET'], self._handle_metadata_request)
         self.server.register_endpoint(
+            "/server/files/thumbnails", ['GET'], self._handle_list_thumbs)
+        self.server.register_endpoint(
             "/server/files/roots", ['GET'], self._handle_list_roots)
         self.server.register_endpoint(
             "/server/files/directory", ['GET', 'POST', 'DELETE'],
@@ -377,6 +379,25 @@ class FileManager:
                 "permissions": perms
             })
         return root_list
+
+    async def _handle_list_thumbs(
+        self, web_request: WebRequest
+    ) -> List[Dict[str, Any]]:
+        requested_file: str = web_request.get_str("filename")
+        metadata: Optional[Dict[str, Any]]
+        metadata = self.gcode_metadata.get(requested_file, None)
+        if metadata is None:
+            return []
+        if "thumbnails" not in metadata:
+            return []
+        thumblist: List[Dict[str, Any]] = metadata["thumbnails"]
+        for info in thumblist:
+            relpath: Optional[str] = info.pop("relative_path", None)
+            if relpath is None:
+                continue
+            thumbpath = pathlib.Path(requested_file).parent.joinpath(relpath)
+            info["thumbnail_path"] = str(thumbpath)
+        return thumblist
 
     async def _handle_directory_request(self,
                                         web_request: WebRequest
@@ -1751,7 +1772,7 @@ class MetadataStorage:
             str, Tuple[Dict[str, Any], asyncio.Event]] = {}
         self.busy: bool = False
 
-    def prune_storage(self):
+    def prune_storage(self) -> None:
         # Check for removed gcode files while moonraker was shutdown
         if self.gc_path:
             del_keys: List[str] = []

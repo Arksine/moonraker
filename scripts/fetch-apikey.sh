@@ -1,6 +1,6 @@
 #!/bin/bash
 # Helper Script for fetching the API Key from a moonraker database
-DATABASE_PATH="${HOME}/.moonraker_database"
+DATABASE_PATH="${HOME}/printer_data/database"
 MOONRAKER_ENV="${HOME}/moonraker-env"
 DB_ARGS="--read=READ --db=authorized_users get _API_KEY_USER_"
 API_REGEX='(?<="api_key": ")([^"]+)'

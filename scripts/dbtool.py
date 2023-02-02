@@ -9,6 +9,7 @@ import pathlib
 import base64
 import tempfile
 import re
+import time
 from typing import Any, Dict, Optional, TextIO, Tuple
 import lmdb
 
@@ -16,7 +17,9 @@ MAX_NAMESPACES = 100
 MAX_DB_SIZE = 200 * 2**20
 HEADER_KEY = b"MOONRAKER_DATABASE_START"
 
-LINE_MATCH = re.compile(r"\+(\d+),(\d+):(.+?)->(.+)")
+LINE_MATCH = re.compile(
+    r"^\+(\d+),(\d+):([A-Za-z0-9+/]+={0,2})->([A-Za-z0-9+/]+={0,2})$"
+)
 
 class DBToolError(Exception):
     pass
@@ -157,10 +160,13 @@ def restore(args: Dict[str, Any]):
     print(f"Restoring backup from '{input_db}' to '{dest_path}'...")
     bkp_dir: Optional[pathlib.Path] = None
     if dest_path.joinpath("data.mdb").exists():
-        tmp_dir = pathlib.Path(tempfile.gettempdir())
-        bkp_dir = tmp_dir.joinpath("moonrakerdb_backup")
+        bkp_dir = dest_path.parent.joinpath("backup")
+        if not bkp_dir.exists():
+            bkp_dir = pathlib.Path(tempfile.gettempdir())
+        str_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        bkp_dir = bkp_dir.joinpath(f"{str_time}/database")
         if not bkp_dir.is_dir():
-            bkp_dir.mkdir()
+            bkp_dir.mkdir(parents=True)
         print(f"Warning: database file at found in '{dest_path}', "
               "all data will be overwritten.  Copying existing DB "
               f"to '{bkp_dir}'")
