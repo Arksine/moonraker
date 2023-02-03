@@ -62,7 +62,8 @@ DEFAULT_ALLOWED_SERVICES = [
     "moonraker-telegram-bot",
     "moonraker-obico",
     "sonar",
-    "crowsnest"
+    "crowsnest",
+    "octoeverywhere"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
