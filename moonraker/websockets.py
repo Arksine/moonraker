@@ -349,7 +349,6 @@ class APITransport:
 class WebsocketManager(APITransport):
     def __init__(self, server: Server) -> None:
         self.server = server
-        self.klippy: Klippy = server.lookup_component("klippy_connection")
         self.clients: Dict[int, BaseSocketClient] = {}
         self.rpc = JsonRPC(server)
         self.closed_event: Optional[asyncio.Event] = None
@@ -376,11 +375,12 @@ class WebsocketManager(APITransport):
         self.server.register_event_handler(event_name, notify_handler)
 
     def register_api_handler(self, api_def: APIDefinition) -> None:
+        klippy: Klippy = self.server.lookup_component("klippy_connection")
         if api_def.callback is None:
             # Remote API, uses RPC to reach out to Klippy
             ws_method = api_def.jrpc_methods[0]
             rpc_cb = self._generate_callback(
-                api_def.endpoint, "", self.klippy.request
+                api_def.endpoint, "", klippy.request
             )
             self.rpc.register_method(ws_method, rpc_cb)
         else:
@@ -514,7 +514,6 @@ class WebsocketManager(APITransport):
     def remove_client(self, sc: BaseSocketClient) -> None:
         old_sc = self.clients.pop(sc.uid, None)
         if old_sc is not None:
-            self.klippy.remove_subscription(old_sc)
             self.server.send_event("websockets:client_removed", sc)
             logging.debug(f"Websocket Removed: {sc.uid}")
         if self.closed_event is not None and not self.clients:
@@ -759,6 +758,8 @@ class WebSocket(WebSocketHandler, BaseSocketClient):
     def on_close(self) -> None:
         self.is_closed = True
         self.__class__.connection_count -= 1
+        kconn: Klippy = self.server.lookup_component("klippy_connection")
+        kconn.remove_subscription(self)
         self.message_buf = []
         now = self.eventloop.get_loop_time()
         pong_elapsed = now - self.last_pong_time

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from moonraker import Server
     from confighelper import ConfigHelper
     from websockets import WebRequest
+    from klippy_connection import KlippyConnection as Klippy
 
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 
@@ -202,6 +203,8 @@ class UnixSocketClient(BaseSocketClient):
         if self.is_closed:
             return
         self.is_closed = True
+        kconn: Klippy = self.server.lookup_component("klippy_connection")
+        kconn.remove_subscription(self)
         if not self.writer.is_closing():
             self.writer.close()
             try:
