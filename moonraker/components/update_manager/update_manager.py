@@ -790,6 +790,16 @@ class AptCliProvider(BasePackageProvider):
             return [p.split("/", maxsplit=1)[0] for p in pkg_list]
         return []
 
+    async def resolve_packages(self, package_list: List[str]) -> List[str]:
+        self.cmd_helper.notify_update_response("Resolving packages...")
+        search_regex = "|".join([f"^{pkg}$" for pkg in package_list])
+        cmd = f"apt-cache search --names-only \"{search_regex}\""
+        ret = await self.cmd_helper.run_cmd_with_response(cmd, timeout=600.)
+        resolved = [
+            pkg.strip().split()[0] for pkg in ret.split("\n") if pkg.strip()
+        ]
+        return [avail for avail in package_list if avail in resolved]
+
     async def install_packages(self,
                                package_list: List[str],
                                **kwargs
@@ -797,8 +807,13 @@ class AptCliProvider(BasePackageProvider):
         timeout: float = kwargs.get('timeout', 300.)
         retries: int = kwargs.get('retries', 3)
         notify: bool = kwargs.get('notify', False)
-        pkgs = " ".join(package_list)
         await self.refresh_packages(notify=notify)
+        resolved = await self.resolve_packages(package_list)
+        if not resolved:
+            self.cmd_helper.notify_update_response("No packages detected")
+            return
+        logging.debug(f"Resolved packages: {resolved}")
+        pkgs = " ".join(resolved)
         await self.cmd_helper.run_cmd(
             f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
             retries=retries, notify=notify)
