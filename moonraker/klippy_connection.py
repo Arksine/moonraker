@@ -26,6 +26,7 @@ from typing import (
     Dict,
     List,
     Set,
+    Tuple
 )
 if TYPE_CHECKING:
     from moonraker import Server
@@ -246,8 +247,7 @@ class KlippyConnection:
                     continue
                 self.log_no_access = True
                 try:
-                    reader, writer = await asyncio.open_unix_connection(
-                        str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
+                    reader, writer = await self.open_klippy_connection(True)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -266,6 +266,14 @@ class KlippyConnection:
                         machine.log_service_info(svc_info)
             self.event_loop.create_task(self._read_stream(reader))
             return await self._init_klippy_connection()
+
+    async def open_klippy_connection(
+        self, primary: bool = False
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        if not primary and not self.is_connected():
+            raise ServerError("Klippy Unix Connection Not Available", 503)
+        return await asyncio.open_unix_connection(
+            str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
 
     def _get_peer_credentials(self, writer: asyncio.StreamWriter) -> bool:
         self._peer_cred = get_unix_peer_credentials(writer, "Klippy")

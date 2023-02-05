@@ -23,7 +23,13 @@ from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
 from utils import ServerError
-from websockets import WebRequest, WebsocketManager, WebSocket, APITransport
+from websockets import (
+    WebRequest,
+    WebsocketManager,
+    WebSocket,
+    APITransport,
+    BridgeSocket
+)
 from streaming_form_data import StreamingFormDataParser
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -210,6 +216,7 @@ class MoonrakerApp:
             (AnyMatches(), self.mutable_router),
             (r"/", WelcomeHandler),
             (r"/websocket", WebSocket),
+            (r"/klippysocket", BridgeSocket),
             (r"/server/redirect", RedirectHandler)
         ]
         self.app = tornado.web.Application(app_handlers, **app_args)
