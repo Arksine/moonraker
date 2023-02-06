@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
-    from ..shell_command import ShellCommandFactory as ShellCmd
 
 MIN_PIP_VERSION = (23, 0)
 
@@ -300,9 +299,9 @@ class AppDeploy(BaseDeploy):
             self.log_exc("Error updating packages")
             return
 
-    async def _update_virtualenv(self,
-                                 requirements: Union[pathlib.Path, List[str]]
-                                 ) -> None:
+    async def _update_python_requirements(
+        self, requirements: Union[pathlib.Path, List[str]]
+    ) -> None:
         if self.pip_cmd is None:
             return
         await self._update_pip()
@@ -346,9 +345,8 @@ class AppDeploy(BaseDeploy):
         if self.pip_cmd is None:
             return None
         self.notify_status("Checking pip version...")
-        scmd: ShellCmd = self.server.lookup_component("shell_command")
         try:
-            data: str = await scmd.exec_cmd(
+            data: str = await self.cmd_helper.run_cmd_with_response(
                 f"{self.pip_cmd} --version", timeout=30., retries=3
             )
             match = re.match(

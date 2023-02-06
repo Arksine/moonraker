@@ -337,7 +337,7 @@ class ZipDeploy(AppDeploy):
                 await self._install_packages(system_pkgs)
         if python_pkgs:
             if force or python_pkgs != self.python_pkg_list:
-                await self._update_virtualenv(python_pkgs)
+                await self._update_python_requirements(python_pkgs)
         ret = await self._check_need_update(npm_hash, self.npm_pkg_json)
         if force or ret:
             if self.npm_pkg_json is not None:

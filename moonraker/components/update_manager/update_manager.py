@@ -507,6 +507,7 @@ class CommandHelper:
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         self.scmd_error = shell_cmd.error
         self.build_shell_command = shell_cmd.build_shell_command
+        self.run_cmd_with_response = shell_cmd.exec_cmd
         self.pkg_updater: Optional[PackageDeploy] = None
 
         # database management
@@ -581,15 +582,16 @@ class CommandHelper:
     def set_package_updater(self, updater: PackageDeploy) -> None:
         self.pkg_updater = updater
 
-    async def run_cmd(self,
-                      cmd: str,
-                      timeout: float = 20.,
-                      notify: bool = False,
-                      retries: int = 1,
-                      env: Optional[Dict[str, str]] = None,
-                      cwd: Optional[str] = None,
-                      sig_idx: int = 1
-                      ) -> None:
+    async def run_cmd(
+        self,
+        cmd: str,
+        timeout: float = 20.,
+        notify: bool = False,
+        retries: int = 1,
+        env: Optional[Dict[str, str]] = None,
+        cwd: Optional[str] = None,
+        sig_idx: int = 1
+    ) -> None:
         cb = self.notify_update_response if notify else None
         scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
         for _ in range(retries):
@@ -598,20 +600,7 @@ class CommandHelper:
         else:
             raise self.server.error("Shell Command Error")
 
-    async def run_cmd_with_response(self,
-                                    cmd: str,
-                                    timeout: float = 20.,
-                                    retries: int = 5,
-                                    env: Optional[Dict[str, str]] = None,
-                                    cwd: Optional[str] = None,
-                                    sig_idx: int = 1
-                                    ) -> str:
-        scmd = self.build_shell_command(cmd, None, env=env, cwd=cwd)
-        result = await scmd.run_with_response(timeout, retries,
-                                              sig_idx=sig_idx)
-        return result
-
-    def notify_update_refreshed(self):
+    def notify_update_refreshed(self) -> None:
         vinfo: Dict[str, Any] = {}
         for name, updater in self.get_updaters().items():
             vinfo[name] = updater.get_update_status()
@@ -620,10 +609,9 @@ class CommandHelper:
         uinfo['busy'] = self.is_update_busy()
         self.server.send_event("update_manager:update_refreshed", uinfo)
 
-    def notify_update_response(self,
-                               resp: Union[str, bytes],
-                               is_complete: bool = False
-                               ) -> None:
+    def notify_update_response(
+        self, resp: Union[str, bytes], is_complete: bool = False
+    ) -> None:
         if self.cur_update_app is None:
             return
         resp = resp.strip()
@@ -640,30 +628,29 @@ class CommandHelper:
         self.server.send_event(
             "update_manager:update_response", notification)
 
-    async def install_packages(self,
-                               package_list: List[str],
-                               **kwargs
-                               ) -> None:
+    async def install_packages(
+        self, package_list: List[str], **kwargs
+    ) -> None:
         if self.pkg_updater is None:
             return
         await self.pkg_updater.install_packages(package_list, **kwargs)
 
-    def get_rate_limit_stats(self):
+    def get_rate_limit_stats(self) -> Dict[str, Any]:
         return self.http_client.github_api_stats()
 
-    def on_download_progress(self,
-                             progress: int,
-                             download_size: int,
-                             downloaded: int
-                             ) -> None:
+    def on_download_progress(
+        self, progress: int, download_size: int, downloaded: int
+    ) -> None:
         totals = (
             f"{downloaded // 1024} KiB / "
-            f"{download_size// 1024} KiB"
+            f"{download_size // 1024} KiB"
         )
         self.notify_update_response(
             f"Downloading {self.cur_update_app}: {totals} [{progress}%]")
 
-    async def create_tempdir(self, suffix=None, prefix=None):
+    async def create_tempdir(
+        self, suffix: Optional[str] = None, prefix: Optional[str] = None
+    ) -> tempfile.TemporaryDirectory[str]:
         def _createdir(sfx, pfx):
             return tempfile.TemporaryDirectory(suffix=sfx, prefix=pfx)
 

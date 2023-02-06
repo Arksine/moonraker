@@ -200,7 +200,7 @@ class GitDeploy(AppDeploy):
         if packages:
             await self._install_packages(packages)
         if modules:
-            await self._update_virtualenv(modules)
+            await self._update_python_requirements(modules)
         npm_hash: Optional[str] = dep_info["npm_hash"]
         ret = await self._check_need_update(npm_hash, self.npm_pkg_json)
         if force or ret:
