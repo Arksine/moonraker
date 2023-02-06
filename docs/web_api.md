@@ -3907,20 +3907,16 @@ The following endpoints are available when the `[update_manager]` component has
 been configured:
 
 #### Get update status
-Retrieves the current state of each "package" available for update.  Typically
-this will consist of information regarding `moonraker`, `klipper`, `system`
-packages, along with configured clients.  If moonraker has not yet received
-information from Klipper then its status will be omitted.  One may request that
-the update info be refreshed by setting the `refresh` argument to `true`.  Note
-that the `refresh` argument is ignored if an update is in progress or if a print
-is in progress. In these cases the current status will be returned immediately
-and no refresh will take place.  If the `refresh` argument is omitted its value
-defaults to `false`.
+Retrieves the current state of each item available for update.  Items may
+include the linux package manager (`system`), applications such as `moonraker` and
+`klipper`, web clients such as `mainsail` and `fluidd`, and other configured
+applications/extensions.
 
 HTTP request:
 ```http
 GET /machine/update/status?refresh=false
 ```
+
 JSON-RPC request:
 ```json
 {
@@ -3932,6 +3928,21 @@ JSON-RPC request:
     "id": 4644
 }
 ```
+
+Parameters:
+
+- `refresh`: (Optional) When set to true state for all updaters will be refreshed.
+  The default is `false`.  A request to refresh is aborted under the following
+  conditions:
+    - An update is in progress
+    - A print is in progress
+    - The update manager hasn't completed initialization
+    - A previous refresh has occured within the last 60 seconds
+
+!!! Note
+    The `refresh` parameter is deprecated.  Client developers should use the
+    [refresh endpoint](#refresh-application-state) to request a refresh.
+
 Returns:
 
 Status information for each update package.  Note that `mainsail`
@@ -4130,7 +4141,53 @@ The `system` package has the following fields:
 - `package_list`: an array containing the names of packages available
   for update
 
-### Perform a full update
+#### Refresh update status
+
+Refreshes the internal update state for the requested item(s).
+
+HTTP request:
+```http
+POST /machine/update/refresh?name=klipper
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.update.refresh",
+    "params": {
+        "name": "klipper"
+    },
+    "id": 4644
+}
+```
+
+Parameters:
+
+- `name`: (Optional) The name of the specified application.  If omitted
+  all registered applications will be refreshed.
+
+Returns:
+
+An object containing full update status matching the response in the
+[status endpoint](#get-update-status).
+
+!!! Note
+    This endpoint will raise 503 error under the following conditions:
+
+      - An update is in progress
+      - A print is in progress
+      - The update manager hasn't completed initialization
+
+!!! Warning
+    Applications should use care when calling this method as a refresh
+    is CPU intensive and may be time consuming.  Moonraker can be
+    configured to refresh state periodically, thus it is recommended
+    that applications avoid their own procedural implementations.
+    Instead it is best to call this API only when a user requests a
+    refresh.
+
+#### Perform a full update
 Attempts to update all configured items in Moonraker.  Updates are
 performed in the following order:
 

@@ -1391,7 +1391,7 @@ down into 3 basic types:
     trackers without first reproducing the issue with all unofficial
     extensions disabled.
 
-#####  Web type (front-end) configuration
+####  Web type (front-end) configuration
 
 ```ini
 # moonraker.conf
@@ -1428,7 +1428,7 @@ info_tags:
 #   The default is an empty list.
 ```
 
-##### All other extensions
+#### All other extensions
 
 !!! Note
     Git repos must have at least one tag for Moonraker to identify its
