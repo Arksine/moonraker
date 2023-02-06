@@ -159,6 +159,9 @@ class UpdateManager:
             "/machine/update/status", ["GET"],
             self._handle_status_request)
         self.server.register_endpoint(
+            "/machine/update/refresh", ["POST"],
+            self._handle_refresh_request)
+        self.server.register_endpoint(
             "/machine/update/recover", ["POST"],
             self._handle_repo_recovery)
         self.server.register_notification("update_manager:update_response")
@@ -419,6 +422,37 @@ class UpdateManager:
         ret['version_info'] = vinfo
         ret['busy'] = self.cmd_helper.is_update_busy()
         if check_refresh:
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(
+                .2, self.cmd_helper.notify_update_refreshed
+            )
+        return ret
+
+    async def _handle_refresh_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        name: Optional[str] = web_request.get_str("name", None)
+        if name is not None and name not in self.updaters:
+            raise self.server.error(f"No updater registered for '{name}'")
+        machine: Machine = self.server.lookup_component("machine")
+        if (
+            machine.validation_enabled() or
+            self.cmd_helper.is_update_busy() or
+            self.kconn.is_printing() or
+            not self.initial_refresh_complete
+        ):
+            raise self.server.error(
+                "Server is busy, cannot perform refresh", 503
+            )
+        async with self.cmd_request_lock:
+            vinfo: Dict[str, Any] = {}
+            for updater_name, updater in list(self.updaters.items()):
+                if name is None or updater_name == name:
+                    await updater.refresh()
+                vinfo[updater_name] = updater.get_update_status()
+            ret = self.cmd_helper.get_rate_limit_stats()
+            ret['version_info'] = vinfo
+            ret['busy'] = self.cmd_helper.is_update_busy()
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
                 .2, self.cmd_helper.notify_update_refreshed
