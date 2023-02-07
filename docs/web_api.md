@@ -135,6 +135,61 @@ test interface with example usage for most of the requests below.  It also
 includes a basic JSON-RPC implementation that uses promises to return responses
 and errors (see json-rpc.js).
 
+### Websocket Connections
+
+#### Primary websocket
+
+The primary websocket supports Moonraker's JSON-RPC API.  Most applications that
+desire a websocket connection will make use of the primary websocket.
+
+The primary websocket is available at:
+```
+ ws://host_or_ip:port/websocket`
+```
+
+The primary websocket will remain connected until the application disconnects
+or Moonraker is shutdown.
+
+#### Bridge websocket
+
+The "bridge" websocket provides a near direct passthrough to Klipper's API
+Server.  Klipper uses its own RPC protocol, which is effectively a simplified
+version of the JSON-RPC specification. Developers should refer to
+[Klipper's API documentation](https://www.klipper3d.org/API_Server.html)
+for details on the protocol and available APIs.
+
+!!! Note
+    The bridge websocket is described as "near direct passthrough" because
+    Moonraker handles the ETX (`0x03`) terminator internally.  Applications
+    can expect to receive complete JSON encoded messages in a text frame
+    without the ETX terminator.  Likewise applications should send JSON encoded
+    messages without the ETX terminator.  Messages may be sent using either
+    text frames or binary frames.
+
+The bridge websocket provides access to diagnostic APIs that are not generally
+suitable for Moonraker's primary connection.  These requests stream a
+substantial amount of data; bridge connections allow Moonraker to avoid
+decoding and re-encoding this data, reducing CPU load on the host. The "dump"
+requests, such as `motion_report/dump_stepper` and `adxl345/dump_adxl345`, are
+examples of APIs that should make use of the bridge websocket.
+
+The bridge websocket is available at:
+```
+ws://host_or_ip:port/klippysocket
+```
+
+The availability of bridge connections depends on Klippy's availablility.
+If Klippy is not running or its API server is not enabled then a bridge
+websocket connection cannot be established.  Established bridge connections
+will close when Klippy is shutdown or restarted.  Such connections will also
+be closed if Moonraker is restarted or shutdown.
+
+!!! Note
+    If JWT or API Key authentication is required the application must use a
+    [oneshot token](#generate-a-oneshot-token) when connecting to a bridge
+    socket.  Since Moonraker does not decode bridge requests it is not possible
+    to authenticate post connection.
+
 ### Unix Socket Connection
 
 All JSON-RPC APIs available over the websocket are also made available over a
