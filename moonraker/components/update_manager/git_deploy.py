@@ -264,7 +264,7 @@ GIT_REF_FMT = (
 )
 
 class GitRepo:
-    tag_r = re.compile(r"(v?\d+(?:\.\d+){0,2}(-(alpha|beta)(\.\d+)?)?)(-\d+)?")
+    tag_r = re.compile(r"(v?\d+(?:\.\d+){1,2}(-(alpha|beta)(\.\d+)?)?)(-\d+)?")
     def __init__(self,
                  cmd_helper: CommandHelper,
                  git_path: pathlib.Path,
