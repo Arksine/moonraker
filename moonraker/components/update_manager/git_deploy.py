@@ -944,6 +944,8 @@ class GitRepo:
             if core[0] == "v":
                 core = core[1:]
             base_ver = [int(part) for part in core.split(".")]
+            while len(base_ver) < 3:
+                base_ver.append(0)
             base_ver.append({"alpha": 0, "beta": 1}.get(ver_match.group(3), 2))
             base_ver.append(int(ver_match.group(5)[1:]))
         except Exception:
