@@ -707,10 +707,11 @@ pin: PA13
 # The variable below should be initialized to the startup value.  If your
 # device is configured to be on at startup use "variable_value: 1"
 variable_value: 0
+gcode:
   {% if 'VALUE' not in params %}
     {action_raise_error("Parameter 'VALUE' missing from 'SET_FLARE'")}
   {% endif %}
-  {% set state = params.VALUE %}
+  {% set state = params.VALUE|int %}
   {% if state %}
     # turn the neopixel on
     SET_LED LED=extruder_flare RED=0.75 BLUE=0.2 GREEN=0.2 SYNC=0
