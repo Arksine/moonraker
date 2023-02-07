@@ -584,6 +584,8 @@ class GitRepo:
         commit = tag = "?"
         try:
             commit = await self.rev_list("--tags --max-count=1")
+            if not commit:
+                return "?", "?"
             tag = await self.describe(f"--tags {commit}")
         except Exception:
             pass
