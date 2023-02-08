@@ -125,6 +125,7 @@ class Machine:
         if pclass is None:
             raise config.error(f"Invalid Provider: {self.provider_type}")
         self.sys_provider: BaseProvider = pclass(config)
+        self.system_info["provider"] = self.provider_type
         logging.info(f"Using System Provider: {self.provider_type}")
         self.validator = InstallValidator(config)
         self.sudo_requests: List[Tuple[SudoCallback, str]] = []
