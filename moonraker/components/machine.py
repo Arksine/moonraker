@@ -1300,13 +1300,21 @@ class SupervisordCliProvider(BaseProvider):
             timeout=timeout, success_codes=success_codes
         )
 
+    def _get_active_state(self, sub_state: str) -> str:
+        if sub_state == "stopping":
+            return "deactivating"
+        elif sub_state == "running":
+            return "active"
+        else:
+            return "inactive"
+
     async def _detect_active_services(self) -> None:
         machine: Machine = self.server.lookup_component("machine")
         units: Dict[str, Any] = await self._get_process_info()
         for unit, info in units.items():
             if machine.is_service_allowed(unit):
                 self.available_services[unit] = {
-                    'active_state': "active",
+                    'active_state': self._get_active_state(info["state"]),
                     'sub_state': info["state"]
                 }
 
@@ -1357,7 +1365,7 @@ class SupervisordCliProvider(BaseProvider):
             for svc, state in zip(svcs, resp_l):
                 sub_state = state.split()[1].lower()
                 new_state: Dict[str, str] = {
-                    'active_state': "active",
+                    'active_state': self._get_active_state(sub_state),
                     'sub_state': sub_state
                 }
                 if self.available_services[svc] != new_state:
