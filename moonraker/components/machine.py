@@ -1254,20 +1254,6 @@ class SupervisordCliProvider(BaseProvider):
         pstats: ProcStats = self.server.lookup_component('proc_stats')
         pstats.register_stat_callback(self._update_service_status)
 
-    async def shutdown(self) -> None:
-        raise self.server.error(
-            "[machine]: Supervisord manager can not process SHUTDOWN."
-            "Please try KILL container or stop Supervisord via ssh terminal."
-        )
-        return
-
-    async def reboot(self) -> None:
-        raise self.server.error(
-            "[machine]: Supervisord manager can not process REBOOT."
-            "Please try KILL container or stop Supervisord via ssh terminal."
-        )
-        return
-
     async def do_service_action(
         self, action: str, service_name: str
     ) -> None:
@@ -1275,19 +1261,6 @@ class SupervisordCliProvider(BaseProvider):
         await self._exec_supervisorctl_command(
             f"{action} {service_name}", timeout=6.
         )
-
-    async def check_virt_status(self) -> Dict[str, Any]:
-        virt_id = virt_type = "none"
-        if (
-            os.path.exists("/.dockerenv") or
-            os.path.exists("/.dockerinit")
-        ):
-            virt_id = "docker"
-            virt_type = "container"
-        return {
-            'virt_type': virt_type,
-            'virt_identifier': virt_id
-        }
 
     async def _exec_supervisorctl_command(
         self,
