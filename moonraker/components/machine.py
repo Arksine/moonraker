@@ -118,7 +118,7 @@ class Machine:
             "none": BaseProvider,
             "systemd_cli": SystemdCliProvider,
             "systemd_dbus": SystemdDbusProvider,
-            "supervisord": SupervisordProvider
+            "supervisord_cli": SupervisordCliProvider
         }
         self.provider_type = config.get('provider', 'systemd_dbus')
         pclass = providers.get(self.provider_type)
@@ -1231,7 +1231,7 @@ class SystemdDbusProvider(BaseProvider):
 # for docker klipper-moonraker image multi-service managing
 # since in container, all command is launched by normal user,
 # sudo_cmd is not needed.
-class SupervisordProvider(BaseProvider):
+class SupervisordCliProvider(BaseProvider):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
         self.spv_conf: str = config.get("supervisord_config_path", "")
