@@ -2114,13 +2114,9 @@ gcode:
 
 ### `[simplyprint]`
 
-!!! Note
-    Currently the SimplyPrint service is only available for developers
-    and testers.  When the service is available for end users this note
-    will be removed.
-
 Enables support for print monitoring through
-[SimplyPrint](https://simplyprint.io).
+[SimplyPrint](https://simplyprint.io),
+publicly launched Moonraker integration Nov 21st 2022.
 
 ```ini
 # moonraker.conf
@@ -2179,9 +2175,12 @@ ambient_sensor:
     - Current print time elapse
     - Estimated ambient temperature
     - Webcam configuration (if available)
-    - Webcam images.  These images are also sent to `printpal.io`
+    - Webcam images.
     - Power device state (if configured)
     - Filament sensor state (if configured)
+
+More on how your data is used in the SimplyPrint privacy policy here;
+[https://simplyprint.io/legal/privacy](https://simplyprint.io/legal/privacy)
 
 ## Include directives
 
