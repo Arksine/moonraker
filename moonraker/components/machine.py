@@ -579,6 +579,9 @@ class Machine:
                         self.inside_container = True
                         virt_type = "container"
                         virt_id = ct
+                        logging.info(
+                            f"Container detected via cgroup: {ct}"
+                        )
                         break
             except Exception:
                 logging.exception(f"Error reading {CGROUP_PATH}")
@@ -599,6 +602,9 @@ class Machine:
                             os.path.exists("/.dockerinit")
                         ):
                             virt_id = "docker"
+                        logging.info(
+                            f"Container detected via sched: {virt_id}"
+                        )
                 except Exception:
                     logging.exception(f"Error reading {SCHED_PATH}")
         return {
