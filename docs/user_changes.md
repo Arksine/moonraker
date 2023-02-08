@@ -2,6 +2,10 @@
 This file will track changes that require user intervention,
 such as a configuration change or a reinstallation.
 
+### Februrary 8th 2023
+- The `provider` option in the `[machine]` section no longer accepts
+  `supervisord` as an option.  It has been renamed to `supervisord_cli`.
+
 ### January 2nd 2023
 - The `bound_service` option for `[power]` devices has been deprecated in
   favor of `bound_services`.  Currently this change does not generate a

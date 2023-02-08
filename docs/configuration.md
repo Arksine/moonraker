@@ -123,8 +123,8 @@ with system services such as systemd.
 provider: systemd_dbus
 #   The provider implementation used to collect system service information
 #   and run service actions (ie: start, restart, stop).  This can be "none",
-#   "supervisord", "systemd_dbus", or "systemd_cli".  If the provider is set
-#   to "none" service action APIs will be disabled.
+#   "supervisord_cli", "systemd_dbus", or "systemd_cli".  If the provider is
+#   set to "none" service action APIs will be disabled.
 #   The default is systemd_dbus.
 sudo_password:
 #   The password for the linux user.  When set Moonraker can run linux commands
