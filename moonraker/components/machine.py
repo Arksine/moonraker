@@ -777,6 +777,14 @@ class Machine:
 class BaseProvider:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.shutdown_action = config.get("shutdown_action", "poweroff")
+        self.shutdown_action = self.shutdown_action.lower()
+        if self.shutdown_action not in ["halt", "poweroff"]:
+            raise config.error(
+                "Section [machine], Option 'shutdown_action':"
+                f"Invalid value '{self.shutdown_action}', must be "
+                "'halt' or 'poweroff'"
+            )
         self.available_services: Dict[str, Dict[str, str]] = {}
         self.shell_cmd: SCMDComp = self.server.load_component(
             config, 'shell_command')
@@ -789,7 +797,7 @@ class BaseProvider:
         return await machine.exec_sudo_command(command)
 
     async def shutdown(self) -> None:
-        await self._exec_sudo_command("systemctl halt")
+        await self._exec_sudo_command(f"systemctl {self.shutdown_action}")
 
     async def reboot(self) -> None:
         await self._exec_sudo_command("systemctl reboot")
@@ -1011,15 +1019,26 @@ class SystemdDbusProvider(BaseProvider):
             "org.freedesktop.systemd1.manage-units",
             "System Service Management (start, stop, restart) "
             "will be disabled")
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off",
-            "The shutdown API will be disabled"
-        )
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off-multiple-sessions",
-            "The shutdown API will be disabled if multiple user "
-            "sessions are open."
-        )
+        if self.shutdown_action == "poweroff":
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
+        else:
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
         try:
             # Get the login manaager interface
             self.login_mgr = await self.dbus_mgr.get_interface(
@@ -1053,7 +1072,10 @@ class SystemdDbusProvider(BaseProvider):
     async def shutdown(self) -> None:
         if self.login_mgr is None:
             await super().shutdown()
-        await self.login_mgr.call_power_off(False)  # type: ignore
+        if self.shutdown_action == "poweroff":
+            await self.login_mgr.call_power_off(False)  # type: ignore
+        else:
+            await self.login_mgr.call_halt(False)  # type: ignore
 
     async def do_service_action(self,
                                 action: str,
