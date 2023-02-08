@@ -126,6 +126,11 @@ provider: systemd_dbus
 #   "supervisord_cli", "systemd_dbus", or "systemd_cli".  If the provider is
 #   set to "none" service action APIs will be disabled.
 #   The default is systemd_dbus.
+shutdown_action: poweroff
+#   Determines the action Moonraker will take when a shutdown is requested.
+#   This option may be set to "halt" or "poweroff. Not all linux distributions
+#   support poweroff, in such scenarios it is necessary to specify 'halt'.
+#   The default is "poweroff".
 sudo_password:
 #   The password for the linux user.  When set Moonraker can run linux commands
 #   that require elevated permissions.  This option accepts Jinja2 Templates,
