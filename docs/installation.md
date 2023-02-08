@@ -299,10 +299,10 @@ Following are some items to take note of:
   by the enviroment variable `MOONRAKER_ARGS`.  This variable is set in
   the environment file.
 
-#### The Enivironment File
+#### The Environment File
 
 The environment file, `moonraker.env`. is created in the data path during
-installation. A default installation's enviroment file will contain the path
+installation. A default installation's environment file will contain the path
 to `moonraker.py` and the data path option, ie:
 
 ```

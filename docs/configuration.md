@@ -712,10 +712,11 @@ pin: PA13
 # The variable below should be initialized to the startup value.  If your
 # device is configured to be on at startup use "variable_value: 1"
 variable_value: 0
+gcode:
   {% if 'VALUE' not in params %}
     {action_raise_error("Parameter 'VALUE' missing from 'SET_FLARE'")}
   {% endif %}
-  {% set state = params.VALUE %}
+  {% set state = params.VALUE|int %}
   {% if state %}
     # turn the neopixel on
     SET_LED LED=extruder_flare RED=0.75 BLUE=0.2 GREEN=0.2 SYNC=0
@@ -971,6 +972,7 @@ Example:
 
 [power homeassistant_switch]
 type: homeassistant
+protocol: http
 address: 192.168.1.126
 port: 8123
 device: switch.1234567890abcdefghij
@@ -1433,13 +1435,17 @@ info_tags:
 #   The default is an empty list.
 ```
 
-#### All other extensions
+#### Git Repo Configuration
 
 !!! Note
     Git repos must have at least one tag for Moonraker to identify its
     version.  The tag may be lightweight or annotated.  The tag must be in
     semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
     integer values.  For example, a repos first tag might be `v0.0.1`.
+
+    Moonraker can still update repos without tags, however as of 2/8/2023
+    the common front ends disable update controls when version information
+    is not reported by Moonraker.
 
 ```ini
 # moonraker.conf
