@@ -1159,6 +1159,11 @@ device_id:
 #   The device id of the light/socket you want to control.
 #   An explanation on how you could get the device id, can be found here:
 #   https://developers.meethue.com/develop/get-started-2/#turning-a-light-on-and-off
+device_type: light
+#   Set to light to control a single hue light, or group to control a hue light gorup. 
+#   If device_type is set to light, the device_id should be the light id, 
+#   and if the device_type is group, the device_id should be the group id.
+#   The default is "light.
 
 ```
 
