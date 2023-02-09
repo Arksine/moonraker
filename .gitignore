@@ -8,3 +8,6 @@ __pycache__/
 venv
 start_moonraker
 *.env
+.pdm.toml
+build
+dist
