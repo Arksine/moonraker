@@ -11,6 +11,7 @@ import struct
 import socket
 import asyncio
 import time
+import subprocess
 
 # Annotation imports
 from typing import (
@@ -22,7 +23,8 @@ from typing import (
     Dict,
     Coroutine,
     Union,
-    cast
+    cast,
+    Tuple
 )
 
 if TYPE_CHECKING:
@@ -54,7 +56,8 @@ class PrinterPower:
             "rf": RFDevice,
             "mqtt": MQTTDevice,
             "smartthings": SmartThings,
-            "hue": HueDevice
+            "hue": HueDevice,
+            "uhubctl": UhubctlDevice
         }
 
         for section in prefix_sections:
@@ -1385,6 +1388,89 @@ class HueDevice(HTTPDevice):
         ret = await self.client.request("GET", url)
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"]["on"] else "off"
+
+
+# USB Hub Control
+# https://github.com/mvp/uhubctl
+# apt install uhubctl
+class UhubctlDevice(PowerDevice):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+
+        self.hub, self.port = tuple(config.get("port").split("."))
+        self.initial_state = config.getboolean("initial_state", True)
+
+    def _uhubctl(self, args: List[str] = []) -> Tuple:
+        proc = subprocess.Popen(
+            ["uhubctl"] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        try:
+            out, err = proc.communicate(timeout=5)
+
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, err = proc.communicate()
+
+        return (out.strip().splitlines(), err.strip().splitlines())
+
+    def _port_status(self, toggle: str = "") -> List[str]:
+        result, err = self._uhubctl(
+            ["-l", self.hub, "-p", self.port] +
+            (["-a", toggle] if toggle else [])
+        )
+
+        if err:
+            logging.exception("uhubctl returned error: " + "\n".join(err))
+            return []
+
+        ports = {}
+
+        for line in result:
+            first_word = line.split(" ")[0]
+
+            if first_word in ["Current", "New"]:
+                hub = line.split(" ")[4]
+                continue
+
+            if first_word == "Sent":
+                continue
+
+            port, info = tuple(line.strip()[5:].split(": "))
+            ports[hub + "." + port] = info.split(" ")
+
+        id = self.hub + "." + self.port
+
+        if id in ports:
+            return ports[id]
+
+        return []
+
+    async def init_state(self) -> None:
+        await self.set_power("on" if self.initial_state else "off")
+        return
+
+    async def refresh_status(self, result=False) -> None:
+        if not result:
+            result = self._port_status()
+
+        if not result:
+            self.state = "error"
+        elif result[1] == "power":
+            self.state = "on"
+        elif result[1] == "off":
+            self.state = "off"
+        else:
+            self.state = "error"
+
+        return
+
+    async def set_power(self, state: str) -> None:
+        await self.refresh_status(self._port_status(state))
+        return
 
 
 # The power component has multiple configuration sections
