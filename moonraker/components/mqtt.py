@@ -323,8 +323,9 @@ class MQTTClient(APITransport, Subscribable):
                 self.status_objs[key] = None
         if status_cfg:
             logging.debug(f"MQTT: Status Objects Set: {self.status_objs}")
-            self.server.register_event_handler("server:klippy_identified",
-                                               self._handle_klippy_identified)
+            self.server.register_event_handler(
+                "server:klippy_started", self._handle_klippy_started
+            )
 
         self.timestamp_deque: Deque = deque(maxlen=20)
         self.api_qos = config.getint('api_qos', self.qos)
@@ -360,7 +361,7 @@ class MQTTClient(APITransport, Subscribable):
             self._do_reconnect(first=True)
         )
 
-    async def _handle_klippy_identified(self) -> None:
+    async def _handle_klippy_started(self, state: str) -> None:
         if self.status_objs:
             args = {'objects': self.status_objs}
             try:

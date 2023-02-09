@@ -130,7 +130,7 @@ class JobQueue:
                         raise self.server.error(
                             "Queue State Changed during Transition Gcode")
                 self._set_queue_state("starting")
-                await kapis.start_print(filename)
+                await kapis.start_print(filename, wait_klippy_started=True)
             except self.server.error:
                 logging.exception(f"Error Loading print: {filename}")
                 self._set_queue_state("paused")

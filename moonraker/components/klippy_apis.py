@@ -80,14 +80,15 @@ class KlippyAPI(Subscribable):
     async def _gcode_firmware_restart(self, web_request: WebRequest) -> str:
         return await self.do_restart("FIRMWARE_RESTART")
 
-    async def _send_klippy_request(self,
-                                   method: str,
-                                   params: Dict[str, Any],
-                                   default: Any = SENTINEL
-                                   ) -> Any:
+    async def _send_klippy_request(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        default: Any = SENTINEL
+    ) -> Any:
         try:
-            result = await self.klippy.request(
-                WebRequest(method, params, conn=self))
+            req = WebRequest(method, params, conn=self)
+            result = await self.klippy.request(req)
         except self.server.error:
             if isinstance(default, SentinelClass):
                 raise
@@ -103,9 +104,11 @@ class KlippyAPI(Subscribable):
             GCODE_ENDPOINT, params, default)
         return result
 
-    async def start_print(self, filename: str) -> str:
+    async def start_print(
+        self, filename: str, wait_klippy_started: bool = False
+    ) -> str:
         # WARNING: Do not call this method from within the following
-        # event handlers:
+        # event handlers when "wait_klippy_started" is set to True:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
         # Doing so will result in "wait_started" blocking for the specifed
         # timeout (default 20s) and returning False.
@@ -115,7 +118,8 @@ class KlippyAPI(Subscribable):
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
-        await self.klippy.wait_started()
+        if wait_klippy_started:
+            await self.klippy.wait_started()
         return await self.run_gcode(script)
 
     async def pause_print(
@@ -139,13 +143,16 @@ class KlippyAPI(Subscribable):
         return await self._send_klippy_request(
             "pause_resume/cancel", {}, default)
 
-    async def do_restart(self, gc: str) -> str:
+    async def do_restart(
+        self, gc: str, wait_klippy_started: bool = False
+    ) -> str:
         # WARNING: Do not call this method from within the following
-        # event handlers:
+        # event handlers when "wait_klippy_started" is set to True:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
         # Doing so will result in "wait_started" blocking for the specifed
         # timeout (default 20s) and returning False.
-        await self.klippy.wait_started()
+        if wait_klippy_started:
+            await self.klippy.wait_started()
         try:
             result = await self.run_gcode(gc)
         except self.server.error as e:

@@ -123,9 +123,14 @@ with system services such as systemd.
 provider: systemd_dbus
 #   The provider implementation used to collect system service information
 #   and run service actions (ie: start, restart, stop).  This can be "none",
-#   "supervisord", "systemd_dbus", or "systemd_cli".  If the provider is set
-#   to "none" service action APIs will be disabled.
+#   "supervisord_cli", "systemd_dbus", or "systemd_cli".  If the provider is
+#   set to "none" service action APIs will be disabled.
 #   The default is systemd_dbus.
+shutdown_action: poweroff
+#   Determines the action Moonraker will take when a shutdown is requested.
+#   This option may be set to "halt" or "poweroff. Not all linux distributions
+#   support poweroff, in such scenarios it is necessary to specify 'halt'.
+#   The default is "poweroff".
 sudo_password:
 #   The password for the linux user.  When set Moonraker can run linux commands
 #   that require elevated permissions.  This option accepts Jinja2 Templates,
@@ -707,10 +712,11 @@ pin: PA13
 # The variable below should be initialized to the startup value.  If your
 # device is configured to be on at startup use "variable_value: 1"
 variable_value: 0
+gcode:
   {% if 'VALUE' not in params %}
     {action_raise_error("Parameter 'VALUE' missing from 'SET_FLARE'")}
   {% endif %}
-  {% set state = params.VALUE %}
+  {% set state = params.VALUE|int %}
   {% if state %}
     # turn the neopixel on
     SET_LED LED=extruder_flare RED=0.75 BLUE=0.2 GREEN=0.2 SYNC=0
@@ -966,6 +972,7 @@ Example:
 
 [power homeassistant_switch]
 type: homeassistant
+protocol: http
 address: 192.168.1.126
 port: 8123
 device: switch.1234567890abcdefghij
@@ -1396,7 +1403,7 @@ down into 3 basic types:
     trackers without first reproducing the issue with all unofficial
     extensions disabled.
 
-#####  Web type (front-end) configuration
+####  Web type (front-end) configuration
 
 ```ini
 # moonraker.conf
@@ -1433,13 +1440,17 @@ info_tags:
 #   The default is an empty list.
 ```
 
-##### All other extensions
+#### Git Repo Configuration
 
 !!! Note
     Git repos must have at least one tag for Moonraker to identify its
     version.  The tag may be lightweight or annotated.  The tag must be in
     semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
     integer values.  For example, a repos first tag might be `v0.0.1`.
+
+    Moonraker can still update repos without tags, however as of 2/8/2023
+    the common front ends disable update controls when version information
+    is not reported by Moonraker.
 
 ```ini
 # moonraker.conf
@@ -2108,13 +2119,9 @@ gcode:
 
 ### `[simplyprint]`
 
-!!! Note
-    Currently the SimplyPrint service is only available for developers
-    and testers.  When the service is available for end users this note
-    will be removed.
-
 Enables support for print monitoring through
-[SimplyPrint](https://simplyprint.io).
+[SimplyPrint](https://simplyprint.io),
+publicly launched Moonraker integration Nov 21st 2022.
 
 ```ini
 # moonraker.conf
@@ -2173,9 +2180,12 @@ ambient_sensor:
     - Current print time elapse
     - Estimated ambient temperature
     - Webcam configuration (if available)
-    - Webcam images.  These images are also sent to `printpal.io`
+    - Webcam images.
     - Power device state (if configured)
     - Filament sensor state (if configured)
+
+More on how your data is used in the SimplyPrint privacy policy here;
+[https://simplyprint.io/legal/privacy](https://simplyprint.io/legal/privacy)
 
 ## Include directives
 

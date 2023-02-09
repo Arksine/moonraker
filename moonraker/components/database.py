@@ -57,8 +57,8 @@ RECORD_DECODE_FUNCS = {
     ord("d"): lambda x: struct.unpack("d", x[1:])[0],
     ord("?"): lambda x: struct.unpack("?", x[1:])[0],
     ord("s"): lambda x: bytes(x[1:]).decode(),
-    ord("["): lambda x: json.load(BytesIO(x)),
-    ord("{"): lambda x: json.load(BytesIO(x)),
+    ord("["): lambda x: json.loads(bytes(x)),
+    ord("{"): lambda x: json.loads(bytes(x)),
 }
 
 SENTINEL = SentinelClass.get_instance()
@@ -712,7 +712,7 @@ class MoonrakerDatabase:
             raise self.server.error(
                 f"Error encoding val: {value}, type: {type(value)}")
 
-    def _decode_value(self, bvalue: bytes) -> DBRecord:
+    def _decode_value(self, bvalue: Union[bytes, memoryview]) -> DBRecord:
         fmt = bvalue[0]
         try:
             decode_func = RECORD_DECODE_FUNCS[fmt]

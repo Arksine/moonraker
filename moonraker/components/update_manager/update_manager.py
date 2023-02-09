@@ -159,6 +159,9 @@ class UpdateManager:
             "/machine/update/status", ["GET"],
             self._handle_status_request)
         self.server.register_endpoint(
+            "/machine/update/refresh", ["POST"],
+            self._handle_refresh_request)
+        self.server.register_endpoint(
             "/machine/update/recover", ["POST"],
             self._handle_repo_recovery)
         self.server.register_notification("update_manager:update_response")
@@ -425,6 +428,37 @@ class UpdateManager:
             )
         return ret
 
+    async def _handle_refresh_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        name: Optional[str] = web_request.get_str("name", None)
+        if name is not None and name not in self.updaters:
+            raise self.server.error(f"No updater registered for '{name}'")
+        machine: Machine = self.server.lookup_component("machine")
+        if (
+            machine.validation_enabled() or
+            self.cmd_helper.is_update_busy() or
+            self.kconn.is_printing() or
+            not self.initial_refresh_complete
+        ):
+            raise self.server.error(
+                "Server is busy, cannot perform refresh", 503
+            )
+        async with self.cmd_request_lock:
+            vinfo: Dict[str, Any] = {}
+            for updater_name, updater in list(self.updaters.items()):
+                if name is None or updater_name == name:
+                    await updater.refresh()
+                vinfo[updater_name] = updater.get_update_status()
+            ret = self.cmd_helper.get_rate_limit_stats()
+            ret['version_info'] = vinfo
+            ret['busy'] = self.cmd_helper.is_update_busy()
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(
+                .2, self.cmd_helper.notify_update_refreshed
+            )
+        return ret
+
     async def _handle_repo_recovery(self,
                                     web_request: WebRequest
                                     ) -> str:
@@ -473,6 +507,7 @@ class CommandHelper:
         shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
         self.scmd_error = shell_cmd.error
         self.build_shell_command = shell_cmd.build_shell_command
+        self.run_cmd_with_response = shell_cmd.exec_cmd
         self.pkg_updater: Optional[PackageDeploy] = None
 
         # database management
@@ -547,15 +582,16 @@ class CommandHelper:
     def set_package_updater(self, updater: PackageDeploy) -> None:
         self.pkg_updater = updater
 
-    async def run_cmd(self,
-                      cmd: str,
-                      timeout: float = 20.,
-                      notify: bool = False,
-                      retries: int = 1,
-                      env: Optional[Dict[str, str]] = None,
-                      cwd: Optional[str] = None,
-                      sig_idx: int = 1
-                      ) -> None:
+    async def run_cmd(
+        self,
+        cmd: str,
+        timeout: float = 20.,
+        notify: bool = False,
+        retries: int = 1,
+        env: Optional[Dict[str, str]] = None,
+        cwd: Optional[str] = None,
+        sig_idx: int = 1
+    ) -> None:
         cb = self.notify_update_response if notify else None
         scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
         for _ in range(retries):
@@ -564,20 +600,7 @@ class CommandHelper:
         else:
             raise self.server.error("Shell Command Error")
 
-    async def run_cmd_with_response(self,
-                                    cmd: str,
-                                    timeout: float = 20.,
-                                    retries: int = 5,
-                                    env: Optional[Dict[str, str]] = None,
-                                    cwd: Optional[str] = None,
-                                    sig_idx: int = 1
-                                    ) -> str:
-        scmd = self.build_shell_command(cmd, None, env=env, cwd=cwd)
-        result = await scmd.run_with_response(timeout, retries,
-                                              sig_idx=sig_idx)
-        return result
-
-    def notify_update_refreshed(self):
+    def notify_update_refreshed(self) -> None:
         vinfo: Dict[str, Any] = {}
         for name, updater in self.get_updaters().items():
             vinfo[name] = updater.get_update_status()
@@ -586,10 +609,9 @@ class CommandHelper:
         uinfo['busy'] = self.is_update_busy()
         self.server.send_event("update_manager:update_refreshed", uinfo)
 
-    def notify_update_response(self,
-                               resp: Union[str, bytes],
-                               is_complete: bool = False
-                               ) -> None:
+    def notify_update_response(
+        self, resp: Union[str, bytes], is_complete: bool = False
+    ) -> None:
         if self.cur_update_app is None:
             return
         resp = resp.strip()
@@ -606,30 +628,29 @@ class CommandHelper:
         self.server.send_event(
             "update_manager:update_response", notification)
 
-    async def install_packages(self,
-                               package_list: List[str],
-                               **kwargs
-                               ) -> None:
+    async def install_packages(
+        self, package_list: List[str], **kwargs
+    ) -> None:
         if self.pkg_updater is None:
             return
         await self.pkg_updater.install_packages(package_list, **kwargs)
 
-    def get_rate_limit_stats(self):
+    def get_rate_limit_stats(self) -> Dict[str, Any]:
         return self.http_client.github_api_stats()
 
-    def on_download_progress(self,
-                             progress: int,
-                             download_size: int,
-                             downloaded: int
-                             ) -> None:
+    def on_download_progress(
+        self, progress: int, download_size: int, downloaded: int
+    ) -> None:
         totals = (
             f"{downloaded // 1024} KiB / "
-            f"{download_size// 1024} KiB"
+            f"{download_size // 1024} KiB"
         )
         self.notify_update_response(
             f"Downloading {self.cur_update_app}: {totals} [{progress}%]")
 
-    async def create_tempdir(self, suffix=None, prefix=None):
+    async def create_tempdir(
+        self, suffix: Optional[str] = None, prefix: Optional[str] = None
+    ) -> tempfile.TemporaryDirectory[str]:
         def _createdir(sfx, pfx):
             return tempfile.TemporaryDirectory(suffix=sfx, prefix=pfx)
 
@@ -790,6 +811,16 @@ class AptCliProvider(BasePackageProvider):
             return [p.split("/", maxsplit=1)[0] for p in pkg_list]
         return []
 
+    async def resolve_packages(self, package_list: List[str]) -> List[str]:
+        self.cmd_helper.notify_update_response("Resolving packages...")
+        search_regex = "|".join([f"^{pkg}$" for pkg in package_list])
+        cmd = f"apt-cache search --names-only \"{search_regex}\""
+        ret = await self.cmd_helper.run_cmd_with_response(cmd, timeout=600.)
+        resolved = [
+            pkg.strip().split()[0] for pkg in ret.split("\n") if pkg.strip()
+        ]
+        return [avail for avail in package_list if avail in resolved]
+
     async def install_packages(self,
                                package_list: List[str],
                                **kwargs
@@ -797,8 +828,13 @@ class AptCliProvider(BasePackageProvider):
         timeout: float = kwargs.get('timeout', 300.)
         retries: int = kwargs.get('retries', 3)
         notify: bool = kwargs.get('notify', False)
-        pkgs = " ".join(package_list)
         await self.refresh_packages(notify=notify)
+        resolved = await self.resolve_packages(package_list)
+        if not resolved:
+            self.cmd_helper.notify_update_response("No packages detected")
+            return
+        logging.debug(f"Resolved packages: {resolved}")
+        pkgs = " ".join(resolved)
         await self.cmd_helper.run_cmd(
             f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
             retries=retries, notify=notify)

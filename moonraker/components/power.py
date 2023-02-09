@@ -273,7 +273,8 @@ class PowerDevice:
         kapis: APIComp = self.server.lookup_component("klippy_apis")
         event_loop.delay_callback(
             self.restart_delay, kapis.do_restart,
-            "FIRMWARE_RESTART")
+            "FIRMWARE_RESTART", True
+        )
 
     def get_name(self) -> str:
         return self.name

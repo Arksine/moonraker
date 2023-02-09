@@ -20,6 +20,7 @@ import shutil
 import distro
 import tempfile
 import getpass
+import configparser
 from confighelper import FileSourceWrapper
 from utils import MOONRAKER_PATH
 
@@ -62,7 +63,8 @@ DEFAULT_ALLOWED_SERVICES = [
     "moonraker-telegram-bot",
     "moonraker-obico",
     "sonar",
-    "crowsnest"
+    "crowsnest",
+    "octoeverywhere"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
@@ -116,13 +118,14 @@ class Machine:
             "none": BaseProvider,
             "systemd_cli": SystemdCliProvider,
             "systemd_dbus": SystemdDbusProvider,
-            "supervisord": SupervisordProvider
+            "supervisord_cli": SupervisordCliProvider
         }
         self.provider_type = config.get('provider', 'systemd_dbus')
         pclass = providers.get(self.provider_type)
         if pclass is None:
             raise config.error(f"Invalid Provider: {self.provider_type}")
         self.sys_provider: BaseProvider = pclass(config)
+        self.system_info["provider"] = self.provider_type
         logging.info(f"Using System Provider: {self.provider_type}")
         self.validator = InstallValidator(config)
         self.sudo_requests: List[Tuple[SudoCallback, str]] = []
@@ -257,7 +260,7 @@ class Machine:
         self.system_info['available_services'] = avail_list
         self.system_info['service_state'] = available_svcs
         svc_info = await self.sys_provider.extract_service_info(
-            "moonraker", os.getpid(), SERVICE_PROPERTIES
+            "moonraker", os.getpid()
         )
         self.moonraker_service_info = svc_info
         self.log_service_info(svc_info)
@@ -577,6 +580,9 @@ class Machine:
                         self.inside_container = True
                         virt_type = "container"
                         virt_id = ct
+                        logging.info(
+                            f"Container detected via cgroup: {ct}"
+                        )
                         break
             except Exception:
                 logging.exception(f"Error reading {CGROUP_PATH}")
@@ -597,6 +603,9 @@ class Machine:
                             os.path.exists("/.dockerinit")
                         ):
                             virt_id = "docker"
+                        logging.info(
+                            f"Container detected via sched: {virt_id}"
+                        )
                 except Exception:
                     logging.exception(f"Error reading {SCHED_PATH}")
         return {
@@ -755,7 +764,8 @@ class Machine:
         if not svc_info:
             return
         name = svc_info.get("unit_name", "unknown")
-        msg = f"\nSystemd unit {name}:"
+        manager = svc_info.get("manager", "systemd").capitalize()
+        msg = f"\n{manager} unit {name}:"
         for key, val in svc_info.items():
             if key == "properties":
                 msg += "\nProperties:"
@@ -768,6 +778,14 @@ class Machine:
 class BaseProvider:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.shutdown_action = config.get("shutdown_action", "poweroff")
+        self.shutdown_action = self.shutdown_action.lower()
+        if self.shutdown_action not in ["halt", "poweroff"]:
+            raise config.error(
+                "Section [machine], Option 'shutdown_action':"
+                f"Invalid value '{self.shutdown_action}', must be "
+                "'halt' or 'poweroff'"
+            )
         self.available_services: Dict[str, Dict[str, str]] = {}
         self.shell_cmd: SCMDComp = self.server.load_component(
             config, 'shell_command')
@@ -780,7 +798,7 @@ class BaseProvider:
         return await machine.exec_sudo_command(command)
 
     async def shutdown(self) -> None:
-        await self._exec_sudo_command("systemctl halt")
+        await self._exec_sudo_command(f"systemctl {self.shutdown_action}")
 
     async def reboot(self) -> None:
         await self._exec_sudo_command("systemctl reboot")
@@ -804,7 +822,11 @@ class BaseProvider:
         return self.available_services
 
     async def extract_service_info(
-        self, service: str, pid: int, properties: List[str], raw: bool = False
+        self,
+        service: str,
+        pid: int,
+        properties: Optional[List[str]] = None,
+        raw: bool = False
     ) -> Dict[str, Any]:
         return {}
 
@@ -910,11 +932,13 @@ class SystemdCliProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             resp: str = await self.shell_cmd.exec_cmd(
                 f"systemctl status {pid}"
@@ -922,6 +946,7 @@ class SystemdCliProvider(BaseProvider):
             unit_name = resp.split(maxsplit=2)[1]
             service_info["unit_name"] = unit_name
             service_info["is_default"] = True
+            service_info["manager"] = "systemd"
             if unit_name != expected_name:
                 service_info["is_default"] = False
                 logging.info(
@@ -995,15 +1020,26 @@ class SystemdDbusProvider(BaseProvider):
             "org.freedesktop.systemd1.manage-units",
             "System Service Management (start, stop, restart) "
             "will be disabled")
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off",
-            "The shutdown API will be disabled"
-        )
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off-multiple-sessions",
-            "The shutdown API will be disabled if multiple user "
-            "sessions are open."
-        )
+        if self.shutdown_action == "poweroff":
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
+        else:
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
         try:
             # Get the login manaager interface
             self.login_mgr = await self.dbus_mgr.get_interface(
@@ -1037,7 +1073,10 @@ class SystemdDbusProvider(BaseProvider):
     async def shutdown(self) -> None:
         if self.login_mgr is None:
             await super().shutdown()
-        await self.login_mgr.call_power_off(False)  # type: ignore
+        if self.shutdown_action == "poweroff":
+            await self.login_mgr.call_power_off(False)  # type: ignore
+        else:
+            await self.login_mgr.call_halt(False)  # type: ignore
 
     async def do_service_action(self,
                                 action: str,
@@ -1152,7 +1191,7 @@ class SystemdDbusProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         if not hasattr(self, "systemd_mgr"):
@@ -1160,6 +1199,8 @@ class SystemdDbusProvider(BaseProvider):
         mgr = self.systemd_mgr
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             dbus_path: str
             dbus_path = await mgr.call_get_unit_by_pid(pid)  # type: ignore
@@ -1171,6 +1212,7 @@ class SystemdDbusProvider(BaseProvider):
             unit_name = await unit_intf.get_id()  # type: ignore
             service_info["unit_name"] = unit_name
             service_info["is_default"] = True
+            service_info["manager"] = "systemd"
             if unit_name != expected_name:
                 service_info["is_default"] = False
                 logging.info(
@@ -1218,69 +1260,94 @@ class SystemdDbusProvider(BaseProvider):
 # for docker klipper-moonraker image multi-service managing
 # since in container, all command is launched by normal user,
 # sudo_cmd is not needed.
-class SupervisordProvider(BaseProvider):
+class SupervisordCliProvider(BaseProvider):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
         self.spv_conf: str = config.get("supervisord_config_path", "")
 
     async def initialize(self) -> None:
-        for svc in ("klipper", "moonraker"):
-            self.available_services[svc] = {
-                'active_state': "none",
-                'sub_state': "unknown"
-            }
-        self.svc_cmd = self.shell_cmd.build_shell_command(
-            f"supervisorctl {self.spv_conf}"
-            f"status {' '.join(list(self.available_services.keys()))}"
-        )
+        await self._detect_active_services()
+        keys = ' '.join(list(self.available_services.keys()))
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} status {keys}"
+        else:
+            cmd = f"supervisorctl status {keys}"
+        self.svc_cmd = self.shell_cmd.build_shell_command(cmd)
         await self._update_service_status(0, notify=True)
         pstats: ProcStats = self.server.lookup_component('proc_stats')
         pstats.register_stat_callback(self._update_service_status)
-
-    async def shutdown(self) -> None:
-        raise self.server.error(
-            "[machine]: Supervisord manager can not process SHUTDOWN."
-            "Please try KILL container or stop Supervisord via ssh terminal."
-        )
-        return
-
-    async def reboot(self) -> None:
-        raise self.server.error(
-            "[machine]: Supervisord manager can not process REBOOT."
-            "Please try KILL container or stop Supervisord via ssh terminal."
-        )
-        return
 
     async def do_service_action(
         self, action: str, service_name: str
     ) -> None:
         # slow reaction for supervisord, timeout set to 6.0
-        await self._exec_command(
-            f"supervisorctl {self.spv_conf}"
-            f"{action} {service_name}",
-            timeout=6.
+        await self._exec_supervisorctl_command(
+            f"{action} {service_name}", timeout=6.
         )
 
-    async def check_virt_status(self) -> Dict[str, Any]:
-        virt_id = virt_type = "none"
-        if (
-            os.path.exists("/.dockerenv") or
-            os.path.exists("/.dockerinit")
-        ):
-            virt_id = "docker"
-            virt_type = "container"
-        return {
-            'virt_type': virt_type,
-            'virt_identifier': virt_id
-        }
-
-    async def _exec_command(
-        self, command: str, tries: int = 1, timeout=2.
+    async def _exec_supervisorctl_command(
+        self,
+        args: str,
+        tries: int = 1,
+        timeout: float = 2.,
+        success_codes: Optional[List[int]] = None
     ) -> str:
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} {args}"
+        else:
+            cmd = f"supervisorctl {args}"
         return await self.shell_cmd.exec_cmd(
-            command, proc_input=None, log_complete=False, retries=tries,
-            timeout=timeout
+            cmd, proc_input=None, log_complete=False, retries=tries,
+            timeout=timeout, success_codes=success_codes
         )
+
+    def _get_active_state(self, sub_state: str) -> str:
+        if sub_state == "stopping":
+            return "deactivating"
+        elif sub_state == "running":
+            return "active"
+        else:
+            return "inactive"
+
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        units: Dict[str, Any] = await self._get_process_info()
+        for unit, info in units.items():
+            if machine.is_service_allowed(unit):
+                self.available_services[unit] = {
+                    'active_state': self._get_active_state(info["state"]),
+                    'sub_state': info["state"]
+                }
+
+    async def _get_process_info(
+        self, process_names: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        units: Dict[str, Any] = {}
+        cmd = "status"
+        if process_names is not None:
+            cmd = f"status {' '.join(process_names)}"
+        try:
+            resp = await self._exec_supervisorctl_command(
+                cmd, timeout=6., success_codes=[0, 3]
+            )
+            lines = [line.strip() for line in resp.split("\n") if line.strip()]
+        except Exception:
+            return {}
+        for line in lines:
+            parts = line.split()
+            name: str = parts[0]
+            state: str = parts[1].lower()
+            if state == "running" and len(parts) >= 6:
+                units[name] = {
+                    "state": state,
+                    "pid": int(parts[3].rstrip(",")),
+                    "uptime": parts[5]
+                }
+            else:
+                units[name] = {
+                    "state": parts[1].lower()
+                }
+        return units
 
     async def _update_service_status(self,
                                      sequence: int,
@@ -1293,13 +1360,13 @@ class SupervisordProvider(BaseProvider):
         try:
             # slow reaction for supervisord, timeout set to 6.0
             resp = await self.svc_cmd.run_with_response(
-                log_complete=False, timeout=6.
+                log_complete=False, timeout=6., success_codes=[0, 3]
             )
             resp_l = resp.strip().split("\n")  # drop lengend
             for svc, state in zip(svcs, resp_l):
                 sub_state = state.split()[1].lower()
                 new_state: Dict[str, str] = {
-                    'active_state': "active",
+                    'active_state': self._get_active_state(sub_state),
                     'sub_state': sub_state
                 }
                 if self.available_services[svc] != new_state:
@@ -1311,16 +1378,80 @@ class SupervisordProvider(BaseProvider):
         except Exception:
             logging.exception("Error processing service state update")
 
-    # service files is defined since docker build.
-    # not needed to implete SV.
+    async def _find_service_by_pid(
+        self, expected_name: str, pid: int
+    ) -> Dict[str, Any]:
+        service_info: Dict[str, Any] = {}
+        for _ in range(5):
+            proc_info = await self._get_process_info(
+                list(self.available_services.keys())
+            )
+            service_info["unit_name"] = expected_name
+            service_info["is_default"] = True
+            service_info["manager"] = "supervisord"
+            need_retry = False
+            for name, info in proc_info.items():
+                if "pid" not in info:
+                    need_retry |= info["state"] == "starting"
+                elif info["pid"] == pid:
+                    if name != expected_name:
+                        service_info["unit_name"] = name
+                        service_info["is_default"] = False
+                        logging.info(
+                            "Detected alternate unit name for "
+                            f"{expected_name}: {name}"
+                        )
+                    return service_info
+            if need_retry:
+                await asyncio.sleep(1.)
+            else:
+                break
+        return {}
+
     async def extract_service_info(
         self,
         service: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
-        return {}
+        service_info = await self._find_service_by_pid(service, pid)
+        if not service_info:
+            logging.info(
+                f"Unable to locate service info for {service}, pid: {pid}"
+            )
+            return {}
+        # locate supervisord.conf
+        if self.spv_conf:
+            spv_path = pathlib.Path(self.spv_conf)
+            if not spv_path.is_file():
+                logging.info(
+                    f"Invalid supervisord configuration file: {self.spv_conf}"
+                )
+                return service_info
+        else:
+            default_config_locations = [
+                "/etc/supervisord.conf",
+                "/etc/supervisor/supervisord.conf"
+            ]
+            for conf_path in default_config_locations:
+                spv_path = pathlib.Path(conf_path)
+                if spv_path.is_file():
+                    break
+            else:
+                logging.info("Failed to locate supervisord.conf")
+                return service_info
+        spv_config = configparser.ConfigParser(interpolation=None)
+        spv_config.read_string(spv_path.read_text())
+        unit = service_info["unit_name"]
+        section_name = f"program:{unit}"
+        if not spv_config.has_section(section_name):
+            logging.info(
+                f"Unable to location supervisor section {section_name}"
+            )
+            return service_info
+        service_info["properties"] = dict(spv_config[section_name])
+        return service_info
 
 
 # Install validation
