@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from types import ModuleType
     from asyncio.trsock import TransportSocket
 
-MOONRAKER_PATH = str(pathlib.Path(__file__).parent.parent.resolve())
+MOONRAKER_PATH = str(pathlib.Path(__file__).parent.parent.parent.resolve())
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
 
