@@ -87,8 +87,15 @@ def retrieve_git_version(source_path: str) -> str:
     return f"t{tag}-g{ver}-shallow"
 
 def get_software_version() -> str:
-    version = "?"
-
+    version: str = "?"
+    try:
+        import moonraker.__version__ as ver  # type: ignore
+        version = ver.__version__
+    except Exception:
+        pass
+    else:
+        if version:
+            return version
     try:
         version = retrieve_git_version(MOONRAKER_PATH)
     except Exception:
