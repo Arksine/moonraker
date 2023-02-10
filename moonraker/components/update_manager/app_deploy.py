@@ -78,6 +78,7 @@ class AppDeploy(BaseDeploy):
                 f"section [{config.get_name()}], type: {self.type}")
         self._verify_path(config, 'path', self.path, check_file=False)
         self.executable: Optional[pathlib.Path] = None
+        self.py_exec: Optional[pathlib.Path] = None
         self.pip_cmd: Optional[str] = None
         self.pip_version: Tuple[int, ...] = tuple()
         self.venv_args: Optional[str] = None
@@ -94,11 +95,20 @@ class AppDeploy(BaseDeploy):
                 else:
                     break
             if act_path.is_file():
+                if self.executable.name != "python":
+                    py_exec = self.executable.parent.joinpath("python")
+                    if py_exec.is_file():
+                        self.py_exec = py_exec
+                else:
+                    self.py_exec = self.executable
                 venv_dir = self.executable.parent.parent
                 self.log_info(f"Detected virtualenv: {venv_dir}")
                 pip_exe = self.executable.parent.joinpath("pip")
                 if pip_exe.is_file():
-                    self.pip_cmd = f"{self.executable} -m pip"
+                    if self.py_exec is not None:
+                        self.pip_cmd = f"{self.py_exec} -m pip"
+                    else:
+                        self.pip_cmd = str(pip_exe)
                 else:
                     self.log_info("Unable to locate pip executable")
             else:
@@ -382,9 +392,9 @@ class AppDeploy(BaseDeploy):
         return None
 
     async def _build_virtualenv(self) -> None:
-        if self.executable is None or self.venv_args is None:
+        if self.py_exec is None or self.venv_args is None:
             return
-        bin_dir = self.executable.parent
+        bin_dir = self.py_exec.parent
         env_path = bin_dir.parent.resolve()
         self.notify_status(f"Creating virtualenv at: {env_path}...")
         if env_path.exists():
@@ -395,5 +405,5 @@ class AppDeploy(BaseDeploy):
         except Exception:
             self.log_exc(f"Error creating virtualenv")
             return
-        if not self.executable.exists():
+        if not self.py_exec.exists():
             raise self.log_exc("Failed to create new virtualenv", False)
