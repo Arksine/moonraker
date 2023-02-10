@@ -22,7 +22,7 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from .utils import ServerError
+from .utils import ServerError, source_info
 from .websockets import (
     WebRequest,
     WebsocketManager,
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from .components.machine import Machine
     from io import BufferedReader
     from .components.authorization import Authorization
+    from .components.template import TemplateFactory, JinjaTemplate
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
     AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
@@ -69,7 +70,6 @@ EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png", ".jpg"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
-ASSET_PATH = pathlib.Path(__file__).parent.joinpath("assets")
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application: MoonrakerApp) -> None:
@@ -173,6 +173,7 @@ class MoonrakerApp:
         self.http_server: Optional[HTTPServer] = None
         self.secure_server: Optional[HTTPServer] = None
         self.api_cache: Dict[str, APIDefinition] = {}
+        self.template_cache: Dict[str, JinjaTemplate] = {}
         self.registered_base_handlers: List[str] = []
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
@@ -303,9 +304,6 @@ class MoonrakerApp:
 
     def get_server(self) -> Server:
         return self.server
-
-    def get_asset_path(self) -> pathlib.Path:
-        return ASSET_PATH
 
     def https_enabled(self) -> bool:
         return self.cert_path.exists() and self.key_path.exists()
@@ -464,6 +462,20 @@ class MoonrakerApp:
                                 transports, callback, need_object_parser)
         self.api_cache[endpoint] = api_def
         return api_def
+
+    async def load_template(self, asset_name: str) -> JinjaTemplate:
+        if asset_name in self.template_cache:
+            return self.template_cache[asset_name]
+        eventloop = self.server.get_event_loop()
+        asset = await eventloop.run_in_thread(
+            source_info.read_asset, asset_name
+        )
+        if asset is None:
+            raise tornado.web.HTTPError(404, "Asset Not Found")
+        template: TemplateFactory = self.server.lookup_component("template")
+        asset_tmpl = template.create_ui_template(asset)
+        self.template_cache[asset_name] = asset_tmpl
+        return asset_tmpl
 
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
@@ -1084,7 +1096,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
             "service_name": svc_info.get("unit_name", "unknown"),
             "hostname": self.server.get_host_info()["hostname"],
         }
-        self.render("welcome.html", **context)
-
-    def get_template_path(self) -> Optional[str]:
-        return str(ASSET_PATH)
+        app: MoonrakerApp = self.server.lookup_component("application")
+        welcome_template = await app.load_template("welcome.html")
+        ret = await welcome_template.render_async(context)
+        self.finish(ret)
