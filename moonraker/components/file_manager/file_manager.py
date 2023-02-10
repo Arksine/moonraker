@@ -18,7 +18,7 @@ import time
 from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
-from ...utils import MOONRAKER_PATH
+from ...utils import source_info
 
 # Annotation imports
 from typing import (
@@ -70,7 +70,8 @@ class FileManager:
         self.file_paths: Dict[str, str] = {}
         app_args = self.server.get_app_args()
         self.datapath = pathlib.Path(app_args["data_path"])
-        self.add_reserved_path("moonraker", MOONRAKER_PATH, False)
+        srcdir = str(source_info.source_path())
+        self.add_reserved_path("moonraker", srcdir, False)
         db: DBComp = self.server.load_component(config, "database")
         db_path = db.get_database_path()
         self.add_reserved_path("database", db_path, False)

@@ -22,7 +22,7 @@ import tempfile
 import getpass
 import configparser
 from ..confighelper import FileSourceWrapper
-from ..utils import MOONRAKER_PATH
+from ..utils import source_info
 
 # Annotation imports
 from typing import (
@@ -1656,7 +1656,7 @@ class InstallValidator:
         tmp_svc = pathlib.Path(
             tempfile.gettempdir()
         ).joinpath(f"{unit}-tmp.svc")
-        src_path = pathlib.Path(MOONRAKER_PATH)
+        src_path = source_info.source_path()
         # Create local environment file
         sysd_data = self.data_path.joinpath("systemd")
         if not sysd_data.exists():
