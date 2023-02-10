@@ -131,12 +131,13 @@ install_script()
     ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
     if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
         rm -f $ENV_FILE
-        args="MOONRAKER_ARGS=\"${SRCDIR}/moonraker/moonraker.py"
+        args="MOONRAKER_ARGS=\"-m moonraker"
         [ -n "${CONFIG_PATH}" ] && args="${args} -c ${CONFIG_PATH}"
         [ -n "${LOG_PATH}" ] && args="${args} -l ${LOG_PATH}"
         args="${args} -d ${DATA_PATH}"
         args="${args}\""
-        echo $args > $ENV_FILE
+        args="${args}\nPYTHONPATH=\"${SRCDIR}\""
+        echo -e $args > $ENV_FILE
     fi
     [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
     report_status "Installing system start script..."
@@ -156,7 +157,6 @@ Type=simple
 User=$USER
 SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
-WorkingDirectory=${SRCDIR}
 EnvironmentFile=${ENV_FILE}
 ExecStart=${PYTHONDIR}/bin/python \$MOONRAKER_ARGS
 Restart=always
