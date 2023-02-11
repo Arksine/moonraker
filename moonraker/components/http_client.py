@@ -40,18 +40,6 @@ AsyncHTTPClient.configure(
 
 GITHUB_PREFIX = "https://api.github.com/"
 
-def escape_query_string(qs: str) -> str:
-    parts = qs.split("&")
-    escaped: List[str] = []
-    for p in parts:
-        item = p.split("=", 1)
-        key = url_escape(item[0])
-        if len(item) == 2:
-            escaped.append(f"{key}={url_escape(item[1])}")
-        else:
-            escaped.append(key)
-    return "&".join(escaped)
-
 class HttpClient:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -78,21 +66,6 @@ class HttpClient:
                 "Either an Etag or Last Modified Date must be specified")
         empty_resp = HttpResponse(url, url, 200, b"", headers, None)
         self.response_cache[url] = empty_resp
-
-    def escape_url(self, url: str) -> str:
-        # escape the url
-        match = re.match(r"(https?://[^/?#]+)([^?#]+)?(\?[^#]+)?(#.+)?", url)
-        if match is not None:
-            uri, path, qs, fragment = match.groups()
-            if path is not None:
-                uri += "/".join([url_escape(p, plus=False)
-                                 for p in path.split("/")])
-            if qs is not None:
-                uri += "?" + escape_query_string(qs[1:])
-            if fragment is not None:
-                uri += "#" + url_escape(fragment[1:], plus=False)
-            url = uri
-        return url
 
     async def request(
         self,
