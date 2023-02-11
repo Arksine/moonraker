@@ -100,7 +100,7 @@ class KlippyConnection:
 
     @property
     def state(self) -> str:
-        if not self._klippy_started:
+        if self.is_connected() and not self._klippy_started:
             return "startup"
         return self._state
 
