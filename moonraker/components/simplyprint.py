@@ -520,14 +520,14 @@ class SimplyPrint(Subscribable):
             "webcam_status", {"connected": self.webcam_stream.connected}
         )
 
-    async def _on_klippy_ready(self):
+    async def _on_klippy_ready(self) -> None:
         last_stats: Dict[str, Any] = self.job_state.get_last_stats()
         if last_stats["state"] == "printing":
             self._on_print_start(last_stats, last_stats, False)
         else:
             self._update_state("operational")
-        query: Dict[str] = await self.klippy_apis.query_objects(
-            {"heaters": None}, None)
+        query: Optional[Dict[str, Any]]
+        query = await self.klippy_apis.query_objects({"heaters": None}, None)
         sub_objs = {
             "display_status": ["progress"],
             "bed_mesh": ["mesh_matrix", "mesh_min", "mesh_max"],
@@ -571,7 +571,6 @@ class SimplyPrint(Subscribable):
             # Add filament sensor subscription
         if not sub_objs:
             return
-        status: Dict[str, Any]
         # Create our own subscription rather than use the host sub
         args = {'objects': sub_objs}
         klippy: KlippyConnection
@@ -957,7 +956,7 @@ class SimplyPrint(Subscribable):
             self.cache.current_wsid = longest.uid
         return ui_data
 
-    async def _send_machine_data(self):
+    async def _send_machine_data(self) -> None:
         app_args = self.server.get_app_args()
         data = self._get_ui_info()
         data["api"] = "Moonraker"
@@ -984,7 +983,7 @@ class SimplyPrint(Subscribable):
         self.cache.machine_info = data
         self.send_sp("machine_data", data)
 
-    def _send_firmware_data(self):
+    def _send_firmware_data(self) -> None:
         kinfo = self.server.get_klippy_info()
         if "software_version" not in kinfo:
             return
@@ -1335,7 +1334,7 @@ class WebcamStream:
     def connected(self) -> bool:
         return self._connected
 
-    async def intialize_url(self):
+    async def intialize_url(self) -> None:
         wcmgr: WebcamManager = self.server.lookup_component("webcam")
         cams = wcmgr.get_webcams()
         if not cams:
@@ -1509,7 +1508,6 @@ class PrintHandler:
                 {"state": "error", "message": "GCode Path not Registered"}
             )
             return
-        url = client.escape_url(url)
         accept = "text/plain,applicaton/octet-stream"
         self._on_download_progress(0, 0, 0)
         try:
@@ -1580,7 +1578,7 @@ class PrintHandler:
                 state = "ready"
         self.simplyprint.send_sp("file_progress", {"state": state})
 
-    async def start_print(self):
+    async def start_print(self) -> None:
         if not self.pending_file:
             return
         pending = self.pending_file
