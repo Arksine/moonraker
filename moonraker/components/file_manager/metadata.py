@@ -17,6 +17,7 @@ import tempfile
 import zipfile
 import shutil
 import uuid
+import io
 from PIL import Image
 
 # Annotation imports
@@ -571,6 +572,8 @@ class Simplify3D(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"Simplify3D\(R\)\sVersion\s(.*)", data)
         if match:
+            self._version = match.group(1)
+            self._is_v5 = self._version.startswith("5")
             return {
                 'slicer': "Simplify3D",
                 'slicer_version': match.group(1)
@@ -590,19 +593,27 @@ class Simplify3D(BaseSlicer):
 
     def parse_filament_total(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+Filament\slength:\s(\d+\.?\d*)\smm", self.footer_data)
+            r";\s+(?:Filament\slength|Material\sLength):\s(\d+\.?\d*)\smm",
+            self.footer_data
+        )
 
     def parse_filament_weight_total(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+Plastic\sweight:\s(\d+\.?\d*)\sg", self.footer_data)
+            r";\s+(?:Plastic\sweight|Material\sWeight):\s(\d+\.?\d*)\sg",
+            self.footer_data
+        )
 
     def parse_filament_name(self) -> Optional[str]:
         return _regex_find_string(
             r";\s+printMaterial,(.*)", self.header_data)
 
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\s+makerBotModelMaterial,(.*)", self.footer_data)
+
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
-            r';\s+Build time:.*', self.footer_data)
+            r';\s+Build (t|T)ime:.*', self.footer_data)
         if not time_match:
             return None
         total_time = 0
@@ -635,15 +646,54 @@ class Simplify3D(BaseSlicer):
                     return None
         return None
 
+    def _get_first_layer_temp_v5(self, type: str) -> Optional[float]:
+        matches = re.finditer(r";\s+temperatureController.*", self.header_data)
+
+        for m in matches:
+            typ = None
+            temp = None
+
+            for line in io.StringIO(self.header_data[m.end()+1:]):
+                if not line.startswith(";"):
+                    break
+
+                if re.search(r";\s+temperatureController", line):
+                    break
+
+                val_temp = _regex_find_first(
+                    r";\s+temperatureSetpoints,\d+\|(\d+)", line)
+                if val_temp:
+                    temp = val_temp
+
+                val_typ = _regex_find_string(r"\s+temperatureType,(.+)", line)
+                if val_typ:
+                    typ = val_typ
+
+                if typ and temp:
+                    break
+
+            if typ == type:
+                return temp
+
+        return None
+
     def parse_first_layer_extr_temp(self) -> Optional[float]:
-        return self._get_first_layer_temp("Extruder 1")
+        if self._is_v5:
+            return self._get_first_layer_temp_v5("extruder")
+        else:
+            return self._get_first_layer_temp("Extruder 1")
 
     def parse_first_layer_bed_temp(self) -> Optional[float]:
-        return self._get_first_layer_temp("Heated Bed")
+        if self._is_v5:
+            return self._get_first_layer_temp_v5("platform")
+        else:
+            return self._get_first_layer_temp("Heated Bed")
 
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+extruderDiameter,(\d+\.\d*)", self.header_data)
+            r";\s+(?:extruderDiameter|nozzleDiameter),(\d+\.\d*)",
+            self.header_data
+        )
 
 class KISSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, Any]]:
