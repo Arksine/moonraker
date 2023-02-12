@@ -35,14 +35,6 @@ class GitDeploy(AppDeploy):
             cmd_helper, self.path, self.name, self.origin,
             self.moved_origin, self.primary_branch, self.channel
         )
-        if self.type != 'git_repo':
-            self.need_channel_update = True
-
-    @staticmethod
-    async def from_application(app: AppDeploy) -> GitDeploy:
-        new_app = GitDeploy(app.config, app.cmd_helper)
-        await new_app.reinstall()
-        return new_app
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
@@ -60,10 +52,7 @@ class GitDeploy(AppDeploy):
     async def _update_repo_state(self, need_fetch: bool = True) -> None:
         self._is_valid = False
         await self.repo.initialize(need_fetch=need_fetch)
-        self.log_info(
-            f"Channel: {self.channel}, "
-            f"Need Channel Update: {self.need_channel_update}"
-        )
+        self.log_info(f"Channel: {self.channel}")
         if not self.repo.check_is_valid():
             self.log_info("Repo validation check failed")
             if self.server.is_debug_enabled():

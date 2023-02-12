@@ -68,6 +68,11 @@ def get_deploy_class(app_path: str) -> Type:
 
 class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
+        _deployers = {
+            "web": WebClientDeploy,
+            "git_repo": GitDeploy,
+            "zip": ZipDeploy
+        }
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
         self.kconn: KlippyConnection
@@ -118,15 +123,12 @@ class UpdateManager:
                 continue
             try:
                 client_type = cfg.get("type")
-                if client_type in ["web", "web_beta"]:
-                    self.updaters[name] = WebClientDeploy(cfg, self.cmd_helper)
-                elif client_type in ["git_repo", "zip", "zip_beta"]:
-                    path = os.path.expanduser(cfg.get('path'))
-                    dclass = get_deploy_class(path)
-                    self.updaters[name] = dclass(cfg, self.cmd_helper)
-                else:
+                deployer = _deployers.get(client_type, None)
+                if deployer is None:
                     self.server.add_warning(
                         f"Invalid type '{client_type}' for section [{section}]")
+                else:
+                    self.updaters[name] = deployer(cfg, self.cmd_helper)
             except Exception as e:
                 self.server.add_warning(
                     f"[update_manager]: Failed to load extension {name}: {e}"
@@ -281,8 +283,7 @@ class UpdateManager:
         async with self.cmd_request_lock:
             self.cmd_helper.set_update_info(app, id(web_request))
             try:
-                if not await self._check_need_reinstall(app):
-                    await updater.update()
+                await updater.update()
             except Exception as e:
                 self.cmd_helper.notify_update_response(
                     f"Error updating {app}: {e}", is_complete=True)
@@ -310,17 +311,14 @@ class UpdateManager:
                     if name in ['klipper', 'moonraker', 'system']:
                         continue
                     app_name = name
-                    if not await self._check_need_reinstall(app_name):
-                        await updater.update()
+                    await updater.update()
 
                 # Update Klipper
                 app_name = 'klipper'
                 kupdater = self.updaters.get('klipper')
                 if isinstance(kupdater, AppDeploy):
                     self.klippy_identified_evt = asyncio.Event()
-                    check_restart = True
-                    if not await self._check_need_reinstall(app_name):
-                        check_restart = await kupdater.update()
+                    check_restart = await kupdater.update()
                     if self.cmd_helper.needs_service_restart(app_name):
                         await kupdater.restart_service()
                         check_restart = True
@@ -336,14 +334,13 @@ class UpdateManager:
                                 "Klippy reconnect timed out...")
                         else:
                             self.cmd_helper.notify_update_response(
-                                f"Klippy Reconnected")
+                                "Klippy Reconnected")
                         self.klippy_identified_evt = None
 
                 # Update Moonraker
                 app_name = 'moonraker'
                 moon_updater = cast(AppDeploy, self.updaters["moonraker"])
-                if not await self._check_need_reinstall(app_name):
-                    await moon_updater.update()
+                await moon_updater.update()
                 if self.cmd_helper.needs_service_restart(app_name):
                     await moon_updater.restart_service()
                 self.cmd_helper.set_full_complete(True)
@@ -356,28 +353,6 @@ class UpdateManager:
             finally:
                 self.cmd_helper.clear_update_info()
             return "ok"
-
-    async def _check_need_reinstall(self, name: str) -> bool:
-        if name not in self.updaters:
-            return False
-        updater = self.updaters[name]
-        if not isinstance(updater, AppDeploy):
-            return False
-        if not updater.check_need_channel_swap():
-            return False
-        app_type = updater.get_configured_type()
-        if app_type == "git_repo":
-            deploy_class: Type = GitDeploy
-        else:
-            deploy_class = ZipDeploy
-        if isinstance(updater, deploy_class):
-            # Here the channel swap can be done without instantiating a new
-            # class, as it will automatically be done when the user updates.
-            return False
-        # Instantiate the new updater.  This will perform a reinstallation
-        new_updater = await deploy_class.from_application(updater)
-        self.updaters[name] = new_updater
-        return True
 
     async def _handle_status_request(self,
                                      web_request: WebRequest
@@ -1187,15 +1162,7 @@ class WebClientDeploy(BaseDeploy):
         self.owner, self.project_name = self.repo.split("/", 1)
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
         self.type = config.get('type')
-        def_channel = "stable"
-        if self.type == "web_beta":
-            def_channel = "beta"
-            self.server.add_warning(
-                f"Config Section [{config.get_name()}], option 'type': "
-                "web_beta', value 'web_beta' is deprecated.  Set 'type' to "
-                "web and 'channel' to 'beta'")
-            self.type = "zip"
-        self.channel = config.get("channel", def_channel)
+        self.channel = config.get("channel", "stable")
         if self.channel not in ["stable", "beta"]:
             raise config.error(
                 f"Invalid Channel '{self.channel}' for config "

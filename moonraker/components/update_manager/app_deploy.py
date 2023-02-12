@@ -37,8 +37,7 @@ SUPPORTED_CHANNELS = {
     "git_repo": ["dev", "beta"]
 }
 TYPE_TO_CHANNEL = {
-    "zip": "stable",
-    "zip_beta": "beta",
+    "zip": "beta",
     "git_repo": "dev"
 }
 
@@ -57,12 +56,17 @@ class AppDeploy(BaseDeploy):
         self.channel = config.get(
             "channel", TYPE_TO_CHANNEL[self.type]
         )
-        if self.type == "zip_beta":
+        self.channel_invalid: bool = False
+        if self.channel not in SUPPORTED_CHANNELS[self.type]:
+            self.channel_invalid = True
+            invalid_channel = self.channel
+            self.channel = TYPE_TO_CHANNEL[self.type]
             self.server.add_warning(
-                f"Config Section [{config.get_name()}], Option 'type: "
-                "zip_beta', value 'zip_beta' is deprecated.  Set 'type' "
-                "to zip and 'channel' to 'beta'")
-            self.type = "zip"
+                f"[{config.get_name()}]: Invalid value '{invalid_channel}' for "
+                f"option 'channel'. Type '{self.type}' supports the following "
+                f"channels: {SUPPORTED_CHANNELS[self.type]}.  Falling back to "
+                f"channel '{self.channel}"
+            )
         self.path = pathlib.Path(
             config.get('path')).expanduser().resolve()
         if (
@@ -72,10 +76,6 @@ class AppDeploy(BaseDeploy):
             fm: FileManager = self.server.lookup_component("file_manager")
             fm.add_reserved_path(f"update_manager {self.name}", self.path)
         executable = config.get('env', None)
-        if self.channel not in SUPPORTED_CHANNELS[self.type]:
-            raise config.error(
-                f"Invalid Channel '{self.channel}' for config "
-                f"section [{config.get_name()}], type: {self.type}")
         self._verify_path(config, 'path', self.path, check_file=False)
         self.executable: Optional[pathlib.Path] = None
         self.py_exec: Optional[pathlib.Path] = None
@@ -184,7 +184,6 @@ class AppDeploy(BaseDeploy):
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
-        self.need_channel_update = storage.get("need_channel_update", False)
         self._is_valid = storage.get("is_valid", False)
         self.pip_version = tuple(storage.get("pip_version", []))
         if self.pip_version:
@@ -210,9 +209,6 @@ class AppDeploy(BaseDeploy):
             raise config.error(f"{base_msg} is not a file")
         if check_exe and not os.access(path, os.X_OK):
             raise config.error(f"{base_msg} is not executable")
-
-    def check_need_channel_swap(self) -> bool:
-        return self.need_channel_update
 
     def get_configured_type(self) -> str:
         return self.type
@@ -241,9 +237,6 @@ class AppDeploy(BaseDeploy):
                       ) -> None:
         raise NotImplementedError
 
-    async def reinstall(self):
-        raise NotImplementedError
-
     async def restart_service(self) -> None:
         if not self.managed_services:
             return
@@ -270,7 +263,7 @@ class AppDeploy(BaseDeploy):
         return {
             'channel': self.channel,
             'debug_enabled': self.server.is_debug_enabled(),
-            'need_channel_update': self.need_channel_update,
+            'channel_invalid': self.channel_invalid,
             'is_valid': self._is_valid,
             'configured_type': self.type,
             'info_tags': self.info_tags
@@ -279,7 +272,6 @@ class AppDeploy(BaseDeploy):
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
         storage['is_valid'] = self._is_valid
-        storage['need_channel_update'] = self.need_channel_update
         storage['pip_version'] = list(self.pip_version)
         return storage
 
