@@ -8,13 +8,23 @@
 # available to clients
 from __future__ import annotations
 
-import asyncio
 import logging
+from collections import defaultdict, deque
 from dataclasses import dataclass, replace
-from collections import deque
+from functools import partial
 
 # Annotation imports
-from typing import Any, Dict, List, Optional, Type, Deque, TYPE_CHECKING
+from typing import (
+    Any,
+    DefaultDict,
+    Deque,
+    Dict,
+    List,
+    Optional,
+    Type,
+    TYPE_CHECKING,
+    Union,
+)
 
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
@@ -27,9 +37,8 @@ SENSOR_UPDATE_TIME = 1.0
 class SensorConfiguration:
     id: str
     name: str
+    type: str
     source: str = ""
-    unit: str = ""
-    accuracy_decimals: int = 2
 
 
 if TYPE_CHECKING:
@@ -38,48 +47,72 @@ if TYPE_CHECKING:
     from .mqtt import MQTTClient
 
 
+def _set_result(
+    name: str, value: Union[int, float], store: Dict[str, Union[int, float]]
+) -> None:
+    if not isinstance(value, (int, float)):
+        store[name] = float(value)
+    else:
+        store[name] = value
+
+
 @dataclass(frozen=True)
 class Sensor:
     config: SensorConfiguration
-    values: Deque
+    values: Dict[str, Deque[Union[int, float]]]
 
 
 class BaseSensor:
-    def __init__(
-        self, name: str, cfg: ConfigHelper, store_size: int = 1200
-    ) -> None:
+    def __init__(self, name: str, cfg: ConfigHelper, store_size: int = 1200) -> None:
         self.server = cfg.get_server()
         self.error_state: Optional[str] = None
 
         self.config = SensorConfiguration(
             id=name,
+            type=cfg.get("type"),
             name=cfg.get("name", name),
-            unit=cfg.get("unit", ""),
-            accuracy_decimals=cfg.getint("accuracy_decimals", 2),
         )
-        self.last_value: float = 0.0
-        self.values: Deque[float] = deque(maxlen=store_size)
-        self.sensor_update_timer = self.server.get_event_loop().register_timer(
-            self._update_sensor_value
+        self.last_measurements: Dict[str, Union[int, float]] = {}
+        self.last_value: Dict[str, Union[int, float]] = {}
+        self.values: DefaultDict[str, Deque[Union[int, float]]] = defaultdict(
+            lambda: deque(maxlen=store_size)
         )
 
     def _update_sensor_value(self, eventtime: float) -> float:
         """
         Append the last updated value to the store.
         """
-        self.values.append(self.last_value)
+        for key, value in self.last_measurements.items():
+            self.values[key].append(value)
+
+        # Copy the last measurements data
+        self.last_value = {**self.last_measurements}
 
         return eventtime + SENSOR_UPDATE_TIME
 
-    async def initialize(self) -> None:
+    async def initialize(self) -> bool:
         """
         Sensor initialization executed on Moonraker startup.
         """
-        self.sensor_update_timer.start()
         logging.info("Registered sensor '%s'", self.config.name)
+        return True
+
+    def get_sensor_info(self) -> Dict[str, Any]:
+        return {
+            "id": self.config.id,
+            "friendly_name": self.config.name,
+            "type": self.config.type,
+            "values": self.last_measurements,
+        }
+
+    def get_sensor_measurements(self) -> Dict[str, List[Union[int, float]]]:
+        return {key: list(values) for key, values in self.values.items()}
+
+    def get_name(self) -> str:
+        return self.config.name
 
     def close(self) -> None:
-        self.sensor_update_timer.stop()
+        pass
 
 
 class MQTTSensor(BaseSensor):
@@ -88,9 +121,7 @@ class MQTTSensor(BaseSensor):
         self.mqtt: MQTTClient = self.server.load_component(cfg, "mqtt")
 
         self.state_topic: str = cfg.get("state_topic")
-        self.state_response = cfg.load_template(
-            "state_response_template", "{payload}"
-        )
+        self.state_response = cfg.load_template("state_response_template", "{payload}")
         self.config = replace(self.config, source=self.state_topic)
         self.qos: Optional[int] = cfg.getint("qos", None, minval=0, maxval=2)
 
@@ -99,38 +130,43 @@ class MQTTSensor(BaseSensor):
         )
 
     def _on_state_update(self, payload: bytes) -> None:
-        err: Optional[Exception] = None
-        context = {"payload": payload.decode()}
-        logging.debug("Context: %s", context)
+        measurements: Dict[str, Union[int, float]] = {}
+        context = {
+            "payload": payload.decode(),
+            "set_result": partial(_set_result, store=measurements),
+        }
+
         try:
-            response = float(self.state_response.render(context))
+            self.state_response.render(context)
         except Exception as e:
+            logging.error("Error updating sensor results: %s", e)
             self.error_state = str(e)
         else:
             self.error_state = None
-
-            self.last_value = round(response, self.config.accuracy_decimals)
+            self.last_measurements = measurements
             logging.debug(
-                "Received updated sensor value for %s: %s%s",
+                "Received updated sensor value for %s: %s",
                 self.config.name,
-                self.last_value,
-                self.config.unit,
+                self.last_measurements,
             )
 
     async def _on_mqtt_disconnected(self):
         self.error_state = "MQTT Disconnected"
-        self.last_value = 0.0
+        self.last_measurements = {}
 
-    async def initialize(self) -> None:
+    async def initialize(self) -> bool:
+        await super().initialize()
         try:
             self.mqtt.subscribe_topic(
-                self.state_topic, self._on_state_update, self.qos
+                self.state_topic,
+                self._on_state_update,
+                self.qos,
             )
             self.error_state = None
+            return True
         except Exception as e:
             self.error_state = str(e)
-
-        return await super().initialize()
+            return False
 
 
 class Sensors:
@@ -138,13 +174,34 @@ class Sensors:
 
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.store_size = config.getint("sensor_store_size", 1200)
         prefix_sections = config.get_prefix_sections("sensor")
+        self.sensors: Dict[str, BaseSensor] = {}
 
-        self.sensors = {}
+        # Register timer to update sensor values in store
+        self.sensors_update_timer = self.server.get_event_loop().register_timer(
+            self._update_sensor_values
+        )
+
         # Register endpoints
         self.server.register_endpoint(
-            "/server/sensors", ["GET"], self._handle_sensor_data_request
+            "/server/sensors/list",
+            ["GET"],
+            self._handle_sensor_list_request,
         )
+        self.server.register_endpoint(
+            "/server/sensors/sensor",
+            ["GET"],
+            self._handle_sensor_info_request,
+        )
+        self.server.register_endpoint(
+            "/server/sensors/measurements",
+            ["GET"],
+            self._handle_sensor_measurements_request,
+        )
+
+        # Register notifications
+        self.server.register_notification("sensors:sensor_update")
 
         for section in prefix_sections:
             cfg = config[section]
@@ -157,22 +214,42 @@ class Sensors:
 
                 logging.info(f"Configuring sensor: {name}")
 
-                sensor_type: str = cfg.get("type", "mqtt")
-                sensor_class: Optional[
-                    Type[BaseSensor]
-                ] = self.__sensor_types.get(sensor_type.upper(), None)
+                sensor_type: str = cfg.get("type")
+                sensor_class: Optional[Type[BaseSensor]] = self.__sensor_types.get(
+                    sensor_type.upper(), None
+                )
                 if sensor_class is None:
-                    raise config.error(
-                        f"Unsupported sensor type: {sensor_type}"
-                    )
+                    raise config.error(f"Unsupported sensor type: {sensor_type}")
 
-                self.sensors[name] = sensor_class(name=name, cfg=cfg)
+                self.sensors[name] = sensor_class(
+                    name=name,
+                    cfg=cfg,
+                    store_size=self.store_size,
+                )
             except Exception as e:
                 # Ensures that configuration errors are shown to the user
                 self.server.add_warning(
                     f"Failed to configure sensor [{cfg.get_name()}]\n{e}"
                 )
                 continue
+
+    def _update_sensor_values(self, eventtime: float) -> float:
+        """
+        Iterate through the sensors and store the last updated value.
+        """
+        for sensor_name, sensor in self.sensors.items():
+            base_value = sensor.last_value
+            sensor._update_sensor_value(eventtime=eventtime)
+
+            # Notify if a change in sensor values was detected
+            if base_value != sensor.last_value:
+                self._notify_sensor_update(name=sensor_name)
+
+        return eventtime + SENSOR_UPDATE_TIME
+
+    def _notify_sensor_update(self, name: str) -> None:
+        sensor_info = self.sensors[name].get_sensor_info()
+        self.server.send_event("sensors:sensor_update", sensor_info)
 
     async def component_init(self) -> None:
         try:
@@ -181,49 +258,55 @@ class Sensors:
             cur_time = event_loop.get_loop_time()
             endtime = cur_time + 120.0
 
-            uninitialized_sensors = list(self.sensors.values())
-            while cur_time < endtime:
-                failed_sensors: List[BaseSensor] = []
-                for sensor in uninitialized_sensors:
-                    ret = sensor.initialize()
-                    if ret is not None:
-                        await ret
-                    if sensor.error_state is not None:
-                        failed_sensors.append(sensor)
-                if not failed_sensors:
-                    logging.debug("All sensors have been initialized")
-                    return
+            for sensor in self.sensors.values():
+                if not await sensor.initialize():
+                    self.server.add_warning(
+                        f"Sensor '{sensor.get_name()}' failed to initialize"
+                    )
 
-                uninitialized_sensors = failed_sensors
-                await asyncio.sleep(2.0)
-                cur_time = event_loop.get_loop_time()
-
-            for sensor in failed_sensors:
-                msg = (
-                    f"Sensor {sensor.config.name} is not available: "
-                    f"{sensor.error_state}"
-                )
-                logging.warning(msg)
-                self.server.add_warning(msg)
+            self.sensors_update_timer.start()
 
         except Exception as e:
             logging.exception(e)
 
-    async def _handle_sensor_data_request(
+    async def _handle_sensor_list_request(
         self, web_request: WebRequest
     ) -> Dict[str, Dict[str, Any]]:
-        data = {}
-        for sensor in self.sensors.values():
-            data[sensor.config.id] = {
-                "source": sensor.config.source,
-                "name": sensor.config.name,
-                "unit_of_measurement": sensor.config.unit,
-                "accuracy_decimals": sensor.config.accuracy_decimals,
-                "measurements": list(sensor.values),
+        output = {
+            "sensors": {
+                key: sensor.get_sensor_info() for key, sensor in self.sensors.items()
             }
-        return data
+        }
+        return output
+
+    async def _handle_sensor_info_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        sensor_name: str = web_request.get_str("sensor")
+        if sensor_name not in self.sensors:
+            raise self.server.error(f"No valid sensor named {sensor_name}")
+
+        sensor = self.sensors[sensor_name]
+
+        return sensor.get_sensor_info()
+
+    async def _handle_sensor_measurements_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Dict[str, Any]]:
+        sensor_name: str = web_request.get_str("sensor", "")
+        if sensor_name and sensor_name not in self.sensors:
+            raise self.server.error(f"No valid sensor named {sensor_name}")
+
+        output = {
+            key: sensor.get_sensor_measurements()
+            for key, sensor in self.sensors.items()
+            if sensor_name is None or key == sensor_name
+        }
+
+        return output
 
     def close(self) -> None:
+        self.sensors_update_timer.stop()
         for sensor in self.sensors.values():
             sensor.close()
 
