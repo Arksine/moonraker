@@ -30,10 +30,10 @@ cleanup_legacy() {
 # Step 3: Install packages
 install_packages()
 {
-    PKGLIST="python3-virtualenv python3-dev libopenjp2-7 python3-libgpiod"
-    PKGLIST="${PKGLIST} curl libcurl4-openssl-dev libssl-dev liblmdb-dev"
+    PKGLIST="python3-virtualenv python3-dev"
+    PKGLIST="${PKGLIST} libopenjp2-7 python3-libgpiod liblmdb-dev"
     PKGLIST="${PKGLIST} libsodium-dev zlib1g-dev libjpeg-dev packagekit"
-    PKGLIST="${PKGLIST} wireless-tools"
+    PKGLIST="${PKGLIST} wireless-tools curl"
 
     # Update system package info
     report_status "Running apt-get update..."
