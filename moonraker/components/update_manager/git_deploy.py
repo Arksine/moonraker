@@ -31,6 +31,12 @@ if TYPE_CHECKING:
 class GitDeploy(AppDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
         super().__init__(config, cmd_helper)
+        self._configure_path(config)
+        self._configure_virtualenv(config)
+        self._configure_dependencies(config)
+        self.origin: str = config.get('origin')
+        self.moved_origin: Optional[str] = config.get('moved_origin', None)
+        self.primary_branch = config.get("primary_branch", "master")
         self.repo = GitRepo(
             cmd_helper, self.path, self.name, self.origin,
             self.moved_origin, self.primary_branch, self.channel
@@ -152,8 +158,8 @@ class GitDeploy(AppDeploy):
             raise self.log_exc(str(e))
 
     async def _collect_dependency_info(self) -> Dict[str, Any]:
-        pkg_deps = await self._parse_install_script()
-        pyreqs = await self._parse_python_reqs()
+        pkg_deps = await self._read_system_dependencies()
+        pyreqs = await self._read_python_reqs()
         npm_hash = await self._get_file_hash(self.npm_pkg_json)
         logging.debug(
             f"\nApplication {self.name}: Pre-update dependencies:\n"
@@ -169,8 +175,8 @@ class GitDeploy(AppDeploy):
     async def _update_dependencies(
         self, dep_info: Dict[str, Any], force: bool = False
     ) -> None:
-        packages = await self._parse_install_script()
-        modules = await self._parse_python_reqs()
+        packages = await self._read_system_dependencies()
+        modules = await self._read_python_reqs()
         logging.debug(
             f"\nApplication {self.name}: Post-update dependencies:\n"
             f"Packages: {packages}\n"
@@ -200,46 +206,6 @@ class GitDeploy(AppDeploy):
                         cwd=str(self.path))
                 except Exception:
                     self.notify_status("Node Package Update failed")
-
-    async def _parse_install_script(self) -> List[str]:
-        if self.install_script is None:
-            return []
-        # Open install file file and read
-        inst_path: pathlib.Path = self.install_script
-        if not inst_path.is_file():
-            self.log_info(f"Failed to open install script: {inst_path}")
-            return []
-        event_loop = self.server.get_event_loop()
-        data = await event_loop.run_in_thread(inst_path.read_text)
-        plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
-        plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
-        packages: List[str] = []
-        for line in plines:
-            packages.extend(line.split())
-        if not packages:
-            self.log_info(f"No packages found in script: {inst_path}")
-        return packages
-
-    async def _parse_python_reqs(self) -> List[str]:
-        if self.python_reqs is None:
-            return []
-        pyreqs = self.python_reqs
-        if not pyreqs.is_file():
-            self.log_info(f"Failed to open python requirements file: {pyreqs}")
-            return []
-        eventloop = self.server.get_event_loop()
-        data = await eventloop.run_in_thread(pyreqs.read_text)
-        modules: List[str] = []
-        for line in data.split("\n"):
-            line = line.strip()
-            if not line or line[0] == "#":
-                continue
-            modules.append(line)
-        if not modules:
-            self.log_info(
-                f"No modules found in python requirements file: {pyreqs}"
-            )
-        return modules
 
 
 GIT_ASYNC_TIMEOUT = 300.

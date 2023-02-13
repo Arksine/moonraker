@@ -11,6 +11,9 @@ import shutil
 import hashlib
 import logging
 import re
+import json
+import distro
+import asyncio
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -41,6 +44,9 @@ TYPE_TO_CHANNEL = {
     "git_repo": "dev"
 }
 
+DISTRO_ALIASES = [distro.id()]
+DISTRO_ALIASES.extend(distro.like().split())
+
 class AppDeploy(BaseDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
         super().__init__(config, cmd_helper, prefix="Application")
@@ -67,56 +73,15 @@ class AppDeploy(BaseDeploy):
                 f"channels: {SUPPORTED_CHANNELS[self.type]}.  Falling back to "
                 f"channel '{self.channel}"
             )
-        self.path = pathlib.Path(
-            config.get('path')).expanduser().resolve()
-        if (
-            self.name not in ["moonraker", "klipper"]
-            and not self.path.joinpath(".writeable").is_file()
-        ):
-            fm: FileManager = self.server.lookup_component("file_manager")
-            fm.add_reserved_path(f"update_manager {self.name}", self.path)
-        executable = config.get('env', None)
-        self._verify_path(config, 'path', self.path, check_file=False)
-        self.executable: Optional[pathlib.Path] = None
+        self.virtualenv: Optional[pathlib.Path] = None
         self.py_exec: Optional[pathlib.Path] = None
         self.pip_cmd: Optional[str] = None
         self.pip_version: Tuple[int, ...] = tuple()
         self.venv_args: Optional[str] = None
-        if executable is not None:
-            self.executable = pathlib.Path(executable).expanduser()
-            self._verify_path(config, 'env', self.executable, check_exe=True)
-            # Detect if executable is actually located in a virtualenv
-            # by checking the parent for the activation script
-            act_path = self.executable.parent.joinpath("activate")
-            while not act_path.is_file():
-                if self.executable.is_symlink():
-                    self.executable = pathlib.Path(os.readlink(self.executable))
-                    act_path = self.executable.parent.joinpath("activate")
-                else:
-                    break
-            if act_path.is_file():
-                if self.executable.name != "python":
-                    py_exec = self.executable.parent.joinpath("python")
-                    if py_exec.is_file():
-                        self.py_exec = py_exec
-                else:
-                    self.py_exec = self.executable
-                venv_dir = self.executable.parent.parent
-                self.log_info(f"Detected virtualenv: {venv_dir}")
-                pip_exe = self.executable.parent.joinpath("pip")
-                if pip_exe.is_file():
-                    if self.py_exec is not None:
-                        self.pip_cmd = f"{self.py_exec} -m pip"
-                    else:
-                        self.pip_cmd = str(pip_exe)
-                else:
-                    self.log_info("Unable to locate pip executable")
-            else:
-                self.log_info(
-                    f"Unable to detect virtualenv at: {executable}"
-                )
-                self.executable = pathlib.Path(executable).expanduser()
-            self.venv_args = config.get('venv_args', None)
+        self.npm_pkg_json: Optional[pathlib.Path] = None
+        self.python_reqs: Optional[pathlib.Path] = None
+        self.install_script: Optional[pathlib.Path] = None
+        self.system_deps_json: Optional[pathlib.Path] = None
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.managed_services: List[str] = []
         svc_default = []
@@ -155,26 +120,6 @@ class AppDeploy(BaseDeploy):
         logging.debug(
             f"Extension {self.name} managed services: {self.managed_services}"
         )
-        # We need to fetch all potential options for an Application.  Not
-        # all options apply to each subtype, however we can't limit the
-        # options in children if we want to switch between channels and
-        # satisfy the confighelper's requirements.
-        self.moved_origin: Optional[str] = config.get('moved_origin', None)
-        self.origin: str = config.get('origin')
-        self.primary_branch = config.get("primary_branch", "master")
-        self.npm_pkg_json: Optional[pathlib.Path] = None
-        if config.getboolean("enable_node_updates", False):
-            self.npm_pkg_json = self.path.joinpath("package-lock.json")
-            self._verify_path(config, 'enable_node_updates', self.npm_pkg_json)
-        self.python_reqs: Optional[pathlib.Path] = None
-        if self.executable is not None:
-            self.python_reqs = self.path.joinpath(config.get("requirements"))
-            self._verify_path(config, 'requirements', self.python_reqs)
-        self.install_script: Optional[pathlib.Path] = None
-        install_script = config.get('install_script', None)
-        if install_script is not None:
-            self.install_script = self.path.joinpath(install_script).resolve()
-            self._verify_path(config, 'install_script', self.install_script)
 
     @staticmethod
     def _is_git_repo(app_path: Union[str, pathlib.Path]) -> bool:
@@ -182,14 +127,74 @@ class AppDeploy(BaseDeploy):
             app_path = pathlib.Path(app_path).expanduser()
         return app_path.joinpath('.git').exists()
 
-    async def initialize(self) -> Dict[str, Any]:
-        storage = await super().initialize()
-        self._is_valid = storage.get("is_valid", False)
-        self.pip_version = tuple(storage.get("pip_version", []))
-        if self.pip_version:
-            ver_str = ".".join([str(part) for part in self.pip_version])
-            self.log_info(f"Stored pip version: {ver_str}")
-        return storage
+    def _configure_path(self, config: ConfigHelper) -> None:
+        self.path = pathlib.Path(config.get('path')).expanduser().resolve()
+        self._verify_path(config, 'path', self.path, check_file=False)
+        if (
+            self.name not in ["moonraker", "klipper"]
+            and not self.path.joinpath(".writeable").is_file()
+        ):
+            fm: FileManager = self.server.lookup_component("file_manager")
+            fm.add_reserved_path(f"update_manager {self.name}", self.path)
+
+    def _configure_virtualenv(self, config: ConfigHelper) -> None:
+        venv_path: Optional[pathlib.Path] = None
+        if config.has_option("virtualenv"):
+            venv_path = pathlib.Path(config.get("virtualenv")).expanduser().resolve()
+            self._verify_path(config, 'virtualenv', venv_path, check_file=False)
+        elif config.has_option("env"):
+            # Deprecated
+            if self.name != "klipper":
+                self.log_info("Option 'env' is deprecated, use 'virtualenv' instead.")
+            py_exec = pathlib.Path(config.get("env")).expanduser()
+            self._verify_path(config, 'env', py_exec, check_exe=True)
+            venv_path = py_exec.expanduser().parent.parent.resolve()
+        if venv_path is not None:
+            act_path = venv_path.joinpath("bin/activate")
+            if not act_path.is_file():
+                raise config.error(
+                    f"[{config.get_name()}]: Invalid virtualenv at path {venv_path}. "
+                    f"Verify that the 'virtualenv' option is set to a valid "
+                    "virtualenv path."
+                )
+            self.py_exec = venv_path.joinpath("bin/python")
+            if not (self.py_exec.is_file() and os.access(self.py_exec, os.X_OK)):
+                raise config.error(
+                    f"[{config.get_name()}]: Invalid python executable at "
+                    f"{self.py_exec}. Verify that the 'virtualenv' option is set "
+                    "to a valid virtualenv path."
+                )
+            self.log_info(f"Detected virtualenv: {venv_path}")
+            self.virtualenv = venv_path
+            pip_exe = self.virtualenv.joinpath("bin/pip")
+            if pip_exe.is_file():
+                self.pip_cmd = f"{self.py_exec} -m pip"
+            else:
+                self.log_info("Unable to locate pip executable")
+        self.venv_args = config.get('venv_args', None)
+
+    def _configure_dependencies(
+        self, config: ConfigHelper, node_only: bool = False
+    ) -> None:
+        if config.getboolean("enable_node_updates", False):
+            self.npm_pkg_json = self.path.joinpath("package-lock.json")
+            self._verify_path(config, 'enable_node_updates', self.npm_pkg_json)
+        if node_only:
+            return
+        if self.py_exec is not None:
+            self.python_reqs = self.path.joinpath(config.get("requirements"))
+            self._verify_path(config, 'requirements', self.python_reqs)
+        deps = config.get("system_dependencies", None)
+        if deps is not None:
+            self.system_deps_json = self.path.joinpath(deps).resolve()
+            self._verify_path(config, 'system_dependencies', self.system_deps_json)
+        else:
+            # Fall back on deprecated "install_script" option if dependencies file
+            # not present
+            install_script = config.get('install_script', None)
+            if install_script is not None:
+                self.install_script = self.path.joinpath(install_script).resolve()
+                self._verify_path(config, 'install_script', self.install_script)
 
     def _verify_path(
         self,
@@ -210,6 +215,15 @@ class AppDeploy(BaseDeploy):
         if check_exe and not os.access(path, os.X_OK):
             raise config.error(f"{base_msg} is not executable")
 
+    async def initialize(self) -> Dict[str, Any]:
+        storage = await super().initialize()
+        self._is_valid = storage.get("is_valid", False)
+        self.pip_version = tuple(storage.get("pip_version", []))
+        if self.pip_version:
+            ver_str = ".".join([str(part) for part in self.pip_version])
+            self.log_info(f"Stored pip version: {ver_str}")
+        return storage
+
     def get_configured_type(self) -> str:
         return self.type
 
@@ -223,11 +237,13 @@ class AppDeploy(BaseDeploy):
             executable = pathlib.Path(executable)
         app_path = app_path.expanduser()
         executable = executable.expanduser()
-        if self.executable is None:
+        if self.py_exec is None:
             return False
         try:
-            return self.path.samefile(app_path) and \
-                self.executable.samefile(executable)
+            return (
+                self.path.samefile(app_path) and
+                self.py_exec.samefile(executable)
+            )
         except Exception:
             return False
 
@@ -258,6 +274,80 @@ class AppDeploy(BaseDeploy):
                     kconn: Klippy = self.server.lookup_component("klippy_connection")
                     svc = kconn.unit_name
                 await machine.do_service_action("restart", svc)
+
+    async def _read_system_dependencies(self) -> List[str]:
+        eventloop = self.server.get_event_loop()
+        if self.system_deps_json is not None:
+            deps_json = self.system_deps_json
+            try:
+                ret = await eventloop.run_in_thread(deps_json.read_bytes)
+                dep_info: Dict[str, List[str]] = json.loads(ret)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception(f"Error reading system deps: {deps_json}")
+                return []
+            for distro_id in DISTRO_ALIASES:
+                if distro_id in dep_info:
+                    if not dep_info[distro_id]:
+                        self.log_info(
+                            f"Dependency file '{deps_json.name}' contains an empty "
+                            f"package definition for linux distro '{distro_id}'"
+                        )
+                    return dep_info[distro_id]
+            else:
+                self.log_info(
+                    f"Dependency file '{deps_json.name}' has no package definition "
+                    f" for linux distro '{DISTRO_ALIASES[0]}'"
+                )
+                return []
+        # Fall back on install script if configured
+        if self.install_script is None:
+            return []
+        # Open install file file and read
+        inst_path: pathlib.Path = self.install_script
+        if not inst_path.is_file():
+            self.log_info(f"Failed to open install script: {inst_path}")
+            return []
+        try:
+            data = await eventloop.run_in_thread(inst_path.read_text)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception(f"Error reading install script: {deps_json}")
+            return []
+        plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
+        plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
+        packages: List[str] = []
+        for line in plines:
+            packages.extend(line.split())
+        if not packages:
+            self.log_info(f"No packages found in script: {inst_path}")
+        return packages
+
+    async def _read_python_reqs(self) -> List[str]:
+        if self.python_reqs is None:
+            return []
+        pyreqs = self.python_reqs
+        if not pyreqs.is_file():
+            self.log_info(f"Failed to open python requirements file: {pyreqs}")
+            return []
+        eventloop = self.server.get_event_loop()
+        data = await eventloop.run_in_thread(pyreqs.read_text)
+        modules: List[str] = []
+        for line in data.split("\n"):
+            line = line.strip()
+            if not line or line[0] == "#":
+                continue
+            match = re.search(r"\s#", line)
+            if match is not None:
+                line = line[:match.start()].strip()
+            modules.append(line)
+        if not modules:
+            self.log_info(
+                f"No modules found in python requirements file: {pyreqs}"
+            )
+        return modules
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
