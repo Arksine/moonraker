@@ -176,9 +176,14 @@ class FileManager:
         cfg_file: Optional[str] = paths.get("config_file")
         cfg_parent = self.file_paths.get("config")
         if cfg_file is not None and cfg_parent is not None:
-            cfg_path = pathlib.Path(cfg_file).resolve()
-            par_path = pathlib.Path(cfg_parent).resolve()
-            if par_path not in cfg_path.parents:
+            cfg_path = pathlib.Path(cfg_file).expanduser()
+            par_path = pathlib.Path(cfg_parent)
+            if (
+                par_path in cfg_path.parents or
+                par_path.resolve() in cfg_path.resolve().parents
+            ):
+                self.server.remove_warning("klipper_config")
+            else:
                 self.server.add_warning(
                     "file_manager: Klipper configuration file not located in "
                     "'config' folder.\n\n"
@@ -186,8 +191,6 @@ class FileManager:
                     f"Config Folder: {par_path}",
                     warn_id="klipper_config"
                 )
-            else:
-                self.server.remove_warning("klipper_config")
 
     def validate_gcode_path(self, gc_path: str) -> None:
         gc_dir = pathlib.Path(gc_path).expanduser()
