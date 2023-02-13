@@ -15,6 +15,17 @@ INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SERVICE_VERSION="1"
 MACHINE_PROVIDER="systemd_cli"
 
+package_decode_script=$( cat << EOF
+import sys
+import json
+try:
+  ret = json.load(sys.stdin)
+except Exception:
+  exit(0)
+sys.stdout.write(' '.join(ret['debian']))
+EOF
+)
+
 # Step 2: Clean up legacy installation
 cleanup_legacy() {
     if [ -f "/etc/init.d/moonraker" ]; then
@@ -30,18 +41,30 @@ cleanup_legacy() {
 # Step 3: Install packages
 install_packages()
 {
-    PKGLIST="python3-virtualenv python3-dev"
-    PKGLIST="${PKGLIST} libopenjp2-7 python3-libgpiod liblmdb-dev"
-    PKGLIST="${PKGLIST} libsodium-dev zlib1g-dev libjpeg-dev packagekit"
-    PKGLIST="${PKGLIST} wireless-tools curl"
-
     # Update system package info
     report_status "Running apt-get update..."
     sudo apt-get update --allow-releaseinfo-change
 
+    system_deps="${SRCDIR}/scripts/system-dependencies.json"
+    if [ -f "${system_deps}" ]; then
+        if [ ! -x "$(command -v python3)" ]; then
+            report_status "Installing python3 base package..."
+            sudo apt-get install --yes python3
+        fi
+        PKGS="$( cat ${system_deps} | python3 -c "${package_decode_script}" )"
+
+    else
+        echo "Error: system-dependencies.json not found, falling back to legacy pacakge list"
+        PKGLIST="${PKGLIST} python3-virtualenv python3-dev python3-libgpiod liblmdb-dev"
+        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit"
+        PKGLIST="${PKGLIST} wireless-tools curl"
+        PKGS=${PKGLIST}
+    fi
+
     # Install desired packages
-    report_status "Installing packages..."
-    sudo apt-get install --yes ${PKGLIST}
+    report_status "Installing Moonraker Dependencies:"
+    report_status "${PKGS}"
+    sudo apt-get install --yes ${PKGS}
 }
 
 # Step 4: Create python virtual environment
