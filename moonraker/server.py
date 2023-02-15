@@ -227,7 +227,7 @@ class Server:
 
     def load_components(self) -> None:
         config = self.config
-        cfg_sections = [s.split()[0] for s in config.sections()]
+        cfg_sections = set([s.split()[0] for s in config.sections()])
         cfg_sections.remove('server')
 
         # load core components
@@ -252,6 +252,14 @@ class Server:
     ) -> Union[_T, Any]:
         if component_name in self.components:
             return self.components[component_name]
+        if self.is_configured():
+            raise self.error(
+                "Cannot load components after configuration", 500
+            )
+        if component_name in self.failed_components:
+            raise self.error(
+                f"Component {component_name} previously failed to load", 500
+            )
         try:
             full_name = f"moonraker.components.{component_name}"
             module = importlib.import_module(full_name)
