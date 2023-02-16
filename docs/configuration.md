@@ -2205,11 +2205,8 @@ type:
 #   The type of device.  Supported types: mqtt
 #   This parameter must be provided.
 name:
-#   The display name of the sensor.
+#   The friendly display name of the sensor.
 #   The default is the sensor source name.
-unit:
-#   The unit for the values that are being collected, e.g. °C, W, A or kWh.
-#   The default is unitless.
 ```
 
 #### MQTT Sensor Configuration
@@ -2227,12 +2224,22 @@ state_topic:
 #  must be provided.
 state_response_template:
 #  A template used to parse the payload received with the state topic.  A
-#  "payload" variable is provided the template's context.  This template
-#  must resolve to a float value.  For example:
-#    {% set resp = payload|fromjson %}
-#    {resp["power"]|float}
-#  The above example assumes a json response is received, with a "power" field
-#  that is coerced to a float value. The default is the payload.
+#  "payload" variable is provided the template's context. This template must
+#  call the provided set_result() method to pass sensor values to Moonraker.
+#  `set_result()` expects two parameters, the name of the measurement (as
+#  string) and the value of the measurement (either integer or float number).
+#
+#  This allows for sensor that can return multiple readings (e.g. temperature/
+#  humidity sensors or powermeters).
+#  For example:
+#    {% set notification = payload|fromjson %}
+#    {set_result("temperature", notification["temperature"]|float)}
+#    {set_result("humidity", notification["humidity"]|float)}
+#    {set_result("pressure", notification["pressure"]|float)}
+#
+#  The above example assumes a json response with multiple fields in a struct
+#  is received. Individual measurements are extracted from that struct, coerced
+#  to a numeric format and passed to Moonraker. The default is the payload.
 ```
 
 !!! Note
@@ -2254,16 +2261,17 @@ Example:
 # integrated power meter running the Shelly firmware over MQTT.
 [sensor mqtt_powermeter]
 type: mqtt
-name: active_power
+name: Powermeter
 # Use a different display name
-unit: W
-# The values collected are in Watt
 state_topic: shellypro1pm-8cb113caba09/status/switch:0
-# The response is a JSON object with a "apower" field that we convert to
-# a float value
+# The response is a JSON object with a multiple fields that we convert to
+# float values before passing them to Moonraker.
 state_response_template:
-  {% set resp = payload|fromjson %}
-  {resp["apower"]|float}
+  {% set notification = payload|fromjson %}
+  {set_result("power", notification["apower"]|float)}
+  {set_result("voltage", notification["voltage"]|float)}
+  {set_result("current", notification["current"]|float)}
+  {set_result("energy", notification["aenergy"]["by_minute"][0]|float * 0.000001)}
 ```
 
 ## Include directives
