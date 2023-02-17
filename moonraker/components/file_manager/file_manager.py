@@ -1493,8 +1493,8 @@ class INotifyHandler:
             int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
         self.create_gcode_notifications: Dict[str, Any] = {}
         self.initialized: bool = False
-        self.pending_gcode_notificatons: List[Coroutine] = []
-        self._gcode_queue_busy: bool = False
+        self.pending_gcode_notifications: List[Coroutine] = []
+        self._gc_notify_task: Optional[asyncio.Task] = None
 
     def add_root_watch(self, root: str, root_path: str) -> None:
         # remove all exisiting watches on root
@@ -1834,16 +1834,17 @@ class INotifyHandler:
             pending_node.queue_move_notification(args)
 
     def queue_gcode_notificaton(self, coro: Coroutine) -> None:
-        self.pending_gcode_notificatons.append(coro)
-        if not self._gcode_queue_busy:
-            self._gcode_queue_busy = True
-            self.event_loop.create_task(self._process_gcode_notifications())
+        self.pending_gcode_notifications.append(coro)
+        if self._gc_notify_task is None:
+            self._gc_notify_task = self.event_loop.create_task(
+                self._process_gcode_notifications()
+            )
 
     async def _process_gcode_notifications(self) -> None:
-        while self.pending_gcode_notificatons:
-            coro = self.pending_gcode_notificatons.pop(0)
+        while self.pending_gcode_notifications:
+            coro = self.pending_gcode_notifications.pop(0)
             await coro
-        self._gcode_queue_busy = False
+        self._gc_notify_task = None
 
     def notify_filelist_changed(self,
                                 action: str,
@@ -1908,6 +1909,11 @@ class INotifyHandler:
         self.server.send_event("file_manager:filelist_changed", result)
 
     def close(self) -> None:
+        while self.pending_gcode_notifications:
+            coro = self.pending_gcode_notifications.pop(0)
+            coro.close()
+        if self._gc_notify_task is not None:
+            self._gc_notify_task.cancel()
         self.event_loop.remove_reader(self.inotify.fileno())
         for watch in self.watched_nodes.keys():
             try:
