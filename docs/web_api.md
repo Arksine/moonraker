@@ -2011,7 +2011,7 @@ Returns: Information about the created directory
 ```json
 {
     "item": {
-        "path": "gcodes/testdir",
+        "path": "my_new_dir",
         "root": "gcodes"
     },
     "action": "create_dir"
@@ -2031,7 +2031,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.files.delete_directory",
     "params": {
-        "path": "gcodes/my_new_dir",
+        "path": "gcodes/my_subdir",
         "force": false
     },
     "id": 6545
@@ -2045,7 +2045,7 @@ Returns:  Information about the deleted directory
 ```json
 {
     "item": {
-        "path": "gcodes/testdir",
+        "path": "my_subdir",
         "root": "gcodes"
     },
     "action": "delete_dir"
@@ -2072,7 +2072,7 @@ in *moving* the source directory into the destination directory.
 
 HTTP request:
 ```http
-POST /server/files/move?source=gcodes/my_file.gcode&dest=gcodes/subdir/my_file.gcode
+POST /server/files/move?source=gcodes/testdir/my_file.gcode&dest=gcodes/subdir/my_file.gcode
 ```
 JSON-RPC request:
 ```json
@@ -2080,7 +2080,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.files.move",
     "params": {
-        "source": "gcodes/my_file.gcode",
+        "source": "gcodes/testdir/my_file.gcode",
         "dest": "gcodes/subdir/my_file.gcode"
     },
     "id": 5664
@@ -2093,10 +2093,10 @@ Returns:  Information about the moved file or directory
     "result": {
         "item": {
             "root": "gcodes",
-            "path": "test4/test3"
+            "path": "subdir/my_file.gcode"
         },
         "source_item": {
-            "path": "gcodes/test4/test3",
+            "path": "testdir/my_file.gcode",
             "root": "gcodes"
         },
         "action": "move_dir"
@@ -2132,7 +2132,7 @@ Returns: Information about the copied file or directory
 {
     "item": {
         "root": "gcodes",
-        "path": "test4/Voron_v2_350_afterburner_Filament Cover_0.2mm_ABS.gcode"
+        "path": "subdir/my_file.gcode"
     },
     "action": "create_file"
 }
