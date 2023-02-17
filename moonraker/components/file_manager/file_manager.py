@@ -1161,6 +1161,7 @@ class InotifyNode:
         self.pending_node_events: Dict[str, asyncio.Handle] = {}
         self.pending_deleted_children: Set[Tuple[str, bool]] = set()
         self.pending_file_events: Dict[str, str] = {}
+        self.queued_move_notificatons: List[List[str]] = []
         self.is_processing_metadata = False
 
     async def _finish_create_node(self) -> None:
@@ -1183,6 +1184,9 @@ class InotifyNode:
         self.ihdlr.log_nodes()
         self.ihdlr.notify_filelist_changed(
             "create_dir", root, node_path)
+        for args in self.queued_move_notificatons:
+            self.ihdlr.notify_filelist_changed(*args)
+        self.queued_move_notificatons.clear()
 
     def _finish_delete_child(self) -> None:
         # Items deleted in a child (node or file) are batched.
@@ -1412,6 +1416,29 @@ class InotifyNode:
             return self
         return self.parent_node.search_pending_event(name)
 
+    def find_pending_node(self) -> Optional[InotifyNode]:
+        if (
+            self.is_processing_metadata or
+            "create_node" in self.pending_node_events
+        ):
+            return self
+        return self.parent_node.find_pending_node()
+
+    def queue_move_notification(self, args: List[str]) -> None:
+        if (
+            self.is_processing_metadata or
+            "create_node" in self.pending_node_events
+        ):
+            self.queued_move_notificatons.append(args)
+        else:
+            if self.ihdlr.server.is_verbose_enabled():
+                path = self.get_path()
+                logging.debug(
+                    f"Node {path} received a move notification queue request, "
+                    f"however node is not pending: {args}"
+                )
+            self.ihdlr.notify_filelist_changed(*args)
+
 class InotifyRootNode(InotifyNode):
     def __init__(self,
                  ihdlr: INotifyHandler,
@@ -1434,6 +1461,14 @@ class InotifyRootNode(InotifyNode):
 
     def is_processing(self) -> bool:
         return self.is_processing_metadata
+
+    def find_pending_node(self) -> Optional[InotifyNode]:
+        if (
+            self.is_processing_metadata or
+            "create_node" in self.pending_node_events
+        ):
+            return self
+        return None
 
 class INotifyHandler:
     def __init__(
@@ -1727,12 +1762,10 @@ class INotifyHandler:
                           f"{node_path}, {evt.name}")
             node.flush_delete()
             moved_evt = self.pending_moves.pop(evt.cookie, None)
-            # Don't emit file events if the node is processing metadata
-            can_notify = not node.is_processing()
+            pending_node = node.find_pending_node()
             if moved_evt is not None:
                 # Moved from a currently watched directory
-                if can_notify:
-                    self.sync_lock.add_pending_path("move_file", file_path)
+                self.sync_lock.add_pending_path("move_file", file_path)
                 prev_parent, prev_name, hdl = moved_evt
                 hdl.cancel()
                 prev_root = prev_parent.get_root()
@@ -1740,26 +1773,26 @@ class INotifyHandler:
                 move_res = self.try_move_metadata(prev_root, root, prev_path, file_path)
                 if root == "gcodes":
                     coro = self._finish_gcode_move(
-                        root, prev_root, file_path, prev_path, can_notify, move_res
+                        root, prev_root, file_path, prev_path, pending_node, move_res
                     )
                     self.queue_gcode_notificaton(coro)
                 else:
-                    self.notify_filelist_changed(
-                        "move_file", root, file_path, prev_root, prev_path
-                    )
+                    args = ["move_file", root, file_path, prev_root, prev_path]
+                    if pending_node is None:
+                        self.notify_filelist_changed(*args)
+                    else:
+                        pending_node.queue_move_notification(args)
             else:
-                if can_notify:
-                    self.sync_lock.add_pending_path("create_file", file_path)
+                self.sync_lock.add_pending_path("create_file", file_path)
                 if root == "gcodes":
-                    coro = self._finish_gcode_create_from_move(file_path, can_notify)
+                    coro = self._finish_gcode_create_from_move(file_path, pending_node)
                     self.queue_gcode_notificaton(coro)
                 else:
-                    self.notify_filelist_changed("create_file", root, file_path)
-            if not can_notify:
-                logging.debug(
-                    "Metadata is processing, suppressing move notification: "
-                    f"{file_path}"
-                )
+                    args = ["create_file", root, file_path]
+                    if pending_node is None:
+                        self.notify_filelist_changed(*args)
+                    else:
+                        pending_node.queue_move_notification(args)
         elif evt.mask & iFlags.MODIFY:
             self.sync_lock.add_pending_path("modify_file", file_path)
             node.schedule_file_event(evt.name, "modify_file")
@@ -1774,7 +1807,7 @@ class INotifyHandler:
         prev_root: str,
         file_path: str,
         prev_path: str,
-        can_notify: bool,
+        pending_node: Optional[InotifyNode],
         move_result: Union[bool, Awaitable]
     ) -> None:
         if not isinstance(move_result, bool):
@@ -1783,18 +1816,22 @@ class INotifyHandler:
             # Unable to move, metadata needs parsing
             mevt = self.parse_gcode_metadata(file_path)
             await mevt.wait()
-        if can_notify:
-            self.notify_filelist_changed(
-                "move_file", root, file_path, prev_root, prev_path
-            )
+        args = ["move_file", root, file_path, prev_root, prev_path]
+        if pending_node is None:
+            self.notify_filelist_changed(*args)
+        else:
+            pending_node.queue_move_notification(args)
 
     async def _finish_gcode_create_from_move(
-        self, file_path: str, can_notify: bool
+        self, file_path: str, pending_node: Optional[InotifyNode]
     ) -> None:
         mevt = self.parse_gcode_metadata(file_path)
         await mevt.wait()
-        if can_notify:
-            self.notify_filelist_changed("create_file", "gcodes", file_path)
+        args = ["create_file", "gcodes", file_path]
+        if pending_node is None:
+            self.notify_filelist_changed(*args)
+        else:
+            pending_node.queue_move_notification(args)
 
     def queue_gcode_notificaton(self, coro: Coroutine) -> None:
         self.pending_gcode_notificatons.append(coro)
