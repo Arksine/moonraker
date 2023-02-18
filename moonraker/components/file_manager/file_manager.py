@@ -1514,9 +1514,9 @@ class INotifyHandler:
         self.watched_nodes: Dict[int, InotifyNode] = {}
         self.pending_moves: Dict[
             int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
-        self.create_gcode_notifications: Dict[str, Any] = {}
+        self.processed_gcode_events: Dict[str, Any] = {}
         self.initialized: bool = False
-        self.pending_gcode_notifications: List[Coroutine] = []
+        self.pending_coroutines: List[Coroutine] = []
         self._gc_notify_task: Optional[asyncio.Task] = None
 
     def add_root_watch(self, root: str, root_path: str) -> None:
@@ -1856,15 +1856,15 @@ class INotifyHandler:
         self.notify_filelist_changed("create_file", "gcodes", file_path)
 
     def queue_gcode_notificaton(self, coro: Coroutine) -> None:
-        self.pending_gcode_notifications.append(coro)
+        self.pending_coroutines.append(coro)
         if self._gc_notify_task is None:
             self._gc_notify_task = self.event_loop.create_task(
                 self._process_gcode_notifications()
             )
 
     async def _process_gcode_notifications(self) -> None:
-        while self.pending_gcode_notifications:
-            coro = self.pending_gcode_notifications.pop(0)
+        while self.pending_coroutines:
+            coro = self.pending_coroutines.pop(0)
             await coro
         self._gc_notify_task = None
 
@@ -1899,14 +1899,14 @@ class INotifyHandler:
             ext in VALID_GCODE_EXTS and
             action == "create_file"
         ):
-            prev_info = self.create_gcode_notifications.get(rel_path, {})
+            prev_info = self.processed_gcode_events.get(rel_path, {})
             if file_info == prev_info:
                 logging.debug("Ignoring duplicate 'create_file' "
                               f"notification: {rel_path}")
                 return
-            self.create_gcode_notifications[rel_path] = dict(file_info)
-        elif rel_path in self.create_gcode_notifications:
-            del self.create_gcode_notifications[rel_path]
+            self.processed_gcode_events[rel_path] = dict(file_info)
+        elif rel_path in self.processed_gcode_events:
+            del self.processed_gcode_events[rel_path]
         file_info['path'] = rel_path
         file_info['root'] = root
         result = {'action': action, 'item': file_info}
@@ -1937,8 +1937,8 @@ class INotifyHandler:
         self.server.send_event("file_manager:filelist_changed", result)
 
     def close(self) -> None:
-        while self.pending_gcode_notifications:
-            coro = self.pending_gcode_notifications.pop(0)
+        while self.pending_coroutines:
+            coro = self.pending_coroutines.pop(0)
             coro.close()
         if self._gc_notify_task is not None:
             self._gc_notify_task.cancel()
