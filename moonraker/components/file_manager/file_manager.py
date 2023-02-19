@@ -1333,7 +1333,7 @@ class InotifyNode:
                 self.iobsvr.notify_filelist_changed(
                     "move_dir", new_root, new_path, prev_root, prev_path
                 )
-            self.iobsvr.queue_gcode_notificaton(_notify_move_dir())
+            self.iobsvr.queue_gcode_notification(_notify_move_dir())
         else:
             self.iobsvr.notify_filelist_changed(
                 "move_dir", new_root, new_path, prev_root, prev_path
@@ -1366,14 +1366,13 @@ class InotifyNode:
         file_path = os.path.join(self.get_path(), file_name)
         root = self.get_root()
         if root == "gcodes":
-            async def _notify_file_write():
-                mevt = self.iobsvr.parse_gcode_metadata(file_path)
-                if os.path.splitext(file_path)[1].lower() == ".ufp":
-                    # don't notify .ufp files
-                    return
-                await mevt.wait()
-                self.iobsvr.notify_filelist_changed(evt_name, root, file_path)
-            self.iobsvr.queue_gcode_notificaton(_notify_file_write())
+            if self.iobsvr.need_create_notify(file_path):
+                async def _notify_file_write():
+                    mevt = self.iobsvr.parse_gcode_metadata(file_path)
+                    await mevt.wait()
+                    self.iobsvr.notify_filelist_changed(evt_name, root, file_path)
+                    self.iobsvr.clear_processing_file(file_path)
+                self.iobsvr.queue_gcode_notification(_notify_file_write())
         else:
             self.iobsvr.notify_filelist_changed(evt_name, root, file_path)
 
@@ -1559,8 +1558,8 @@ class InotifyObserver(BaseFileSystemObserver):
         self.watched_nodes: Dict[int, InotifyNode] = {}
         self.pending_moves: Dict[
             int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
-        self.processed_gcode_events: Dict[str, Any] = {}
         self.initialized: bool = False
+        self.processing_gcode_files: Set[str] = set()
         self.pending_coroutines: List[Coroutine] = []
         self._gc_notify_task: Optional[asyncio.Task] = None
 
@@ -1843,7 +1842,7 @@ class InotifyObserver(BaseFileSystemObserver):
                     coro = self._finish_gcode_move(
                         root, prev_root, file_path, prev_path, pending_node, move_res
                     )
-                    self.queue_gcode_notificaton(coro)
+                    self.queue_gcode_notification(coro)
                 else:
                     args = ["move_file", root, file_path, prev_root, prev_path]
                     if pending_node is None:
@@ -1862,8 +1861,9 @@ class InotifyObserver(BaseFileSystemObserver):
                     return
                 self.sync_lock.add_pending_path("create_file", file_path)
                 if root == "gcodes":
-                    coro = self._finish_gcode_create_from_move(file_path)
-                    self.queue_gcode_notificaton(coro)
+                    if self.need_create_notify(file_path):
+                        coro = self._finish_gcode_create_from_move(file_path)
+                        self.queue_gcode_notification(coro)
                 else:
                     self.notify_filelist_changed("create_file", root, file_path)
         elif evt.mask & iFlags.MODIFY:
@@ -1899,8 +1899,38 @@ class InotifyObserver(BaseFileSystemObserver):
         mevt = self.parse_gcode_metadata(file_path)
         await mevt.wait()
         self.notify_filelist_changed("create_file", "gcodes", file_path)
+        self.clear_processing_file(file_path)
 
-    def queue_gcode_notificaton(self, coro: Coroutine) -> None:
+    def need_create_notify(self, file_path: str) -> bool:
+        # We don't want to emit duplicate notifications, which may occur
+        # during metadata processing if the file needs to undergo object
+        # processing.
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".ufp":
+            # Queue the ufp file for parsing and return False, we do not
+            # want to notify the ufp since it will be removed.
+            self.parse_gcode_metadata(file_path)
+            return False
+        elif ext not in VALID_GCODE_EXTS:
+            return True
+        rel_path = self.file_manager.get_relative_path("gcodes", file_path)
+        if (
+            self.gcode_metadata.is_file_processing(rel_path) and
+            rel_path in self.processing_gcode_files
+        ):
+            logging.debug(
+                f"Inotify file create event received for file '{rel_path}' during "
+                f"metadata processing.  Suppressing notification."
+            )
+            return False
+        self.processing_gcode_files.add(rel_path)
+        return True
+
+    def clear_processing_file(self, file_path: str) -> None:
+        rel_path = self.file_manager.get_relative_path("gcodes", file_path)
+        self.processing_gcode_files.discard(rel_path)
+
+    def queue_gcode_notification(self, coro: Coroutine) -> None:
         self.pending_coroutines.append(coro)
         if self._gc_notify_task is None:
             self._gc_notify_task = self.event_loop.create_task(
@@ -1938,20 +1968,6 @@ class InotifyObserver(BaseFileSystemObserver):
                 "that does not exit"
             )
             return
-        ext = os.path.splitext(rel_path)[-1].lower()
-        if (
-            root == "gcodes" and
-            ext in VALID_GCODE_EXTS and
-            action == "create_file"
-        ):
-            prev_info = self.processed_gcode_events.get(rel_path, {})
-            if file_info == prev_info:
-                logging.debug("Ignoring duplicate 'create_file' "
-                              f"notification: {rel_path}")
-                return
-            self.processed_gcode_events[rel_path] = dict(file_info)
-        elif rel_path in self.processed_gcode_events:
-            del self.processed_gcode_events[rel_path]
         file_info['path'] = rel_path
         file_info['root'] = root
         result = {'action': action, 'item': file_info}
@@ -2076,6 +2092,9 @@ class MetadataStorage:
 
     def is_processing(self) -> bool:
         return len(self.pending_requests) > 0
+
+    def is_file_processing(self, fname: str) -> bool:
+        return fname in self.pending_requests
 
     def _has_valid_data(self,
                         fname: str,
