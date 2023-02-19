@@ -1,6 +1,20 @@
 ##
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### February 20th 2023
+- The following new endpoints are available when at least one `[sensor]`
+  section has been configured:
+  - `GET /server/sensors/list`
+  - `GET /server/sensors/sensor`
+  - `GET /server/sensors/measurements`
+
+  See [web_api.md](web_api.md) for details on these new endpoints.
+- A `sensors:sensor_update` notification has been added.  When at least one
+  monitored sensor is reporting a changed value Moonraker will broadcast this
+  notification.
+
+  See [web_api.md](web_api.md) for details on this new notification.
+
 ### February 17 2023
 - Moonraker API Version 1.2.1
 - An error in the return value for some file manager endpoints has
