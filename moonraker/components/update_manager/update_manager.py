@@ -270,7 +270,7 @@ class UpdateManager:
             raise self.server.error("Update Refused: Klippy is printing")
         app: str = web_request.get_endpoint().split("/")[-1]
         if app == "client":
-            app = web_request.get('name')
+            app = web_request.get_str('name')
         if self.cmd_helper.is_app_updating(app):
             return f"Object {app} is currently being updated"
         updater = self.updaters.get(app, None)
