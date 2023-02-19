@@ -1783,16 +1783,21 @@ class INotifyHandler:
                     else:
                         pending_node.queue_move_notification(args)
             else:
+                if pending_node is not None:
+                    logging.debug(
+                        "Parent node is processing, suppressing 'create from move' "
+                        f"notification: {file_path}"
+                    )
+                    pending_node.reset_event("create_node", INOTIFY_BUNDLE_TIME)
+                    if root == "gcodes":
+                        self.parse_gcode_metadata(file_path)
+                    return
                 self.sync_lock.add_pending_path("create_file", file_path)
                 if root == "gcodes":
-                    coro = self._finish_gcode_create_from_move(file_path, pending_node)
+                    coro = self._finish_gcode_create_from_move(file_path)
                     self.queue_gcode_notificaton(coro)
                 else:
-                    args = ["create_file", root, file_path]
-                    if pending_node is None:
-                        self.notify_filelist_changed(*args)
-                    else:
-                        pending_node.queue_move_notification(args)
+                    self.notify_filelist_changed("create_file", root, file_path)
         elif evt.mask & iFlags.MODIFY:
             self.sync_lock.add_pending_path("modify_file", file_path)
             node.schedule_file_event(evt.name, "modify_file")
@@ -1822,16 +1827,10 @@ class INotifyHandler:
         else:
             pending_node.queue_move_notification(args)
 
-    async def _finish_gcode_create_from_move(
-        self, file_path: str, pending_node: Optional[InotifyNode]
-    ) -> None:
+    async def _finish_gcode_create_from_move(self, file_path: str) -> None:
         mevt = self.parse_gcode_metadata(file_path)
         await mevt.wait()
-        args = ["create_file", "gcodes", file_path]
-        if pending_node is None:
-            self.notify_filelist_changed(*args)
-        else:
-            pending_node.queue_move_notification(args)
+        self.notify_filelist_changed("create_file", "gcodes", file_path)
 
     def queue_gcode_notificaton(self, coro: Coroutine) -> None:
         self.pending_gcode_notifications.append(coro)
