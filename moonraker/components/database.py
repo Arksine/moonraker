@@ -11,7 +11,6 @@ import struct
 import operator
 import logging
 from asyncio import Future, Task
-from io import BytesIO
 from functools import reduce
 from threading import Lock as ThreadLock
 import lmdb
