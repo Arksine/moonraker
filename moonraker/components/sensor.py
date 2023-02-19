@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from websockets import WebRequest
 
 SENSOR_UPDATE_TIME = 1.0
+SENSOR_EVENT_NAME = "sensors:sensor_update"
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ class BaseSensor:
             lambda: deque(maxlen=store_size)
         )
 
-    def _update_sensor_value(self, eventtime: float) -> float:
+    def _update_sensor_value(self, eventtime: float) -> None:
         """
         Append the last updated value to the store.
         """
@@ -87,8 +88,6 @@ class BaseSensor:
 
         # Copy the last measurements data
         self.last_value = {**self.last_measurements}
-
-        return eventtime + SENSOR_UPDATE_TIME
 
     async def initialize(self) -> bool:
         """
@@ -201,7 +200,7 @@ class Sensors:
         )
 
         # Register notifications
-        self.server.register_notification("sensors:sensor_update")
+        self.server.register_notification(SENSOR_EVENT_NAME)
 
         for section in prefix_sections:
             cfg = config[section]
@@ -237,27 +236,22 @@ class Sensors:
         """
         Iterate through the sensors and store the last updated value.
         """
+        changed_data: Dict[str, Dict[str, Union[int, float]]] = {}
         for sensor_name, sensor in self.sensors.items():
             base_value = sensor.last_value
             sensor._update_sensor_value(eventtime=eventtime)
 
             # Notify if a change in sensor values was detected
             if base_value != sensor.last_value:
-                self._notify_sensor_update(name=sensor_name)
+                changed_data[sensor_name] = sensor.last_value
+        if changed_data:
+            self.server.send_event(SENSOR_EVENT_NAME, changed_data)
 
         return eventtime + SENSOR_UPDATE_TIME
-
-    def _notify_sensor_update(self, name: str) -> None:
-        sensor_info = self.sensors[name].get_sensor_info()
-        self.server.send_event("sensors:sensor_update", sensor_info)
 
     async def component_init(self) -> None:
         try:
             logging.debug("Initializing sensor component")
-            event_loop = self.server.get_event_loop()
-            cur_time = event_loop.get_loop_time()
-            endtime = cur_time + 120.0
-
             for sensor in self.sensors.values():
                 if not await sensor.initialize():
                     self.server.add_warning(
