@@ -189,7 +189,7 @@ class Sensors:
             self._handle_sensor_list_request,
         )
         self.server.register_endpoint(
-            "/server/sensors/sensor",
+            "/server/sensors/info",
             ["GET"],
             self._handle_sensor_info_request,
         )
@@ -294,7 +294,7 @@ class Sensors:
         output = {
             key: sensor.get_sensor_measurements()
             for key, sensor in self.sensors.items()
-            if sensor_name is None or key == sensor_name
+            if sensor_name is "" or key == sensor_name
         }
 
         return output

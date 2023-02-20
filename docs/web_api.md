@@ -4927,7 +4927,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.device_power.devices",
+    "method":"server.sensors.list",
     "id": 5646
 }
 ```
@@ -4955,13 +4955,13 @@ Returns the status for a single configured sensor.
 
 HTTP request:
 ```http
-GET /server/sensors/list?sensor=sensor1
+GET /server/sensors/info?sensor=sensor1
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "machine.device_power.get_device",
+    "method": "/server/sensors/info?sensor=sensor1",
     "params": {
         "sensor": "sensor1"
     },
@@ -6455,7 +6455,7 @@ from at least one monitored sensor changes.
             }
         }
     ]
-  ```
+```
 
 When a sensor reading changes, all connections will receive a
 `sensors:sensor_update` event where the params contains a data struct
