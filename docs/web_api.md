@@ -4915,6 +4915,154 @@ State of the strip.
 }
 ```
 
+### Sensor APIs
+The APIs below are available when the `[sensor]` component has been configured.
+
+#### Get Sensor List
+HTTP request:
+```http
+GET /server/sensors/list
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"server.sensors.list",
+    "id": 5646
+}
+```
+Returns:
+
+An array of objects containing info for each configured sensor.
+```json
+{
+    "sensors": {
+        "sensor1": {
+            "id": "sensor1",
+            "friendly_name": "Sensor 1",
+            "type": "mqtt",
+            "values": {
+                "value1": 0,
+                "value2": 119.8
+            }
+        }
+    }
+}
+```
+
+#### Get Sensor Information
+Returns the status for a single configured sensor.
+
+HTTP request:
+```http
+GET /server/sensors/info?sensor=sensor1
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "/server/sensors/info?sensor=sensor1",
+    "params": {
+        "sensor": "sensor1"
+    },
+    "id": 4564
+}
+```
+Returns:
+
+An object containing sensor information for the requested sensor:
+```json
+{
+    "id": "sensor1",
+    "friendly_name": "Sensor 1",
+    "type": "mqtt",
+    "values": {
+        "value1": 0.0,
+        "value2": 120.0
+    }
+}
+```
+
+#### Get Sensor Measurements
+Returns all recorded measurements for a configured sensor.
+
+HTTP request:
+```http
+GET /server/sensors/measurements?sensor=sensor1
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.sensors.measurements",
+    "params": {
+        "sensor": "sensor1"
+    },
+    "id": 4564
+}
+```
+Returns:
+
+An object containing all recorded measurements for the requested sensor:
+```json
+{
+    "sensor1": {
+        "value1": [
+            3.1,
+            3.2,
+            3.0
+        ],
+        "value2": [
+            120.0,
+            120.0,
+            119.9
+        ]
+    }
+}
+```
+
+#### Get Batch Sensor Measurements
+Returns recorded measurements for all sensors.
+
+HTTP request:
+```http
+GET /server/sensors/measurements
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.sensors.measurements",
+    "id": 4564
+}
+```
+Returns:
+
+An object containing all measurements for every configured sensor:
+```json
+{
+    "sensor1": {
+        "value1": [
+            3.1,
+            3.2,
+            3.0
+        ],
+        "value2": [
+            120.0,
+            120.0,
+            119.9
+        ]
+    },
+    "sensor2": {
+        "value_a": [
+            1,
+            1,
+            0
+        ]
+    }
+}
+```
+
 ### OctoPrint API emulation
 Partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
@@ -6289,6 +6437,30 @@ for that agent, with its identity info in the `data` field.  When an agent
 disconnects clients will receive a `disconnected` event with the data field
 omitted.  All other events are determined by the agent, where each event may
 or may not include optional `data`.
+
+#### Sensor Events
+
+Moonraker will emit a `sensors:sensor_update` notification when a measurement
+from at least one monitored sensor changes.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "sensors:sensor_update",
+    "params": [
+        {
+            "sensor1": {
+                "humidity": 28.9,
+                "temperature": 22.4
+            }
+        }
+    ]
+```
+
+When a sensor reading changes, all connections will receive a
+`sensors:sensor_update` event where the params contains a data struct
+with the sensor id as the key and the sensors letest measurements as value
+struct.
 
 ### Appendix
 
