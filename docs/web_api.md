@@ -4961,7 +4961,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "/server/sensors/info?sensor=sensor1",
+    "method": "server.sensors.info",
     "params": {
         "sensor": "sensor1"
     },
@@ -6455,6 +6455,7 @@ from at least one monitored sensor changes.
             }
         }
     ]
+}
 ```
 
 When a sensor reading changes, all connections will receive a
