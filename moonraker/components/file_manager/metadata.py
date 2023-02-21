@@ -17,7 +17,6 @@ import tempfile
 import zipfile
 import shutil
 import uuid
-import io
 from PIL import Image
 
 # Annotation imports
@@ -646,35 +645,18 @@ class Simplify3D(BaseSlicer):
                     return None
         return None
 
-    def _get_first_layer_temp_v5(self, type: str) -> Optional[float]:
-        matches = re.finditer(r";\s+temperatureController.*", self.header_data)
-
-        for m in matches:
-            typ = None
-            temp = None
-
-            for line in io.StringIO(self.header_data[m.end()+1:]):
-                if not line.startswith(";"):
-                    break
-
-                if re.search(r";\s+temperatureController", line):
-                    break
-
-                val_temp = _regex_find_first(
-                    r";\s+temperatureSetpoints,\d+\|(\d+)", line)
-                if val_temp:
-                    temp = val_temp
-
-                val_typ = _regex_find_string(r"\s+temperatureType,(.+)", line)
-                if val_typ:
-                    typ = val_typ
-
-                if typ and temp:
-                    break
-
-            if typ == type:
-                return temp
-
+    def _get_first_layer_temp_v5(self, heater_type: str) -> Optional[float]:
+        pattern = (
+            r";\s+temperatureController,.+?"
+            r";\s+temperatureType,"f"{heater_type}"r".+?"
+            r";\s+temperatureSetpoints,\d+\|(\d+)"
+        )
+        match = re.search(pattern, self.header_data, re.MULTILINE | re.DOTALL)
+        if match is not None:
+            try:
+                return float(match.group(1))
+            except Exception:
+                return None
         return None
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
