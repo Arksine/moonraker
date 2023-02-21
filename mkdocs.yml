@@ -5,14 +5,13 @@ nav:
     - 'User Documentation':
         - Installation: installation.md
         - Configuration : configuration.md
-        - User Changes: user_changes.md
-    - 'Client Developers':
-        - Client API: web_api.md
+    - 'Developer Documenation':
+        - Remote API: web_api.md
         - Printer Objects: printer_objects.md
-        - API Changes: api_changes.md
-    - 'Backend Developers':
-        - Contributing: contributing.md
         - Components: components.md
+    - 'Miscellaneous':
+        - Contributing: contributing.md
+        - Changelog: changelog.md
 theme:
     name: readthedocs
 plugins:
