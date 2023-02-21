@@ -1026,6 +1026,8 @@ def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
                 except Exception as e:
                     log_to_stderr(f"Object processing failed: {e}")
                     return False
+        if os.path.islink(file_path):
+            file_path = os.path.realpath(file_path)
         shutil.move(tmp_file, file_path)
     return True
 
@@ -1095,6 +1097,8 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
                 if UFP_THUMB_PATH in zf.namelist():
                     tmp_thumb_path = zf.extract(
                         UFP_THUMB_PATH, path=tmp_dir_name)
+            if os.path.islink(dest_path):
+                dest_path = os.path.realpath(dest_path)
             shutil.move(tmp_model_path, dest_path)
             if tmp_thumb_path:
                 if not os.path.exists(dest_thumb_dir):

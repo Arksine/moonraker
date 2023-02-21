@@ -794,8 +794,6 @@ class FileManager:
         if unzip_ufp:
             filename = os.path.splitext(filename)[0] + ".gcode"
             dest_path = os.path.splitext(dest_path)[0] + ".gcode"
-        if os.path.islink(dest_path):
-            raise self.server.error(f"Cannot overwrite symlink: {dest_path}")
         if os.path.isfile(dest_path) and not os.access(dest_path, os.W_OK):
             raise self.server.error(f"File is read-only: {dest_path}")
         return {
@@ -806,7 +804,8 @@ class FileManager:
             'tmp_file_path': upload_args['tmp_file_path'],
             'start_print': start_print,
             'unzip_ufp': unzip_ufp,
-            'ext': f_ext
+            'ext': f_ext,
+            "is_link": os.path.islink(dest_path)
         }
 
     async def _finish_gcode_upload(
@@ -843,7 +842,8 @@ class FileManager:
                 queued = True
         self.fs_observer.on_item_create("gcodes", upload_info["dest_path"])
         result = dict(self._sched_changed_event(
-            "create_file", "gcodes", upload_info["dest_path"]
+            "create_file", "gcodes", upload_info["dest_path"],
+            immediate=upload_info["is_link"]
         ))
         result.update({"print_started": started, "print_queued": queued})
         return result
@@ -855,7 +855,9 @@ class FileManager:
         dest_path: str = upload_info["dest_path"]
         root: str = upload_info["root"]
         self.fs_observer.on_item_create(root, dest_path)
-        return self._sched_changed_event("create_file", root, dest_path)
+        return self._sched_changed_event(
+            "create_file", root, dest_path, immediate=upload_info["is_link"]
+        )
 
     async def _process_uploaded_file(self,
                                      upload_info: Dict[str, Any]
@@ -877,8 +879,11 @@ class FileManager:
                 finfo = self.get_path_info(tmp_path, upload_info['root'])
                 finfo['ufp_path'] = tmp_path
             else:
-                shutil.move(upload_info['tmp_file_path'],
-                            upload_info['dest_path'])
+                dest_path = upload_info['dest_path']
+                if upload_info["is_link"]:
+                    dest_path = os.path.realpath(dest_path)
+                shutil.move(
+                    upload_info['tmp_file_path'], dest_path)
                 finfo = self.get_path_info(upload_info['dest_path'],
                                            upload_info['root'])
         except Exception:
