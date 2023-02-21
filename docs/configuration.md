@@ -94,7 +94,16 @@ enable_object_processing: False
 #   "cancel object" functionality.  Note that this process is file I/O intensive,
 #   it is not recommended for usage on low resource SBCs such as a Pi Zero.
 #   The default is False.
+file_system_observer: inotify
+#   The observer used to monitor file system changes.  May be inotify or none.
+#   When set to none file system observation is disabled.  The default is
+#   inotify.
+enable_observer_warnings: True
+#   When set to True Moonraker will generate warnings when an observer
+#   encounters an error. This may be useful to determine if the observer
+#   malfunctioning. The default is True.
 enable_inotify_warnings: True
+#   *** DEPRECATED - SEE "enable_observer_warnings" ***
 #   When set to True Moonraker will generate warnings when inotify attempts
 #   to add a duplicate watch or when inotify encounters an error.  On some
 #   file systems inotify may not work as expected, this gives users the
