@@ -92,7 +92,10 @@ class FileManager:
                 "'file_system_observer'.  Falling back to no observer."
             )
             obs_class = BaseFileSystemObserver
-        logging.info(f"Using File System Observer: {observer}")
+        if observer == "none":
+            logging.info("File System Observation is disabled")
+        else:
+            logging.info(f"Using File System Observer: {observer}")
         self.fs_observer = obs_class(
             config, self, self.gcode_metadata, self.sync_lock
         )
