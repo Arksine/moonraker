@@ -109,6 +109,8 @@ class FileManager:
         self.server.register_endpoint(
             "/server/files/metadata", ['GET'], self._handle_metadata_request)
         self.server.register_endpoint(
+            "/server/files/metascan", ['POST'], self._handle_metascan_request)
+        self.server.register_endpoint(
             "/server/files/thumbnails", ['GET'], self._handle_list_thumbs)
         self.server.register_endpoint(
             "/server/files/roots", ['GET'], self._handle_list_roots)
@@ -379,6 +381,31 @@ class FileManager:
                 f"Metadata not available for <{requested_file}>", 404)
         metadata['filename'] = requested_file
         return metadata
+
+    async def _handle_metascan_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        async with self.sync_lock:
+            requested_file: str = web_request.get_str('filename')
+            gcpath = pathlib.Path(self.file_paths["gcodes"]).joinpath(requested_file)
+            if not gcpath.is_file():
+                raise self.server.error(f"File '{requested_file}' does not exist", 404)
+            if gcpath.suffix not in VALID_GCODE_EXTS:
+                raise self.server.error(f"File {gcpath} is not a valid gcode file")
+            # remove metadata and force a rescan
+            ret = self.gcode_metadata.remove_file_metadata(requested_file)
+            if ret is not None:
+                await ret
+            path_info = self.get_path_info(gcpath, "gcodes")
+            evt = self.gcode_metadata.parse_metadata(requested_file, path_info)
+            await evt.wait()
+            metadata: Optional[Dict[str, Any]]
+            metadata = self.gcode_metadata.get(requested_file, None)
+            if metadata is None:
+                raise self.server.error(
+                    f"Failed to parse metadata for file '{requested_file}'", 500)
+            metadata['filename'] = requested_file
+            return metadata
 
     async def _handle_list_roots(
         self, web_request: WebRequest
@@ -2250,7 +2277,7 @@ class MetadataStorage:
                 return False
         return True
 
-    def remove_directory_metadata(self, dir_name: str) -> None:
+    def remove_directory_metadata(self, dir_name: str) -> Optional[Awaitable]:
         if dir_name[-1] != "/":
             dir_name += "/"
         del_items: Dict[str, Any] = {}
@@ -2264,15 +2291,16 @@ class MetadataStorage:
             self.mddb.delete_batch(list(del_items.keys()))
             eventloop = self.server.get_event_loop()
             # Remove thumbs in a nother thread
-            eventloop.run_in_thread(self._remove_thumbs, del_items)
+            return eventloop.run_in_thread(self._remove_thumbs, del_items)
+        return None
 
-    def remove_file_metadata(self, fname: str) -> None:
+    def remove_file_metadata(self, fname: str) -> Optional[Awaitable]:
         md: Optional[Dict[str, Any]] = self.metadata.pop(fname, None)
         if md is None:
-            return
+            return None
         self.mddb.pop(fname, None)
         eventloop = self.server.get_event_loop()
-        eventloop.run_in_thread(self._remove_thumbs, {fname: md})
+        return eventloop.run_in_thread(self._remove_thumbs, {fname: md})
 
     def _remove_thumbs(self, records: Dict[str, Dict[str, Any]]) -> None:
         for fname, metadata in records.items():
