@@ -792,7 +792,7 @@ class FileManager:
                 except Exception:
                     pass
                 raise
-        return result
+            return result
 
     def _parse_upload_args(self,
                            upload_args: Dict[str, Any]
@@ -2144,23 +2144,19 @@ class InotifyObserver(BaseFileSystemObserver):
                 source_root, source_path)
             result['source_item'] = {'path': src_rel_path, 'root': source_root}
         key = f"{action}-{root}-{rel_path}"
-        if sync_fut is not None:
-            # Delay this notification so that it occurs after an item
-            logging.debug(f"Syncing notification: {full_path}")
-            self.event_loop.register_callback(
-                self._sync_with_request, result, sync_fut, key
-            )
-        else:
-            self.file_manager.cancel_notification(key)
-            self.server.send_event("file_manager:filelist_changed", result)
+        self.event_loop.create_task(
+            self._finish_notify(result, sync_fut, key)
+        )
 
-    async def _sync_with_request(
+    async def _finish_notify(
         self,
         result: Dict[str, Any],
-        sync_fut: asyncio.Future,
+        sync_fut: Optional[asyncio.Future],
         notify_key: str
     ) -> None:
-        await sync_fut
+        if sync_fut is not None:
+            logging.debug(f"Syncing notification: {notify_key}")
+            await sync_fut
         self.file_manager.cancel_notification(notify_key)
         await asyncio.sleep(.005)
         self.server.send_event("file_manager:filelist_changed", result)
