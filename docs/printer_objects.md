@@ -47,7 +47,7 @@ The `gcode_move` object reports the current gcode state:
 - `speed_factor`: AKA "feedrate", this is the current speed multiplier
 - `speed`: The current gcode speed in mm/s.
 - `extrude_factor`: AKA "extrusion multiplier".
-- `absolute_coorinates`: true if the machine axes are moved using
+- `absolute_coordinates`: true if the machine axes are moved using
   absolute coordinates, false if using relative coordinates.
 - `absolute_extrude`: true if the extruder is moved using absolute
   coordinates, false if using relative coordinates.
