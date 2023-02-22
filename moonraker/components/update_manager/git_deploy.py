@@ -241,7 +241,12 @@ class GitDeploy(AppDeploy):
             return []
         eventloop = self.server.get_event_loop()
         data = await eventloop.run_in_thread(pyreqs.read_text)
-        modules = [mdl.strip() for mdl in data.split("\n") if mdl.strip()]
+        modules: List[str] = []
+        for line in data.split("\n"):
+            line = line.strip()
+            if not line or line[0] == "#":
+                continue
+            modules.append(line)
         if not modules:
             self.log_info(
                 f"No modules found in python requirements file: {pyreqs}"
