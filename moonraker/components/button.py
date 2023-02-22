@@ -6,7 +6,6 @@
 from __future__ import annotations
 import asyncio
 import logging
-from ..confighelper import SentinelClass
 
 from typing import (
     TYPE_CHECKING,
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
     from .gpio import GpioFactory
     from ..app import InternalTransport as ITransport
 
-SENTINEL = SentinelClass.get_instance()
 
 class ButtonManager:
     def __init__(self, config: ConfigHelper) -> None:
