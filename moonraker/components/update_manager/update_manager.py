@@ -708,7 +708,7 @@ class PackageDeploy(BaseDeploy):
         except shell_cmd.error:
             return None
         # APT Command found should be available
-        logging.debug(f"APT package manager detected: {ret.encode()}")
+        logging.debug(f"APT package manager detected: {ret}")
         provider = AptCliProvider(self.cmd_helper)
         try:
             await provider.initialize()

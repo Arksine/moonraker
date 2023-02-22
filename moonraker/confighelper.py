@@ -32,12 +32,12 @@ from typing import (
     Dict,
     List,
     Type,
+    TextIO
 )
 if TYPE_CHECKING:
     from .server import Server
     from .components.gpio import GpioFactory, GpioOutputPin
     from .components.template import TemplateFactory
-    from io import TextIOWrapper
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
@@ -468,11 +468,11 @@ class ConfigHelper:
                         "failed to load.  In the future this will result "
                         "in a startup error.")
 
-    def create_backup(self):
+    def create_backup(self) -> None:
         cfg_path = self.server.get_app_args()["config_file"]
         cfg = pathlib.Path(cfg_path).expanduser().resolve()
         backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
-        backup_fp: Optional[TextIOWrapper] = None
+        backup_fp: Optional[TextIO] = None
         try:
             if backup.exists():
                 cfg_mtime: int = 0

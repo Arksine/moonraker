@@ -268,7 +268,8 @@ class PanelDue:
     async def _process_klippy_ready(self) -> None:
         # Request "info" and "configfile" status
         retries = 10
-        printer_info = cfg_status = {}
+        printer_info: Dict[str, Any] = {}
+        cfg_status: Dict[str, Any] = {}
         while retries:
             try:
                 printer_info = await self.klippy_apis.get_klippy_info()
