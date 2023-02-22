@@ -21,7 +21,7 @@ from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
-from .utils import ServerError, SentinelClass, get_software_version
+from .utils import ServerError, Sentinel, get_software_version
 from .loghelper import LogManager
 
 # Annotation imports
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
     FlexCallback = Callable[..., Optional[Coroutine]]
-    _T = TypeVar("_T")
+    _T = TypeVar("_T", Sentinel, Any)
 
 API_VERSION = (1, 2, 1)
 CORE_COMPONENTS = [
@@ -53,7 +53,6 @@ CORE_COMPONENTS = [
     'webcam', 'extensions',
 ]
 
-SENTINEL = SentinelClass.get_instance()
 
 class Server:
     error = ServerError
@@ -245,11 +244,12 @@ class Server:
         config.validate_config()
         self._is_configured = True
 
-    def load_component(self,
-                       config: confighelper.ConfigHelper,
-                       component_name: str,
-                       default: Union[SentinelClass, _T] = SENTINEL
-                       ) -> Union[_T, Any]:
+    def load_component(
+        self,
+        config: confighelper.ConfigHelper,
+        component_name: str,
+        default: _T = Sentinel.MISSING
+    ) -> Union[_T, Any]:
         if component_name in self.components:
             return self.components[component_name]
         try:
@@ -265,19 +265,18 @@ class Server:
             logging.exception(msg)
             if component_name not in self.failed_components:
                 self.failed_components.append(component_name)
-            if isinstance(default, SentinelClass):
+            if default is Sentinel.MISSING:
                 raise
             return default
         self.components[component_name] = component
         logging.info(f"Component ({component_name}) loaded")
         return component
 
-    def lookup_component(self,
-                         component_name: str,
-                         default: Union[SentinelClass, _T] = SENTINEL
-                         ) -> Union[_T, Any]:
+    def lookup_component(
+        self, component_name: str, default: _T = Sentinel.MISSING
+    ) -> Union[_T, Any]:
         component = self.components.get(component_name, default)
-        if isinstance(component, SentinelClass):
+        if component is Sentinel.MISSING:
             raise ServerError(f"Component ({component_name}) not found")
         return component
 

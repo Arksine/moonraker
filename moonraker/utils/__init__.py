@@ -19,6 +19,7 @@ import shlex
 import re
 import struct
 import socket
+import enum
 from . import source_info
 
 # Annotation imports
@@ -45,14 +46,8 @@ class ServerError(Exception):
         self.status_code = status_code
 
 
-class SentinelClass:
-    _instance: ClassVar[Optional[SentinelClass]] = None
-
-    @staticmethod
-    def get_instance() -> SentinelClass:
-        if SentinelClass._instance is None:
-            SentinelClass._instance = SentinelClass()
-        return SentinelClass._instance
+class Sentinel(enum.Enum):
+    MISSING = object()
 
 def _run_git_command(cmd: str) -> str:
     prog = shlex.split(cmd)

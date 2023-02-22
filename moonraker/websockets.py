@@ -12,7 +12,7 @@ import asyncio
 import copy
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
-from .utils import ServerError, SentinelClass
+from .utils import ServerError, Sentinel
 
 # Annotation imports
 from typing import (
@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     AuthComp = Optional[Authorization]
 
 CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
-SENTINEL = SentinelClass.get_instance()
 
 class Subscribable:
     def send_status(self,
@@ -98,11 +97,11 @@ class WebRequest:
 
     def _get_converted_arg(self,
                            key: str,
-                           default: Union[SentinelClass, _T],
+                           default: Union[Sentinel, _T],
                            dtype: Type[_C]
                            ) -> Union[_C, _T]:
         if key not in self.args:
-            if isinstance(default, SentinelClass):
+            if default is Sentinel.MISSING:
                 raise ServerError(f"No data for argument: {key}")
             return default
         val = self.args[key]
@@ -124,34 +123,34 @@ class WebRequest:
 
     def get(self,
             key: str,
-            default: Union[SentinelClass, _T] = SENTINEL
+            default: Union[Sentinel, _T] = Sentinel.MISSING
             ) -> Union[_T, Any]:
         val = self.args.get(key, default)
-        if isinstance(val, SentinelClass):
+        if val is Sentinel.MISSING:
             raise ServerError(f"No data for argument: {key}")
         return val
 
     def get_str(self,
                 key: str,
-                default: Union[SentinelClass, _T] = SENTINEL
+                default: Union[Sentinel, _T] = Sentinel.MISSING
                 ) -> Union[str, _T]:
         return self._get_converted_arg(key, default, str)
 
     def get_int(self,
                 key: str,
-                default: Union[SentinelClass, _T] = SENTINEL
+                default: Union[Sentinel, _T] = Sentinel.MISSING
                 ) -> Union[int, _T]:
         return self._get_converted_arg(key, default, int)
 
     def get_float(self,
                   key: str,
-                  default: Union[SentinelClass, _T] = SENTINEL
+                  default: Union[Sentinel, _T] = Sentinel.MISSING
                   ) -> Union[float, _T]:
         return self._get_converted_arg(key, default, float)
 
     def get_boolean(self,
                     key: str,
-                    default: Union[SentinelClass, _T] = SENTINEL
+                    default: Union[Sentinel, _T] = Sentinel.MISSING
                     ) -> Union[bool, _T]:
         return self._get_converted_arg(key, default, bool)
 
@@ -245,8 +244,8 @@ class JsonRPC:
         rpc_version: str = obj.get('jsonrpc', "")
         if rpc_version != "2.0":
             return self.build_error(-32600, "Invalid Request", req_id)
-        method_name = obj.get('method', SENTINEL)
-        if method_name is SENTINEL:
+        method_name = obj.get('method', Sentinel.MISSING)
+        if method_name is Sentinel.MISSING:
             self.process_response(obj, conn)
             return None
         if not isinstance(method_name, str):

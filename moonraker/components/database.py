@@ -15,7 +15,7 @@ from io import BytesIO
 from functools import reduce
 from threading import Lock as ThreadLock
 import lmdb
-from ..utils import SentinelClass, ServerError
+from ..utils import Sentinel, ServerError
 
 # Annotation imports
 from typing import (
@@ -60,8 +60,6 @@ RECORD_DECODE_FUNCS = {
     ord("["): lambda x: json.loads(bytes(x)),
     ord("{"): lambda x: json.loads(bytes(x)),
 }
-
-SENTINEL = SentinelClass.get_instance()
 
 def getitem_with_default(item: Dict, field: Any) -> Any:
     if not isinstance(item, Dict):
@@ -346,14 +344,14 @@ class MoonrakerDatabase:
     def get_item(self,
                  namespace: str,
                  key: Optional[Union[List[str], str]] = None,
-                 default: Any = SENTINEL
+                 default: Any = Sentinel.MISSING
                  ) -> Future[Any]:
         return self._run_command(self._get_impl, namespace, key, default)
 
     def _get_impl(self,
                   namespace: str,
                   key: Optional[Union[List[str], str]] = None,
-                  default: Any = SENTINEL
+                  default: Any = Sentinel.MISSING
                   ) -> Any:
         try:
             if key is None:
@@ -363,7 +361,7 @@ class MoonrakerDatabase:
             val = reduce(operator.getitem,  # type: ignore
                          key_list[1:], ns)
         except Exception as e:
-            if not isinstance(default, SentinelClass):
+            if default is not Sentinel.MISSING:
                 return default
             if isinstance(e, self.server.error):
                 raise
@@ -875,7 +873,7 @@ class NamespaceWrapper:
         return self.db._get_namespace(self.namespace)
 
     def __getitem__(self, key: Union[List[str], str]) -> Future[Any]:
-        return self.get(key, default=SENTINEL)
+        return self.get(key, default=Sentinel.MISSING)
 
     def __setitem__(self,
                     key: Union[List[str], str],
@@ -908,13 +906,13 @@ class NamespaceWrapper:
 
     def pop(self,
             key: Union[List[str], str],
-            default: Any = SENTINEL
+            default: Any = Sentinel.MISSING
             ) -> Union[Future[Any], Task[Any]]:
         if not self.server.is_running():
             try:
                 val = self.delete(key).result()
             except Exception:
-                if isinstance(default, SentinelClass):
+                if default is Sentinel.MISSING:
                     raise
                 val = default
             fut = self.eventloop.create_future()
@@ -925,7 +923,7 @@ class NamespaceWrapper:
             try:
                 val = await self.delete(key)
             except Exception:
-                if isinstance(default, SentinelClass):
+                if default is Sentinel.MISSING:
                     raise
                 val = default
             return val
