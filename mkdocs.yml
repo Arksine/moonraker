@@ -5,7 +5,7 @@ nav:
     - 'User Documentation':
         - Installation: installation.md
         - Configuration : configuration.md
-    - 'Developer Documenation':
+    - 'Developer Documentation':
         - Remote API: web_api.md
         - Printer Objects: printer_objects.md
         - Components: components.md
