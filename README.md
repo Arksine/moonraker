@@ -40,12 +40,5 @@ The following projects deploy Moonraker via Docker:
 
 ### Changes
 
-This section contains changelogs that users and developers may reference
-to see if any action is necessary on their part.  The date of the most
-recent change is included.
-
-Users:\
-[user_changes.md](https://moonraker.readthedocs.io/en/latest/user_changes/) - February 8th 2023
-
-Developers:\
-[api_changes.md](https://moonraker.readthedocs.io/en/latest/api_changes/) - March 4th 2022
+Please refer to the [changelog](https://moonraker.readthedocs.io/en/latest/changelog)
+for a list of notable changes to Moonraker.
