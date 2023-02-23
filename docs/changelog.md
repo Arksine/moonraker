@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog].
 ### Added
 
 - Added this changelog!
+- Added pyproject.toml with support for builds through [pdm](https://pdm.fming.dev/latest/).
 - **sensor**: New component for generic sensor configuration.
     - [Configuration Docs](configuration.md#sensor)
     - [API Docs](web_api.md#sensor-apis)
@@ -37,6 +38,9 @@ The format is based on [Keep a Changelog].
 
 ### Changed
 
+- Converted Moonraker source into a Python package.
+- The source from `moonraker.py` has been moved to `server.py`.  The remaining code in
+  `moonraker.py` serves as a legacy entry point for launching Moonraker.
 - **file_manager**: Improved inotify synchronization with API requests.
 - **file_manager**: Endpoint return values are now consistent with their
   respective websocket notifications.
@@ -60,6 +64,11 @@ The format is based on [Keep a Changelog].
 - **machine**: Fixed support for Supervisord Version 4 and above.
 - **update_manager**: Added package resolution step to the APT backend.
 - **update_manger**: Fixed PackageKit resolution step for 64-bit systems.
+- **update_manager**: Fixed Python requirements file parsing.  Comments are now ignored.
+
+### Removed
+
+- Pycurl dependency.  Moonraker no longer uses Tornado's curl based http client.
 
 ## [0.7.1] - 2021-07-08
 
