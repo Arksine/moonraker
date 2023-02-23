@@ -252,7 +252,7 @@ class ConfigHelper:
                 f"Option '{option}' in section "
                 f"[{self.section}]: length of 'count' argument must ",
                 "match length of 'separators' argument")
-        else:
+        elif count is None:
             count = tuple(None for _ in range(len(separators)))
 
         def list_parser(value: str,
