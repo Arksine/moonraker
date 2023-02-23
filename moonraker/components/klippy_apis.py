@@ -186,7 +186,9 @@ class KlippyAPI(Subscribable):
             OBJ_LIST_ENDPOINT, {}, default)
         if isinstance(result, dict) and 'objects' in result:
             return result['objects']
-        return result
+        if default is not Sentinel.MISSING:
+            return default
+        raise self.server.error("Invalid response received from Klippy", 500)
 
     async def query_objects(self,
                             objects: Mapping[str, Optional[List[str]]],
@@ -197,7 +199,9 @@ class KlippyAPI(Subscribable):
             STATUS_ENDPOINT, params, default)
         if isinstance(result, dict) and 'status' in result:
             return result['status']
-        return result
+        if default is not Sentinel.MISSING:
+            return default
+        raise self.server.error("Invalid response received from Klippy", 500)
 
     async def subscribe_objects(self,
                                 objects: Mapping[str, Optional[List[str]]],
@@ -218,7 +222,9 @@ class KlippyAPI(Subscribable):
             SUBSCRIPTION_ENDPOINT, params, default)
         if isinstance(result, dict) and 'status' in result:
             return result['status']
-        return result
+        if default is not Sentinel.MISSING:
+            return default
+        raise self.server.error("Invalid response received from Klippy", 500)
 
     async def subscribe_gcode_output(self) -> str:
         template = {'response_template':
