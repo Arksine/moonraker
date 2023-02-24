@@ -135,7 +135,7 @@ class ExtPahoClient(paho_mqtt.Client):
             sock.do_handshake()
 
             if verify_host:
-                ssl.match_hostname(sock.getpeercert(), self._host)
+                ssl.match_hostname(sock.getpeercert(), self._host)  # type: ignore
 
         if self._transport == "websockets":
             sock.settimeout(self._keepalive)
