@@ -344,6 +344,57 @@ class WebRequest:
                     ) -> Union[bool, _T]:
         return self._get_converted_arg(key, default, bool)
 
+    def _parse_list(
+        self,
+        key: str,
+        sep: str,
+        ltype: Type[_C],
+        count: Optional[int],
+        default: Union[Sentinel, _T]
+    ) -> Union[List[_C], _T]:
+        if key not in self.args:
+            if default is Sentinel.MISSING:
+                raise ServerError(f"No data for argument: {key}")
+            return default
+        value = self.args[key]
+        if isinstance(value, str):
+            try:
+                ret = [ltype(val.strip()) for val in value.split(sep) if val.strip()]
+            except Exception as e:
+                raise ServerError(
+                    f"Invalid list format received for argument '{key}', "
+                    "parsing failed."
+                ) from e
+        elif isinstance(value, list):
+            for val in value:
+                if not isinstance(val, ltype):
+                    raise ServerError(
+                        f"Invalid list format for argument '{key}', expected all "
+                        f"values to be of type {ltype.__name__}."
+                    )
+            # List already parsed
+            ret = value
+        else:
+            raise ServerError(
+                f"Invalid value received for argument '{key}'.  Expected List type, "
+                f"received {type(value).__name__}"
+            )
+        if count is not None and len(ret) != count:
+            raise ServerError(
+                f"Invalid list received for argument '{key}', count mismatch. "
+                f"Expected {count} items, got {len(ret)}."
+            )
+        return ret
+
+    def get_list(
+        self,
+        key: str,
+        default: Union[Sentinel, _T] = Sentinel.MISSING,
+        sep: str = ",",
+        count: Optional[int] = None
+    ) -> Union[_T, List[str]]:
+        return self._parse_list(key, sep, str, count, default)
+
 
 class JsonRPC:
     def __init__(
