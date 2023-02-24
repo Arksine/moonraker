@@ -13,8 +13,7 @@ import pathlib
 import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
-from ..common import Subscribable, WebRequest, APITransport
-from ..websockets import JsonRPC
+from ..common import Subscribable, WebRequest, APITransport, JsonRPC
 
 # Annotation imports
 from typing import (

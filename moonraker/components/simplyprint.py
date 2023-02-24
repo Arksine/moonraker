@@ -32,7 +32,8 @@ from typing import (
 if TYPE_CHECKING:
     from ..app import InternalTransport
     from ..confighelper import ConfigHelper
-    from ..websockets import WebsocketManager, BaseSocketClient
+    from ..websockets import WebsocketManager
+    from ..common import BaseRemoteConnection
     from tornado.websocket import WebSocketClientConnection
     from .database import MoonrakerDatabase
     from .klippy_apis import KlippyAPI
@@ -609,7 +610,7 @@ class SimplyPrint(Subscribable):
             is_on = device_info["status"] == "on"
             self.send_sp("power_controller", {"on": is_on})
 
-    def _on_websocket_identified(self, ws: BaseSocketClient) -> None:
+    def _on_websocket_identified(self, ws: BaseRemoteConnection) -> None:
         if (
             self.cache.current_wsid is None and
             ws.client_data.get("type", "") == "web"
@@ -622,7 +623,7 @@ class SimplyPrint(Subscribable):
             self.cache.current_wsid = ws.uid
             self.send_sp("machine_data", ui_data)
 
-    def _on_websocket_removed(self, ws: BaseSocketClient) -> None:
+    def _on_websocket_removed(self, ws: BaseRemoteConnection) -> None:
         if self.cache.current_wsid is None or self.cache.current_wsid != ws.uid:
             return
         ui_data = self._get_ui_info()

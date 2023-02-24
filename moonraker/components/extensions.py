@@ -8,7 +8,7 @@ import asyncio
 import pathlib
 import logging
 import json
-from ..websockets import BaseSocketClient
+from ..common import BaseRemoteConnection
 from ..utils import get_unix_peer_credentials
 
 # Annotation imports
@@ -32,7 +32,7 @@ UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.agents: Dict[str, BaseSocketClient] = {}
+        self.agents: Dict[str, BaseRemoteConnection] = {}
         self.uds_server: Optional[asyncio.AbstractServer] = None
         self.server.register_endpoint(
             "/connection/send_event", ["POST"], self._handle_agent_event,
@@ -45,7 +45,7 @@ class ExtensionManager:
             "/server/extensions/request", ["POST"], self._handle_call_agent
         )
 
-    def register_agent(self, connection: BaseSocketClient) -> None:
+    def register_agent(self, connection: BaseRemoteConnection) -> None:
         data = connection.client_data
         name = data["name"]
         client_type = data["type"]
@@ -64,7 +64,7 @@ class ExtensionManager:
         }
         connection.send_notification("agent_event", [evt])
 
-    def remove_agent(self, connection: BaseSocketClient) -> None:
+    def remove_agent(self, connection: BaseRemoteConnection) -> None:
         name = connection.client_data["name"]
         if name in self.agents:
             del self.agents[name]
@@ -135,7 +135,7 @@ class ExtensionManager:
             await self.uds_server.wait_closed()
             self.uds_server = None
 
-class UnixSocketClient(BaseSocketClient):
+class UnixSocketClient(BaseRemoteConnection):
     def __init__(
         self,
         server: Server,
