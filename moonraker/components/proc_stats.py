@@ -27,7 +27,8 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest, WebsocketManager
+    from ..common import WebRequest
+    from ..websockets import WebsocketManager
     from . import shell_command
     STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 

@@ -22,12 +22,11 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
+from .common import WebRequest, APIDefinition, APITransport
 from .utils import ServerError, source_info
 from .websockets import (
-    WebRequest,
     WebsocketManager,
     WebSocket,
-    APITransport,
     BridgeSocket
 )
 from streaming_form_data import StreamingFormDataParser
@@ -111,24 +110,6 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
             except Exception:
                 logging.exception(f"Unable to remove rule: {pattern}")
 
-class APIDefinition:
-    def __init__(self,
-                 endpoint: str,
-                 http_uri: str,
-                 jrpc_methods: List[str],
-                 request_methods: Union[str, List[str]],
-                 transports: List[str],
-                 callback: Optional[APICallback],
-                 need_object_parser: bool):
-        self.endpoint = endpoint
-        self.uri = http_uri
-        self.jrpc_methods = jrpc_methods
-        if not isinstance(request_methods, list):
-            request_methods = [request_methods]
-        self.request_methods = request_methods
-        self.supported_transports = transports
-        self.callback = callback
-        self.need_object_parser = need_object_parser
 
 class InternalTransport(APITransport):
     def __init__(self, server: Server) -> None:

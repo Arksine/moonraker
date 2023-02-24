@@ -21,7 +21,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from .klippy_apis import KlippyAPI as APIComp
     GCQueue = Deque[Dict[str, Any]]
     TempStore = Dict[str, Dict[str, Deque[float]]]

@@ -22,7 +22,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..server import Server
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from .database import MoonrakerDatabase
     from .machine import Machine
     from .shell_command import ShellCommandFactory

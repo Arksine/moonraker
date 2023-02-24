@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 from ..utils import Sentinel
-from ..websockets import WebRequest, Subscribable
+from ..common import WebRequest, Subscribable
 
 # Annotation imports
 from typing import (
@@ -21,7 +21,6 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
     from ..klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     _T = TypeVar("_T")

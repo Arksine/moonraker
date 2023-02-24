@@ -29,7 +29,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
 
 class OnOff(str, Enum):
     on: str = "on"

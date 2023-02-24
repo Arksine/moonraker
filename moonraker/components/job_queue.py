@@ -20,7 +20,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from .klippy_apis import KlippyAPI
     from .file_manager.file_manager import FileManager
 

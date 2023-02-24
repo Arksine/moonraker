@@ -40,7 +40,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from ..app import MoonrakerApp
     from ..klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp

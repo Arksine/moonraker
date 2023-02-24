@@ -31,7 +31,7 @@ from typing import (
 if TYPE_CHECKING:
     from .server import Server
     from .app import MoonrakerApp
-    from .websockets import WebRequest, Subscribable
+    from .common import WebRequest, Subscribable
     from .confighelper import ConfigHelper
     from .components.klippy_apis import KlippyAPI
     from .components.file_manager.file_manager import FileManager

@@ -39,7 +39,7 @@ from typing import (
 if TYPE_CHECKING:
     from ...server import Server
     from ...confighelper import ConfigHelper
-    from ...websockets import WebRequest
+    from ...common import WebRequest
     from ...klippy_connection import KlippyConnection
     from ..shell_command import ShellCommandFactory as SCMDComp
     from ..database import MoonrakerDatabase as DBComp

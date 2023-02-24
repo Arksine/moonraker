@@ -38,7 +38,8 @@ from typing import (
     TypeVar,
 )
 if TYPE_CHECKING:
-    from .websockets import WebRequest, WebsocketManager
+    from .common import WebRequest
+    from .websockets import WebsocketManager
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager

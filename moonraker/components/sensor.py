@@ -28,7 +28,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from .mqtt import MQTTClient
 
 SENSOR_UPDATE_TIME = 1.0

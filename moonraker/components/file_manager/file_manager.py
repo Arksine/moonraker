@@ -41,7 +41,7 @@ from typing import (
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
     from ...confighelper import ConfigHelper
-    from ...websockets import WebRequest
+    from ...common import WebRequest
     from ...klippy_connection import KlippyConnection
     from .. import database
     from .. import klippy_apis

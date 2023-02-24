@@ -24,7 +24,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from .server import Server
-    from .websockets import WebRequest
+    from .common import WebRequest
     from .klippy_connection import KlippyConnection
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:

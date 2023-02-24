@@ -28,7 +28,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..websockets import WebRequest
+    from ..common import WebRequest
     from .machine import Machine
     from .klippy_apis import KlippyAPI as APIComp
     from .mqtt import MQTTClient

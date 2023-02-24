@@ -18,7 +18,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..websockets import Subscribable, WebRequest
+from ..common import Subscribable, WebRequest
 
 from typing import (
     TYPE_CHECKING,
