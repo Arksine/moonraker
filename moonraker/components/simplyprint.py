@@ -14,12 +14,11 @@ import pathlib
 import base64
 import tornado.websocket
 from tornado.escape import url_escape
-from ..websockets import Subscribable, WebRequest
-
 import logging.handlers
 import tempfile
 from queue import SimpleQueue
-from loghelper import LocalQueueHandler
+from ..loghelper import LocalQueueHandler
+from ..websockets import Subscribable, WebRequest
 
 from typing import (
     TYPE_CHECKING,
