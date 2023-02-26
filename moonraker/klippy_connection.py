@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.job_state import JobState
+    from .components.database import MoonrakerDatabase as Database
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 # These endpoints are reserved for klippy/moonraker communication only and are
@@ -51,6 +52,7 @@ INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
+SVC_INFO_KEY = "klippy_connection.service_info"
 
 class KlippyConnection:
     def __init__(self, server: Server) -> None:
@@ -129,6 +131,13 @@ class KlippyConnection:
         svc_info = self._service_info
         unit_name = svc_info.get("unit_name", "klipper.service")
         return unit_name.split(".", 1)[0]
+
+    async def component_init(self) -> None:
+        db: Database = self.server.lookup_component('database')
+        machine: Machine = self.server.lookup_component("machine")
+        self._service_info = await db.get_item("moonraker", SVC_INFO_KEY, {})
+        if self._service_info:
+            machine.log_service_info(self._service_info)
 
     async def wait_connected(self) -> bool:
         if (
@@ -261,6 +270,8 @@ class KlippyConnection:
                         "klipper", self._peer_cred["process_id"]
                     )
                     if svc_info != self._service_info:
+                        db: Database = self.server.lookup_component('database')
+                        db.insert_item("moonraker", SVC_INFO_KEY, svc_info)
                         self._service_info = svc_info
                         machine.log_service_info(svc_info)
             self.event_loop.create_task(self._read_stream(reader))
