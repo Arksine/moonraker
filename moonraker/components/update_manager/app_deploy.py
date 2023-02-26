@@ -25,6 +25,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
+    from ...klippy_connection import KlippyConnection as Klippy
     from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
@@ -115,6 +116,20 @@ class AppDeploy(BaseDeploy):
         services: List[str] = config.getlist(
             "managed_services", svc_default, separator=None
         )
+        if self.name in services:
+            machine: Machine = self.server.lookup_component("machine")
+            data_path: str = self.server.get_app_args()["data_path"]
+            asvc = pathlib.Path(data_path).joinpath("moonraker.asvc")
+            if not machine.is_service_allowed(self.name):
+                self.server.add_warning(
+                    f"[{config.get_name()}]: Moonraker is not permitted to "
+                    f"restart service '{self.name}'.  To enable management "
+                    f"of this service add {self.name} to the bottom of the "
+                    f"file {asvc}.  To disable management for this service "
+                    "set 'is_system_service: False' in the configuration "
+                    "for this section."
+                )
+                services.clear()
         for svc in services:
             if svc not in svc_choices:
                 raw = " ".join(services)
@@ -219,9 +234,10 @@ class AppDeploy(BaseDeploy):
     async def reinstall(self):
         raise NotImplementedError
 
-    async def restart_service(self):
+    async def restart_service(self) -> None:
         if not self.managed_services:
             return
+        machine: Machine = self.server.lookup_component("machine")
         is_full = self.cmd_helper.is_full_update()
         for svc in self.managed_services:
             if is_full and svc != self.name:
@@ -233,21 +249,12 @@ class AppDeploy(BaseDeploy):
             if svc == "moonraker":
                 # Launch restart async so the request can return
                 # before the server restarts
-                event_loop = self.server.get_event_loop()
-                event_loop.delay_callback(.1, self._do_restart, svc)
+                machine.restart_moonraker_service()
             else:
-                await self._do_restart(svc)
-
-    async def _do_restart(self, svc_name: str) -> None:
-        machine: Machine = self.server.lookup_component("machine")
-        try:
-            await machine.do_service_action("restart", svc_name)
-        except Exception:
-            if svc_name == "moonraker":
-                # We will always get an error when restarting moonraker
-                # from within the child process, so ignore it
-                return
-            raise self.log_exc("Error restarting service")
+                if svc == "klipper":
+                    kconn: Klippy = self.server.lookup_component("klippy_connection")
+                    svc = kconn.unit_name
+                await machine.do_service_action("restart", svc)
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
