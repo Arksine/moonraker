@@ -48,8 +48,10 @@ DISTRO_ALIASES = [distro.id()]
 DISTRO_ALIASES.extend(distro.like().split())
 
 class AppDeploy(BaseDeploy):
-    def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
-        super().__init__(config, cmd_helper, prefix="Application")
+    def __init__(
+            self, config: ConfigHelper, cmd_helper: CommandHelper, prefix: str
+    ) -> None:
+        super().__init__(config, cmd_helper, prefix=prefix)
         self.config = config
         type_choices = list(TYPE_TO_CHANNEL.keys())
         self.type = config.get('type').lower()

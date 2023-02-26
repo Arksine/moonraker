@@ -91,6 +91,10 @@ class BaseDeploy:
         log_msg = f"{self.prefix}{msg}"
         logging.info(log_msg)
 
+    def log_debug(self, msg: str) -> None:
+        log_msg = f"{self.prefix}{msg}"
+        logging.debug(log_msg)
+
     def notify_status(self, msg: str, is_complete: bool = False) -> None:
         log_msg = f"{self.prefix}{msg}"
         logging.debug(log_msg)

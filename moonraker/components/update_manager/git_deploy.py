@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 class GitDeploy(AppDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
-        super().__init__(config, cmd_helper)
+        super().__init__(config, cmd_helper, "Git Repo")
         self._configure_path(config)
         self._configure_virtualenv(config)
         self._configure_dependencies(config)

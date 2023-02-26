@@ -36,7 +36,7 @@ RINFO_KEYS = [
 
 class ZipDeploy(AppDeploy):
     def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
-        super().__init__(config, cmd_helper)
+        super().__init__(config, cmd_helper, "Zip Dist")
         self._configure_path(config)
         self._configure_virtualenv(config)
         self._configure_dependencies(config, node_only=True)
