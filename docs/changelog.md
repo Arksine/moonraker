@@ -6,7 +6,16 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
-- None
+### Fixed
+
+- **simplyprint**:  Fixed import error preventing the component from loading.
+- **update_manager**:  Moonraker will now restart the correct "moonraker" and
+  "klipper" services if they are not the default values.
+
+### Changed
+
+- **update_manager**:  It is now required that an application be "allowed"
+  for Moonraker to restart it after an update.
 
 ## [0.8.0] - 2023-02-23
 
