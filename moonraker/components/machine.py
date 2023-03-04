@@ -64,7 +64,8 @@ DEFAULT_ALLOWED_SERVICES = [
     "moonraker-obico",
     "sonar",
     "crowsnest",
-    "octoeverywhere"
+    "octoeverywhere",
+    "ratos-configurator"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
