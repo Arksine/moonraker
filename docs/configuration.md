@@ -2052,18 +2052,24 @@ domain: switch
 
 
 ### `[notifier]`
-Enables the notification service. Multiple "notifiers" may be configured,
-each with their own section, ie: `[notifier my_discord_server]`, `[notifier my_phone]`.
 
-All notifiers require an url for a service to be set up. Moonraker uses [Apprise](https://github.com/caronc/apprise) internally.
-You can find the available services and their corresponding urls here: [https://github.com/caronc/apprise/wiki](https://github.com/caronc/apprise/wiki).
+Enables the notification service. Multiple "notifiers" may be configured,
+each with their own section, ie: `[notifier my_discord_server]`,
+`[notifier my_phone]`.
+
+All notifiers require an url for a service to be set up. Moonraker depends on
+[Apprise](https://github.com/caronc/apprise) to emit notifications.
+Available services and their corresponding at urls may be found on the
+[Apprise Wiki](https://github.com/caronc/apprise/wiki).
 
 ```ini
 # moonraker.conf
 
 [notifier telegram]
 url: tgram://{bottoken}/{ChatID}
-#   The url for your notifier. This URL accepts Jinja2 templates, so you can use [secrets] if you want.
+#   The url for your notifier. This URL accepts Jinja2 templates,
+#   so you can use [secrets] if you want.  This parameter must be
+#   provided.
 events: *
 #   The events this notifier should trigger to. '*' means all events.
 #   You can use multiple events, comma separated.
@@ -2074,18 +2080,52 @@ events: *
 #      cancelled
 #      paused
 #      resumed
+#   This parameter must be provided.
 body: "Your printer status has changed to {event_name}"
-#   The body of the notification. This option accepts Jinja2 templates.
-#   You can use {event_name} to print the current event trigger name. And {event_args} for
-#   the arguments that came with it. When using the notify functionality in a macro context, you can
-#   use {event_message} to print out your message.
+#   The body of the notification. This option accepts Jinja2 templates, where
+#   the template is passed a context containing the following fields:
+#      event_name: The name of the event that triggered the notification
+#                  (ie: started, complete, error, etc)
+#      event_args: A list containing the arguments passed to the event.
+#                  See the "Tip" below for additional details on this field.
+#      event_message: An additional message passed to the notification when
+#                     triggered.  This is commonly used when the notification
+#                     is received from Klippy using a gcode_macro.
+#   The default is a body containining the "name" of the notification as entered
+#   in the section header.
 title:
-#   The optional title of the notification. Just as the body, this option accepts Jinja2 templates.
+#   The optional title of the notification. This option accepts Jinja2 templates,
+#   the template will receive a context with the same fields as the body.  The
+#   default is an empty string as the title.
 attach:
-#   An optional attachment. Can be an url of a webcam for example. Note: this isn't available for all
-#   notification services. You can check if it's supported on the Apprise Wiki. Be aware that links in
-#   your internal network can only be viewed within your network.
+#   One or more items to attach to the notification. This may be a path to a
+#   local file or a url (such as a webcam snapshot).  Multiple attachments must be
+#   separated by a newline.  This option accepts Jinja2 templates, the tempalte
+#   will recieve the same context as the "body" and "title" options.  The default
+#   is no attachment will be sent with the notification.
+#
+#   Note: Attachments are not available for all notification services, you can
+#   check if it's supported on the Apprise Wiki.  Be aware that links to items
+#   hosted on your local network can only be viewed within that network.
 ```
+
+!!! Tip
+    The `event_args` field of the Jinja2 context passed to templates in
+    this section receives a list of "arguments" passed to the event.  For
+    those familiar with Python this list is known as "variable arguments".
+    Currently the notifier only supports two kinds of events: those
+    triggered by a change in the job state and those triggered from a remote
+    method call frm a `gcode_macro`.
+
+    For `remote method` events the `event_args` field will always be
+    an empty list.  For `job state` events the `event_args` field will
+    contain two items. The first item (`event_args[0]`) contains the
+    job state recorded prior to the event, the second item (`event_args[1]`)
+    contains the current job state.  In most cases users will be interested
+    in the current job state (`event_args[1]`).
+
+    The `job state` is a dict that contains the values reported by
+    Klipper's [print_stats](printer_objects.md#print_stats) object.
 
 #### An example:
 ```ini

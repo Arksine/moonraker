@@ -236,7 +236,11 @@ The `virtual_sdcard` object reports the state of the virtual sdcard:
     "print_duration": 0.0,
     "filament_used": 0.0,
     "state": "standby",
-    "message": ""
+    "message": "",
+    "info": {
+        "total_layer": null,
+        "current_layer": null
+    }
 }
 ```
 The `print_stats` object reports `virtual_sdcard` print state:
@@ -260,6 +264,17 @@ The `print_stats` object reports `virtual_sdcard` print state:
     - `"error"` - Note that if an error is detected the print will abort
 - `message`:  If an error is detected, this field contains the error
   message generated.  Otherwise it will be a null string.
+- `info`: This is a dict containing information about the print provided by the
+  slicer.  Currently this is limited to the `total_layer` and `current_layer` values.
+  Note that these values are set by the
+  [SET_PRINT_STATS_INFO](https://www.klipper3d.org/G-Codes.html#set_print_stats_info)
+  gcode command.  It is necessary to configure the slicer to include this command
+  in the print.  `SET_PRINT_STATS_INFO TOTAL_LAYER=total_layer_count` should
+  be called in the slicer's "start gcode" to initalize the total layer count.
+  `SET_PRINT_STATS_INFO CURRENT_LAYER=current_layer` should be called in the
+  slicer's "on layer change" gcode.  The user must substitute the
+  `total_layer_count` and `current_layer` with the appropriate
+  "placeholder syntax" for the slicer.
 
 !!! Note
     After a print has started all of the values above will persist until
