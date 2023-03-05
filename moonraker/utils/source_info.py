@@ -28,16 +28,17 @@ def is_git_repo(src_path: Optional[pathlib.Path] = None) -> bool:
 
 def is_dist_package(src_path: Optional[pathlib.Path] = None) -> bool:
     if src_path is None:
-        # Fetch dist info for moonraker.  This should be the most reliable
-        # method
+        # Check Moonraker's source path
         src_path = source_path()
-        site_dirs = site.getsitepackages()
-        return str(src_path) in site_dirs
-    else:
-        # Make an assumption based on the source path.  If its name is
-        # site-packages or dist-packages then presumably it is an
-        # installed package
-        return src_path.name in ["dist-packages", "site-packages"]
+        if hasattr(site, "getsitepackages"):
+            # The site module is present, get site packages for Moonraker's venv.
+            # This is more "correct" than the fallback method.
+            site_dirs = site.getsitepackages()
+            return str(src_path) in site_dirs
+    # Make an assumption based on the source path.  If its name is
+    # site-packages or dist-packages then presumably it is an
+    # installed package
+    return src_path.name in ["dist-packages", "site-packages"]
 
 def package_version() -> Optional[str]:
     try:
