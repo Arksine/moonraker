@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import apprise
 import logging
+import pathlib
+import re
 
 # Annotation imports
 from typing import (
@@ -20,6 +22,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
+    from .file_manager.file_manager import FileManager
     from .http_client import HttpClient
     from .klippy_apis import KlippyAPI as APIComp
 
@@ -163,7 +166,6 @@ class NotifierEvent:
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:
-
         self.config = config
         name_parts = config.get_name().split(maxsplit=1)
         if len(name_parts) != 2:
@@ -171,26 +173,16 @@ class NotifierInstance:
         self.server = config.get_server()
         self.name = name_parts[1]
         self.apprise = apprise.Apprise()
-        self.warned = False
-
-        self.attach_requires_file_system_check = True
-        self.attach = config.get("attach", None)
-        if self.attach is None or \
-            (self.attach.startswith("http://") or
-             self.attach.startswith("https://")):
-            self.attach_requires_file_system_check = False
-
-        url_template = config.gettemplate('url')
+        self.attach = config.gettemplate("attach", None)
+        url_template = config.gettemplate("url")
         self.url = url_template.render()
 
-        if len(self.url) < 2:
+        if re.match(r"\w+?://", self.url) is None:
             raise config.error(f"Invalid url for: {config.get_name()}")
 
-        self.title = config.gettemplate('title', None)
+        self.title = config.gettemplate("title", None)
         self.body = config.gettemplate("body", None)
-
         self.events: List[str] = config.getlist("events", separator=",")
-
         self.apprise.add(self.url)
 
     def as_dict(self):
@@ -206,7 +198,6 @@ class NotifierInstance:
     async def notify(
         self, event_name: str, event_args: List, message: str = ""
     ) -> None:
-
         context = {
             "event_name": event_name,
             "event_args": event_args,
@@ -221,22 +212,46 @@ class NotifierInstance:
         )
 
         # Verify the attachment
-        if self.attach_requires_file_system_check and self.attach is not None:
-            fm = self.server.lookup_component("file_manager")
-            if not fm.can_access_path(self.attach):
-                if not self.warned:
-                    self.server.add_warning(
-                        f"Attachment of notifier '{self.name}' is not "
-                        "valid. The location of the "
-                        "attachment is not "
-                        "accessible.")
-                    self.warned = True
+        attachments: List[str] = []
+        if self.attach is not None:
+            fm: FileManager = self.server.lookup_component("file_manager")
+            try:
+                rendered = self.attach.render(context)
+            except self.server.error:
+                logging.exception(f"notifier {self.name}: Failed to render attachment")
+                self.server.add_warning(
+                    f"[notifier {self.name}]: The attachment is not valid. The "
+                    "template failed to render.",
+                    f"notifier {self.name}"
+                )
                 self.attach = None
-
+            else:
+                for item in rendered.splitlines():
+                    item = item.strip()
+                    if not item:
+                        continue
+                    if re.match(r"https?://", item) is not None:
+                        # Attachment is a url, system check not necessary
+                        attachments.append(item)
+                        continue
+                    attach_path = pathlib.Path(item).expanduser().resolve()
+                    if not attach_path.is_file():
+                        self.server.add_warning(
+                            f"[notifier {self.name}]: Invalid attachment detected, "
+                            f"file does not exist: {attach_path}.",
+                            f"notifier {self.name}"
+                        )
+                    elif not fm.can_access_path(attach_path):
+                        self.server.add_warning(
+                            f"[notifier {self.name}]: Invalid attachment detected, "
+                            f"no read permission for the file {attach_path}.",
+                            f"notifier {self.name}"
+                        )
+                    else:
+                        attachments.append(str(attach_path))
         await self.apprise.async_notify(
-            rendered_body.strip(),
-            rendered_title.strip(),
-            attach=self.attach
+            rendered_body.strip(), rendered_title.strip(),
+            attach=None if not attachments else attachments
         )
 
     def get_name(self) -> str:
