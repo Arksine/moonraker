@@ -3,7 +3,7 @@
 
 [[package]]
 name = "apprise"
-version = "1.2.1"
+version = "1.3.0"
 requires_python = ">=3.6"
 summary = "Push Notifications that work with just about every platform!"
 dependencies = [
@@ -243,12 +243,12 @@ summary = "Backport of pathlib-compatible object wrapper for zip files"
 
 [metadata]
 lock_version = "4.1"
-content_hash = "sha256:0e54d8cb135fb11f1588c0d0208221cfcdbae6d54ed3ffa43012ec460bae6b34"
+content_hash = "sha256:bd19ec8276f3edb6593bc16f7f45f5eac908f900934ae45ac6b33284da7e370f"
 
 [metadata.files]
-"apprise 1.2.1" = [
-    {url = "https://files.pythonhosted.org/packages/a4/3a/52ec5cf9ed71e3a068a208603e38471b686a59b548dda771f2975166e4a9/apprise-1.2.1-py2.py3-none-any.whl", hash = "sha256:679fb5d6232ec7748eef308bda9fe0f0707fa5e48eab247bfde83c3a024a21d1"},
-    {url = "https://files.pythonhosted.org/packages/d2/04/4285d864569dde4eece4b0e7bfa447a68e99240898537b10926cb5a53145/apprise-1.2.1.tar.gz", hash = "sha256:67e0c227eecee260000980dbbf8ba1e5eebdbe494f4730808297c9e645c03579"},
+"apprise 1.3.0" = [
+    {url = "https://files.pythonhosted.org/packages/52/27/150411d166042b7cf49a4b1747e603017069e572a0a9465e621de4f22b71/apprise-1.3.0-py2.py3-none-any.whl", hash = "sha256:ef0c1413a32182272b6ed60ddcee6057744dc683725651015332e063b9a6a4ad"},
+    {url = "https://files.pythonhosted.org/packages/e2/81/b25a7dc3fe2cdcfc5b2bc12d459f80a73b9ec4ab087a26cd99a675db75eb/apprise-1.3.0.tar.gz", hash = "sha256:2c50c19a5dd41317b1f659c52b21a990febe6c15e08464228a1ce8e6098f11bf"},
 ]
 "async-timeout 4.0.2" = [
     {url = "https://files.pythonhosted.org/packages/54/6e/9678f7b2993537452710ffb1750c62d2c26df438aa621ad5fa9d1507a43a/async-timeout-4.0.2.tar.gz", hash = "sha256:2163e1640ddb52b7a8c80d0a67a08587e5d245cc9c553a74a847056bc2976b15"},
