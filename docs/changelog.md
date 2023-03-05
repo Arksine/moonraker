@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
+### Added
+- **notifier**: The `attach` option now supports Jinja2 templates.
+- **notifier**: The `attach` option may now contain multiple attachments,
+  each separated by a newline.
+
 ### Fixed
 
 - **simplyprint**:  Fixed import error preventing the component from loading.
@@ -14,6 +19,8 @@ The format is based on [Keep a Changelog].
 
 ### Changed
 
+- Bumped Apprise to version `1.3.0`.
+- **machine**: Added `ratos-configurator` to list of default allowed services
 - **update_manager**:  It is now required that an application be "allowed"
   for Moonraker to restart it after an update.
 
