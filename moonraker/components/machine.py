@@ -20,8 +20,9 @@ import shutil
 import distro
 import tempfile
 import getpass
-from confighelper import FileSourceWrapper
-from utils import MOONRAKER_PATH
+import configparser
+from ..confighelper import FileSourceWrapper
+from ..utils import source_info
 
 # Annotation imports
 from typing import (
@@ -38,10 +39,10 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from app import MoonrakerApp
-    from klippy_connection import KlippyConnection
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
+    from ..app import MoonrakerApp
+    from ..klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager
@@ -54,10 +55,17 @@ if TYPE_CHECKING:
     SudoReturn = Union[Awaitable[Tuple[str, bool]], Tuple[str, bool]]
     SudoCallback = Callable[[], SudoReturn]
 
-ALLOWED_SERVICES = [
-    "moonraker", "klipper", "webcamd", "MoonCord",
-    "KlipperScreen", "moonraker-telegram-bot",
-    "sonar", "crowsnest"
+DEFAULT_ALLOWED_SERVICES = [
+    "klipper_mcu",
+    "webcamd",
+    "MoonCord",
+    "KlipperScreen",
+    "moonraker-telegram-bot",
+    "moonraker-obico",
+    "sonar",
+    "crowsnest",
+    "octoeverywhere",
+    "ratos-configurator"
 ]
 CGROUP_PATH = "/proc/1/cgroup"
 SCHED_PATH = "/proc/1/sched"
@@ -80,6 +88,8 @@ SERVICE_PROPERTIES = [
 class Machine:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self._allowed_services: List[str] = []
+        self._init_allowed_services()
         dist_info: Dict[str, Any]
         dist_info = {'name': distro.name(pretty=True)}
         dist_info.update(distro.info())
@@ -100,19 +110,23 @@ class Machine:
             'cpu_info': self._get_cpu_info(),
             'sd_info': self._get_sdcard_info(),
             'distribution': dist_info,
-            'virtualization': self._check_inside_container()
+            'virtualization': self._check_inside_container(),
+            'network': {},
+            'canbus': {}
         }
         self._update_log_rollover(log=True)
         providers: Dict[str, type] = {
             "none": BaseProvider,
             "systemd_cli": SystemdCliProvider,
-            "systemd_dbus": SystemdDbusProvider
+            "systemd_dbus": SystemdDbusProvider,
+            "supervisord_cli": SupervisordCliProvider
         }
         self.provider_type = config.get('provider', 'systemd_dbus')
         pclass = providers.get(self.provider_type)
         if pclass is None:
             raise config.error(f"Invalid Provider: {self.provider_type}")
         self.sys_provider: BaseProvider = pclass(config)
+        self.system_info["provider"] = self.provider_type
         logging.info(f"Using System Provider: {self.provider_type}")
         self.validator = InstallValidator(config)
         self.sudo_requests: List[Tuple[SudoCallback, str]] = []
@@ -151,22 +165,46 @@ class Machine:
         # IP network shell commands
         shell_cmd: SCMDComp = self.server.load_component(
             config, 'shell_command')
-        self.addr_cmd = shell_cmd.build_shell_command("ip -json address")
+        self.addr_cmd = shell_cmd.build_shell_command("ip -json -det address")
         iwgetbin = "/sbin/iwgetid"
         if not pathlib.Path(iwgetbin).exists():
             iwgetbin = "iwgetid"
         self.iwgetid_cmd = shell_cmd.build_shell_command(iwgetbin)
         self.init_evt = asyncio.Event()
 
+    def _init_allowed_services(self) -> None:
+        app_args = self.server.get_app_args()
+        data_path = app_args["data_path"]
+        fpath = pathlib.Path(data_path).joinpath("moonraker.asvc")
+        fm: FileManager = self.server.lookup_component("file_manager")
+        fm.add_reserved_path("allowed_services", fpath, False)
+        try:
+            if not fpath.exists():
+                fpath.write_text("\n".join(DEFAULT_ALLOWED_SERVICES))
+            data = fpath.read_text()
+        except Exception:
+            logging.exception("Failed to read allowed_services.txt")
+            self._allowed_services = DEFAULT_ALLOWED_SERVICES
+        else:
+            svcs = [svc.strip() for svc in data.split("\n") if svc.strip()]
+            for svc in svcs:
+                if svc.endswith(".service"):
+                    svc = svc.rsplit(".", 1)[0]
+                if svc not in self._allowed_services:
+                    self._allowed_services.append(svc)
+
     def _update_log_rollover(self, log: bool = False) -> None:
         sys_info_msg = "\nSystem Info:"
         for header, info in self.system_info.items():
             sys_info_msg += f"\n\n***{header}***"
             if not isinstance(info, dict):
-                sys_info_msg += f"\n {repr(info)}"
+                sys_info_msg += f"\n  {repr(info)}"
             else:
                 for key, val in info.items():
                     sys_info_msg += f"\n  {key}: {val}"
+        sys_info_msg += f"\n\n***Allowed Services***"
+        for svc in self._allowed_services:
+            sys_info_msg += f"\n  {svc}"
         self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
 
     @property
@@ -178,6 +216,13 @@ class Machine:
         svc_info = self.moonraker_service_info
         unit_name = svc_info.get("unit_name", "moonraker.service")
         return unit_name.split(".", 1)[0]
+
+    def is_service_allowed(self, service: str) -> bool:
+        return (
+            service in self._allowed_services or
+            re.match(r"moonraker[_-]?\d*", service) is not None or
+            re.match(r"klipper[_-]?\d*", service) is not None
+        )
 
     def validation_enabled(self) -> bool:
         return self.validator.validation_enabled
@@ -194,13 +239,15 @@ class Machine:
     def get_moonraker_service_info(self):
         return dict(self.moonraker_service_info)
 
-    async def wait_for_init(self, timeout: float = None) -> None:
+    async def wait_for_init(
+        self, timeout: Optional[float] = None
+    ) -> None:
         try:
             await asyncio.wait_for(self.init_evt.wait(), timeout)
         except asyncio.TimeoutError:
             pass
 
-    async def component_init(self):
+    async def component_init(self) -> None:
         await self.validator.validation_init()
         await self.sys_provider.initialize()
         if not self.inside_container:
@@ -214,7 +261,7 @@ class Machine:
         self.system_info['available_services'] = avail_list
         self.system_info['service_state'] = available_svcs
         svc_info = await self.sys_provider.extract_service_info(
-            "moonraker", os.getpid(), SERVICE_PROPERTIES
+            "moonraker", os.getpid()
         )
         self.moonraker_service_info = svc_info
         self.log_service_info(svc_info)
@@ -229,7 +276,8 @@ class Machine:
     async def _handle_machine_request(self, web_request: WebRequest) -> str:
         ep = web_request.get_endpoint()
         if self.inside_container:
-            virt_id = self.system_info['virtualization'].get('virt_id', "none")
+            virt_id = self.system_info['virtualization'].get(
+                'virt_identifier', "none")
             raise self.server.error(
                 f"Cannot {ep.split('/')[-1]} from within a "
                 f"{virt_id} container")
@@ -256,7 +304,7 @@ class Machine:
         self.server.get_event_loop().create_task(wrapper())
 
     async def _handle_service_request(self, web_request: WebRequest) -> str:
-        name: str = web_request.get('service')
+        name: str = web_request.get_str('service')
         action = web_request.get_endpoint().split('/')[-1]
         if name == self.unit_name:
             if action != "restart":
@@ -266,7 +314,7 @@ class Machine:
         elif self.sys_provider.is_service_available(name):
             await self.do_service_action(action, name)
         else:
-            if name in ALLOWED_SERVICES:
+            if name in self._allowed_services:
                 raise self.server.error(f"Service '{name}' not installed")
             raise self.server.error(
                 f"Service '{name}' not allowed")
@@ -342,7 +390,7 @@ class Machine:
     async def _handle_sudo_info(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
-        check_access = web_request.get("check_access", False)
+        check_access = web_request.get_boolean("check_access", False)
         has_sudo: Optional[bool] = None
         if check_access:
             has_sudo = await self.check_sudo_access()
@@ -533,6 +581,9 @@ class Machine:
                         self.inside_container = True
                         virt_type = "container"
                         virt_id = ct
+                        logging.info(
+                            f"Container detected via cgroup: {ct}"
+                        )
                         break
             except Exception:
                 logging.exception(f"Error reading {CGROUP_PATH}")
@@ -553,6 +604,9 @@ class Machine:
                             os.path.exists("/.dockerinit")
                         ):
                             virt_id = "docker"
+                        logging.info(
+                            f"Container detected via sched: {virt_id}"
+                        )
                 except Exception:
                     logging.exception(f"Error reading {SCHED_PATH}")
         return {
@@ -567,32 +621,45 @@ class Machine:
         if sequence % NETWORK_UPDATE_SEQUENCE:
             return
         network: Dict[str, Any] = {}
+        canbus: Dict[str, Any] = {}
         try:
             # get network interfaces
             resp = await self.addr_cmd.run_with_response(log_complete=False)
-            decoded = json.loads(resp)
+            decoded: List[Dict[str, Any]] = json.loads(resp)
             for interface in decoded:
-                if (
-                    interface['operstate'] != "UP" or
-                    interface['link_type'] != "ether" or
-                    'address' not in interface
-                ):
+                if interface['operstate'] != "UP":
                     continue
-                addresses: List[Dict[str, Any]] = [
-                    {
-                        'family': IP_FAMILIES[addr['family']],
-                        'address': addr['local'],
-                        'is_link_local': addr.get('scope', "") == "link"
+                if interface['link_type'] == "can":
+                    infodata: dict = interface.get(
+                        "linkinfo", {}).get("info_data", {})
+                    canbus[interface['ifname']] = {
+                        'tx_queue_len': interface['txqlen'],
+                        'bitrate': infodata.get("bittiming", {}).get(
+                            "bitrate", -1
+                        ),
+                        'driver': infodata.get("bittiming_const", {}).get(
+                            "name", "unknown"
+                        )
                     }
-                    for addr in interface.get('addr_info', [])
-                    if 'family' in addr and 'local' in addr
-                ]
-                if not addresses:
-                    continue
-                network[interface['ifname']] = {
-                    'mac_address': interface['address'],
-                    'ip_addresses': addresses
-                }
+                elif (
+                    interface['link_type'] == "ether" and
+                    'address' in interface
+                ):
+                    addresses: List[Dict[str, Any]] = [
+                        {
+                            'family': IP_FAMILIES[addr['family']],
+                            'address': addr['local'],
+                            'is_link_local': addr.get('scope', "") == "link"
+                        }
+                        for addr in interface.get('addr_info', [])
+                        if 'family' in addr and 'local' in addr
+                    ]
+                    if not addresses:
+                        continue
+                    network[interface['ifname']] = {
+                        'mac_address': interface['address'],
+                        'ip_addresses': addresses
+                    }
         except Exception:
             logging.exception("Error processing network update")
             return
@@ -602,6 +669,7 @@ class Machine:
             if notify:
                 self.server.send_event("machine:net_state_changed", network)
         self.system_info['network'] = network
+        self.system_info['canbus'] = canbus
 
     async def get_public_network(self) -> Dict[str, Any]:
         wifis = await self._get_wifi_interfaces()
@@ -697,7 +765,8 @@ class Machine:
         if not svc_info:
             return
         name = svc_info.get("unit_name", "unknown")
-        msg = f"\nSystemd unit {name}:"
+        manager = svc_info.get("manager", "systemd").capitalize()
+        msg = f"\n{manager} unit {name}:"
         for key, val in svc_info.items():
             if key == "properties":
                 msg += "\nProperties:"
@@ -710,6 +779,14 @@ class Machine:
 class BaseProvider:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.shutdown_action = config.get("shutdown_action", "poweroff")
+        self.shutdown_action = self.shutdown_action.lower()
+        if self.shutdown_action not in ["halt", "poweroff"]:
+            raise config.error(
+                "Section [machine], Option 'shutdown_action':"
+                f"Invalid value '{self.shutdown_action}', must be "
+                "'halt' or 'poweroff'"
+            )
         self.available_services: Dict[str, Dict[str, str]] = {}
         self.shell_cmd: SCMDComp = self.server.load_component(
             config, 'shell_command')
@@ -722,16 +799,16 @@ class BaseProvider:
         return await machine.exec_sudo_command(command)
 
     async def shutdown(self) -> None:
-        await self._exec_sudo_command(f"shutdown now")
+        await self._exec_sudo_command(f"systemctl {self.shutdown_action}")
 
     async def reboot(self) -> None:
-        await self._exec_sudo_command(f"shutdown -r now")
+        await self._exec_sudo_command("systemctl reboot")
 
     async def do_service_action(self,
                                 action: str,
                                 service_name: str
                                 ) -> None:
-        raise self.server.error("Serice Actions Not Available", 503)
+        raise self.server.error("Service Actions Not Available", 503)
 
     async def check_virt_status(self) -> Dict[str, Any]:
         return {
@@ -746,7 +823,11 @@ class BaseProvider:
         return self.available_services
 
     async def extract_service_info(
-        self, service: str, pid: int, properties: List[str], raw: bool = False
+        self,
+        service: str,
+        pid: int,
+        properties: Optional[List[str]] = None,
+        raw: bool = False
     ) -> Dict[str, Any]:
         return {}
 
@@ -804,7 +885,8 @@ class SystemdCliProvider(BaseProvider):
             'virt_identifier': virt_id
         }
 
-    async def _detect_active_services(self):
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
         try:
             resp: str = await self.shell_cmd.exec_cmd(
                 "systemctl list-units --all --type=service --plain"
@@ -816,12 +898,11 @@ class SystemdCliProvider(BaseProvider):
             services = []
         for svc in services:
             sname = svc.rsplit('.', 1)[0]
-            for allowed in ALLOWED_SERVICES:
-                if sname.startswith(allowed):
-                    self.available_services[sname] = {
-                        'active_state': "unknown",
-                        'sub_state': "unknown"
-                    }
+            if machine.is_service_allowed(sname):
+                self.available_services[sname] = {
+                    'active_state': "unknown",
+                    'sub_state': "unknown"
+                }
 
     async def _update_service_status(self,
                                      sequence: int,
@@ -852,11 +933,13 @@ class SystemdCliProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             resp: str = await self.shell_cmd.exec_cmd(
                 f"systemctl status {pid}"
@@ -864,6 +947,7 @@ class SystemdCliProvider(BaseProvider):
             unit_name = resp.split(maxsplit=2)[1]
             service_info["unit_name"] = unit_name
             service_info["is_default"] = True
+            service_info["manager"] = "systemd"
             if unit_name != expected_name:
                 service_info["is_default"] = False
                 logging.info(
@@ -876,7 +960,7 @@ class SystemdCliProvider(BaseProvider):
                 timeout=10.
             )
             raw_props: Dict[str, Any] = {}
-            lines = [p.strip() for p in props.split("\n") if p.strip]
+            lines = [p.strip() for p in props.split("\n") if p.strip()]
             for line in lines:
                 parts = line.split("=", 1)
                 if len(parts) == 2:
@@ -937,15 +1021,26 @@ class SystemdDbusProvider(BaseProvider):
             "org.freedesktop.systemd1.manage-units",
             "System Service Management (start, stop, restart) "
             "will be disabled")
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off",
-            "The shutdown API will be disabled"
-        )
-        await self.dbus_mgr.check_permission(
-            "org.freedesktop.login1.power-off-multiple-sessions",
-            "The shutdown API will be disabled if multiple user "
-            "sessions are open."
-        )
+        if self.shutdown_action == "poweroff":
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.power-off-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
+        else:
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt",
+                "The shutdown API will be disabled"
+            )
+            await self.dbus_mgr.check_permission(
+                "org.freedesktop.login1.halt-multiple-sessions",
+                "The shutdown API will be disabled if multiple user "
+                "sessions are open."
+            )
         try:
             # Get the login manaager interface
             self.login_mgr = await self.dbus_mgr.get_interface(
@@ -979,7 +1074,10 @@ class SystemdDbusProvider(BaseProvider):
     async def shutdown(self) -> None:
         if self.login_mgr is None:
             await super().shutdown()
-        await self.login_mgr.call_power_off(False)  # type: ignore
+        if self.shutdown_action == "poweroff":
+            await self.login_mgr.call_power_off(False)  # type: ignore
+        else:
+            await self.login_mgr.call_halt(False)  # type: ignore
 
     async def do_service_action(self,
                                 action: str,
@@ -1032,11 +1130,13 @@ class SystemdDbusProvider(BaseProvider):
     async def _detect_active_services(self) -> None:
         # Get loaded service
         mgr = self.systemd_mgr
-        patterns = [f"{svc}*.service" for svc in ALLOWED_SERVICES]
-        units = await mgr.call_list_units_by_patterns(  # type: ignore
-            ["loaded"], patterns)
+        machine: Machine = self.server.lookup_component("machine")
+        units: List[str]
+        units = await mgr.call_list_units_filtered(["loaded"])  # type: ignore
         for unit in units:
             name: str = unit[0].split('.')[0]
+            if not machine.is_service_allowed(name):
+                continue
             state: str = unit[3]
             substate: str = unit[4]
             dbus_path: str = unit[6]
@@ -1092,7 +1192,7 @@ class SystemdDbusProvider(BaseProvider):
         self,
         service_name: str,
         pid: int,
-        properties: List[str],
+        properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
         if not hasattr(self, "systemd_mgr"):
@@ -1100,6 +1200,8 @@ class SystemdDbusProvider(BaseProvider):
         mgr = self.systemd_mgr
         service_info: Dict[str, Any] = {}
         expected_name = f"{service_name}.service"
+        if properties is None:
+            properties = SERVICE_PROPERTIES
         try:
             dbus_path: str
             dbus_path = await mgr.call_get_unit_by_pid(pid)  # type: ignore
@@ -1111,6 +1213,7 @@ class SystemdDbusProvider(BaseProvider):
             unit_name = await unit_intf.get_id()  # type: ignore
             service_info["unit_name"] = unit_name
             service_info["is_default"] = True
+            service_info["manager"] = "systemd"
             if unit_name != expected_name:
                 service_info["is_default"] = False
                 logging.info(
@@ -1155,6 +1258,202 @@ class SystemdDbusProvider(BaseProvider):
             processed[key] = val
         return processed
 
+# for docker klipper-moonraker image multi-service managing
+# since in container, all command is launched by normal user,
+# sudo_cmd is not needed.
+class SupervisordCliProvider(BaseProvider):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        self.spv_conf: str = config.get("supervisord_config_path", "")
+
+    async def initialize(self) -> None:
+        await self._detect_active_services()
+        keys = ' '.join(list(self.available_services.keys()))
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} status {keys}"
+        else:
+            cmd = f"supervisorctl status {keys}"
+        self.svc_cmd = self.shell_cmd.build_shell_command(cmd)
+        await self._update_service_status(0, notify=True)
+        pstats: ProcStats = self.server.lookup_component('proc_stats')
+        pstats.register_stat_callback(self._update_service_status)
+
+    async def do_service_action(
+        self, action: str, service_name: str
+    ) -> None:
+        # slow reaction for supervisord, timeout set to 6.0
+        await self._exec_supervisorctl_command(
+            f"{action} {service_name}", timeout=6.
+        )
+
+    async def _exec_supervisorctl_command(
+        self,
+        args: str,
+        tries: int = 1,
+        timeout: float = 2.,
+        success_codes: Optional[List[int]] = None
+    ) -> str:
+        if self.spv_conf:
+            cmd = f"supervisorctl -c {self.spv_conf} {args}"
+        else:
+            cmd = f"supervisorctl {args}"
+        return await self.shell_cmd.exec_cmd(
+            cmd, proc_input=None, log_complete=False, retries=tries,
+            timeout=timeout, success_codes=success_codes
+        )
+
+    def _get_active_state(self, sub_state: str) -> str:
+        if sub_state == "stopping":
+            return "deactivating"
+        elif sub_state == "running":
+            return "active"
+        else:
+            return "inactive"
+
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        units: Dict[str, Any] = await self._get_process_info()
+        for unit, info in units.items():
+            if machine.is_service_allowed(unit):
+                self.available_services[unit] = {
+                    'active_state': self._get_active_state(info["state"]),
+                    'sub_state': info["state"]
+                }
+
+    async def _get_process_info(
+        self, process_names: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        units: Dict[str, Any] = {}
+        cmd = "status"
+        if process_names is not None:
+            cmd = f"status {' '.join(process_names)}"
+        try:
+            resp = await self._exec_supervisorctl_command(
+                cmd, timeout=6., success_codes=[0, 3]
+            )
+            lines = [line.strip() for line in resp.split("\n") if line.strip()]
+        except Exception:
+            return {}
+        for line in lines:
+            parts = line.split()
+            name: str = parts[0]
+            state: str = parts[1].lower()
+            if state == "running" and len(parts) >= 6:
+                units[name] = {
+                    "state": state,
+                    "pid": int(parts[3].rstrip(",")),
+                    "uptime": parts[5]
+                }
+            else:
+                units[name] = {
+                    "state": parts[1].lower()
+                }
+        return units
+
+    async def _update_service_status(self,
+                                     sequence: int,
+                                     notify: bool = True
+                                     ) -> None:
+        if sequence % 2:
+            # Update every other sequence
+            return
+        svcs = list(self.available_services.keys())
+        try:
+            # slow reaction for supervisord, timeout set to 6.0
+            resp = await self.svc_cmd.run_with_response(
+                log_complete=False, timeout=6., success_codes=[0, 3]
+            )
+            resp_l = resp.strip().split("\n")  # drop lengend
+            for svc, state in zip(svcs, resp_l):
+                sub_state = state.split()[1].lower()
+                new_state: Dict[str, str] = {
+                    'active_state': self._get_active_state(sub_state),
+                    'sub_state': sub_state
+                }
+                if self.available_services[svc] != new_state:
+                    self.available_services[svc] = new_state
+                    if notify:
+                        self.server.send_event(
+                            "machine:service_state_changed",
+                            {svc: new_state})
+        except Exception:
+            logging.exception("Error processing service state update")
+
+    async def _find_service_by_pid(
+        self, expected_name: str, pid: int
+    ) -> Dict[str, Any]:
+        service_info: Dict[str, Any] = {}
+        for _ in range(5):
+            proc_info = await self._get_process_info(
+                list(self.available_services.keys())
+            )
+            service_info["unit_name"] = expected_name
+            service_info["is_default"] = True
+            service_info["manager"] = "supervisord"
+            need_retry = False
+            for name, info in proc_info.items():
+                if "pid" not in info:
+                    need_retry |= info["state"] == "starting"
+                elif info["pid"] == pid:
+                    if name != expected_name:
+                        service_info["unit_name"] = name
+                        service_info["is_default"] = False
+                        logging.info(
+                            "Detected alternate unit name for "
+                            f"{expected_name}: {name}"
+                        )
+                    return service_info
+            if need_retry:
+                await asyncio.sleep(1.)
+            else:
+                break
+        return {}
+
+    async def extract_service_info(
+        self,
+        service: str,
+        pid: int,
+        properties: Optional[List[str]] = None,
+        raw: bool = False
+    ) -> Dict[str, Any]:
+        service_info = await self._find_service_by_pid(service, pid)
+        if not service_info:
+            logging.info(
+                f"Unable to locate service info for {service}, pid: {pid}"
+            )
+            return {}
+        # locate supervisord.conf
+        if self.spv_conf:
+            spv_path = pathlib.Path(self.spv_conf)
+            if not spv_path.is_file():
+                logging.info(
+                    f"Invalid supervisord configuration file: {self.spv_conf}"
+                )
+                return service_info
+        else:
+            default_config_locations = [
+                "/etc/supervisord.conf",
+                "/etc/supervisor/supervisord.conf"
+            ]
+            for conf_path in default_config_locations:
+                spv_path = pathlib.Path(conf_path)
+                if spv_path.is_file():
+                    break
+            else:
+                logging.info("Failed to locate supervisord.conf")
+                return service_info
+        spv_config = configparser.ConfigParser(interpolation=None)
+        spv_config.read_string(spv_path.read_text())
+        unit = service_info["unit_name"]
+        section_name = f"program:{unit}"
+        if not spv_config.has_section(section_name):
+            logging.info(
+                f"Unable to location supervisor section {section_name}"
+            )
+            return service_info
+        service_info["properties"] = dict(spv_config[section_name])
+        return service_info
+
 
 # Install validation
 INSTALL_VERSION = 1
@@ -1176,14 +1475,13 @@ Type=simple
 User=%s
 SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
-WorkingDirectory=%s
 EnvironmentFile=%s
 ExecStart=%s $MOONRAKER_ARGS
 Restart=always
 RestartSec=10
 """  # noqa: E122
 
-ENVIRONMENT = "MOONRAKER_ARGS=\"%s/moonraker/moonraker.py %s\""
+ENVIRONMENT = "MOONRAKER_ARGS=\"%s%s\"%s"
 TEMPLATE_NAME = "password_request.html"
 
 class ValidationError(Exception):
@@ -1205,14 +1503,14 @@ class InstallValidator:
         self.announcement_id = ""
         self.validation_enabled = False
 
-    def _update_backup_path(self):
+    def _update_backup_path(self) -> None:
         str_time = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         if not hasattr(self, "backup_path"):
             self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
         elif not self.backup_path.exists():
             self.backup_path = self.data_path.joinpath(f"backup/{str_time}")
 
-    async def validation_init(self):
+    async def validation_init(self) -> None:
         db: MoonrakerDatabase = self.server.lookup_component("database")
         install_ver: int = await db.get_item(
             "moonraker", "validate_install.install_version", 0
@@ -1358,7 +1656,6 @@ class InstallValidator:
         tmp_svc = pathlib.Path(
             tempfile.gettempdir()
         ).joinpath(f"{unit}-tmp.svc")
-        src_path = pathlib.Path(MOONRAKER_PATH)
         # Create local environment file
         sysd_data = self.data_path.joinpath("systemd")
         if not sysd_data.exists():
@@ -1396,13 +1693,29 @@ class InstallValidator:
         service_bkp = svc_bkp_path.joinpath(svc_dest.name)
         shutil.copy2(str(svc_dest), str(service_bkp))
         # write temporary service file
+        src_path = source_info.source_path()
+        exec_path = pathlib.Path(sys.executable)
+        py_exec = exec_path.parent.joinpath("python")
+        pythonpath = ""
+        src_arg = ""
+        if exec_path.name == "python" or py_exec.is_file():
+            # Default to loading via the python executable.  This
+            # makes it possible to switch between git repos, pip
+            # releases and git releases without reinstalling the
+            # service.
+            exec_path = py_exec
+            src_arg = "-m moonraker "
+        if not source_info.is_dist_package():
+            # This module isn't in site/dist packages,
+            # add PYTHONPATH env variable
+            pythonpath = f"\nPYTHONPATH=\"{src_path}\""
         tmp_svc.write_text(
             SYSTEMD_UNIT
-            % (SERVICE_VERSION, user, src_path, env_file, sys.executable)
+            % (SERVICE_VERSION, user, env_file, exec_path)
         )
         try:
             # write new environment
-            env_file.write_text(ENVIRONMENT % (src_path, cmd_args))
+            env_file.write_text(ENVIRONMENT % (src_arg, cmd_args, pythonpath))
             await machine.exec_sudo_command(
                 f"cp -f {tmp_svc} {svc_dest}", tries=5, timeout=60.)
             await machine.exec_sudo_command(
@@ -1672,7 +1985,7 @@ class InstallValidator:
         )
         self.server.send_event("server:gcode_response", gc_announcement)
 
-    async def remove_announcement(self):
+    async def remove_announcement(self) -> None:
         if not self.announcement_id:
             return
         ancmp: Announcements = self.server.lookup_component("announcements")

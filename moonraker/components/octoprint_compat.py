@@ -15,8 +15,8 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager
     from .job_queue import JobQueue
@@ -355,12 +355,12 @@ class OctoPrintCompat:
     async def _select_file(self,
                            web_request: WebRequest
                            ) -> None:
-        command: str = web_request.get('command')
-        rel_path: str = web_request.get('relative_path')
+        command: str = web_request.get_str('command')
+        rel_path: str = web_request.get_str('relative_path')
         root, filename = rel_path.strip("/").split("/", 1)
         fmgr: FileManager = self.server.lookup_component('file_manager')
         if command == "select":
-            start_print: bool = web_request.get('print', False)
+            start_print: bool = web_request.get_boolean('print', False)
             if not start_print:
                 # No-op, selecting a file has no meaning in Moonraker
                 return

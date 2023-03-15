@@ -12,10 +12,8 @@ import logging
 import json
 import getpass
 import asyncio
-import socket
-import struct
 import pathlib
-from utils import ServerError
+from .utils import ServerError, get_unix_peer_credentials
 
 # Annotation imports
 from typing import (
@@ -28,22 +26,33 @@ from typing import (
     Dict,
     List,
     Set,
+    Tuple
 )
 if TYPE_CHECKING:
-    from moonraker import Server
-    from app import MoonrakerApp
-    from websockets import WebRequest, Subscribable
-    from confighelper import ConfigHelper
-    from components.klippy_apis import KlippyAPI
-    from components.file_manager.file_manager import FileManager
-    from components.machine import Machine
-    from asyncio.trsock import TransportSocket
+    from .server import Server
+    from .app import MoonrakerApp
+    from .common import WebRequest, Subscribable
+    from .confighelper import ConfigHelper
+    from .components.klippy_apis import KlippyAPI
+    from .components.file_manager.file_manager import FileManager
+    from .components.machine import Machine
+    from .components.job_state import JobState
+    from .components.database import MoonrakerDatabase as Database
     FlexCallback = Callable[..., Optional[Coroutine]]
+
+# These endpoints are reserved for klippy/moonraker communication only and are
+# not exposed via http or the websocket
+RESERVED_ENDPOINTS = [
+    "list_endpoints",
+    "gcode/subscribe_output",
+    "register_remote_method",
+]
 
 INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
+SVC_INFO_KEY = "klippy_connection.service_info"
 
 class KlippyConnection:
     def __init__(self, server: Server) -> None:
@@ -57,7 +66,9 @@ class KlippyConnection:
         self.connection_task: Optional[asyncio.Task] = None
         self.closing: bool = False
         self._klippy_info: Dict[str, Any] = {}
-        self.init_list: List[str] = []
+        self._klippy_identified: bool = False
+        self._klippy_initializing: bool = False
+        self._klippy_started: bool = False
         self._klipper_version: str = ""
         self._missing_reqs: Set[str] = set()
         self._peer_cred: Dict[str, int] = {}
@@ -91,6 +102,8 @@ class KlippyConnection:
 
     @property
     def state(self) -> str:
+        if self.is_connected() and not self._klippy_started:
+            return "startup"
         return self._state
 
     @property
@@ -118,6 +131,13 @@ class KlippyConnection:
         svc_info = self._service_info
         unit_name = svc_info.get("unit_name", "klipper.service")
         return unit_name.split(".", 1)[0]
+
+    async def component_init(self) -> None:
+        db: Database = self.server.lookup_component('database')
+        machine: Machine = self.server.lookup_component("machine")
+        self._service_info = await db.get_item("moonraker", SVC_INFO_KEY, {})
+        if self._service_info:
+            machine.log_service_info(self._service_info)
 
     async def wait_connected(self) -> bool:
         if (
@@ -236,8 +256,7 @@ class KlippyConnection:
                     continue
                 self.log_no_access = True
                 try:
-                    reader, writer = await asyncio.open_unix_connection(
-                        str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
+                    reader, writer = await self.open_klippy_connection(True)
                 except asyncio.CancelledError:
                     raise
                 except Exception:
@@ -247,88 +266,49 @@ class KlippyConnection:
                 if self._get_peer_credentials(writer):
                     machine: Machine = self.server.lookup_component("machine")
                     provider = machine.get_system_provider()
-                    props = ["Description", "ExecStart", "FragmentPath"]
                     svc_info = await provider.extract_service_info(
-                        "klipper", self._peer_cred["process_id"], props
+                        "klipper", self._peer_cred["process_id"]
                     )
                     if svc_info != self._service_info:
+                        db: Database = self.server.lookup_component('database')
+                        db.insert_item("moonraker", SVC_INFO_KEY, svc_info)
                         self._service_info = svc_info
                         machine.log_service_info(svc_info)
             self.event_loop.create_task(self._read_stream(reader))
             return await self._init_klippy_connection()
 
+    async def open_klippy_connection(
+        self, primary: bool = False
+    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        if not primary and not self.is_connected():
+            raise ServerError("Klippy Unix Connection Not Available", 503)
+        return await asyncio.open_unix_connection(
+            str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
+
     def _get_peer_credentials(self, writer: asyncio.StreamWriter) -> bool:
-        sock: TransportSocket
-        sock = writer.get_extra_info("socket", None)
-        if sock is None:
-            logging.debug(
-                "Unable to get Unix Socket, cant fetch peer credentials"
-            )
+        self._peer_cred = get_unix_peer_credentials(writer, "Klippy")
+        if not self._peer_cred:
             return False
-        data: bytes = b""
-        try:
-            size = struct.calcsize("3I")
-            data = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, size)
-            pid, uid, gid = struct.unpack("3I", data)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logging.exception(
-                f"Failed to get Klippy Peer Credentials, raw: 0x{data.hex()}"
-            )
-            return False
-        self._peer_cred = {
-            "process_id": pid,
-            "user_id": uid,
-            "group_id": gid
-        }
         logging.debug(
             f"Klippy Connection: Received Peer Credentials: {self._peer_cred}"
         )
         return True
 
     async def _init_klippy_connection(self) -> bool:
-        self.init_list = []
+        self._klippy_identified = False
+        self._klippy_started = False
+        self._klippy_initializing = True
         self._missing_reqs.clear()
         self.init_attempts = 0
-        self._state = "initializing"
-        webhooks_err_logged = False
-        gcout_err_logged = False
+        self._state = "startup"
         while self.server.is_running():
             await asyncio.sleep(INIT_TIME)
-            # Subscribe to "webhooks"
-            # Register "webhooks" subscription
-            if "webhooks_sub" not in self.init_list:
-                try:
-                    await self.klippy_apis.subscribe_objects(
-                        {'webhooks': None})
-                except ServerError as e:
-                    if not webhooks_err_logged:
-                        webhooks_err_logged = True
-                        logging.info(
-                            f"{e}\nUnable to subscribe to webhooks object")
-                else:
-                    logging.info("Webhooks Subscribed")
-                    self.init_list.append("webhooks_sub")
-            # Subscribe to Gcode Output
-            if "gcode_output_sub" not in self.init_list:
-                try:
-                    await self.klippy_apis.subscribe_gcode_output()
-                except ServerError as e:
-                    if not gcout_err_logged:
-                        gcout_err_logged = True
-                        logging.info(
-                            f"{e}\nUnable to register gcode output "
-                            "subscription")
-                else:
-                    logging.info("GCode Output Subscribed")
-                    self.init_list.append("gcode_output_sub")
-            if "startup_complete" not in self.init_list:
-                await self._check_ready()
-            if len(self.init_list) == 5:
+            await self._check_ready()
+            if not self._klippy_initializing:
                 logging.debug("Klippy Connection Initialized")
                 return True
-            elif not self.is_connected():
+            if not self.is_connected():
+                self._klippy_initializing = False
                 break
             else:
                 self.init_attempts += 1
@@ -342,10 +322,27 @@ class KlippyConnection:
         endpoints = result.get('endpoints', [])
         app: MoonrakerApp = self.server.lookup_component("application")
         for ep in endpoints:
-            app.register_remote_handler(ep)
+            if ep not in RESERVED_ENDPOINTS:
+                app.register_remote_handler(ep)
+
+    async def _request_initial_subscriptions(self) -> None:
+        try:
+            await self.klippy_apis.subscribe_objects({'webhooks': None})
+        except ServerError as e:
+            logging.exception("Unable to subscribe to webhooks object")
+        else:
+            logging.info("Webhooks Subscribed")
+        try:
+            await self.klippy_apis.subscribe_gcode_output()
+        except ServerError as e:
+            logging.exception(
+                "Unable to register gcode output subscription"
+            )
+        else:
+            logging.info("GCode Output Subscribed")
 
     async def _check_ready(self) -> None:
-        send_id = "identified" not in self.init_list
+        send_id = not self._klippy_identified
         result: Dict[str, Any]
         try:
             result = await self.klippy_apis.get_klippy_info(send_id)
@@ -365,20 +362,28 @@ class KlippyConnection:
         self._klippy_info = dict(result)
         if "state_message" in self._klippy_info:
             self._state_message = self._klippy_info["state_message"]
-        state = result.get('state', "unknown")
-        if state != "startup" and "endpoints_requested" not in self.init_list:
-            await self._request_endpoints()
-            self.init_list.append("endpoints_requested")
-        self._state = state
+        if "state" not in result:
+            return
         if send_id:
-            self.init_list.append("identified")
+            self._klippy_identified = True
             await self.server.send_event("server:klippy_identified")
+            # Request initial endpoints to register info, emergency stop APIs
+            await self._request_endpoints()
+        self._state = result["state"]
         if self._state != "startup":
-            self.init_list.append('startup_complete')
-            await self.server.send_event("server:klippy_started",
-                                         self._state)
+            await self._request_initial_subscriptions()
+            # Register remaining endpoints available
+            await self._request_endpoints()
+            startup_state = self._state
+            await self.server.send_event(
+                "server:klippy_started", startup_state
+            )
+            self._klippy_started = True
             if self._state != "ready":
                 logging.info("\n" + self._state_message)
+                if self._state == "shutdown" and startup_state != "shutdown":
+                    # Klippy shutdown during startup event
+                    self.server.send_event("server:klippy_shutdown")
             else:
                 await self._verify_klippy_requirements()
                 # register methods with klippy
@@ -388,8 +393,18 @@ class KlippyConnection:
                     except ServerError:
                         logging.exception(
                             f"Unable to register method '{method}'")
-                logging.info("Klippy ready")
-                await self.server.send_event("server:klippy_ready")
+                if self._state == "ready":
+                    logging.info("Klippy ready")
+                    await self.server.send_event("server:klippy_ready")
+                    if self._state == "shutdown":
+                        # Klippy shutdown during ready event
+                        self.server.send_event("server:klippy_shutdown")
+                else:
+                    logging.info(
+                        "Klippy state transition from ready during init, "
+                        f"new state: {self._state}"
+                    )
+            self._klippy_initializing = False
 
     async def _verify_klippy_requirements(self) -> None:
         result = await self.klippy_apis.get_object_list(default=None)
@@ -475,7 +490,9 @@ class KlippyConnection:
             # XXX - process other states (startup, ready, error, etc)?
             if "state" in wh:
                 state = wh["state"]
-                if state == "shutdown":
+                if state == "shutdown" and not self._klippy_initializing:
+                    # If the shutdown state is received during initialization
+                    # defer the event, the init routine will handle it.
                     logging.info("Klippy has shutdown")
                     self.server.send_event("server:klippy_shutdown")
                 self._state = state
@@ -508,7 +525,7 @@ class KlippyConnection:
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
         args = web_request.get_args()
-        conn = web_request.get_connection()
+        conn = web_request.get_subscribable()
 
         # Build the subscription request from a superset of all client
         # subscriptions
@@ -565,8 +582,51 @@ class KlippyConnection:
     def is_connected(self) -> bool:
         return self.writer is not None and not self.closing
 
+    def is_ready(self) -> bool:
+        return self._state == "ready"
+
+    def is_printing(self) -> bool:
+        if not self.is_ready():
+            return False
+        job_state: JobState = self.server.lookup_component("job_state")
+        stats = job_state.get_last_stats()
+        return stats.get("state", "") == "printing"
+
+    async def rollover_log(self) -> None:
+        if "unit_name" not in self._service_info:
+            raise self.server.error(
+                "Unable to detect Klipper Service, cannot perform "
+                "manual rollover"
+            )
+        logfile: Optional[str] = self._klippy_info.get("log_file", None)
+        if logfile is None:
+            raise self.server.error(
+                "Unable to detect path to Klipper log file"
+            )
+        if self.is_printing():
+            raise self.server.error("Cannot rollover log while printing")
+        logpath = pathlib.Path(logfile).expanduser().resolve()
+        if not logpath.is_file():
+            raise self.server.error(
+                f"No file at {logpath} exists, cannot perform rollover"
+            )
+        machine: Machine = self.server.lookup_component("machine")
+        await machine.do_service_action("stop", self.unit_name)
+        suffix = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        new_path = pathlib.Path(f"{logpath}.{suffix}")
+
+        def _do_file_op() -> None:
+            if new_path.exists():
+                new_path.unlink()
+            logpath.rename(new_path)
+
+        await self.event_loop.run_in_thread(_do_file_op)
+        await machine.do_service_action("start", self.unit_name)
+
     async def _on_connection_closed(self) -> None:
-        self.init_list = []
+        self._klippy_identified = False
+        self._klippy_initializing = False
+        self._klippy_started = False
         self._state = "disconnected"
         self._state_message = "Klippy Disconnected"
         for request in self.pending_requests.values():

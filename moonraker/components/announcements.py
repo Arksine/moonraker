@@ -21,10 +21,10 @@ from typing import (
     Union
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
-    from http_client import HttpClient
-    from components.database import MoonrakerDatabase
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
+    from .http_client import HttpClient
+    from .database import MoonrakerDatabase
 
 
 MOONLIGHT_URL = "https://arksine.github.io/moonlight"
@@ -143,12 +143,7 @@ class Announcements:
     async def _handle_update_request(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
-        subs: Optional[Union[str, List[str]]]
-        subs = web_request.get("subscriptions", None)
-        if isinstance(subs, str):
-            subs = [sub.strip() for sub in subs.split(",") if sub.strip()]
-        elif subs is None:
-            subs = list(self.subscriptions.keys())
+        subs = web_request.get_list("subscriptions", list(self.subscriptions.keys()))
         for sub in subs:
             if sub not in self.subscriptions:
                 raise self.server.error(f"No subscription for {sub}")

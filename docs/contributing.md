@@ -3,7 +3,7 @@
 While Moonraker exists as a service independently from Klipper, it relies
 on Klipper to be useful.  Thus, the tentative plan is to eventually merge
 the Moonraker application into the Klipper repo after Moonraker matures,
-at which point this repo will be archived.  As such, contibuting guidelines
+at which point this repo will be archived.  As such, contributing guidelines
 are near those of Klipper:
 
 #### New Module Contributions

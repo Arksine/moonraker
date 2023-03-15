@@ -60,6 +60,9 @@ klippy_uds_address: /tmp/klippy_uds
 #   Default is /tmp/klippy_uds.
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
+max_websocket_connections:
+#   The maximum number of concurrently open websocket connections.
+#   The default is 50.
 enable_debug_logging: False
 #   ***DEPRECATED***
 #   Verbose logging is enabled by the '-v' command line option.
@@ -91,7 +94,16 @@ enable_object_processing: False
 #   "cancel object" functionality.  Note that this process is file I/O intensive,
 #   it is not recommended for usage on low resource SBCs such as a Pi Zero.
 #   The default is False.
+file_system_observer: inotify
+#   The observer used to monitor file system changes.  May be inotify or none.
+#   When set to none file system observation is disabled.  The default is
+#   inotify.
+enable_observer_warnings: True
+#   When set to True Moonraker will generate warnings when an observer
+#   encounters an error. This may be useful to determine if the observer
+#   malfunctioning. The default is True.
 enable_inotify_warnings: True
+#   *** DEPRECATED - SEE "enable_observer_warnings" ***
 #   When set to True Moonraker will generate warnings when inotify attempts
 #   to add a duplicate watch or when inotify encounters an error.  On some
 #   file systems inotify may not work as expected, this gives users the
@@ -120,8 +132,14 @@ with system services such as systemd.
 provider: systemd_dbus
 #   The provider implementation used to collect system service information
 #   and run service actions (ie: start, restart, stop).  This can be "none",
-#   "systemd_dbus", or "systemd_cli".  If the provider is set to "none" service
-#   action APIs will be disabled.  The default is systemd_dbus.
+#   "supervisord_cli", "systemd_dbus", or "systemd_cli".  If the provider is
+#   set to "none" service action APIs will be disabled.
+#   The default is systemd_dbus.
+shutdown_action: poweroff
+#   Determines the action Moonraker will take when a shutdown is requested.
+#   This option may be set to "halt" or "poweroff. Not all linux distributions
+#   support poweroff, in such scenarios it is necessary to specify 'halt'.
+#   The default is "poweroff".
 sudo_password:
 #   The password for the linux user.  When set Moonraker can run linux commands
 #   that require elevated permissions.  This option accepts Jinja2 Templates,
@@ -140,6 +158,11 @@ force_validation:
 #   By default Moonraker will not attempt to revalidate if a previous attempt
 #   at validation successfully completed. Setting this value to True will force
 #   Moonraker to perform validation.  The default is False.
+supervisord_config_path:
+#   Path to the supervisord config file. This is required when for multiple
+#   supervisord are instances running on single machine and the default
+#  '/var/run/supervisord.sock' is occupied by other services.
+#   The default is no path.
 ```
 
 !!! Note
@@ -156,6 +179,25 @@ force_validation:
 
     Alternatively it may be possible to enable the `systemd-logind` service,
     consult with your distributions's documentation.
+
+#### Allowed Services
+
+The `machine` component uses the configured provider to manage services
+on the system (ie: restart a service).  Moonraker is authorized to manage
+the `moonraker` and `klipper` services, including those that match common
+multi-instance patterns, such as `moonraker-1`, `klipper_2`, and `moonraker1`.
+
+Moonraker may be authorized to manage additional services by modifying
+`<data_folder>/moonraker.asvc`.  By default this file includes the
+following services:
+
+- `klipper_mcu`
+- `webcamd`
+- `MoonCord`
+- `KlipperScreen`
+- `moonraker-telegam-bot`
+- `sonar`
+- `crowsnest`
 
 #### Reboot / Shutdown from Klipper
 
@@ -307,11 +349,18 @@ authorization module.
 # moonraker.conf
 
 [authorization]
+enable_api_key: True
+#   Enables API Key authentication.  The default is True.
 login_timeout:
 #   The time, in days, after which a user is forced to re-enter their
 #   credentials to log in.  This period begins when a logged out user
 #   first logs in.  Successive logins without logging out will not
 #   renew the timeout.  The default is 90 days.
+max_login_attempts:
+#   Maximum number of consecutive failed login attempts before an IP address
+#   is locked out.  Failed logins are tracked per IP and are reset upon a
+#   successful login.  Locked out IPs are reset when Moonraker restarts.
+#   By default there is no maximum number of logins.
 trusted_clients:
  192.168.1.30
  192.168.1.0/24
@@ -546,21 +595,18 @@ restart_klipper_when_powered: False
 restart_delay: 1.
 #   If "restart_klipper_when_powered" is set, this option specifies the amount
 #   of time (in seconds) to delay the restart.  Default is 1 second.
-bound_service:
-#   Can be set to any service Moonraker is authorized to manage with the
-#   exception of the moonraker service itself. See the tip below this section
-#   for details on what services are authorized.  When a bound service has
-#   been set the service will be started when the device powers on and stopped
-#   when the device powers off.  The default is no service is bound to the
-#   device.
+bound_services:
+#   A newline separated list of services that are "bound" to the state of this
+#   device.  When the device is powered on all bound services will be started.
+#   When the device is powered off all bound services are stopped.
+#
+#   The items in this list are limited to those specified in the allow list,
+#   see the [machine] configuration documentation for details.  Additionally,
+#   the Moonraker service can not be bound to a power device.  Note that
+#   service names are case sensitive.
+#
+#   The default is no services are bound to the device.
 ```
-
-!!! Tip
-    Moonraker is authorized to manage the `klipper`, `klipper_mcu`,
-    `webcamd`, `MoonCord`, `KlipperScreen`, and `moonraker-telegram-bot`
-    services.  It can also manage multiple instances of a service, ie:
-    `klipper_1`, `klipper_2`.  Keep in mind that service names are case
-    sensitive.
 
 !!! Note
     If a device has been bound to the `klipper` service and the
@@ -675,10 +721,11 @@ pin: PA13
 # The variable below should be initialized to the startup value.  If your
 # device is configured to be on at startup use "variable_value: 1"
 variable_value: 0
+gcode:
   {% if 'VALUE' not in params %}
     {action_raise_error("Parameter 'VALUE' missing from 'SET_FLARE'")}
   {% endif %}
-  {% set state = params.VALUE %}
+  {% set state = params.VALUE|int %}
   {% if state %}
     # turn the neopixel on
     SET_LED LED=extruder_flare RED=0.75 BLUE=0.2 GREEN=0.2 SYNC=0
@@ -934,6 +981,7 @@ Example:
 
 [power homeassistant_switch]
 type: homeassistant
+protocol: http
 address: 192.168.1.126
 port: 8123
 device: switch.1234567890abcdefghij
@@ -1120,6 +1168,11 @@ device_id:
 #   The device id of the light/socket you want to control.
 #   An explanation on how you could get the device id, can be found here:
 #   https://developers.meethue.com/develop/get-started-2/#turning-a-light-on-and-off
+device_type: light
+#   Set to light to control a single hue light, or group to control a hue light group.
+#   If device_type is set to light, the device_id should be the light id,
+#   and if the device_type is group, the device_id should be the group id.
+#   The default is "light".
 
 ```
 
@@ -1132,13 +1185,20 @@ with a gcode_macro, such as:
 
 [gcode_macro POWER_OFF_PRINTER]
 gcode:
-  {action_call_remote_method("set_device_power",
-                             device="printer",
-                             state="off")}
+  {action_call_remote_method(
+    "set_device_power", device="printer", state="off"
+  )}
 ```
+
+The `device` parameter must be the name of a configured power device.
+The `state` parameter must be `on`, `off`, or `toggle`.  In the example above
+a device configured as `[power printer]` will be powered off.
+
+
 The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
 printer off when idle with a configuration similar to that of below:
+
 ```ini
 # printer.cfg
 
@@ -1156,13 +1216,91 @@ gcode:
   UPDATE_DELAYED_GCODE ID=delayed_printer_off DURATION=60
 ```
 
+##### Power on a device when a print starts
+
+Some users have their logic wired to a separate power supply from heaters,
+fans, etc.  This keeps Klipper in the "ready" state when power is removed
+from such devices.  It is possible to configure Klipper to power up such
+devices just before a print is started by overriding the `SDCARD_PRINT_FILE`
+gcode command.
+
+The following example presumes that the user a `[power heaters]`
+device configured in `moonraker.conf`:
+
+```ini
+# printer.cfg
+
+# Create a Macro to Power on the Heaters.  This is necessary to be
+# sure that the template evaluates the call in the correct order.
+[gcode_macro POWER_ON_HEATERS]
+gcode:
+  {action_call_remote_method(
+    "set_device_power", device="heaters", state="on"
+  )}
+
+# Override SDCARD_PRINT_FILE
+[gcode_macro SDCARD_PRINT_FILE]
+rename_existing: SDCPF
+gcode:
+   # Step 1: Call the remote method to turn on the power device
+   POWER_ON_HEATERS
+   # Step 2: Pause while the device powers up.  The following example
+   # pauses for 4 seconds.  It may be necessary to tweak this value.
+   G4 P4000
+   # Step 3: Call the renamed command to start the print
+   SDCPF {rawparams}
+
+```
+
+!!! Warning
+    The `SDCARD_PRINT_FILE` G-Code command will be executed when a Moonraker
+    forwards a request to start a print.  Do not put this command in a G-Code
+    file or in a macro that is run from a G-Code file.  This will result in an
+    `SD Busy` error and abort the print.
+
+
+##### Force a power device to change state during a print
+
+Another exotic use case is the addition of a "conditional" peripheral,
+such as an MMU device.  The user may not wish to power on this device
+for every print, and instead power it on from within the "Start G-GCode"
+conditionally.  Additionaly we do not want this device to be turned on/off
+unintentionally during a print.  The `set_device_power` remote method takes
+an optional `force` argument that can be used to accommodate this scenario.
+
+The following example presumes that the user has a `[power mmu]` device
+configured in `moonraker.conf` with the `locked_when_printing` option
+set to `True`.  The slicer would be configured to set `USE_MMU=1` for
+the print start macro when the MMU is in use.
+
+```ini
+# printer.cfg
+
+[gcode_macro POWER_ON_MMU]
+gcode:
+  {action_call_remote_method(
+    "set_device_power", device="mmu", state="on", force=True
+  )}
+
+[gcode_macro PRINT_START]
+gcode:
+  {% set use_mmu = params.USE_MMU|default(0)|int %}
+  {% if use_mmu $}
+    # Turn on power supply for extruders/bed
+    POWER_ON_MMU
+    # Add a bit of delay to give the switch time
+    G4 P2000
+  {% endif %}
+  # Add the rest of your "Start G-Code"...
+```
+
+
 #### Power on G-Code Uploads
 
 To power on a device after an upload, `queue_gcode_uploads: True` must
 be set in the `[file_manager]`, `load_on_startup: True` must be set in
 `[job_queue]` and `one_when_job_queued: True` must be set in `[power dev_name]`,
 where "dev_name" the the name of your power device.  For example:
-
 
 ```ini
 # moonraker.conf
@@ -1171,9 +1309,7 @@ where "dev_name" the the name of your power device.  For example:
 # is set and Klipper cannot immediately start the print.
 [file_manager]
 queue_gcode_uploads: True
-# Set the config_path and log_path options to the correct locations
-#config_path:
-#log_path:
+
 
 # Configure the Job Queue to start a queued print when Klipper reports as
 # ready.
@@ -1276,7 +1412,7 @@ down into 3 basic types:
     trackers without first reproducing the issue with all unofficial
     extensions disabled.
 
-#####  Web type (front-end) configuration
+####  Web type (front-end) configuration
 
 ```ini
 # moonraker.conf
@@ -1313,13 +1449,16 @@ info_tags:
 #   The default is an empty list.
 ```
 
-##### All other extensions
+#### Git Repo Configuration
 
 !!! Note
     Git repos must have at least one tag for Moonraker to identify its
     version.  The tag may be lightweight or annotated.  The tag must be in
     semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
     integer values.  For example, a repos first tag might be `v0.0.1`.
+
+    Moonraker can update repos without tags, however front ends may disable
+    update controls when version information is not reported by Moonraker.
 
 ```ini
 # moonraker.conf
@@ -1328,17 +1467,15 @@ info_tags:
 # systemd service
 [update_manager extension_name]
 type: git_repo
-#   Can be git_repo or zip.  This value is set depending on how an extension
-#   chooses to deploy updates, see its documentation for details  This
-#   parameter must be provided.
+#   Currently must be git_repo.  This value is set depending on how an
+#   extension chooses to deploy updates, see its documentation for details.
+#   This parameter must be provided.
 channel: dev
 #   The update channel.  The available value differs depending on the
 #   "type" option.
 #      type: git_repo - May be dev or beta.  The dev channel will update to
 #                       the latest pushed commit, whereas the beta channel
 #                       will update to the latest tagged commit.
-#      type: zip      - May be be stable or beta.  When beta is specified
-#                       "pre-release" updates are available.
 #   The default is dev.
 path:
 #   The absolute path to the client's files on disk. This parameter must be
@@ -1373,14 +1510,6 @@ enable_node_updates:
 #   to package-lock.json.  Note that if your project does not have a
 #   package-lock.json in its root directory then the plugin will fail to load.
 #   Default is False.
-host_repo:
-#   The GitHub repo in which zipped releases are hosted.  Note that this does
-#   not need to match the repository in the "origin" option, as it is possible
-#   to use a central GitHub repository to host multiple extension builds.  As
-#   an example, Moonraker's repo hosts builds for both Moonraker and Klipper.
-#   This option defaults to the repo extracted from the "origin" option,
-#   however if the origin is not hosted on GitHub then this parameter must
-#   be provided.
 is_system_service: True
 #   This should be set to False for repos that are not installed as a service
 #   or do not need to restart a service after updates. This option sets the
@@ -1399,11 +1528,18 @@ managed_services:
 #       <name>    - The name configured in the extension's section header.
 #                   If the section header is [update_manager KlipperScreen]
 #                   then KlipperScreen would be a valid value.
-#       klipper   - The klipper service will be restarted after an update
-#       moonraker - The moonraker service will be restarted after an update
+#       klipper   - The Klipper service associated with this instance of
+#                   Moonraker will be restarted after an update.
+#       moonraker - The Moonraker service will be restarted after an update.
+#
+#   NOTE: Moonraker will resolve the service names for the "klipper" and
+#   "moonraker" services if they are not the default values.  Specific names
+#   such as "klipper-1" or "moonraker_2" should not be entered in this option.
+#
 #   When this option is specified it overrides the "is_system_service" option.
 #   Thus it is not required to specify both, only one or the other.  The
-#   default depends on "is_system_service" as explained above.
+#   default is no managed services if "is_system_service" is set to False,
+#   otherwise the default is the service named in the section header.
 refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
@@ -1417,6 +1553,12 @@ info_tags:
 #   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
 ```
+
+!!! Note
+    If this application requires a restart after an update it may be necessary
+    to grant Moonraker permission to manage its service. See the
+    [allowed services](#allowed-services) section for details on which
+    services Moonraker is allowed to manage and how to add additional services.
 
 ### `[mqtt]`
 
@@ -1478,8 +1620,10 @@ instance_name:
 #   The default is the machine's hostname.
 status_objects:
 #   A newline separated list of Klipper objects whose state will be
-#   published in the payload of the following topic:
-#      {instance_name}/klipper/status
+#   published.  There are two different ways to publish the states - you
+#   can use either or both depending on your need.  See the
+#   "publish_split_status" options for details.
+#
 #   For example, this option could be set as follows:
 #
 #     status_objects:
@@ -1500,6 +1644,23 @@ status_objects:
 #
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
+publish_split_status: False
+#   Configures how to publish status updates to MQTT.
+#
+#   When set to False (default), all Klipper object state updates will be
+#   published to a single mqtt state with the following topic:
+#     {instance_name}/klipper/status
+#
+#   When set to True, all Klipper object state updates will be published to
+#   separate mqtt topics derived from the object and item in the following
+#   format:
+#     {instance_name}/klipper/state/{objectname}/{statename}
+#
+#   The actual value of the state is published as "value" to the topic above.
+#   For example, if the heater_bed temperature was 24.0, this is the payload:
+#     {"eventtime": {timestamp}, "value": 24.0}
+#   It would be published to this topic:
+#     {instance_name}/klipper/state/heater_bed/temperature
 default_qos: 0
 #   The default QOS level used when publishing or subscribing to topics.
 #   Must be an integer value from 0 to 2.  The default is 0.
@@ -1807,18 +1968,18 @@ separate from `moonraker.conf`.  This allows users to safely distribute
 their configuration and log files without revealing credentials and
 other sensitive information.
 
-!!! Note:
-    This section no long has configuration options.  Previously the
+!!! Note
+    This section no longer has configuration options.  Previously the
     `secrets_path` option was used to specify the location of the file.
     The secrets file name and location is now determined by the `data path`
-    and `alias` command line options, ie: `<data_base_path>/<alias>.secrets`.
-    By default this resolves to `$HOME/moonraker_data/moonraker.secrets`.
-    This may be a symbolic link.
+    and `alias` command line options, ie: `<data_base_path>/moonraker.secrets`.
+    For a typical single instance installation this resolves to
+    `$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
 
 Example ini secrets file:
 
 ```ini
-# moonraker_secrets.ini
+# /home/pi/printer_data/moonraker.secrets
 
 [mqtt_credentials]
 username: mqtt_user
@@ -1894,18 +2055,24 @@ domain: switch
 
 
 ### `[notifier]`
-Enables the notification service. Multiple "notifiers" may be configured,
-each with their own section, ie: `[notifier my_discord_server]`, `[notifier my_phone]`.
 
-All notifiers require an url for a service to be set up. Moonraker uses [Apprise](https://github.com/caronc/apprise) internally.
-You can find the available services and their corresponding urls here: [https://github.com/caronc/apprise/wiki](https://github.com/caronc/apprise/wiki).
+Enables the notification service. Multiple "notifiers" may be configured,
+each with their own section, ie: `[notifier my_discord_server]`,
+`[notifier my_phone]`.
+
+All notifiers require an url for a service to be set up. Moonraker depends on
+[Apprise](https://github.com/caronc/apprise) to emit notifications.
+Available services and their corresponding at urls may be found on the
+[Apprise Wiki](https://github.com/caronc/apprise/wiki).
 
 ```ini
 # moonraker.conf
 
 [notifier telegram]
 url: tgram://{bottoken}/{ChatID}
-#   The url for your notifier. This URL accepts Jinja2 templates, so you can use [secrets] if you want.
+#   The url for your notifier. This URL accepts Jinja2 templates,
+#   so you can use [secrets] if you want.  This parameter must be
+#   provided.
 events: *
 #   The events this notifier should trigger to. '*' means all events.
 #   You can use multiple events, comma separated.
@@ -1916,18 +2083,52 @@ events: *
 #      cancelled
 #      paused
 #      resumed
+#   This parameter must be provided.
 body: "Your printer status has changed to {event_name}"
-#   The body of the notification. This option accepts Jinja2 templates.
-#   You can use {event_name} to print the current event trigger name. And {event_args} for
-#   the arguments that came with it. When using the notify functionality in a macro context, you can
-#   use {event_message} to print out your message.
+#   The body of the notification. This option accepts Jinja2 templates, where
+#   the template is passed a context containing the following fields:
+#      event_name: The name of the event that triggered the notification
+#                  (ie: started, complete, error, etc)
+#      event_args: A list containing the arguments passed to the event.
+#                  See the "Tip" below for additional details on this field.
+#      event_message: An additional message passed to the notification when
+#                     triggered.  This is commonly used when the notification
+#                     is received from Klippy using a gcode_macro.
+#   The default is a body containining the "name" of the notification as entered
+#   in the section header.
 title:
-#   The optional title of the notification. Just as the body, this option accepts Jinja2 templates.
+#   The optional title of the notification. This option accepts Jinja2 templates,
+#   the template will receive a context with the same fields as the body.  The
+#   default is an empty string as the title.
 attach:
-#   An optional attachment. Can be an url of a webcam for example. Note: this isn't available for all
-#   notification services. You can check if it's supported on the Apprise Wiki. Be aware that links in
-#   your internal network can only be viewed within your network.
+#   One or more items to attach to the notification. This may be a path to a
+#   local file or a url (such as a webcam snapshot).  Multiple attachments must be
+#   separated by a newline.  This option accepts Jinja2 templates, the tempalte
+#   will recieve the same context as the "body" and "title" options.  The default
+#   is no attachment will be sent with the notification.
+#
+#   Note: Attachments are not available for all notification services, you can
+#   check if it's supported on the Apprise Wiki.  Be aware that links to items
+#   hosted on your local network can only be viewed within that network.
 ```
+
+!!! Tip
+    The `event_args` field of the Jinja2 context passed to templates in
+    this section receives a list of "arguments" passed to the event.  For
+    those familiar with Python this list is known as "variable arguments".
+    Currently the notifier only supports two kinds of events: those
+    triggered by a change in the job state and those triggered from a remote
+    method call frm a `gcode_macro`.
+
+    For `remote method` events the `event_args` field will always be
+    an empty list.  For `job state` events the `event_args` field will
+    contain two items. The first item (`event_args[0]`) contains the
+    job state recorded prior to the event, the second item (`event_args[1]`)
+    contains the current job state.  In most cases users will be interested
+    in the current job state (`event_args[1]`).
+
+    The `job state` is a dict that contains the values reported by
+    Klipper's [print_stats](printer_objects.md#print_stats) object.
 
 #### An example:
 ```ini
@@ -1972,13 +2173,9 @@ gcode:
 
 ### `[simplyprint]`
 
-!!! Note
-    Currently the SimplyPrint service is only available for developers
-    and testers.  When the service is available for end users this note
-    will be removed.
-
 Enables support for print monitoring through
-[SimplyPrint](https://simplyprint.io).
+[SimplyPrint](https://simplyprint.io),
+publicly launched Moonraker integration Nov 21st 2022.
 
 ```ini
 # moonraker.conf
@@ -2037,9 +2234,99 @@ ambient_sensor:
     - Current print time elapse
     - Estimated ambient temperature
     - Webcam configuration (if available)
-    - Webcam images.  These images are also sent to `printpal.io`
+    - Webcam images.
     - Power device state (if configured)
     - Filament sensor state (if configured)
+
+More on how your data is used in the SimplyPrint privacy policy here;
+[https://simplyprint.io/legal/privacy](https://simplyprint.io/legal/privacy)
+
+### `[sensor]`
+
+Enables data collection from additional sensor sources.  Multiple "sensor"
+sources may be configured, each with their own section, ie: `[sensor current]`,
+`[sensor voltage]`.
+
+#### Options common to all sensor devices
+
+The following configuration options are available for all sensor types:
+
+```ini
+# moonraker.conf
+
+[sensor my_sensor]
+type:
+#   The type of device.  Supported types: mqtt
+#   This parameter must be provided.
+name:
+#   The friendly display name of the sensor.
+#   The default is the sensor source name.
+```
+
+#### MQTT Sensor Configuration
+
+The following options are available for `mqtt` sensor types:
+
+```ini
+# moonraker.conf
+
+qos:
+#  The MQTT QOS level to use when publishing and subscribing to topics.
+#  The default is to use the setting supplied in the [mqtt] section.
+state_topic:
+#  The mqtt topic to subscribe to for sensor state updates.  This parameter
+#  must be provided.
+state_response_template:
+#  A template used to parse the payload received with the state topic.  A
+#  "payload" variable is provided the template's context. This template must
+#  call the provided set_result() method to pass sensor values to Moonraker.
+#  `set_result()` expects two parameters, the name of the measurement (as
+#  string) and the value of the measurement (either integer or float number).
+#
+#  This allows for sensor that can return multiple readings (e.g. temperature/
+#  humidity sensors or powermeters).
+#  For example:
+#    {% set notification = payload|fromjson %}
+#    {set_result("temperature", notification["temperature"]|float)}
+#    {set_result("humidity", notification["humidity"]|float)}
+#    {set_result("pressure", notification["pressure"]|float)}
+#
+#  The above example assumes a json response with multiple fields in a struct
+#  is received. Individual measurements are extracted from that struct, coerced
+#  to a numeric format and passed to Moonraker. The default is the payload.
+```
+
+!!! Note
+    Moonraker's MQTT client must be properly configured to add a MQTT sensor.
+    See the [mqtt](#mqtt) section for details.
+
+!!! Tip
+    MQTT is the most robust way of collecting sensor data from networked
+    devices through Moonraker.  A well implemented MQTT sensor will publish all
+    changes in state to the `state_topic`.  Moonraker receives these changes,
+    updates its internal state, and notifies connected clients.
+
+Example:
+
+```ini
+# moonraker.conf
+
+# Example configuration for a Shelly Pro 1PM (Gen2) switch with
+# integrated power meter running the Shelly firmware over MQTT.
+[sensor mqtt_powermeter]
+type: mqtt
+name: Powermeter
+# Use a different display name
+state_topic: shellypro1pm-8cb113caba09/status/switch:0
+# The response is a JSON object with a multiple fields that we convert to
+# float values before passing them to Moonraker.
+state_response_template:
+  {% set notification = payload|fromjson %}
+  {set_result("power", notification["apower"]|float)}
+  {set_result("voltage", notification["voltage"]|float)}
+  {set_result("current", notification["current"]|float)}
+  {set_result("energy", notification["aenergy"]["by_minute"][0]|float * 0.000001)}
+```
 
 ## Include directives
 

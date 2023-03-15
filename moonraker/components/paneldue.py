@@ -13,7 +13,7 @@ import errno
 import logging
 import asyncio
 from collections import deque
-from utils import ServerError
+from ..utils import ServerError
 
 # Annotation imports
 from typing import (
@@ -28,11 +28,9 @@ from typing import (
     Coroutine,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from . import klippy_apis
-    from .file_manager import file_manager
-    APIComp = klippy_apis.KlippyAPI
-    FMComp = file_manager.FileManager
+    from ..confighelper import ConfigHelper
+    from .klippy_apis import KlippyAPI as APIComp
+    from .file_manager.file_manager import FileManager as FMComp
     FlexCallback = Callable[..., Optional[Coroutine]]
 
 MIN_EST_TIME = 10.
@@ -270,7 +268,8 @@ class PanelDue:
     async def _process_klippy_ready(self) -> None:
         # Request "info" and "configfile" status
         retries = 10
-        printer_info = cfg_status = {}
+        printer_info: Dict[str, Any] = {}
+        cfg_status: Dict[str, Any] = {}
         while retries:
             try:
                 printer_info = await self.klippy_apis.get_klippy_info()

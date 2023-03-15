@@ -1,6 +1,32 @@
 ##
 This document keeps a record of all changes to Moonraker's web APIs.
 
+### February 20th 2023
+- The following new endpoints are available when at least one `[sensor]`
+  section has been configured:
+  - `GET /server/sensors/list`
+  - `GET /server/sensors/sensor`
+  - `GET /server/sensors/measurements`
+
+  See [web_api.md](web_api.md) for details on these new endpoints.
+- A `sensors:sensor_update` notification has been added.  When at least one
+  monitored sensor is reporting a changed value Moonraker will broadcast this
+  notification.
+
+  See [web_api.md](web_api.md) for details on this new notification.
+
+### February 17 2023
+- Moonraker API Version 1.2.1
+- An error in the return value for some file manager endpoints has
+  been corrected.  Specifically, the returned result contains an `item` object
+  with a `path` field that was prefixed with the root (ie: "gcodes").
+  This is inconsistent with the websocket notification and has been corrected
+  to remove the prefix. This affects the following endpoints:
+    - `POST /server/files/directory` | `server.files.post_directory`
+    - `DELETE /server/files/directory` | `server.files.delete_directory`
+    - `POST /server/files/move` | `server.files.move`
+    - `POST /server/files/copy` | `server.files.copy`
+
 ### March 4th 2022
 - Moonraker API Version 1.0.1
 - The `server.websocket.id` endpoint has been deprecated. It is

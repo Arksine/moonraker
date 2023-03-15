@@ -5,10 +5,10 @@ import hashlib
 import confighelper
 import shutil
 import time
-from confighelper import ConfigError
-from moonraker import Server
-from utils import ServerError
-from components import gpio
+from moonraker.confighelper import ConfigError
+from moonraker.server import Server
+from moonraker.utils import ServerError
+from moonraker.components import gpio
 from mocks import MockGpiod
 from typing import TYPE_CHECKING, Dict
 if TYPE_CHECKING:

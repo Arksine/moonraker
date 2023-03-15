@@ -13,7 +13,7 @@ import re
 import time
 import zipfile
 from .app_deploy import AppDeploy
-from utils import verify_source
+from ...utils import verify_source
 
 # Annotation imports
 from typing import (
@@ -25,7 +25,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
     from .update_manager import CommandHelper
 
 RINFO_KEYS = [
@@ -337,7 +337,7 @@ class ZipDeploy(AppDeploy):
                 await self._install_packages(system_pkgs)
         if python_pkgs:
             if force or python_pkgs != self.python_pkg_list:
-                await self._update_virtualenv(python_pkgs)
+                await self._update_python_requirements(python_pkgs)
         ret = await self._check_need_update(npm_hash, self.npm_pkg_json)
         if force or ret:
             if self.npm_pkg_json is not None:

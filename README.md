@@ -1,8 +1,10 @@
+[![pdm-managed](https://img.shields.io/badge/pdm-managed-blueviolet)](https://pdm.fming.dev)
+
 #  Moonraker - API Web Server for Klipper
 
 Moonraker is a Python 3 based web server that exposes APIs with which
 client applications may use to interact with the 3D printing firmware
-[Klipper](https://github.com/KevinOConnor/klipper). Communcation between
+[Klipper](https://github.com/KevinOConnor/klipper). Communication between
 the Klippy host and Moonraker is done over a Unix Domain Socket.  Tornado
 is used to provide Moonraker's server functionality.
 
@@ -38,12 +40,5 @@ The following projects deploy Moonraker via Docker:
 
 ### Changes
 
-This section contains changelogs that users and developers may reference
-to see if any action is necessary on their part.  The date of the most
-recent change is included.
-
-Users:\
-[user_changes.md](https://moonraker.readthedocs.io/en/latest/user_changes/) - July 27th 2022
-
-Developers:\
-[api_changes.md](https://moonraker.readthedocs.io/en/latest/api_changes/) - March 4th 2022
+Please refer to the [changelog](https://moonraker.readthedocs.io/en/latest/changelog)
+for a list of notable changes to Moonraker.

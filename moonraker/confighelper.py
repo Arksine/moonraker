@@ -14,8 +14,8 @@ import threading
 import copy
 import logging
 from io import StringIO
-from utils import SentinelClass
-from components.template import JinjaTemplate
+from .utils import Sentinel
+from .components.template import JinjaTemplate
 
 # Annotation imports
 from typing import (
@@ -32,16 +32,15 @@ from typing import (
     Dict,
     List,
     Type,
+    TextIO
 )
 if TYPE_CHECKING:
-    from moonraker import Server
-    from components.gpio import GpioFactory, GpioOutputPin
-    from components.template import TemplateFactory
-    from io import TextIOWrapper
+    from .server import Server
+    from .components.gpio import GpioFactory, GpioOutputPin
+    from .components.template import TemplateFactory
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
-SENTINEL = SentinelClass.get_instance()
 DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
 
 class ConfigError(Exception):
@@ -120,7 +119,7 @@ class ConfigHelper:
     def _get_option(self,
                     func: Callable[..., Any],
                     option: str,
-                    default: Union[SentinelClass, _T],
+                    default: Union[Sentinel, _T],
                     above: Optional[Union[int, float]] = None,
                     below: Optional[Union[int, float]] = None,
                     minval: Optional[Union[int, float]] = None,
@@ -138,7 +137,7 @@ class ConfigHelper:
         try:
             val = func(section, option)
         except (configparser.NoOptionError, configparser.NoSectionError) as e:
-            if isinstance(default, SentinelClass):
+            if default is Sentinel.MISSING:
                 raise ConfigError(str(e)) from None
             val = default
             section = self.section
@@ -198,7 +197,7 @@ class ConfigHelper:
 
     def get(self,
             option: str,
-            default: Union[SentinelClass, _T] = SENTINEL,
+            default: Union[Sentinel, _T] = Sentinel.MISSING,
             deprecate: bool = False
             ) -> Union[str, _T]:
         return self._get_option(
@@ -207,7 +206,7 @@ class ConfigHelper:
 
     def getint(self,
                option: str,
-               default: Union[SentinelClass, _T] = SENTINEL,
+               default: Union[Sentinel, _T] = Sentinel.MISSING,
                above: Optional[int] = None,
                below: Optional[int] = None,
                minval: Optional[int] = None,
@@ -220,7 +219,7 @@ class ConfigHelper:
 
     def getboolean(self,
                    option: str,
-                   default: Union[SentinelClass, _T] = SENTINEL,
+                   default: Union[Sentinel, _T] = Sentinel.MISSING,
                    deprecate: bool = False
                    ) -> Union[bool, _T]:
         return self._get_option(
@@ -229,7 +228,7 @@ class ConfigHelper:
 
     def getfloat(self,
                  option: str,
-                 default: Union[SentinelClass, _T] = SENTINEL,
+                 default: Union[Sentinel, _T] = Sentinel.MISSING,
                  above: Optional[float] = None,
                  below: Optional[float] = None,
                  minval: Optional[float] = None,
@@ -242,7 +241,7 @@ class ConfigHelper:
 
     def getlists(self,
                  option: str,
-                 default: Union[SentinelClass, _T] = SENTINEL,
+                 default: Union[Sentinel, _T] = Sentinel.MISSING,
                  list_type: Type = str,
                  separators: Tuple[Optional[str], ...] = ('\n',),
                  count: Optional[Tuple[Optional[int], ...]] = None,
@@ -253,7 +252,7 @@ class ConfigHelper:
                 f"Option '{option}' in section "
                 f"[{self.section}]: length of 'count' argument must ",
                 "match length of 'separators' argument")
-        else:
+        elif count is None:
             count = tuple(None for _ in range(len(separators)))
 
         def list_parser(value: str,
@@ -292,7 +291,7 @@ class ConfigHelper:
 
     def getlist(self,
                 option: str,
-                default: Union[SentinelClass, _T] = SENTINEL,
+                default: Union[Sentinel, _T] = Sentinel.MISSING,
                 separator: Optional[str] = '\n',
                 count: Optional[int] = None,
                 deprecate: bool = False
@@ -302,7 +301,7 @@ class ConfigHelper:
 
     def getintlist(self,
                    option: str,
-                   default: Union[SentinelClass, _T] = SENTINEL,
+                   default: Union[Sentinel, _T] = Sentinel.MISSING,
                    separator: Optional[str] = '\n',
                    count: Optional[int] = None,
                    deprecate: bool = False
@@ -312,7 +311,7 @@ class ConfigHelper:
 
     def getfloatlist(self,
                      option: str,
-                     default: Union[SentinelClass, _T] = SENTINEL,
+                     default: Union[Sentinel, _T] = Sentinel.MISSING,
                      separator: Optional[str] = '\n',
                      count: Optional[int] = None,
                      deprecate: bool = False
@@ -322,7 +321,7 @@ class ConfigHelper:
 
     def getdict(self,
                 option: str,
-                default: Union[SentinelClass, _T] = SENTINEL,
+                default: Union[Sentinel, _T] = Sentinel.MISSING,
                 separators: Tuple[Optional[str], Optional[str]] = ('\n', '='),
                 dict_type: Type = str,
                 allow_empty_fields: bool = False,
@@ -356,7 +355,7 @@ class ConfigHelper:
 
     def getgpioout(self,
                    option: str,
-                   default: Union[SentinelClass, _T] = SENTINEL,
+                   default: Union[Sentinel, _T] = Sentinel.MISSING,
                    initial_value: int = 0,
                    deprecate: bool = False
                    ) -> Union[GpioOutputPin, _T]:
@@ -375,7 +374,7 @@ class ConfigHelper:
 
     def gettemplate(self,
                     option: str,
-                    default: Union[SentinelClass, _T] = SENTINEL,
+                    default: Union[Sentinel, _T] = Sentinel.MISSING,
                     is_async: bool = False,
                     deprecate: bool = False
                     ) -> Union[JinjaTemplate, _T]:
@@ -396,7 +395,7 @@ class ConfigHelper:
 
     def load_template(self,
                       option: str,
-                      default: Union[SentinelClass, str] = SENTINEL,
+                      default: Union[Sentinel, str] = Sentinel.MISSING,
                       is_async: bool = False,
                       deprecate: bool = False
                       ) -> JinjaTemplate:
@@ -409,7 +408,7 @@ class ConfigHelper:
 
     def getpath(self,
                 option: str,
-                default: Union[SentinelClass, _T] = SENTINEL,
+                default: Union[Sentinel, _T] = Sentinel.MISSING,
                 deprecate: bool = False
                 ) -> Union[pathlib.Path, _T]:
         val = self.gettemplate(option, default, deprecate=deprecate)
@@ -468,11 +467,11 @@ class ConfigHelper:
                         "failed to load.  In the future this will result "
                         "in a startup error.")
 
-    def create_backup(self):
+    def create_backup(self) -> None:
         cfg_path = self.server.get_app_args()["config_file"]
         cfg = pathlib.Path(cfg_path).expanduser().resolve()
         backup = cfg.parent.joinpath(f".{cfg.name}.bkp")
-        backup_fp: Optional[TextIOWrapper] = None
+        backup_fp: Optional[TextIO] = None
         try:
             if backup.exists():
                 cfg_mtime: int = 0

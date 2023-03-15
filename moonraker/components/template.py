@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 import logging
+import asyncio
 import jinja2
 import json
 
@@ -16,8 +17,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from moonraker import Server
-    from confighelper import ConfigHelper
+    from ..server import Server
+    from ..confighelper import ConfigHelper
     from .secrets import Secrets
 
 class TemplateFactory:
@@ -89,10 +90,21 @@ class JinjaTemplate:
             raise self.server.error(
                 "Cannot render async templates with the render() method"
                 ", use render_async()")
-        return self.template.render(context).strip()
+        try:
+            return self.template.render(context).strip()
+        except Exception as e:
+            msg = "Error rending Jinja2 Template"
+            if self.server.is_configured():
+                raise self.server.error(msg, 500) from e
+            raise self.server.config_error(msg) from e
 
     async def render_async(self, context: Dict[str, Any] = {}) -> str:
-        ret = await self.template.render_async(context)
+        try:
+            ret = await self.template.render_async(context)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            raise self.server.error("Error rending Jinja2 Template", 500) from e
         return ret.strip()
 
 def load_component(config: ConfigHelper) -> TemplateFactory:

@@ -14,12 +14,11 @@ import pathlib
 import base64
 import tornado.websocket
 from tornado.escape import url_escape
-from websockets import Subscribable, WebRequest
-
 import logging.handlers
 import tempfile
 from queue import SimpleQueue
-from utils import LocalQueueHandler
+from ..loghelper import LocalQueueHandler
+from ..common import Subscribable, WebRequest
 
 from typing import (
     TYPE_CHECKING,
@@ -31,20 +30,21 @@ from typing import (
     Any,
 )
 if TYPE_CHECKING:
-    from app import InternalTransport
-    from confighelper import ConfigHelper
-    from websockets import WebsocketManager, WebSocket
+    from ..app import InternalTransport
+    from ..confighelper import ConfigHelper
+    from ..websockets import WebsocketManager
+    from ..common import BaseRemoteConnection
     from tornado.websocket import WebSocketClientConnection
-    from components.database import MoonrakerDatabase
-    from components.klippy_apis import KlippyAPI
-    from components.job_state import JobState
-    from components.machine import Machine
-    from components.file_manager.file_manager import FileManager
-    from components.http_client import HttpClient
-    from components.power import PrinterPower
-    from components.announcements import Announcements
-    from components.webcam import WebcamManager, WebCam
-    from klippy_connection import KlippyConnection
+    from .database import MoonrakerDatabase
+    from .klippy_apis import KlippyAPI
+    from .job_state import JobState
+    from .machine import Machine
+    from .file_manager.file_manager import FileManager
+    from .http_client import HttpClient
+    from .power import PrinterPower
+    from .announcements import Announcements
+    from .webcam import WebcamManager, WebCam
+    from ..klippy_connection import KlippyConnection
 
 COMPONENT_VERSION = "0.0.1"
 SP_VERSION = "0.1"
@@ -106,8 +106,7 @@ class SimplyPrint(Subscribable):
         self.gcode_terminal_enabled: bool = False
         self.connected = False
         self.is_set_up = False
-        # TODO: default use_test_endpoint to false upon release
-        self.test = config.get("use_test_endpoint", True)
+        self.test = config.get("use_test_endpoint", False)
         connect_url = config.get("url", None)
         if connect_url is not None:
             self.connect_url = connect_url
@@ -183,11 +182,9 @@ class SimplyPrint(Subscribable):
             "proc_stats:cpu_throttled", self._on_cpu_throttled
         )
         self.server.register_event_handler(
-            "websockets:websocket_identified",
-            self._on_websocket_identified)
+            "websockets:client_identified", self._on_websocket_identified)
         self.server.register_event_handler(
-            "websockets:websocket_removed",
-            self._on_websocket_removed)
+            "websockets:client_removed", self._on_websocket_removed)
         self.server.register_event_handler(
             "server:gcode_response", self._on_gcode_response)
         self.server.register_event_handler(
@@ -523,14 +520,14 @@ class SimplyPrint(Subscribable):
             "webcam_status", {"connected": self.webcam_stream.connected}
         )
 
-    async def _on_klippy_ready(self):
+    async def _on_klippy_ready(self) -> None:
         last_stats: Dict[str, Any] = self.job_state.get_last_stats()
         if last_stats["state"] == "printing":
             self._on_print_start(last_stats, last_stats, False)
         else:
             self._update_state("operational")
-        query: Dict[str] = await self.klippy_apis.query_objects(
-            {"heaters": None}, None)
+        query: Optional[Dict[str, Any]]
+        query = await self.klippy_apis.query_objects({"heaters": None}, None)
         sub_objs = {
             "display_status": ["progress"],
             "bed_mesh": ["mesh_matrix", "mesh_min", "mesh_max"],
@@ -574,7 +571,6 @@ class SimplyPrint(Subscribable):
             # Add filament sensor subscription
         if not sub_objs:
             return
-        status: Dict[str, Any]
         # Create our own subscription rather than use the host sub
         args = {'objects': sub_objs}
         klippy: KlippyConnection
@@ -614,7 +610,7 @@ class SimplyPrint(Subscribable):
             is_on = device_info["status"] == "on"
             self.send_sp("power_controller", {"on": is_on})
 
-    def _on_websocket_identified(self, ws: WebSocket) -> None:
+    def _on_websocket_identified(self, ws: BaseRemoteConnection) -> None:
         if (
             self.cache.current_wsid is None and
             ws.client_data.get("type", "") == "web"
@@ -627,7 +623,7 @@ class SimplyPrint(Subscribable):
             self.cache.current_wsid = ws.uid
             self.send_sp("machine_data", ui_data)
 
-    def _on_websocket_removed(self, ws: WebSocket) -> None:
+    def _on_websocket_removed(self, ws: BaseRemoteConnection) -> None:
         if self.cache.current_wsid is None or self.cache.current_wsid != ws.uid:
             return
         ui_data = self._get_ui_info()
@@ -952,7 +948,7 @@ class SimplyPrint(Subscribable):
         self.cache.current_wsid = None
         websockets: WebsocketManager
         websockets = self.server.lookup_component("websockets")
-        conns = websockets.get_websockets_by_type("web")
+        conns = websockets.get_clients_by_type("web")
         if conns:
             longest = conns[0]
             ui_data["ui"] = longest.client_data["name"]
@@ -960,7 +956,7 @@ class SimplyPrint(Subscribable):
             self.cache.current_wsid = longest.uid
         return ui_data
 
-    async def _send_machine_data(self):
+    async def _send_machine_data(self) -> None:
         app_args = self.server.get_app_args()
         data = self._get_ui_info()
         data["api"] = "Moonraker"
@@ -987,7 +983,7 @@ class SimplyPrint(Subscribable):
         self.cache.machine_info = data
         self.send_sp("machine_data", data)
 
-    def _send_firmware_data(self):
+    def _send_firmware_data(self) -> None:
         kinfo = self.server.get_klippy_info()
         if "software_version" not in kinfo:
             return
@@ -1314,7 +1310,7 @@ class LayerDetect:
 # Ideally we will always fetch from the localhost rather than
 # go through the reverse proxy
 FALLBACK_URL = "http://127.0.0.1:8080/?action=snapshot"
-SP_SNAPSHOT_URL = "https://apirewrite.simplyprint.io/jobs/ReceiveSnapshot"
+SP_SNAPSHOT_URL = "https://api.simplyprint.io/jobs/ReceiveSnapshot"
 SP_AI_URL = "https://ai.simplyprint.io/api/v2/infer"
 
 class WebcamStream:
@@ -1338,7 +1334,7 @@ class WebcamStream:
     def connected(self) -> bool:
         return self._connected
 
-    async def intialize_url(self):
+    async def intialize_url(self) -> None:
         wcmgr: WebcamManager = self.server.lookup_component("webcam")
         cams = wcmgr.get_webcams()
         if not cams:
@@ -1512,7 +1508,6 @@ class PrintHandler:
                 {"state": "error", "message": "GCode Path not Registered"}
             )
             return
-        url = client.escape_url(url)
         accept = "text/plain,applicaton/octet-stream"
         self._on_download_progress(0, 0, 0)
         try:
@@ -1583,7 +1578,7 @@ class PrintHandler:
                 state = "ready"
         self.simplyprint.send_sp("file_progress", {"state": state})
 
-    async def start_print(self):
+    async def start_print(self) -> None:
         if not self.pending_file:
             return
         pending = self.pending_file

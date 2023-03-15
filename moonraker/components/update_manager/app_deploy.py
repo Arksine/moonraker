@@ -10,6 +10,7 @@ import pathlib
 import shutil
 import hashlib
 import logging
+import re
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -20,12 +21,16 @@ from typing import (
     Union,
     Dict,
     List,
+    Tuple
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
+    from ...klippy_connection import KlippyConnection as Klippy
     from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
+
+MIN_PIP_VERSION = (23, 0)
 
 SUPPORTED_CHANNELS = {
     "zip": ["stable", "beta"],
@@ -71,25 +76,37 @@ class AppDeploy(BaseDeploy):
             raise config.error(
                 f"Invalid Channel '{self.channel}' for config "
                 f"section [{config.get_name()}], type: {self.type}")
-        self._verify_path(config, 'path', self.path)
+        self._verify_path(config, 'path', self.path, check_file=False)
         self.executable: Optional[pathlib.Path] = None
-        self.pip_exe: Optional[pathlib.Path] = None
+        self.pip_cmd: Optional[str] = None
+        self.pip_version: Tuple[int, ...] = tuple()
         self.venv_args: Optional[str] = None
         if executable is not None:
             self.executable = pathlib.Path(executable).expanduser()
-            self.pip_exe = self.executable.parent.joinpath("pip")
-            if not self.pip_exe.exists():
+            self._verify_path(config, 'env', self.executable, check_exe=True)
+            # Detect if executable is actually located in a virtualenv
+            # by checking the parent for the activation script
+            act_path = self.executable.parent.joinpath("activate")
+            while not act_path.is_file():
                 if self.executable.is_symlink():
                     self.executable = pathlib.Path(os.readlink(self.executable))
-                    self.pip_exe = self.executable.parent.joinpath("pip")
-                if not self.pip_exe.exists():
-                    logging.info(
-                        f"Update Manger {self.name}: Unable to locate pip "
-                        "executable")
-                    self.pip_exe = None
-            self._verify_path(config, 'env', self.executable)
+                    act_path = self.executable.parent.joinpath("activate")
+                else:
+                    break
+            if act_path.is_file():
+                venv_dir = self.executable.parent.parent
+                self.log_info(f"Detected virtualenv: {venv_dir}")
+                pip_exe = self.executable.parent.joinpath("pip")
+                if pip_exe.is_file():
+                    self.pip_cmd = f"{self.executable} -m pip"
+                else:
+                    self.log_info("Unable to locate pip executable")
+            else:
+                self.log_info(
+                    f"Unable to detect virtualenv at: {executable}"
+                )
+                self.executable = pathlib.Path(executable).expanduser()
             self.venv_args = config.get('venv_args', None)
-
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.managed_services: List[str] = []
         svc_default = []
@@ -99,6 +116,20 @@ class AppDeploy(BaseDeploy):
         services: List[str] = config.getlist(
             "managed_services", svc_default, separator=None
         )
+        if self.name in services:
+            machine: Machine = self.server.lookup_component("machine")
+            data_path: str = self.server.get_app_args()["data_path"]
+            asvc = pathlib.Path(data_path).joinpath("moonraker.asvc")
+            if not machine.is_service_allowed(self.name):
+                self.server.add_warning(
+                    f"[{config.get_name()}]: Moonraker is not permitted to "
+                    f"restart service '{self.name}'.  To enable management "
+                    f"of this service add {self.name} to the bottom of the "
+                    f"file {asvc}.  To disable management for this service "
+                    "set 'is_system_service: False' in the configuration "
+                    "for this section."
+                )
+                services.clear()
         for svc in services:
             if svc not in svc_choices:
                 raw = " ".join(services)
@@ -143,19 +174,32 @@ class AppDeploy(BaseDeploy):
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
-        self.need_channel_update = storage.get('need_channel_upate', False)
-        self._is_valid = storage.get('is_valid', False)
+        self.need_channel_update = storage.get("need_channel_update", False)
+        self._is_valid = storage.get("is_valid", False)
+        self.pip_version = tuple(storage.get("pip_version", []))
+        if self.pip_version:
+            ver_str = ".".join([str(part) for part in self.pip_version])
+            self.log_info(f"Stored pip version: {ver_str}")
         return storage
 
-    def _verify_path(self,
-                     config: ConfigHelper,
-                     option: str,
-                     file_path: pathlib.Path
-                     ) -> None:
-        if not file_path.exists():
-            raise config.error(
-                f"Invalid path for option `{option}` in section "
-                f"[{config.get_name()}]: Path `{file_path}` does not exist")
+    def _verify_path(
+        self,
+        config: ConfigHelper,
+        option: str,
+        path: pathlib.Path,
+        check_file: bool = True,
+        check_exe: bool = False
+    ) -> None:
+        base_msg = (
+            f"Invalid path for option `{option}` in section "
+            f"[{config.get_name()}]: Path `{path}`"
+        )
+        if not path.exists():
+            raise config.error(f"{base_msg} does not exist")
+        if check_file and not path.is_file():
+            raise config.error(f"{base_msg} is not a file")
+        if check_exe and not os.access(path, os.X_OK):
+            raise config.error(f"{base_msg} is not executable")
 
     def check_need_channel_swap(self) -> bool:
         return self.need_channel_update
@@ -190,9 +234,10 @@ class AppDeploy(BaseDeploy):
     async def reinstall(self):
         raise NotImplementedError
 
-    async def restart_service(self):
+    async def restart_service(self) -> None:
         if not self.managed_services:
             return
+        machine: Machine = self.server.lookup_component("machine")
         is_full = self.cmd_helper.is_full_update()
         for svc in self.managed_services:
             if is_full and svc != self.name:
@@ -204,21 +249,12 @@ class AppDeploy(BaseDeploy):
             if svc == "moonraker":
                 # Launch restart async so the request can return
                 # before the server restarts
-                event_loop = self.server.get_event_loop()
-                event_loop.delay_callback(.1, self._do_restart, svc)
+                machine.restart_moonraker_service()
             else:
-                await self._do_restart(svc)
-
-    async def _do_restart(self, svc_name: str) -> None:
-        machine: Machine = self.server.lookup_component("machine")
-        try:
-            await machine.do_service_action("restart", svc_name)
-        except Exception:
-            if svc_name == "moonraker":
-                # We will always get an error when restarting moonraker
-                # from within the child process, so ignore it
-                return
-            raise self.log_exc("Error restarting service")
+                if svc == "klipper":
+                    kconn: Klippy = self.server.lookup_component("klippy_connection")
+                    svc = kconn.unit_name
+                await machine.do_service_action("restart", svc)
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
@@ -234,6 +270,7 @@ class AppDeploy(BaseDeploy):
         storage = super().get_persistent_data()
         storage['is_valid'] = self._is_valid
         storage['need_channel_update'] = self.need_channel_update
+        storage['pip_version'] = list(self.pip_version)
         return storage
 
     async def _get_file_hash(self,
@@ -269,11 +306,12 @@ class AppDeploy(BaseDeploy):
             self.log_exc("Error updating packages")
             return
 
-    async def _update_virtualenv(self,
-                                 requirements: Union[pathlib.Path, List[str]]
-                                 ) -> None:
-        if self.pip_exe is None:
+    async def _update_python_requirements(
+        self, requirements: Union[pathlib.Path, List[str]]
+    ) -> None:
+        if self.pip_cmd is None:
             return
+        await self._update_pip()
         # Update python dependencies
         if isinstance(requirements, pathlib.Path):
             if not requirements.is_file():
@@ -285,20 +323,67 @@ class AppDeploy(BaseDeploy):
             args = " ".join(requirements)
         self.notify_status("Updating python packages...")
         try:
-            # First attempt to update pip
-            # await self.cmd_helper.run_cmd(
-            #     f"{self.pip_exe} install -U pip", timeout=1200., notify=True,
-            #     retries=3)
             await self.cmd_helper.run_cmd(
-                f"{self.pip_exe} install {args}", timeout=1200., notify=True,
-                retries=3)
+                f"{self.pip_cmd} install {args}", timeout=1200., notify=True,
+                retries=3
+            )
         except Exception:
             self.log_exc("Error updating python requirements")
 
-    async def _build_virtualenv(self) -> None:
-        if self.pip_exe is None or self.venv_args is None:
+    async def _update_pip(self) -> None:
+        if self.pip_cmd is None:
             return
-        bin_dir = self.pip_exe.parent
+        update_ver = await self._check_pip_version()
+        if update_ver is None:
+            return
+        cur_vstr = ".".join([str(part) for part in self.pip_version])
+        self.notify_status(
+            f"Updating pip from version {cur_vstr} to {update_ver}..."
+        )
+        try:
+            await self.cmd_helper.run_cmd(
+                f"{self.pip_cmd} install pip=={update_ver}",
+                timeout=1200., notify=True, retries=3
+            )
+        except Exception:
+            self.log_exc("Error updating python pip")
+
+    async def _check_pip_version(self) -> Optional[str]:
+        if self.pip_cmd is None:
+            return None
+        self.notify_status("Checking pip version...")
+        try:
+            data: str = await self.cmd_helper.run_cmd_with_response(
+                f"{self.pip_cmd} --version", timeout=30., retries=3
+            )
+            match = re.match(
+                r"^pip ([0-9.]+) from .+? \(python ([0-9.]+)\)$", data.strip()
+            )
+            if match is None:
+                return None
+            pipver_str: str = match.group(1)
+            pyver_str: str = match.group(2)
+            pipver = tuple([int(part) for part in pipver_str.split(".")])
+            pyver = tuple([int(part) for part in pyver_str.split(".")])
+        except Exception:
+            self.log_exc("Error Getting Pip Version")
+            return None
+        self.pip_version = pipver
+        if not self.pip_version:
+            return None
+        self.log_info(
+            f"Dectected pip version: {pipver_str}, Python {pyver_str}"
+        )
+        if pyver < (3, 7):
+            return None
+        if self.pip_version < MIN_PIP_VERSION:
+            return ".".join([str(ver) for ver in MIN_PIP_VERSION])
+        return None
+
+    async def _build_virtualenv(self) -> None:
+        if self.executable is None or self.venv_args is None:
+            return
+        bin_dir = self.executable.parent
         env_path = bin_dir.parent.resolve()
         self.notify_status(f"Creating virtualenv at: {env_path}...")
         if env_path.exists():
@@ -309,5 +394,5 @@ class AppDeploy(BaseDeploy):
         except Exception:
             self.log_exc(f"Error creating virtualenv")
             return
-        if not self.pip_exe.exists():
+        if not self.executable.exists():
             raise self.log_exc("Failed to create new virtualenv", False)

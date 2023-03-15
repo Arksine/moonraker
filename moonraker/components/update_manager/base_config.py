@@ -8,15 +8,15 @@ from __future__ import annotations
 import os
 import sys
 import copy
-from utils import MOONRAKER_PATH
+from ...utils import source_info
 from typing import (
     TYPE_CHECKING,
     Dict
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from components.database import MoonrakerDatabase
+    from ...confighelper import ConfigHelper
+    from ..database import MoonrakerDatabase
 
 KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
 KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
@@ -29,7 +29,7 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
         "install_script": "scripts/install-moonraker.sh",
         "host_repo": "arksine/moonraker",
         "env": sys.executable,
-        "path": MOONRAKER_PATH,
+        "path": str(source_info.source_path()),
         "managed_services": "moonraker"
     },
     "klipper": {

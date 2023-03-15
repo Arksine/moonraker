@@ -328,10 +328,10 @@
                         <div class="content">
                             {% for item in summary %}
                                 <article class="item">{{ item }}</article>
-                            {% end %}
+                            {% endfor %}
                         </div>
                     </article>
-                {% end %}
+                {% endif %}
                 {% if announcements %}
                 <article class="card messages">
                     <h1>Announcements</h1>
@@ -346,20 +346,20 @@
                             <script>
                                 setClickable("{{ id }}");
                             </script>
-                        {% end %}
+                        {% endfor %}
                     </div>
                 </article>
-                {% end %}
+                {% endif %}
                 {% if warnings %}
                     <article class="card messages warning">
                         <h1>Warnings</h1>
                         <div class="content">
                             {% for warn in warnings %}
                                 <article class="item">{{ warn }}</article>
-                            {% end %}
+                            {% endfor %}
                         </div>
                     </article>
-                {% end %}
+                {% endif %}
             </div>
             <div id="update_modal" class="modal">
                 <div class="modal-card">
@@ -410,7 +410,7 @@
                 const modal = document.getElementById("update_modal");
                 {% if sudo_requested %}
                     modal.style.display = "block";
-                {% end %}
+                {% endif %}
                 const main_form = document.getElementById("main_form")
                 const status_item = document.getElementById("modal_status");
                 const status_div = document.getElementById("status_msg");

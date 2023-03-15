@@ -5,7 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 import logging
-from utils import load_system_module
+from ..utils import load_system_module
 
 # Annotation imports
 from typing import (
@@ -18,8 +18,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from eventloop import EventLoop
+    from ..confighelper import ConfigHelper
+    from ..eventloop import EventLoop
     GPIO_CALLBACK = Callable[[float, float, int], Optional[Awaitable[None]]]
 
 class GpioFactory:
@@ -267,7 +267,7 @@ class GpioEvent(GpioBase):
         self.error_count = 0
         ret = self.callback(eventtime, evt_duration, self.value)
         if ret is not None:
-            self.event_loop.create_task(ret)
+            self.event_loop.create_task(ret)  # type: ignore
 
     def _increment_error(self, eventtime: float) -> None:
         if eventtime - self.last_error_reset > ERROR_RESET_TIME:

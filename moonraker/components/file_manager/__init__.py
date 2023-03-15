@@ -9,7 +9,7 @@ from . import file_manager as fm
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from ...confighelper import ConfigHelper
 
 def load_component(config: ConfigHelper) -> fm.FileManager:
     return fm.load_component(config)

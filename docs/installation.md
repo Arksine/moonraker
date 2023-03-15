@@ -208,7 +208,8 @@ structure using the default data path of `$HOME/printer_data`.
 │   └── moonraker.log
 ├── systemd
 │   └── moonraker.env
-└── moonraker.secrets (optional)
+├── moonraker.secrets (optional)
+└── moonraker.asvc
 ```
 
 If it is not desirible for the files and folders to exist in these specific
@@ -298,10 +299,10 @@ Following are some items to take note of:
   by the enviroment variable `MOONRAKER_ARGS`.  This variable is set in
   the environment file.
 
-#### The Enivironment File
+#### The Environment File
 
 The environment file, `moonraker.env`. is created in the data path during
-installation. A default installation's enviroment file will contain the path
+installation. A default installation's environment file will contain the path
 to `moonraker.py` and the data path option, ie:
 
 ```
@@ -490,6 +491,71 @@ Retrieve the API Key via the browser from a trusted client:
   The API Key without the quotes.
 
         {"result": "8ce6ae5d354a4365812b83140ed62e4b"}
+
+### LMDB Database Backup and Restore
+
+Moonraker uses a [LMDB Database](http://www.lmdb.tech/doc/) for persistent
+storage of procedurally generated data.  LMDB database files are platform
+dependent, and thus cannot be easily transferred between different machines.
+A file generated on a Raspberry Pi cannot be directly transferred to an x86
+machine.  Likewise, a file generated on a 32-bit version of Linux cannot
+be transferred to a 64-bit machine.
+
+Moonraker includes two scripts, `backup-database.sh` and `restore-database.sh`
+to help facilitate database backups and transfers.
+
+```shell
+~/moonraker/scripts/backup-database.sh -h
+Moonraker Database Backup Utility
+
+usage: backup-database.sh [-h] [-e <python env path>] [-d <database path>] [-o <output file>]
+
+optional arguments:
+  -h                  show this message
+  -e <env path>       Moonraker Python Environment
+  -d <database path>  Moonraker LMDB database to backup
+  -o <output file>    backup file to save to
+```
+
+```shell
+~/moonraker/scripts/restore-database.sh -h
+Moonraker Database Restore Utility
+
+usage: restore-database.sh [-h] [-e <python env path>] [-d <database path>] [-i <input file>]
+
+optional arguments:
+  -h                  show this message
+  -e <env path>       Moonraker Python Environment
+  -d <database path>  Moonraker LMDB database path to restore to
+  -i <input file>     backup file to restore from
+```
+
+Both scripts include default values for the Moonraker Environment and Database
+Path.  These are `$HOME/moonraker-env` and `$HOME/printer_data/database`
+respectively.  The `backup` script defaults the output value to
+`$HOME/database.backup`.  The `restore` script requires that the user specify
+the input file using the `-i` option.
+
+To backup a database for a default Moonraker installation the user may ssh into
+the machine and run the following command:
+
+```shell
+~/moonraker/scripts/backup-database.sh -o ~/moonraker-database.backup
+```
+
+And to restore the database:
+```shell
+sudo service moonraker stop
+~/moonraker/scripts/restore-database.sh -i ~/moonraker-database.backup
+sudo service moonraker start
+```
+
+The backup file contains [cdb like](https://manpages.org/cdb/5) entries
+for each key/value pair in the database.  All keys and values are base64
+encoded, however the data is not encrypted.  Moonraker's database may
+contain credentials and other sensitive information, so users should treat
+this file accordingly.  It is not recommended to keep backups in any folder
+served by Moonraker.
 
 ### Recovering a broken repo
 

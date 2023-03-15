@@ -34,8 +34,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
+    from ..websockets import WebsocketManager
     from tornado.httputil import HTTPServerRequest
     from tornado.web import RequestHandler
     from .database import MoonrakerDatabase as DBComp
@@ -76,6 +77,9 @@ class Authorization:
         self.login_timeout = config.getint('login_timeout', 90)
         self.force_logins = config.getboolean('force_logins', False)
         self.default_source = config.get('default_source', "moonraker").lower()
+        self.enable_api_key = config.getboolean('enable_api_key', True)
+        self.max_logins = config.getint("max_login_attempts", None, above=0)
+        self.failed_logins: Dict[IPAddr, int] = {}
         if self.default_source not in AUTH_SOURCES:
             raise config.error(
                 "[authorization]: option 'default_source' - Invalid "
@@ -223,36 +227,45 @@ class Authorization:
         self.permitted_paths.add("/access/info")
         self.server.register_endpoint(
             "/access/login", ['POST'], self._handle_login,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/logout", ['POST'], self._handle_logout,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request, transports=['http'])
+            self._handle_user_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/users/list", ['GET'], self._handle_list_request,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/user/password", ['POST'], self._handle_password_reset,
-            transports=['http'])
+            transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, transports=['http'])
+            self._handle_apikey_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/oneshot_token", ['GET'],
-            self._handle_oneshot_request, transports=['http'])
+            self._handle_oneshot_request, transports=['http', 'websocket'])
         self.server.register_endpoint(
             "/access/info", ['GET'],
-            self._handle_info_request, transports=['http'])
-        self.server.register_notification("authorization:user_created")
-        self.server.register_notification("authorization:user_deleted")
+            self._handle_info_request, transports=['http', 'websocket'])
+        wsm: WebsocketManager = self.server.lookup_component("websockets")
+        wsm.register_notification("authorization:user_created")
+        wsm.register_notification(
+            "authorization:user_deleted", event_type="logout"
+        )
+        wsm.register_notification(
+            "authorization:user_logged_out", event_type="logout"
+        )
 
     def register_permited_path(self, path: str) -> None:
         self.permitted_paths.add(path)
+
+    def is_path_permitted(self, path: str) -> bool:
+        return path in self.permitted_paths
 
     def _sync_user(self, username: str) -> None:
         self.user_db[username] = self.users[username]
@@ -275,7 +288,23 @@ class Authorization:
         return self.get_oneshot_token(ip, user_info)
 
     async def _handle_login(self, web_request: WebRequest) -> Dict[str, Any]:
-        return await self._login_jwt_user(web_request)
+        ip = web_request.get_ip_address()
+        if ip is not None and self.check_logins_maxed(ip):
+            raise HTTPError(
+                401, "Unauthorized, Maximum Login Attempts Reached"
+            )
+        try:
+            ret = await self._login_jwt_user(web_request)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            if ip is not None:
+                failed = self.failed_logins.get(ip, 0)
+                self.failed_logins[ip] = failed + 1
+            raise
+        if ip is not None:
+            self.failed_logins.pop(ip, None)
+        return ret
 
     async def _handle_logout(self, web_request: WebRequest) -> Dict[str, str]:
         user_info = web_request.get_current_user()
@@ -289,6 +318,11 @@ class Authorization:
         jwk_id: str = self.users[username].pop("jwk_id", None)
         self._sync_user(username)
         self.public_jwks.pop(jwk_id, None)
+        eventloop = self.server.get_event_loop()
+        eventloop.delay_callback(
+            .005, self.server.send_event, "authorization:user_logged_out",
+            {'username': username}
+        )
         return {
             "username": username,
             "action": "user_logged_out"
@@ -310,7 +344,7 @@ class Authorization:
                                   ) -> Dict[str, str]:
         refresh_token: str = web_request.get_str('refresh_token')
         try:
-            user_info = self._decode_jwt(refresh_token, token_type="refresh")
+            user_info = self.decode_jwt(refresh_token, token_type="refresh")
         except Exception:
             raise self.server.error("Invalid Refresh Token", 401)
         username: str = user_info['username']
@@ -473,12 +507,15 @@ class Authorization:
         refresh_token = self._generate_jwt(
             username, jwk_id, private_key, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
+        conn = web_request.get_client_connection()
         if create:
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
                 .005, self.server.send_event,
                 "authorization:user_created",
                 {'username': username})
+        elif conn is not None:
+            conn.user_info = user_info
         return {
             'username': username,
             'token': token,
@@ -540,10 +577,9 @@ class Authorization:
         jwt_sig = base64url_encode(sig)
         return b".".join([jwt_msg, jwt_sig]).decode()
 
-    def _decode_jwt(self,
-                    token: str,
-                    token_type: str = "access"
-                    ) -> Dict[str, Any]:
+    def decode_jwt(
+        self, token: str, token_type: str = "access"
+    ) -> Dict[str, Any]:
         message, sig = token.rsplit('.', maxsplit=1)
         enc_header, enc_payload = message.split('.')
         header: Dict[str, Any] = json.loads(base64url_decode(enc_header))
@@ -579,6 +615,24 @@ class Authorization:
         if user_info is None:
             raise self.server.error("Unknown user", 401)
         return user_info
+
+    def validate_jwt(self, token: str) -> Dict[str, Any]:
+        try:
+            user_info = self.decode_jwt(token)
+        except Exception as e:
+            if isinstance(e, self.server.error):
+                raise
+            raise self.server.error(
+                f"Failed to decode JWT: {e}", 401
+            ) from e
+        return user_info
+
+    def validate_api_key(self, api_key: str) -> Dict[str, Any]:
+        if not self.enable_api_key:
+            raise self.server.error("API Key authentication is disabled", 401)
+        if api_key and api_key == self.api_key:
+            return self.users[API_USER]
+        raise self.server.error("Invalid API Key", 401)
 
     def _load_private_key(self, secret: str) -> Signer:
         try:
@@ -642,20 +696,16 @@ class Authorization:
                 qtoken = request.query_arguments.get('access_token', None)
                 if qtoken is not None:
                     auth_token = qtoken[-1].decode()
+        elif auth_token.startswith("Bearer "):
+            auth_token = auth_token[7:]
         else:
-            if auth_token.startswith("Bearer "):
-                auth_token = auth_token[7:]
-            elif auth_token.startswith("Basic "):
-                raise HTTPError(401, "Basic Auth is not supported")
-            else:
-                raise HTTPError(
-                    401, f"Invalid Authorization Header: {auth_token}")
+            return None
         if auth_token:
             try:
-                return self._decode_jwt(auth_token)
+                return self.decode_jwt(auth_token)
             except Exception:
                 logging.exception(f"JWT Decode Error {auth_token}")
-                raise HTTPError(401, f"Error decoding JWT: {auth_token}")
+                raise HTTPError(401, "JWT Decode Error")
         return None
 
     def _check_authorized_ip(self, ip: IPAddr) -> bool:
@@ -705,6 +755,11 @@ class Authorization:
         else:
             return None
 
+    def check_logins_maxed(self, ip_addr: IPAddr) -> bool:
+        if self.max_logins is None:
+            return False
+        return self.failed_logins.get(ip_addr, 0) >= self.max_logins
+
     def check_authorized(self,
                          request: HTTPServerRequest
                          ) -> Optional[Dict[str, Any]]:
@@ -734,14 +789,15 @@ class Authorization:
                 return ost_user
 
         # Check API Key Header
-        key: Optional[str] = request.headers.get("X-Api-Key")
-        if key and key == self.api_key:
-            return self.users[API_USER]
+        if self.enable_api_key:
+            key: Optional[str] = request.headers.get("X-Api-Key")
+            if key and key == self.api_key:
+                return self.users[API_USER]
 
         # If the force_logins option is enabled and at least one
         # user is created this is an unauthorized request
         if self.force_logins and len(self.users) > 1:
-            raise HTTPError(401, "Unauthorized")
+            raise HTTPError(401, "Unauthorized, Force Logins Enabled")
 
         # Check if IP is trusted
         trusted_user = self._check_trusted_connection(ip)

@@ -17,8 +17,8 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
     from .database import MoonrakerDatabase as DBComp
     from .job_state import JobState
     from .file_manager.file_manager import FileManager

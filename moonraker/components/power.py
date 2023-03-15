@@ -11,6 +11,7 @@ import struct
 import socket
 import asyncio
 import time
+from urllib.parse import quote, urlencode
 
 # Annotation imports
 from typing import (
@@ -26,14 +27,14 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
     from .machine import Machine
-    from . import klippy_apis
+    from .klippy_apis import KlippyAPI as APIComp
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
     from .http_client import HttpClient
-    APIComp = klippy_apis.KlippyAPI
+    from klippy_connection import KlippyConnection
 
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:
@@ -93,13 +94,6 @@ class PrinterPower:
         self.server.register_event_handler(
             "job_queue:job_queue_changed", self._handle_job_queued)
         self.server.register_notification("power:power_changed")
-
-    async def _check_klippy_printing(self) -> bool:
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapis.query_objects(
-            {'print_stats': None}, default={})
-        pstate = result.get('print_stats', {}).get('state', "").lower()
-        return pstate == "printing"
 
     async def component_init(self) -> None:
         for dev in self.devices.values():
@@ -169,7 +163,9 @@ class PrinterPower:
                 result[name] = "device_not_found"
         return result
 
-    def set_device_power(self, device: str, state: Union[bool, str]) -> None:
+    def set_device_power(
+        self, device: str, state: Union[bool, str], force: bool = False
+    ) -> None:
         request: str = ""
         if isinstance(state, bool):
             request = "on" if state else "off"
@@ -185,7 +181,8 @@ class PrinterPower:
             return
         event_loop = self.server.get_event_loop()
         event_loop.register_callback(
-            self.devices[device].process_request, request)
+            self.devices[device].process_request, request, force=force
+        )
 
     async def add_device(self, name: str, device: PowerDevice) -> None:
         if name in self.devices:
@@ -237,7 +234,18 @@ class PowerDevice:
             self.server.register_event_handler(
                 "server:klippy_started", self._schedule_firmware_restart
             )
-        self.bound_service: Optional[str] = config.get('bound_service', None)
+        self.bound_services: List[str] = []
+        bound_services: List[str] = config.getlist('bound_services', [])
+        if config.has_option('bound_service'):
+            # The `bound_service` option is deprecated, however this minimal
+            # change does not require a warning as it can be reliably resolved
+            bound_services.append(config.get('bound_service'))
+        for svc in bound_services:
+            if svc.endswith(".service"):
+                svc = svc.rsplit(".", 1)[0]
+            if svc in self.bound_services:
+                continue
+            self.bound_services.append(svc)
         self.need_scheduled_restart = False
         self.on_when_queued = config.getboolean('on_when_job_queued', False)
         if config.has_option('on_when_upload_queued'):
@@ -246,13 +254,6 @@ class PowerDevice:
         self.initial_state: Optional[bool] = config.getboolean(
             'initial_state', None
         )
-
-    async def _check_klippy_printing(self) -> bool:
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapis.query_objects(
-            {'print_stats': None}, default={})
-        pstate = result.get('print_stats', {}).get('state', "").lower()
-        return pstate == "printing"
 
     def _schedule_firmware_restart(self, state: str = "") -> None:
         if not self.need_scheduled_restart:
@@ -272,7 +273,8 @@ class PowerDevice:
         kapis: APIComp = self.server.lookup_component("klippy_apis")
         event_loop.delay_callback(
             self.restart_delay, kapis.do_restart,
-            "FIRMWARE_RESTART")
+            "FIRMWARE_RESTART", True
+        )
 
     def get_name(self) -> str:
         return self.name
@@ -291,14 +293,15 @@ class PowerDevice:
 
     async def process_power_changed(self) -> None:
         self.notify_power_changed()
-        if self.bound_service is not None:
+        if self.bound_services:
             machine_cmp: Machine = self.server.lookup_component("machine")
             action = "start" if self.state == "on" else "stop"
-            logging.info(
-                f"Power Device {self.name}: Performing {action} action "
-                f"on bound service {self.bound_service}"
-            )
-            await machine_cmp.do_service_action(action, self.bound_service)
+            for svc in self.bound_services:
+                logging.info(
+                    f"Power Device {self.name}: Performing {action} action "
+                    f"on bound service {svc}"
+                )
+                await machine_cmp.do_service_action(action, svc)
         if self.state == "on" and self.klipper_restart:
             self.need_scheduled_restart = True
             klippy_state = self.server.get_klippy_state()
@@ -333,35 +336,37 @@ class PowerDevice:
     def should_turn_on_when_queued(self) -> bool:
         return self.on_when_queued and self.state == "off"
 
-    def _setup_bound_service(self) -> None:
-        if self.bound_service is None:
+    def _setup_bound_services(self) -> None:
+        if not self.bound_services:
             return
         machine_cmp: Machine = self.server.lookup_component("machine")
-        if machine_cmp.unit_name == self.bound_service.split(".", 1)[0]:
-            raise self.server.error(
-                f"Power Device {self.name}: Cannot bind to Moonraker "
-                f"service, {self.bound_service}."
-            )
         sys_info = machine_cmp.get_system_info()
         avail_svcs: List[str] = sys_info.get('available_services', [])
-        if self.bound_service not in avail_svcs:
-            raise self.server.error(
-                f"Bound Service {self.bound_service} is not available")
-        logging.info(f"Power Device '{self.name}' bound to "
-                     f"service '{self.bound_service}'")
+        for svc in self.bound_services:
+            if machine_cmp.unit_name == svc:
+                raise self.server.error(
+                    f"Power Device {self.name}: Cannot bind to Moonraker "
+                    f"service {svc}."
+                )
+            if svc not in avail_svcs:
+                raise self.server.error(
+                    f"Bound Service {svc} is not available"
+                )
+        svcs = ", ".join(self.bound_services)
+        logging.info(f"Power Device '{self.name}' bound to services: {svcs}")
 
     def init_state(self) -> Optional[Coroutine]:
         return None
 
     def initialize(self) -> bool:
-        self._setup_bound_service()
+        self._setup_bound_services()
         ret = self.init_state()
         if ret is not None:
             eventloop = self.server.get_event_loop()
             self.init_task = eventloop.create_task(ret)
         return self.state != "error"
 
-    async def process_request(self, req: str) -> str:
+    async def process_request(self, req: str, force: bool = False) -> str:
         if self.state == "init" and self.request_lock.locked():
             # return immediately if the device is initializing,
             # otherwise its possible for this to block indefinitely
@@ -381,11 +386,13 @@ class PowerDevice:
                     if base_state != cur_state:
                         self.notify_power_changed()
                     return cur_state
-                printing = await self._check_klippy_printing()
-                if self.locked_while_printing and printing:
-                    raise self.server.error(
-                        f"Unable to change power for {self.name} "
-                        "while printing")
+                if not force:
+                    kconn: KlippyConnection
+                    kconn = self.server.lookup_component("klippy_connection")
+                    if self.locked_while_printing and kconn.is_printing():
+                        raise self.server.error(
+                            f"Unable to change power for {self.name} "
+                            "while printing")
                 ret = self.set_power(req)
                 if ret is not None:
                     await ret
@@ -436,7 +443,7 @@ class HTTPDevice(PowerDevice):
                     raise
                 except Exception as e:
                     if type(last_err) != type(e) or last_err.args != e.args:
-                        logging.info(f"Device Init Error: {self.name}\n{e}")
+                        logging.exception(f"Device Init Error: {self.name}")
                         last_err = e
                     await asyncio.sleep(5.)
                     continue
@@ -457,12 +464,9 @@ class HTTPDevice(PowerDevice):
                     self.notify_power_changed()
                     return
 
-    async def _send_http_command(self,
-                                 url: str,
-                                 command: str,
-                                 retries: int = 3
-                                 ) -> Dict[str, Any]:
-        url = self.client.escape_url(url)
+    async def _send_http_command(
+        self, url: str, command: str, retries: int = 3
+    ) -> Dict[str, Any]:
         response = await self.client.get(
             url, request_timeout=20., attempts=retries,
             retry_pause_time=1., enable_cache=False)
@@ -539,7 +543,7 @@ class GpioDevice(PowerDevice):
         self.state = state
         self._check_timer()
 
-    def _check_timer(self):
+    def _check_timer(self) -> None:
         if self.state == "on" and self.timer is not None:
             event_loop = self.server.get_event_loop()
             power: PrinterPower = self.server.lookup_component("power")
@@ -562,15 +566,13 @@ class KlipperDevice(PowerDevice):
             raise config.error(
                 "Option 'restart_klipper_when_powered' in section "
                 f"[{config.get_name()}] is unsupported for 'klipper_device'")
-        if (
-            self.bound_service is not None and
-            self.bound_service.startswith("klipper")
-        ):
-            # Klipper devices cannot be bound to an instance of klipper or
-            # klipper_mcu
-            raise config.error(
-                f"Option 'bound_service' cannot be set to {self.bound_service}"
-                f" for 'klipper_device' [{config.get_name()}]")
+        for svc in self.bound_services:
+            if svc.startswith("klipper"):
+                # Klipper devices cannot be bound to an instance of klipper or
+                # klipper_mcu
+                raise config.error(
+                    f"Option 'bound_services' must not contain service '{svc}'"
+                    f" for 'klipper_device' [{config.get_name()}]")
         self.is_shutdown: bool = False
         self.update_fut: Optional[asyncio.Future] = None
         self.timer: Optional[float] = config.getfloat(
@@ -706,14 +708,14 @@ class KlipperDevice(PowerDevice):
         if last_state not in [state, "init"] and not in_event:
             self.notify_power_changed()
 
-    def _check_timer(self):
+    def _check_timer(self) -> None:
         if self.state == "on" and self.timer is not None:
             event_loop = self.server.get_event_loop()
             power: PrinterPower = self.server.lookup_component("power")
             self.timer_handle = event_loop.delay_callback(
                 self.timer, power.set_device_power, self.name, "off")
 
-    def _reset_timer(self):
+    def _reset_timer(self) -> None:
         if self.timer_handle is not None:
             self.timer_handle.cancel()
             self.timer_handle = None
@@ -882,7 +884,7 @@ class TPLinkSmartPlug(PowerDevice):
                     raise
                 except Exception as e:
                     if type(last_err) != type(e) or last_err.args != e.args:
-                        logging.info(f"Device Init Error: {self.name}\n{e}")
+                        logging.exception(f"Device Init Error: {self.name}")
                         last_err = e
                     await asyncio.sleep(5.)
                     continue
@@ -935,14 +937,11 @@ class TPLinkSmartPlug(PowerDevice):
 
 class Tasmota(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
-        super().__init__(config, default_password="")
+        super().__init__(config, default_user="admin", default_password="")
         self.output_id = config.getint("output_id", 1)
         self.timer = config.get("timer", "")
 
-    async def _send_tasmota_command(self,
-                                    command: str,
-                                    password: Optional[str] = None
-                                    ) -> Dict[str, Any]:
+    async def _send_tasmota_command(self, command: str) -> Dict[str, Any]:
         if command in ["on", "off"]:
             out_cmd = f"Power{self.output_id} {command}"
             if self.timer != "" and command == "off":
@@ -951,9 +950,12 @@ class Tasmota(HTTPDevice):
             out_cmd = f"Power{self.output_id}"
         else:
             raise self.server.error(f"Invalid tasmota command: {command}")
-
-        url = f"http://{self.addr}/cm?user=admin&password=" \
-            f"{self.password}&cmnd={out_cmd}"
+        query = urlencode({
+            "user": self.user,
+            "password": self.password,
+            "cmnd": out_cmd
+        })
+        url = f"{self.protocol}://{quote(self.addr)}/cm?{query}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -987,22 +989,21 @@ class Shelly(HTTPDevice):
         self.timer = config.get("timer", "")
 
     async def _send_shelly_command(self, command: str) -> Dict[str, Any]:
-        if command == "on":
-            out_cmd = f"relay/{self.output_id}?turn={command}"
-        elif command == "off":
-            if self.timer != "":
-                out_cmd = f"relay/{self.output_id}?turn=on&timer={self.timer}"
-            else:
-                out_cmd = f"relay/{self.output_id}?turn={command}"
-        elif command == "info":
-            out_cmd = f"relay/{self.output_id}"
-        else:
+        query_args: Dict[str, Any] = {}
+        out_cmd = f"relay/{self.output_id}"
+        if command in ["on", "off"]:
+            query_args["turn"] = command
+            if command == "off" and self.timer != "":
+                query_args["turn"] = "on"
+                query_args["timer"] = self.timer
+        elif command != "info":
             raise self.server.error(f"Invalid shelly command: {command}")
         if self.password != "":
-            out_pwd = f"{self.user}:{self.password}@"
+            out_pwd = f"{quote(self.user)}:{quote(self.password)}@"
         else:
             out_pwd = f""
-        url = f"http://{out_pwd}{self.addr}/{out_cmd}"
+        query = urlencode(query_args)
+        url = f"{self.protocol}://{out_pwd}{quote(self.addr)}/{out_cmd}?{query}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -1024,14 +1025,14 @@ class SmartThings(HTTPDevice):
         self.device: str = config.get("device", "")
         self.token: str = config.gettemplate("token").render()
 
-    async def _send_smartthings_command(self,
-                                        command: str
-                                        ) -> Dict[str, Any]:
+    async def _send_smartthings_command(self, command: str) -> Dict[str, Any]:
         body: Optional[List[Dict[str, Any]]] = None
         if (command == "on" or command == "off"):
             method = "POST"
-            url = (f"{self.protocol}://{self.addr}"
-                   f"/v1/devices/{self.device}/commands")
+            url = (
+                f"{self.protocol}://{quote(self.addr)}"
+                f"/v1/devices/{quote(self.device)}/commands"
+            )
             body = [
                 {
                     "component": "main",
@@ -1041,8 +1042,11 @@ class SmartThings(HTTPDevice):
             ]
         elif command == "info":
             method = "GET"
-            url = (f"{self.protocol}://{self.addr}/v1/devices/{self.device}/"
-                   "components/main/capabilities/switch/status")
+            url = (
+                f"{self.protocol}://{quote(self.addr)}/v1/devices/"
+                f"{quote(self.device)}/components/main/capabilities/"
+                "switch/status"
+            )
         else:
             raise self.server.error(
                 f"Invalid SmartThings command: {command}")
@@ -1050,7 +1054,6 @@ class SmartThings(HTTPDevice):
         headers = {
             'Authorization': f'Bearer {self.token}'
         }
-        url = self.client.escape_url(url)
         response = await self.client.request(
             method, url, body=body, headers=headers,
             attempts=3, enable_cache=False
@@ -1075,13 +1078,22 @@ class HomeSeer(HTTPDevice):
         super().__init__(config, default_user="admin", default_password="")
         self.device = config.getint("device")
 
-    async def _send_homeseer(self,
-                             request: str,
-                             additional: str = ""
-                             ) -> Dict[str, Any]:
-        url = (f"http://{self.user}:{self.password}@{self.addr}"
-               f"/JSON?user={self.user}&pass={self.password}"
-               f"&request={request}&ref={self.device}&{additional}")
+    async def _send_homeseer(
+        self, request: str, state: str = ""
+    ) -> Dict[str, Any]:
+        query_args = {
+            "user": self.user,
+            "pass": self.password,
+            "request": request,
+            "ref": self.device,
+        }
+        if state:
+            query_args["label"] = state
+        query = urlencode(query_args)
+        url = (
+            f"{self.protocol}://{quote(self.user)}:{quote(self.password)}@"
+            f"{quote(self.addr)}/JSON?{query}"
+        )
         return await self._send_http_command(url, request)
 
     async def _send_status_request(self) -> str:
@@ -1089,12 +1101,9 @@ class HomeSeer(HTTPDevice):
         return res[f"Devices"][0]["status"].lower()
 
     async def _send_power_request(self, state: str) -> str:
-        if state == "on":
-            state_hs = "On"
-        elif state == "off":
-            state_hs = "Off"
-        res = await self._send_homeseer("controldevicebylabel",
-                                        f"label={state_hs}")
+        res = await self._send_homeseer(
+            "controldevicebylabel", state.capitalize()
+        )
         return state
 
 
@@ -1106,26 +1115,23 @@ class HomeAssistant(HTTPDevice):
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
 
-    async def _send_homeassistant_command(self,
-                                          command: str
-                                          ) -> Dict[str, Any]:
+    async def _send_homeassistant_command(self, command: str) -> Dict[str, Any]:
         body: Optional[Dict[str, Any]] = None
         if command in ["on", "off"]:
-            out_cmd = f"api/services/{self.domain}/turn_{command}"
+            out_cmd = f"api/services/{quote(self.domain)}/turn_{command}"
             body = {"entity_id": self.device}
             method = "POST"
         elif command == "info":
-            out_cmd = f"api/states/{self.device}"
+            out_cmd = f"api/states/{quote(self.device)}"
             method = "GET"
         else:
             raise self.server.error(
                 f"Invalid homeassistant command: {command}")
-        url = f"{self.protocol}://{self.addr}:{self.port}/{out_cmd}"
+        url = f"{self.protocol}://{quote(self.addr)}:{self.port}/{out_cmd}"
         headers = {
             'Authorization': f'Bearer {self.token}'
         }
         data: Dict[str, Any] = {}
-        url = self.client.escape_url(url)
         response = await self.client.request(
             method, url, body=body, headers=headers,
             attempts=3, enable_cache=False
@@ -1154,16 +1160,16 @@ class Loxonev1(HTTPDevice):
 
     async def _send_loxonev1_command(self, command: str) -> Dict[str, Any]:
         if command in ["on", "off"]:
-            out_cmd = f"jdev/sps/io/{self.output_id}/{command}"
+            out_cmd = f"jdev/sps/io/{quote(self.output_id)}/{command}"
         elif command == "info":
-            out_cmd = f"jdev/sps/io/{self.output_id}"
+            out_cmd = f"jdev/sps/io/{quote(self.output_id)}"
         else:
             raise self.server.error(f"Invalid loxonev1 command: {command}")
         if self.password != "":
-            out_pwd = f"{self.user}:{self.password}@"
+            out_pwd = f"{quote(self.user)}:{quote(self.password)}@"
         else:
             out_pwd = f""
-        url = f"http://{out_pwd}{self.addr}/{out_cmd}"
+        url = f"http://{out_pwd}{quote(self.addr)}/{out_cmd}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -1358,28 +1364,39 @@ class HueDevice(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config)
         self.device_id = config.get("device_id")
+        self.device_type = config.get("device_type", "light")
+        if self.device_type == "group":
+            self.state_key = "action"
+            self.on_state = "all_on"
+        else:
+            self.state_key = "state"
+            self.on_state = "on"
 
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
-            f"http://{self.addr}/api/{self.user}/lights/{self.device_id}/state"
+            f"{self.protocol}://{quote(self.addr)}/api/{quote(self.user)}"
+            f"/{self.device_type}s/{quote(self.device_id)}"
+            f"/{quote(self.state_key)}"
         )
-        url = self.client.escape_url(url)
         ret = await self.client.request("PUT", url, body={"on": new_state})
         resp = cast(List[Dict[str, Dict[str, Any]]], ret.json())
+        state_url = (
+            f"/{self.device_type}s/{self.device_id}/{self.state_key}/on"
+        )
         return (
-            "on" if resp[0]["success"][f"/lights/{self.device_id}/state/on"]
+            "on" if resp[0]["success"][state_url]
             else "off"
         )
 
     async def _send_status_request(self) -> str:
         url = (
-            f"http://{self.addr}/api/{self.user}/lights/{self.device_id}"
+            f"{self.protocol}://{quote(self.addr)}/api/{quote(self.user)}"
+            f"/{self.device_type}s/{quote(self.device_id)}"
         )
-        url = self.client.escape_url(url)
         ret = await self.client.request("GET", url)
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
-        return "on" if resp["state"]["on"] else "off"
+        return "on" if resp["state"][self.on_state] else "off"
 
 
 # The power component has multiple configuration sections

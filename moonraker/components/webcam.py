@@ -20,9 +20,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from moonraker import Server
-    from confighelper import ConfigHelper
-    from websockets import WebRequest
+    from ..server import Server
+    from ..confighelper import ConfigHelper
+    from ..common import WebRequest
     from .database import MoonrakerDatabase
     from .machine import Machine
     from .shell_command import ShellCommandFactory
@@ -194,8 +194,8 @@ class WebcamManager:
             except Exception:
                 logging.exception(f"Error Processing {img_type} url")
                 result[f"{img_type}_url"] = ""
+        url: str = result["snapshot_url"]
         if result.get("snapshot_url", "").startswith("http"):
-            url = client.escape_url(result["snapshot_url"])
             ret = await client.get(url, connect_timeout=1., request_timeout=1.)
             result["snapshot_reachable"] = not ret.has_error()
         return result

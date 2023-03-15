@@ -101,6 +101,7 @@ class BaseSlicer(object):
         self.header_data: str = ""
         self.footer_data: str = ""
         self.layer_height: Optional[float] = None
+        self.has_m486_objects: bool = False
 
     def set_data(self,
                  header_data: str,
@@ -136,9 +137,22 @@ class BaseSlicer(object):
                            data: str,
                            pattern: Optional[str] = None
                            ) -> bool:
-        match = re.search(r"\nDEFINE_OBJECT NAME=", data)
+        match = re.search(
+            r"\n((DEFINE_OBJECT)|(EXCLUDE_OBJECT_DEFINE)) NAME=",
+            data
+        )
         if match is not None:
-            # Objects alread processed
+            # Objects already processed
+            fname = os.path.basename(self.path)
+            log_to_stderr(
+                f"File '{fname}' currently supports cancellation, "
+                "processing aborted"
+            )
+            if match.group(1).startswith("DEFINE_OBJECT"):
+                log_to_stderr(
+                    "Legacy object processing detected.  This is not "
+                    "compatible with official versions of Klipper."
+                )
             return False
         # Always check M486
         patterns = [r"\nM486"]
@@ -146,6 +160,7 @@ class BaseSlicer(object):
             patterns.append(pattern)
         for regex in patterns:
             if re.search(regex, data) is not None:
+                self.has_m486_objects = regex == r"\nM486"
                 return True
         return False
 
@@ -308,7 +323,8 @@ class PrusaSlicer(BaseSlicer):
             'PrusaSlicer': r"PrusaSlicer\s(.*)\son",
             'SuperSlicer': r"SuperSlicer\s(.*)\son",
             'SliCR-3D': r"SliCR-3D\s(.*)\son",
-            'BambuStudio': r"BambuStudio[^ ]*\s(.*)\n"
+            'BambuStudio': r"BambuStudio[^ ]*\s(.*)\n",
+            'A3dp-Slicer': r"A3dp-Slicer\s(.*)\son",
         }
         for name, expr in aliases.items():
             match = re.search(expr, data)
@@ -555,6 +571,8 @@ class Simplify3D(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, str]]:
         match = re.search(r"Simplify3D\(R\)\sVersion\s(.*)", data)
         if match:
+            self._version = match.group(1)
+            self._is_v5 = self._version.startswith("5")
             return {
                 'slicer': "Simplify3D",
                 'slicer_version': match.group(1)
@@ -574,19 +592,27 @@ class Simplify3D(BaseSlicer):
 
     def parse_filament_total(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+Filament\slength:\s(\d+\.?\d*)\smm", self.footer_data)
+            r";\s+(?:Filament\slength|Material\sLength):\s(\d+\.?\d*)\smm",
+            self.footer_data
+        )
 
     def parse_filament_weight_total(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+Plastic\sweight:\s(\d+\.?\d*)\sg", self.footer_data)
+            r";\s+(?:Plastic\sweight|Material\sWeight):\s(\d+\.?\d*)\sg",
+            self.footer_data
+        )
 
     def parse_filament_name(self) -> Optional[str]:
         return _regex_find_string(
             r";\s+printMaterial,(.*)", self.header_data)
 
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";\s+makerBotModelMaterial,(.*)", self.footer_data)
+
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
-            r';\s+Build time:.*', self.footer_data)
+            r';\s+Build (t|T)ime:.*', self.footer_data)
         if not time_match:
             return None
         total_time = 0
@@ -619,15 +645,37 @@ class Simplify3D(BaseSlicer):
                     return None
         return None
 
+    def _get_first_layer_temp_v5(self, heater_type: str) -> Optional[float]:
+        pattern = (
+            r";\s+temperatureController,.+?"
+            r";\s+temperatureType,"f"{heater_type}"r".+?"
+            r";\s+temperatureSetpoints,\d+\|(\d+)"
+        )
+        match = re.search(pattern, self.header_data, re.MULTILINE | re.DOTALL)
+        if match is not None:
+            try:
+                return float(match.group(1))
+            except Exception:
+                return None
+        return None
+
     def parse_first_layer_extr_temp(self) -> Optional[float]:
-        return self._get_first_layer_temp("Extruder 1")
+        if self._is_v5:
+            return self._get_first_layer_temp_v5("extruder")
+        else:
+            return self._get_first_layer_temp("Extruder 1")
 
     def parse_first_layer_bed_temp(self) -> Optional[float]:
-        return self._get_first_layer_temp("Heated Bed")
+        if self._is_v5:
+            return self._get_first_layer_temp_v5("platform")
+        else:
+            return self._get_first_layer_temp("Heated Bed")
 
     def parse_nozzle_diameter(self) -> Optional[float]:
         return _regex_find_first(
-            r";\s+extruderDiameter,(\d+\.\d*)", self.header_data)
+            r";\s+(?:extruderDiameter|nozzleDiameter),(\d+\.\d*)",
+            self.header_data
+        )
 
 class KISSlicer(BaseSlicer):
     def check_identity(self, data: str) -> Optional[Dict[str, Any]]:
@@ -920,19 +968,48 @@ SUPPORTED_DATA = [
     'filament_weight_total',
     'thumbnails']
 
-def process_objects(file_path: str) -> bool:
+def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
     try:
-        from preprocess_cancellation import preprocessor
+        from preprocess_cancellation import (
+            preprocess_slicer,
+            preprocess_cura,
+            preprocess_ideamaker,
+            preprocess_m486
+        )
     except ImportError:
         log_to_stderr("Module 'preprocess-cancellation' failed to load")
         return False
     fname = os.path.basename(file_path)
-    log_to_stderr(f"Performing Object Processing on file: {fname}")
+    log_to_stderr(
+        f"Performing Object Processing on file: {fname}, "
+        f"sliced by {name}"
+    )
     with tempfile.TemporaryDirectory() as tmp_dir_name:
         tmp_file = os.path.join(tmp_dir_name, fname)
         with open(file_path, 'r') as in_file:
             with open(tmp_file, 'w') as out_file:
-                preprocessor(in_file, out_file)
+                try:
+                    if slicer.has_m486_objects:
+                        processor = preprocess_m486
+                    elif isinstance(slicer, PrusaSlicer):
+                        processor = preprocess_slicer
+                    elif isinstance(slicer, Cura):
+                        processor = preprocess_cura
+                    elif isinstance(slicer, IdeaMaker):
+                        processor = preprocess_ideamaker
+                    else:
+                        log_to_stderr(
+                            f"Object Processing Failed, slicer {name}"
+                            "not supported"
+                        )
+                        return False
+                    for line in processor(in_file):
+                        out_file.write(line)
+                except Exception as e:
+                    log_to_stderr(f"Object processing failed: {e}")
+                    return False
+        if os.path.islink(file_path):
+            file_path = os.path.realpath(file_path)
         shutil.move(tmp_file, file_path)
     return True
 
@@ -971,7 +1048,8 @@ def extract_metadata(
     metadata: Dict[str, Any] = {}
     slicer, ident = get_slicer(file_path)
     if check_objects and slicer.has_objects():
-        if process_objects(file_path):
+        name = ident.get("slicer", "unknown")
+        if process_objects(file_path, slicer, name):
             slicer, ident = get_slicer(file_path)
     metadata['size'] = os.path.getsize(file_path)
     metadata['modified'] = os.path.getmtime(file_path)
@@ -1001,6 +1079,8 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
                 if UFP_THUMB_PATH in zf.namelist():
                     tmp_thumb_path = zf.extract(
                         UFP_THUMB_PATH, path=tmp_dir_name)
+            if os.path.islink(dest_path):
+                dest_path = os.path.realpath(dest_path)
             shutil.move(tmp_model_path, dest_path)
             if tmp_thumb_path:
                 if not os.path.exists(dest_thumb_dir):

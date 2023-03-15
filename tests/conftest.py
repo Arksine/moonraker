@@ -10,9 +10,9 @@ import shlex
 import tempfile
 import subprocess
 from typing import Iterator, Dict, AsyncIterator, Any
-from moonraker import Server
-from eventloop import EventLoop
-import utils
+from moonraker.server import Server
+from moonraker.eventloop import EventLoop
+from moonraker import utils
 import dbtool
 from fixtures import KlippyProcess, HttpClient, WebsocketClient
 

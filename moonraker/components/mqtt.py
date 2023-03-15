@@ -13,7 +13,7 @@ import pathlib
 import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
-from websockets import Subscribable, WebRequest, JsonRPC, APITransport
+from ..common import Subscribable, WebRequest, APITransport, JsonRPC
 
 # Annotation imports
 from typing import (
@@ -30,9 +30,9 @@ from typing import (
     Deque,
 )
 if TYPE_CHECKING:
-    from app import APIDefinition
-    from confighelper import ConfigHelper
-    from klippy_connection import KlippyConnection as Klippy
+    from ..app import APIDefinition
+    from ..confighelper import ConfigHelper
+    from ..klippy_connection import KlippyConnection as Klippy
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 
@@ -54,21 +54,35 @@ class ExtPahoClient(paho_mqtt.Client):
         if self._port <= 0:
             raise ValueError('Invalid port number.')
 
-        self._in_packet = {
-            "command": 0,
-            "have_remaining": 0,
-            "remaining_count": [],
-            "remaining_mult": 1,
-            "remaining_length": 0,
-            "packet": b"",
-            "to_process": 0,
-            "pos": 0}
+        if hasattr(self, "_out_packet_mutex"):
+            # Paho Mqtt Version < 1.6.x
+            self._in_packet = {
+                "command": 0,
+                "have_remaining": 0,
+                "remaining_count": [],
+                "remaining_mult": 1,
+                "remaining_length": 0,
+                "packet": b"",
+                "to_process": 0,
+                "pos": 0
+            }
+            with self._out_packet_mutex:
+                self._out_packet = deque()  # type: ignore
 
-        with self._out_packet_mutex:
+            with self._current_out_packet_mutex:
+                self._current_out_packet = None
+        else:
+            self._in_packet = {
+                "command": 0,
+                "have_remaining": 0,
+                "remaining_count": [],
+                "remaining_mult": 1,
+                "remaining_length": 0,
+                "packet": bytearray(b""),
+                "to_process": 0,
+                "pos": 0
+            }
             self._out_packet = deque()  # type: ignore
-
-        with self._current_out_packet_mutex:
-            self._current_out_packet = None
 
         with self._msgtime_mutex:
             self._last_msg_in = paho_mqtt.time_func()
@@ -120,7 +134,7 @@ class ExtPahoClient(paho_mqtt.Client):
             sock.do_handshake()
 
             if verify_host:
-                ssl.match_hostname(sock.getpeercert(), self._host)
+                ssl.match_hostname(sock.getpeercert(), self._host)  # type: ignore
 
         if self._transport == "websockets":
             sock.settimeout(self._keepalive)
@@ -266,6 +280,8 @@ class MQTTClient(APITransport, Subscribable):
             raise config.error(
                 "Option 'default_qos' in section [mqtt] must be "
                 "between 0 and 2")
+        self.publish_split_status = \
+            config.getboolean("publish_split_status", False)
         self.client = ExtPahoClient(protocol=self.protocol)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -290,10 +306,11 @@ class MQTTClient(APITransport, Subscribable):
             transports=["http", "websocket", "internal"])
 
         # Subscribe to API requests
-        self.json_rpc = JsonRPC(transport="MQTT")
+        self.json_rpc = JsonRPC(self.server, transport="MQTT")
         self.api_request_topic = f"{self.instance_name}/moonraker/api/request"
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
+        self.klipper_state_prefix = f"{self.instance_name}/klipper/state"
         self.moonraker_status_topic = f"{self.instance_name}/moonraker/status"
         status_cfg: Dict[str, Any] = config.getdict("status_objects", {},
                                                     allow_empty_fields=True)
@@ -306,8 +323,9 @@ class MQTTClient(APITransport, Subscribable):
                 self.status_objs[key] = None
         if status_cfg:
             logging.debug(f"MQTT: Status Objects Set: {self.status_objs}")
-            self.server.register_event_handler("server:klippy_identified",
-                                               self._handle_klippy_identified)
+            self.server.register_event_handler(
+                "server:klippy_started", self._handle_klippy_started
+            )
 
         self.timestamp_deque: Deque = deque(maxlen=20)
         self.api_qos = config.getint('api_qos', self.qos)
@@ -343,7 +361,7 @@ class MQTTClient(APITransport, Subscribable):
             self._do_reconnect(first=True)
         )
 
-    async def _handle_klippy_identified(self) -> None:
+    async def _handle_klippy_started(self, state: str) -> None:
         if self.status_objs:
             args = {'objects': self.status_objs}
             try:
@@ -712,8 +730,19 @@ class MQTTClient(APITransport, Subscribable):
                     ) -> None:
         if not status or not self.is_connected():
             return
-        payload = {'eventtime': eventtime, 'status': status}
-        self.publish_topic(self.klipper_status_topic, payload)
+        if self.publish_split_status:
+            for objkey in status:
+                objval = status[objkey]
+                for statekey in objval:
+                    payload = {'eventtime': eventtime,
+                               'value': objval[statekey]}
+                    self.publish_topic(
+                        f"{self.klipper_state_prefix}/{objkey}/{statekey}",
+                        payload, retain=True)
+        else:
+            payload = {'eventtime': eventtime, 'status': status}
+            self.publish_topic(self.klipper_status_topic, payload)
+
 
     def get_instance_name(self) -> str:
         return self.instance_name

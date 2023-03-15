@@ -22,8 +22,13 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from utils import ServerError
-from websockets import WebRequest, WebsocketManager, WebSocket, APITransport
+from .common import WebRequest, APIDefinition, APITransport
+from .utils import ServerError, source_info
+from .websockets import (
+    WebsocketManager,
+    WebSocket,
+    BridgeSocket
+)
 from streaming_form_data import StreamingFormDataParser
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -42,33 +47,28 @@ from typing import (
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
-    from moonraker import Server
-    from eventloop import EventLoop
-    from confighelper import ConfigHelper
-    from klippy_connection import KlippyConnection as Klippy
-    from components.file_manager.file_manager import FileManager
-    from components.announcements import Announcements
-    from components.machine import Machine
+    from .server import Server
+    from .eventloop import EventLoop
+    from .confighelper import ConfigHelper
+    from .klippy_connection import KlippyConnection as Klippy
+    from .components.file_manager.file_manager import FileManager
+    from .components.announcements import Announcements
+    from .components.machine import Machine
     from io import BufferedReader
-    import components.authorization
+    from .components.authorization import Authorization
+    from .components.template import TemplateFactory, JinjaTemplate
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
-    AuthComp = Optional[components.authorization.Authorization]
+    AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
 
-# These endpoints are reserved for klippy/server communication only and are
-# not exposed via http or the websocket
-RESERVED_ENDPOINTS = [
-    "list_endpoints", "gcode/subscribe_output",
-    "register_remote_method"
-]
 
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
+MAX_WS_CONNS_DEFAULT = 50
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png", ".jpg"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
 ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
-ASSET_PATH = pathlib.Path(__file__).parent.joinpath("assets")
 
 class MutableRouter(tornado.web.ReversibleRuleRouter):
     def __init__(self, application: MoonrakerApp) -> None:
@@ -110,24 +110,6 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
             except Exception:
                 logging.exception(f"Unable to remove rule: {pattern}")
 
-class APIDefinition:
-    def __init__(self,
-                 endpoint: str,
-                 http_uri: str,
-                 jrpc_methods: List[str],
-                 request_methods: Union[str, List[str]],
-                 transports: List[str],
-                 callback: Optional[APICallback],
-                 need_object_parser: bool):
-        self.endpoint = endpoint
-        self.uri = http_uri
-        self.jrpc_methods = jrpc_methods
-        if not isinstance(request_methods, list):
-            request_methods = [request_methods]
-        self.request_methods = request_methods
-        self.supported_transports = transports
-        self.callback = callback
-        self.need_object_parser = need_object_parser
 
 class InternalTransport(APITransport):
     def __init__(self, server: Server) -> None:
@@ -172,9 +154,13 @@ class MoonrakerApp:
         self.http_server: Optional[HTTPServer] = None
         self.secure_server: Optional[HTTPServer] = None
         self.api_cache: Dict[str, APIDefinition] = {}
+        self.template_cache: Dict[str, JinjaTemplate] = {}
         self.registered_base_handlers: List[str] = []
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
+        max_ws_conns = config.getint(
+            'max_websocket_connections', MAX_WS_CONNS_DEFAULT
+        )
 
         # SSL config
         self.cert_path: pathlib.Path = self._get_path_option(
@@ -199,6 +185,7 @@ class MoonrakerApp:
             'websocket_ping_interval': 10,
             'websocket_ping_timeout': 30,
             'server': self.server,
+            'max_websocket_connections': max_ws_conns,
             'default_handler_class': AuthorizedErrorHandler,
             'default_handler_args': {},
             'log_function': self.log_request,
@@ -211,6 +198,7 @@ class MoonrakerApp:
             (AnyMatches(), self.mutable_router),
             (r"/", WelcomeHandler),
             (r"/websocket", WebSocket),
+            (r"/klippysocket", BridgeSocket),
             (r"/server/redirect", RedirectHandler)
         ]
         self.app = tornado.web.Application(app_handlers, **app_args)
@@ -298,9 +286,6 @@ class MoonrakerApp:
     def get_server(self) -> Server:
         return self.server
 
-    def get_asset_path(self) -> pathlib.Path:
-        return ASSET_PATH
-
     def https_enabled(self) -> bool:
         return self.cert_path.exists() and self.key_path.exists()
 
@@ -321,8 +306,6 @@ class MoonrakerApp:
         return self.api_cache
 
     def register_remote_handler(self, endpoint: str) -> None:
-        if endpoint in RESERVED_ENDPOINTS:
-            return
         api_def = self._create_api_definition(endpoint)
         if api_def.uri in self.registered_base_handlers:
             # reserved handler or already registered
@@ -461,6 +444,20 @@ class MoonrakerApp:
         self.api_cache[endpoint] = api_def
         return api_def
 
+    async def load_template(self, asset_name: str) -> JinjaTemplate:
+        if asset_name in self.template_cache:
+            return self.template_cache[asset_name]
+        eventloop = self.server.get_event_loop()
+        asset = await eventloop.run_in_thread(
+            source_info.read_asset, asset_name
+        )
+        if asset is None:
+            raise tornado.web.HTTPError(404, "Asset Not Found")
+        template: TemplateFactory = self.server.lookup_component("template")
+        asset_tmpl = template.create_ui_template(asset)
+        self.template_cache[asset_name] = asset_tmpl
+        return asset_tmpl
+
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
@@ -501,7 +498,9 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             else:
                 wsm: WebsocketManager = self.server.lookup_component(
                     "websockets")
-                conn = wsm.get_websocket(conn_id)
+                conn = wsm.get_client(conn_id)
+        if not isinstance(conn, WebSocket):
+            return None
         return conn
 
     def write_error(self, status_code: int, **kwargs) -> None:
@@ -1078,7 +1077,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
             "service_name": svc_info.get("unit_name", "unknown"),
             "hostname": self.server.get_host_info()["hostname"],
         }
-        self.render("welcome.html", **context)
-
-    def get_template_path(self) -> Optional[str]:
-        return str(ASSET_PATH)
+        app: MoonrakerApp = self.server.lookup_component("application")
+        welcome_template = await app.load_template("welcome.html")
+        ret = await welcome_template.render_async(context)
+        self.finish(ret)

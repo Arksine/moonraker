@@ -10,8 +10,8 @@ import time
 
 from typing import TYPE_CHECKING, Dict, Any, Optional
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
-    from utils import ServerError
+    from ...confighelper import ConfigHelper
+    from ...utils import ServerError
     from .update_manager import CommandHelper
 
 class BaseDeploy:
@@ -24,6 +24,9 @@ class BaseDeploy:
                  ) -> None:
         if name is None:
             name = config.get_name().split(maxsplit=1)[-1]
+            if name.startswith("client "):
+                # allow deprecated [update_manager client app] style names
+                name = name[7:]
         self.name = name
         if prefix:
             prefix = f"{prefix} {self.name}: "
