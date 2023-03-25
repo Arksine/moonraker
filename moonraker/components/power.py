@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from .klippy_apis import KlippyAPI as APIComp
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
-    from .http_client import HttpClient
+    from .http_client import HttpClient, HttpResponse
     from klippy_connection import KlippyConnection
 
 class PrinterPower:
@@ -54,7 +54,8 @@ class PrinterPower:
             "rf": RFDevice,
             "mqtt": MQTTDevice,
             "smartthings": SmartThings,
-            "hue": HueDevice
+            "hue": HueDevice,
+            "http": GenericHTTP,
         }
 
         for section in prefix_sections:
@@ -417,15 +418,19 @@ class PowerDevice:
         return None
 
 class HTTPDevice(PowerDevice):
-    def __init__(self,
-                 config: ConfigHelper,
-                 default_port: int = -1,
-                 default_user: str = "",
-                 default_password: str = "",
-                 default_protocol: str = "http"
-                 ) -> None:
+    def __init__(
+        self,
+        config: ConfigHelper,
+        default_port: int = -1,
+        default_user: str = "",
+        default_password: str = "",
+        default_protocol: str = "http",
+        is_generic: bool = False
+    ) -> None:
         super().__init__(config)
         self.client: HttpClient = self.server.lookup_component("http_client")
+        if is_generic:
+            return
         self.addr: str = config.get("address")
         self.port = config.getint("port", default_port)
         self.user = config.load_template("user", default_user).render()
@@ -1398,6 +1403,48 @@ class HueDevice(HTTPDevice):
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"][self.on_state] else "off"
 
+class GenericHTTP(HTTPDevice):
+    def __init__(self, config: ConfigHelper,) -> None:
+        super().__init__(config, is_generic=True)
+        self.urls: Dict[str, str] = {
+            "on": config.gettemplate("on_url").render(),
+            "off": config.gettemplate("off_url").render(),
+            "status": config.gettemplate("status_url").render()
+        }
+        self.request_template = config.gettemplate(
+            "request_template", None, is_async=True
+        )
+        self.response_template = config.gettemplate("response_template", is_async=True)
+
+    async def _send_generic_request(self, command: str) -> str:
+        request = self.client.wrap_request(
+            self.urls[command], request_timeout=20., attempts=3, retry_pause_time=1.
+        )
+        context: Dict[str, Any] = {
+            "command": command,
+            "http_request": request,
+            "async_sleep": asyncio.sleep,
+            "log_debug": logging.debug,
+            "urls": dict(self.urls)
+        }
+        if self.request_template is not None:
+            await self.request_template.render_async(context)
+            response = request.last_response()
+            if response is None:
+                raise self.server.error("Failed to receive a response")
+        else:
+            response = await request.send()
+        response.raise_for_status()
+        result = (await self.response_template.render_async(context)).lower()
+        if result not in ["on", "off"]:
+            raise self.server.error(f"Invalid result: {result}")
+        return result
+
+    async def _send_power_request(self, state: str) -> str:
+        return await self._send_generic_request(state)
+
+    async def _send_status_request(self) -> str:
+        return await self._send_generic_request("status")
 
 # The power component has multiple configuration sections
 def load_component(config: ConfigHelper) -> PrinterPower:
