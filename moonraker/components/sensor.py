@@ -289,7 +289,7 @@ class Sensors:
         output = {
             key: sensor.get_sensor_measurements()
             for key, sensor in self.sensors.items()
-            if sensor_name is "" or key == sensor_name
+            if not sensor_name or key == sensor_name
         }
 
         return output
