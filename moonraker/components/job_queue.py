@@ -89,6 +89,8 @@ class JobQueue:
                                prev_stats: Dict[str, Any],
                                new_stats: Dict[str, Any]
                                ) -> None:
+        if not self.automatic:
+            return
         async with self.lock:
             # Transition to the next job in the queue
             if self.queue_state == "ready" and self.queued_jobs:
@@ -216,7 +218,8 @@ class JobQueue:
                     self.pop_queue_handle = event_loop.delay_callback(
                         0.01, self._pop_job)
                 else:
-                    self._set_queue_state("ready")
+                    qs = "paused" if self.automatic else "ready"
+                    self._set_queue_state(qs)
     def _job_map_to_list(self) -> List[Dict[str, Any]]:
         cur_time = time.time()
         return [job.as_dict(cur_time) for
