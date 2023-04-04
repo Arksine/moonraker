@@ -1,5 +1,5 @@
 #
-This document describes Moonraker's full configuration. By default Mooonraker
+This document describes Moonraker's full configuration. By default Moonraker
 loads the configuration file from `~/moonraker.conf`, however prebuilt
 images such as MainsailOS and FluiddPi configure Moonraker to load the
 configuration from `~/klipper_config/moonraker.conf`.
@@ -68,7 +68,7 @@ enable_debug_logging: False
 #   Verbose logging is enabled by the '-v' command line option.
 ```
 
-!!! Note:
+!!! Note
     Previously the `[server]` section contained `ssl_certificate_path` and
     `ssl_key_path` options. These options are now deprecated, as both locations
     are determined by the `data path` and `alias` configured on the command
@@ -960,7 +960,7 @@ protocol:
 port:
 #   The port the Home Assistant server is listening on.  Default is 8123.
 device:
-#   The device ID of the switch to control. This parameter must be provided.
+#   The entity ID of the switch to control. This parameter must be provided.
 token:
 #   A token used for request authorization.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. This parameter
@@ -1174,6 +1174,234 @@ device_type: light
 #   and if the device_type is group, the device_id should be the group id.
 #   The default is "light".
 
+```
+
+#### Generic HTTP Devices
+
+Support for configurable HTTP switches.  This device type may be used when
+no specific implementation is available for a switch.
+
+```ini
+on_url:
+off_url:
+status_url:
+#   The urls used to control a device and report its status.  These options
+#   accept Jinja2 templates with access to "secrets", see the [secrets]
+#   documentation for details.  It is required that any special characters
+#   be escaped per RFC 3986 section 2.  These options must be provided.
+request_template:
+#   An optional Jinja2 template used to customize the http request.  This
+#   template can set the request method, additional headers, and the body.
+#   When this option is not specified all commands will use a "GET" method
+#   with no body and no additional headers.
+response_template:
+#   A Jinja2 template used to process the http response for each command.  This
+#   template should always render to "on" or "off" based on the response.  See
+#   the following section for details on the fields provided to the Jinja2
+#   context.  This parameter must be provided.
+
+```
+
+###### The template context
+
+The `request_template` and `response_template` options are each provided
+a Jinja2 context with the following fields:
+
+- `command`: The command associated with this call.  Will be one of "on"
+  "off", or "status".
+- `async_sleep`:  An alias for the `asyncio.sleep` method.  This may be used
+  to add delays if necessary.
+- `log_debug`: An alias for `logging.debug`.  This can be used to log messages
+  and data to `moonraker.log` to aid in debugging an implmentation.  Note that
+  verbose logging must be
+  [enabled](installation.md#debug-options-for-developers) for these messages
+  to appear in the log.
+- `http_request`: A request object used to build and send http requests.
+  This object exposes several methods detailed in the following section.
+  When a `request_template` is configured it will share the same http
+  request object with the `response_template`.
+- `urls`: A `Dict` object containing the configured urls for each command.
+  Specifically this object contains "on", "off", and "status" fields, where
+  each field points to the url specified in the configuration.
+
+###### The HTTP Request object
+
+The HTTP Request Object is a wrapper around Moonraker's internal HTTP Client
+that facilitates building HTTP requests. By default the request object will be
+initialized as a "GET" request with the URL configured for the specified command
+(ie: if the command is `on` then the request is initialized with the `on_url`).
+The request provides the following methods that may be called from a Jinja2
+script:
+
+__`http_request.set_method(method)`__
+
+> Sets the request method (ie: `GET`, `POST`, `PUT`).
+
+
+__`http_request.set_url(url)`__
+
+> Sets the request URL.  Reserved characters in the url must be encoded
+per [RFC3986](https://www.rfc-editor.org/rfc/rfc3986#section-2).
+
+__`http_request.set_body(body)`__
+
+
+> Sets the request body.  This may be a `string`, `List`, or `Dict` object.
+`List` and `Dict` objects will be encoded to json and the `Content-Type`
+header will be set to `application/json`.
+
+__`http_request.add_header(name, value)`__
+
+> Adds a request header.
+
+__`http_request.set_headers(headers)`__
+
+> Sets the request headers to supplied `Dict` object.  This will overwrite any
+headers previously added or set.
+
+__`http_request.reset()`__
+
+> Resets the request object to the default values.  The request method will be
+set to `GET`, the body will be empty, and the headers will be cleared.  The
+url will be reset to the configured URL for the current command.
+
+__`http_request.last_response()`__
+
+> Returns the most recent [HTTP response](#the-http-response-object).  If no
+request has been sent this will return `None`.
+
+__`http_request.send(**kwargs)`__
+
+> Sends the request and returns an [HTTP response](#the-http-response-object).
+
+
+###### The HTTP Response object
+
+A response object provides access to http response data.  The methods and
+properties available will look familiar for those who have experience with
+the Python `requests` module.
+
+__`http_response.json()`__
+
+> Decodes the body and returns a resulting `Dict`.
+
+__`http_response.has_error()`__
+
+> Returns if the response is an error.  This is typically true if
+the response returns a status code outside of the 200-299 range.
+
+__`http_response.raise_for_status(message=None)`__
+
+> Raises an exception if the response is an error.  The optional "message"
+may be specified to replace the error message received from the response.
+
+__`http_response.text`__
+
+> A property that returns the body as a UTF-8 encoded string.
+
+__`http_response.content`__
+
+> A property that returns the body as a python `bytes` object.
+
+__`http_response.url`__
+
+> A property that returns the url of the request associated with this response.
+
+__`http_response.final_url`__
+
+> A property that returns "effective" url of the request after all redirects.
+
+__`http_reponse.headers`__
+
+> A property that returns the response headers as a python `Dict`.
+
+__`http_response.status_code`__
+
+> A property that returns the HTTP status code received with the response.
+
+###### Examples
+
+The following examples re-implement some of the `[power]` modules existing
+types using generic http.  The first example shows how a [tasmota](#tasmota-configuration)
+switch may be implemented.  Tasmota depends on `GET` http requests for all actions,
+making it the most simple type of generic implementation:
+
+```ini
+# moonraker.conf
+
+[power generic_tasmota]
+type: http
+on_url:
+  # Build the query string so we can encode it.  This example assumes a password is
+  # supplied in a "secrets" file.  If no password is required the "password" field can
+  # be omitted or set to an empty string
+  {% set qs = {"user": "admin", "password": secrets.tasmota.password, "cmnd": "Power1 on"} %}
+  http://tasmota-switch.lan/cm?{qs|urlencode}
+off_url:
+  {% set qs = {"user": "admin", "password": secrets.tasmota.password, "cmnd": "Power1 off"} %}
+  http://tasmota-switch.lan/cm?{qs|urlencode}
+status_url:
+  {% set qs = {"user": "admin", "password": secrets.tasmota.password, "cmnd": "Power1"} %}
+  http://tasmota-switch.lan/cm?{qs|urlencode}
+response_template:
+  # The module will perform the "GET" request using the appropriate url.
+  # We use the `last_response` method to fetch the result and decode the
+  # json response.  Tasmota devices return a similar response for all
+  # commands, so the response does not require special processing.
+  {% set resp = http_request.last_response().json() %}
+  # The expression below will render "on" or "off".
+  {resp["POWER1"].lower()}
+```
+
+The next example implements a [Home Assistant](#home-assistant-configuration-http)
+device.  Home Assistant requires `POST` requests for the on and off commands,
+and a `GET` request for the status command.  The Home Assistant API uses Token
+based authentication, requiring that the request add an `Authorization` header.
+Finally, the on and off HTTP requests do not consistently return device state,
+making necessary to send a status request after an on or off request.
+
+```ini
+# moonraker.conf
+
+[power generic_homeassistant]
+type: http
+on_url: http://homeassistant.lan:8123/api/services/switch/turn_on
+off_url: http://homeassistant.lan:8123/api/services/switch/turn_off
+status_url: http://homeassistant.lan:8123/api/states/switch.test_switch
+request_template:
+  # Home Assistant uses token authorization, add the correct authorization header
+  {% do http_request.add_header("Authorization", "Bearer %s" % secrets.homeassistant.token) %}
+  {% if command in ["on", "off"] %}
+    # On and Off commands are POST requests.  Additionally they require that we add
+    # a json body.  The content type header will be automatically set for us in this
+    # instance.
+    {% do http_request.set_method("POST") %}
+    {% do http_request.set_body({"entity_id": "switch.test_switch"}) %}
+  {% endif %}
+  {% do http_request.send() %}
+response_template:
+  # Home Assistant does not return device state in the response to on and off
+  # commands making it necessary to request device status.
+  {% if command in ["on", "off"] %}
+    # Some delay is necessary to ensure that Home Assistant has finished processing
+    # the command.  This example sleeps for 1 second, more or less may be required
+    # depending on the type of switch, speed of the Home Assistant host, etc.
+    {% do async_sleep(1.0) %}
+    # Set the request method, clear the body, set the url
+    {% do http_request.set_method("GET") %}
+    {% do http_request.set_body(None) %}
+    {% do http_request.set_url(urls.status) %}
+    # Note: The Authorization header was set in the "request_template".  Since the
+    # http request object is shared between both templates it is not necessary to
+    # add it again unless we perform a "reset()" on the request.
+    {% set response = http_request.send() %}
+    # Raise an exception if we don't get a successful response.  This is handled
+    # for us after executing the response template, however sending a request here
+    # requires that
+    {% do response.raise_for_status() %}
+  {% endif %}
+  {% set resp = http_request.last_response().json() %}
+  {resp["state"]}
 ```
 
 #### Toggling device state from Klipper
@@ -1501,9 +1729,19 @@ requirements:
 #  This parameter must be provided if the "env" option is set, otherwise it
 #  should be omitted.
 install_script:
-#  The file location, relative to the repository, for the installation script.
-#  The update manager parses this file for "system" packages that need updating.
-#  The default is no install script, which disables system package updates
+#  The file location, relative to the repository, for the installation script
+#  associated with this application.  Moonraker will not run this script, instead
+#  it will parse the script searching for new "system" package dependencies that
+#  require installation.  Packages in the script must be defined as follows for
+#  Moonraker to successfully parse them:
+#      PKGLIST="packagename1 packagename2 packagename3"
+#      PKGLIST="${PKGLIST} packagename4 packagename5"
+#
+#  Note that the "packagenameX" items in the example above should be the names
+#  of valid system packages.  The second line in the example is optional and
+#  additional lines in the same format may be added.
+#
+#  The default is no install script.
 enable_node_updates:
 #   When set to True, Moonraker will assume that this repo relies upon node
 #   and will attempt to execute "npm ci --only=prod" when it detects a change
