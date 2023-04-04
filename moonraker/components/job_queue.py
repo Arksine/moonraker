@@ -218,7 +218,7 @@ class JobQueue:
                     self.pop_queue_handle = event_loop.delay_callback(
                         0.01, self._pop_job)
                 else:
-                    qs = "paused" if self.automatic else "ready"
+                    qs = "ready" if self.automatic else "paused"
                     self._set_queue_state(qs)
     def _job_map_to_list(self) -> List[Dict[str, Any]]:
         cur_time = time.time()
