@@ -1,5 +1,5 @@
 #
-This document describes Moonraker's full configuration. By default Mooonraker
+This document describes Moonraker's full configuration. By default Moonraker
 loads the configuration file from `~/moonraker.conf`, however prebuilt
 images such as MainsailOS and FluiddPi configure Moonraker to load the
 configuration from `~/klipper_config/moonraker.conf`.
