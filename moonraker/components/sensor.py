@@ -241,7 +241,6 @@ class Sensors:
                 changed_data[sensor_name] = sensor.last_value
         if changed_data:
             self.server.send_event(SENSOR_EVENT_NAME, changed_data)
-
         return eventtime + SENSOR_UPDATE_TIME
 
     async def component_init(self) -> None:
@@ -254,7 +253,6 @@ class Sensors:
                     )
 
             self.sensors_update_timer.start()
-
         except Exception as e:
             logging.exception(e)
 
@@ -274,25 +272,23 @@ class Sensors:
         sensor_name: str = web_request.get_str("sensor")
         if sensor_name not in self.sensors:
             raise self.server.error(f"No valid sensor named {sensor_name}")
-
         sensor = self.sensors[sensor_name]
-
         return sensor.get_sensor_info()
 
     async def _handle_sensor_measurements_request(
         self, web_request: WebRequest
     ) -> Dict[str, Dict[str, Any]]:
         sensor_name: str = web_request.get_str("sensor", "")
-        if sensor_name and sensor_name not in self.sensors:
-            raise self.server.error(f"No valid sensor named {sensor_name}")
-
-        output = {
-            key: sensor.get_sensor_measurements()
-            for key, sensor in self.sensors.items()
-            if sensor_name is "" or key == sensor_name
-        }
-
-        return output
+        if sensor_name:
+            sensor = self.sensors.get(sensor_name, None)
+            if sensor is None:
+                raise self.server.error(f"No valid sensor named {sensor_name}")
+            return {sensor_name: sensor.get_sensor_measurements()}
+        else:
+            return {
+                key: sensor.get_sensor_measurements()
+                for key, sensor in self.sensors.items()
+            }
 
     def close(self) -> None:
         self.sensors_update_timer.stop()
