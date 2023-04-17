@@ -278,7 +278,7 @@ class HttpRequestWrapper:
     def __init__(
         self, client: HttpClient, default_url: str, **kwargs
     ) -> None:
-        self.client = client
+        self._do_request = client.request
         self._last_response: Optional[HttpResponse] = None
         self.default_request_args: Dict[str, Any] = {
             "method": "GET",
@@ -293,7 +293,7 @@ class HttpRequestWrapper:
         req_args.update(kwargs)
         method = req_args.pop("method", self.default_request_args["method"])
         url = req_args.pop("url", self.default_request_args["url"])
-        self._last_response = await self.client.request(method, url, **req_args)
+        self._last_response = await self._do_request(method, url, **req_args)
         return self._last_response
 
     def set_method(self, method: str) -> None:
