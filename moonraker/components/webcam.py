@@ -33,7 +33,9 @@ if TYPE_CHECKING:
 CAM_FIELDS = {
     "name": "name", "service": "service", "target_fps": "targetFps",
     "stream_url": "urlStream", "snapshot_url": "urlSnapshot",
-    "flip_horizontal": "flipX", "flip_vertical": "flipY"
+    "flip_horizontal": "flipX", "flip_vertical": "flipY",
+    "enabled": "enabled", "target_fps_idle": "targetFpsIdle",
+    "aspect_ratio": "aspectRatio", "icon": "icon"
 }
 
 class WebcamManager:
@@ -118,8 +120,7 @@ class WebcamManager:
             cam_data[dbfield] = getattr(webcam, mfield)
         cam_data["location"] = webcam.location
         cam_data["rotation"] = webcam.rotation
-        if "icon" not in cam_data:
-            cam_data["icon"] = "mdi-webcam"
+        cam_data["extra_data"] = webcam.extra_data
         db: MoonrakerDatabase = self.server.lookup_component("database")
         db.insert_item("webcams", uid, cam_data)
 
@@ -141,16 +142,17 @@ class WebcamManager:
                 raise self.server.error(f"Webcam {name} not found", 404)
             webcam_data = self.webcams[name].as_dict()
         elif action == "POST":
-            if (
-                name in self.webcams and
-                self.webcams[name].source == "config"
-            ):
-                raise self.server.error(
-                    f"Cannot overwrite webcam '{name}' sourced from "
-                    "Moonraker configuration"
-                )
-            webcam = WebCam.from_web_request(self.server, web_request)
-            self.webcams[name] = webcam
+            webcam = self.webcams.get(name, None)
+            if webcam is not None:
+                if webcam.source == "config":
+                    raise self.server.error(
+                        f"Cannot overwrite webcam '{name}' sourced from "
+                        "Moonraker configuration"
+                    )
+                webcam.update(web_request)
+            else:
+                webcam = WebCam.from_web_request(self.server, web_request)
+                self.webcams[name] = webcam
             webcam_data = webcam.as_dict()
             await self._save_cam(webcam)
         elif action == "DELETE":
@@ -205,6 +207,10 @@ class WebCam:
     _default_host: str = "http://127.0.0.1"
     def __init__(self, server: Server, **kwargs) -> None:
         self._server = server
+        self.enabled: bool = kwargs["enabled"]
+        self.icon: str = kwargs["icon"]
+        self.aspect_ratio: str = kwargs["aspect_ratio"]
+        self.target_fps_idle: int = kwargs["target_fps_idle"]
         self.name: str = kwargs["name"]
         self.location: str = kwargs["location"]
         self.service: str = kwargs["service"]
@@ -215,6 +221,14 @@ class WebCam:
         self.flip_vertical: bool = kwargs["flip_vertical"]
         self.rotation: int = kwargs["rotation"]
         self.source: str = kwargs["source"]
+        self.extra_data: Dict[str, Any] = kwargs.get("extra_data", {})
+        if self.rotation not in [0, 90, 180, 270]:
+            raise server.error(f"Invalid value for 'rotation': {self.rotation}")
+        prefix, sep, postfix = self.aspect_ratio.partition(":")
+        if not (prefix.isdigit() and sep == ":" and postfix.isdigit()):
+            raise server.error(
+                f"Invalid value for 'aspect_ratio': {self.aspect_ratio}"
+            )
 
     def as_dict(self):
         return {k: v for k, v in self.__dict__.items() if k[0] != "_"}
@@ -315,6 +329,24 @@ class WebCam:
             pass
         return url
 
+    def update(self, web_request: WebRequest) -> None:
+        for field in web_request.get_args().keys():
+            try:
+                attr = getattr(self, field)
+            except AttributeError:
+                continue
+            if isinstance(attr, int):
+                val: Any = web_request.get_int(field)
+            elif isinstance(attr, float):
+                val = web_request.get_float(field)
+            elif isinstance(attr, bool):
+                val = web_request.get_boolean(field)
+            elif isinstance(attr, str):
+                val = web_request.get_str(field)
+            else:
+                val = web_request.get(field)
+            setattr(self, field, val)
+
     @staticmethod
     def set_default_host(host: str) -> None:
         WebCam._default_host = host
@@ -323,18 +355,24 @@ class WebCam:
     def from_config(cls, config: ConfigHelper) -> WebCam:
         webcam: Dict[str, Any] = {}
         webcam["name"] = config.get_name().split(maxsplit=1)[-1]
+        webcam["enabled"] = config.getboolean("enabled", True)
+        webcam["icon"] = config.get("icon", "mdiWebcam")
+        webcam["aspect_ratio"] = config.get("aspect_ratio", "4:3")
         webcam["location"] = config.get("location", "printer")
         webcam["service"] = config.get("service", "mjpegstreamer")
         webcam["target_fps"] = config.getint("target_fps", 15)
+        webcam["target_fps_idle"] = config.getint("target_fps_idle", 5)
         webcam["stream_url"] = config.get("stream_url")
-        webcam["snapshot_url"] = config.get("snapshot_url")
+        webcam["snapshot_url"] = config.get("snapshot_url", "")
         webcam["flip_horizontal"] = config.getboolean("flip_horizontal", False)
         webcam["flip_vertical"] = config.getboolean("flip_vertical", False)
         webcam["rotation"] = config.getint("rotation", 0)
-        if webcam["rotation"] not in [0, 90, 180, 270]:
-            raise config.error("Invalid value for option 'rotation'")
         webcam["source"] = "config"
-        return cls(config.get_server(), **webcam)
+        server = config.get_server()
+        try:
+            return cls(config.get_server(), **webcam)
+        except server.error as err:
+            raise config.error(str(err)) from err
 
     @classmethod
     def from_web_request(
@@ -342,30 +380,39 @@ class WebCam:
     ) -> WebCam:
         webcam: Dict[str, Any] = {}
         webcam["name"] = web_request.get_str("name")
+        webcam["enabled"] = web_request.get_boolean("enabled", True)
+        webcam["icon"] = web_request.get_str("icon", "mdiWebcam")
+        webcam["aspect_ratio"] = web_request.get_str("aspect_ratio", "4:3")
         webcam["location"] = web_request.get_str("location", "printer")
         webcam["service"] = web_request.get_str("service", "mjpegstreamer")
         webcam["target_fps"] = web_request.get_int("target_fps", 15)
+        webcam["target_fps_idle"] = web_request.get_int("target_fps_idle", 5)
         webcam["stream_url"] = web_request.get_str("stream_url")
-        webcam["snapshot_url"] = web_request.get_str("snapshot_url")
-        webcam["flip_horizontal"] = web_request.get_boolean(
-            "flip_horizontal", False
-        )
-        webcam["flip_vertical"] = web_request.get_boolean(
-            "flip_vertical", False
-        )
+        webcam["snapshot_url"] = web_request.get_str("snapshot_url", "")
+        webcam["flip_horizontal"] = web_request.get_boolean("flip_horizontal", False)
+        webcam["flip_vertical"] = web_request.get_boolean("flip_vertical", False)
         webcam["rotation"] = web_request.get_int("rotation", 0)
-        if webcam["rotation"] not in [0, 90, 180, 270]:
-            raise server.error("Invalid value for parameter 'rotation'")
+        webcam["extra_data"] = web_request.get("extra_data", {})
         webcam["source"] = "database"
         return cls(server, **webcam)
 
     @classmethod
     def from_database(cls, server: Server, cam_data: Dict[str, Any]) -> WebCam:
         webcam: Dict[str, Any] = {}
-        for mfield, dbfield in CAM_FIELDS.items():
-            webcam[mfield] = cam_data[dbfield]
-        webcam["location"] = webcam.get("location", "printer")
-        webcam["rotation"] = webcam.get("rotation", 0)
+        webcam["name"] = cam_data["name"]
+        webcam["enabled"] = cam_data.get("enabled", True)
+        webcam["icon"] = cam_data.get("icon", "mdiWebcam")
+        webcam["aspect_ratio"] = cam_data.get("aspectRatio", "4:3")
+        webcam["location"] = cam_data.get("location", "printer")
+        webcam["service"] = cam_data.get("service", "mjpegstreamer")
+        webcam["target_fps"] = cam_data.get("targetFps", 15)
+        webcam["target_fps_idle"] = cam_data.get("targetFpsIdle", 5)
+        webcam["stream_url"] = cam_data.get("urlStream", "")
+        webcam["snapshot_url"] = cam_data.get("urlSnapshot", "")
+        webcam["flip_horizontal"] = cam_data.get("flipX", False)
+        webcam["flip_vertical"] = cam_data.get("flipY", False)
+        webcam["rotation"] = cam_data.get("rotation", webcam.get("rotate", 0))
+        webcam["extra_data"] = cam_data.get("extra_data", {})
         webcam["source"] = "database"
         return cls(server, **webcam)
 
