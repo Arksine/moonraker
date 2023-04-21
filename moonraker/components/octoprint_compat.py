@@ -44,10 +44,16 @@ class OctoPrintCompat:
         self.enable_ufp: bool = config.getboolean('enable_ufp', True)
 
         # Get webcam settings from config
+        rotation = config.getint('webcam_rotation', 0)
+        if rotation not in [0, 90, 180, 270]:
+            self.server.add_warning(
+                f"Invalid value '{rotation}' for option 'webcam_rotation'.  "
+                "Value must be 0, 90, 180, or 270.")
+
         self.webcam: Dict[str, Any] = {
-            'flipH': config.getboolean('flip_h', False),
-            'flipV': config.getboolean('flip_v', False),
-            'rotate90': config.getboolean('rotate_90', False),
+            'flipH': config.getboolean('flip_h', rotation in [180, 270]),
+            'flipV': config.getboolean('flip_v', rotation in [180, 270]),
+            'rotate90': config.getboolean('rotate_90', rotation in [90, 270]),
             'streamUrl': config.get('stream_url', '/webcam/?action=stream'),
             'webcamEnabled': config.getboolean('webcam_enabled', True),
         }
