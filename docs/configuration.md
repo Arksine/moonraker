@@ -302,7 +302,7 @@ may be configured directly through front-ends and added to the database,
 however it is also possible for users to configure one or more webcams in
 `moonraker.conf`.  If a webcam is configured in `moonraker.conf` it takes
 precedent over a webcam in the database by the same name.  The options
-available may not apply to all front-ends, refer to your front-end's
+available may not apply to all front ends, refer to your front end's
 documentation for details on camera configuration.
 
 ```ini
@@ -310,12 +310,20 @@ documentation for details on camera configuration.
 location: printer
 #   A description of the webcam location, ie: what the webcam is observing.
 #   The default is "printer".
+icon:
+#   A name of the icon to use for the camera.  The default is mdiWebcam.
+enabled: True
+#   An optional boolean value to indicate if this webcam should be enabled.
+#   Default is True.
 service: mjpegstreamer
 #   The name of the application or service hosting the webcam stream.  Front-
 #   ends may use this configuration to determine how to launch or start the
 #   program.  The default is "mjpegstreamer".
 target_fps: 15
 #   An integer value specifying the target framerate.  The default is 15 fps.
+target_fps_idle: 5
+#   An integer value specifying the target framerate when the printer is idle.
+#   The default is 5 fps.
 stream_url:
 #   The url for the camera stream request.  This may be a full url or a
 #   relative path (ie: /webcam?action=stream) if the stream is served on the
@@ -323,7 +331,7 @@ stream_url:
 snapshot_url:
 #   The url for the camera snapshot request.  This may be a full url or a
 #   relative path (ie: /webcam?action=stream) if the stream is served on the
-#   same host as Moonraker at port 80.  This parameter must be provided.
+#   same host as Moonraker at port 80.  The default is an empty url.
 flip_horizontal: False
 #   A boolean value indicating whether the stream should be flipped
 #   horizontally.  The default is false.
@@ -333,6 +341,10 @@ flip_vertical: False
 rotation: 0
 #   An integer value indicating the amount of clockwise rotation to apply
 #   to the stream.  May be 0, 90, 180, or 270.  The default is 0.
+aspect_ratio: 4:3
+#   The aspect ratio to display for the camera.  Note that this option
+#   is specific to certain services, otherwise it is ignored.
+#   The default is 4:3.
 ```
 
 ## Optional Components

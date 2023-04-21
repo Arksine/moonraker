@@ -3736,36 +3736,51 @@ A list of configured webcams:
             "name": "testcam3",
             "location": "door",
             "service": "mjpegstreamer",
+            "enabled": true,
+            "icon": "mdiWebcam",
             "target_fps": 20,
+            "target_fps_idle": 5,
             "stream_url": "http://camera.lan/webcam?action=stream",
             "snapshot_url": "http://camera.lan/webcam?action=snapshot",
             "flip_horizontal": false,
             "flip_vertical": true,
             "rotation": 90,
+            "aspect_ratio": "4:3",
+            "extra_data": {},
             "source": "config"
         },
         {
             "name": "tc2",
             "location": "printer",
             "service": "mjpegstreamer",
+            "enabled": true,
+            "icon": "mdiWebcam",
             "target_fps": 15,
+            "target_fps_idle": 5,
             "stream_url": "http://printer.lan/webcam?action=stream",
             "snapshot_url": "http://printer.lan/webcam?action=snapshot",
             "flip_horizontal": false,
             "flip_vertical": false,
             "rotation": 0,
+            "aspect_ratio": "4:3",
+            "extra_data": {},
             "source": "database"
         },
         {
             "name": "TestCam",
             "location": "printer",
             "service": "mjpegstreamer",
+            "enabled": true,
+            "icon": "mdiWebcam",
             "target_fps": 15,
+            "target_fps_idle": 5,
             "stream_url": "/webcam/?action=stream",
             "snapshot_url": "/webcam/?action=snapshot",
             "flip_horizontal": false,
             "flip_vertical": false,
             "rotation": 0,
+            "aspect_ratio": "4:3",
+            "extra_data": {},
             "source": "database"
         }
     ]
@@ -3806,17 +3821,25 @@ The full configuration for the requested webcam:
         "name": "TestCam",
         "location": "printer",
         "service": "mjpegstreamer",
+        "enabled": true,
+        "icon": "mdiWebcam",
         "target_fps": 15,
+        "target_fps_idle": 5,
         "stream_url": "/webcam/?action=stream",
         "snapshot_url": "/webcam/?action=snapshot",
         "flip_horizontal": false,
         "flip_vertical": false,
         "rotation": 0,
+        "aspect_ratio": "4:3",
+        "extra_data": {},
         "source": "database"
     }
 }
 ```
 #### Add or update a webcam
+
+Adds a new webcam entry or updates an existing entry.  When updating
+an entry only the fields provided will be modified.
 
 !!! Note
     A webcam configured via `moonraker.conf` cannot be updated or
@@ -3851,30 +3874,42 @@ JSON-RPC request:
 Parameters:
 
 - `name`: The name of the camera to add or update.  This parameter must
-  be provided.
+  be provided for new entries.
 - `location`: A description of the webcam location, ie: what the webcam is
-  observing.  The default is "printer".
+  observing.  The default is `printer` for new entries.
+- `icon`:  The name of the icon to use for the camera. The default is `mdiWebcam`
+  for new entries.
+- `enabled`:  A boolean value to indicate if this webcam should be enabled.
+   Default is True for new entries.
 - `service`: The name of the webcam application streaming service.  The default
-  is "mjpegstreamer".
-- `target_fps`:  The target framerate.  The default is 15
+  is "mjpegstreamer" for new entries.
+- `target_fps`:  The target framerate.  The default is 15 for new entries.
+- `target_fps_idle`: The target framerate when the printer is idle.
+   The default is 5 for new entries.
 - `stream_url`:  The url for the camera stream request.  This may be a full url
   or a url relative to Moonraker's host machine.  If the url is relative it is
   assumed that the stream is available over http on port 80. This parameter
-  must be provided.
+  must be provided for new entries.
 - `snapshot_url`: The url for the camera snapshot request. This may be a full
   url or a url relative to Moonraker's host machine.  If the url is relative
-  it is assumed that the snapshot is available over http on port 80. This
-  parameter must be provided.
+  it is assumed that the snapshot is available over http on port 80. The
+  default is an empty string for new entries.
 - `flip_horizontal`:  A boolean value indicating whether the stream should be
-  flipped horizontally.  The default is false.
+  flipped horizontally.  The default is false for new entries.
 - `flip_vertical`: A boolean value indicating whether the stream should be
-  flipped vertically.  The default is false.
+  flipped vertically.  The default is false for new entries.
 - `rotation`: An integer value indicating the amount of clockwise rotation to
-   apply to the stream.  May be 0, 90, 180, or 270.  The default is 0.
+   apply to the stream.  May be 0, 90, 180, or 270.  The default is 0 for new entries.
+- `aspect_ratio`: The aspect ratio to display for the camera.  Note that this option
+   is specific to certain services, otherwise it is ignored. The default is `4:3`
+   for new entries.
+- `extra_data`:  Additional webcam data set by the front end in the form of a json
+  object.  This may be used to store any additional webcam options and/or data. The
+  default is an empty object for new entries.
 
 Returns:
 
-The full configuration for the added webcam:
+The full configuration for the added/updated webcam:
 
 ```json
 {
@@ -3882,12 +3917,17 @@ The full configuration for the added webcam:
         "name": "TestCam",
         "location": "printer",
         "service": "mjpegstreamer",
+        "enabled": true,
+        "icon": "mdiWebcam",
         "target_fps": 15,
+        "target_fps_idle": 5,
         "stream_url": "/webcam/?action=stream",
         "snapshot_url": "/webcam/?action=snapshot",
         "flip_horizontal": false,
         "flip_vertical": false,
         "rotation": 0,
+        "aspect_ratio": "4:3",
+        "extra_data": {},
         "source": "database"
     }
 }
@@ -6502,6 +6542,61 @@ The `params` array contains an object with the following fields:
 - `request_messages`:  An array of strings, each string describing
   a pending sudo request.  The array will be empty if no sudo
   requests are pending.
+
+#### Webcams changed event
+
+Moonraker will emit the `notify_webcams_changed` event when a configured
+webcam is added, removed, or updated.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_webcams_changed",
+    "params": [
+        {
+            "webcams": [
+                {
+                    "name": "tc2",
+                    "location": "printer",
+                    "service": "mjpegstreamer",
+                    "enabled": true,
+                    "icon": "mdiWebcam",
+                    "target_fps": 15,
+                    "target_fps_idle": 5,
+                    "stream_url": "http://printer.lan/webcam?action=stream",
+                    "snapshot_url": "http://printer.lan/webcam?action=snapshot",
+                    "flip_horizontal": false,
+                    "flip_vertical": false,
+                    "rotation": 0,
+                    "aspect_ratio": "4:3",
+                    "extra_data": {},
+                    "source": "database"
+                },
+                {
+                    "name": "TestCam",
+                    "location": "printer",
+                    "service": "mjpegstreamer",
+                    "enabled": true,
+                    "icon": "mdiWebcam",
+                    "target_fps": 15,
+                    "target_fps_idle": 5,
+                    "stream_url": "/webcam/?action=stream",
+                    "snapshot_url": "/webcam/?action=snapshot",
+                    "flip_horizontal": false,
+                    "flip_vertical": false,
+                    "rotation": 0,
+                    "aspect_ratio": "4:3",
+                    "extra_data": {},
+                    "source": "database"
+                }
+            ]
+        }
+    ]
+}
+```
+
+The `webcams` field contans an array of objects like those returned by the
+[list webcams](#list-webcams) API.
 
 #### Agent Events
 Moonraker will emit the `notify_agent_event` notification when it
