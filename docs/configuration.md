@@ -2343,6 +2343,9 @@ body: "Your printer status has changed to {event_name}"
 #                     is received from Klippy using a gcode_macro.
 #   The default is a body containining the "name" of the notification as entered
 #   in the section header.
+body_format:
+#   The formatting to use for the body, can be `text`, `html` and `markdown`.
+#   The default is `text`.
 title:
 #   The optional title of the notification. This option accepts Jinja2 templates,
 #   the template will receive a context with the same fields as the body.  The

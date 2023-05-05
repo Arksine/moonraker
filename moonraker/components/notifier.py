@@ -182,6 +182,10 @@ class NotifierInstance:
 
         self.title = config.gettemplate("title", None)
         self.body = config.gettemplate("body", None)
+        upper_body_format = config.get("body_format", 'text').upper()
+        if not hasattr(apprise.NotifyFormat, upper_body_format):
+            raise config.error(f"Invalid body_format for {config.get_name()}")
+        self.body_format = getattr(apprise.NotifyFormat, upper_body_format)
         self.events: List[str] = config.getlist("events", separator=",")
         self.apprise.add(self.url)
 
@@ -191,6 +195,7 @@ class NotifierInstance:
             "url": self.config.get("url"),
             "title": self.config.get("title", None),
             "body": self.config.get("body", None),
+            "body_format": self.config.get("body_format", None),
             "events": self.events,
             "attach": self.attach
         }
@@ -251,6 +256,7 @@ class NotifierInstance:
                         attachments.append(str(attach_path))
         await self.apprise.async_notify(
             rendered_body.strip(), rendered_title.strip(),
+            body_format=self.body_format,
             attach=None if not attachments else attachments
         )
 
