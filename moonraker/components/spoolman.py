@@ -97,25 +97,24 @@ class SpoolManager:
 
     async def _handle_status_update(self, status: Dict[str, Any]) -> None:
         epos = self._eposition_from_status(status)
-        logging.info(f"Epos: {epos}")
         if epos and epos > self.highest_e_pos:
             async with self.extruded_lock:
                 self.extruded += epos - self.highest_e_pos
                 self.highest_e_pos = epos
 
-        now = datetime.datetime.now()
-        difference = now - self.last_sync_time
-        if difference.total_seconds() > self.sync_rate_seconds:
-            self.last_sync_time = now
-            logging.debug("Sync period elapsed, tracking usage")
-            await self.track_filament_usage()
+            now = datetime.datetime.now()
+            difference = now - self.last_sync_time
+            if difference.total_seconds() > self.sync_rate_seconds:
+                self.last_sync_time = now
+                logging.debug("Sync period elapsed, tracking usage")
+                await self.track_filament_usage()
 
     async def set_active_spool(self, spool_id: Optional[str]) -> bool:
         self.moonraker_db[ACTIVE_SPOOL_KEY] = spool_id
         await self.server.send_event(
             "spool_manager:active_spool_set", {"spool_id": spool_id}
         )
-        logging.info(f"Setting spool active, id: {spool_id}")
+        logging.info(f"Setting active spool to: {spool_id}")
         return True
 
     async def get_active_spool_id(self) -> Optional[str]:
@@ -130,10 +129,10 @@ class SpoolManager:
             if self.extruded > 0:
                 used_length = self.extruded
 
-                logging.info(
-                    f"Sending spool usage request, "
-                    f"spool_id: {spool_id}, "
-                    f"length: {used_length}, "
+                logging.debug(
+                    f"Sending spool usage: "
+                    f"ID: {spool_id}, "
+                    f"Length: {used_length:.3f}mm, "
                 )
 
                 response = await self.http_client.request(
@@ -162,7 +161,7 @@ class SpoolManager:
         else:
             query = "?" + urlencode(web_request.args)
 
-        endpoint = web_request.endpoint.removeprefix("/spoolman")
+        endpoint = web_request.endpoint[9:]  # Remove /spoolman prefix
         full_url = f"{self.spoolman_url}{endpoint}{query}"
 
         logging.debug(f"Proxying {web_request.action} request to {full_url}")
