@@ -115,8 +115,13 @@ class DataStore:
         for sensor in self.temperature_store:
             if sensor in data:
                 last_val = self.last_temps[sensor]
+                temperature = data[sensor].get('temperature')
+                if temperature is None:
+                    temperature = last_val[0]
+                else:
+                    temperature = round(temperature, 2)
                 self.last_temps[sensor] = (
-                    round(data[sensor].get('temperature', last_val[0]), 2),
+                    temperature,
                     data[sensor].get('target', last_val[1]),
                     data[sensor].get('power', last_val[2]),
                     data[sensor].get('speed', last_val[3]))
