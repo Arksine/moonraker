@@ -320,7 +320,8 @@ class AppDeploy(BaseDeploy):
                 return
             args = f"-r {requirements}"
         else:
-            args = " ".join(requirements)
+            reqs = [req.replace("\"", "'") for req in requirements]
+            args = " ".join([f"\"{req}\"" for req in reqs])
         self.notify_status("Updating python packages...")
         try:
             await self.cmd_helper.run_cmd(
