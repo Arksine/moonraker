@@ -27,7 +27,7 @@ from typing import (
     TYPE_CHECKING,
     List,
     Optional,
-    ClassVar,
+    Any,
     Tuple,
     Dict,
     Union
@@ -57,7 +57,9 @@ def _run_git_command(cmd: str) -> str:
     retcode = process.wait()
     if retcode == 0:
         return ret.strip().decode()
-    raise Exception(f"Failed to run git command: {cmd}")
+    raise Exception(
+        f"Failed to run git command '{cmd}': {err.decode(errors='ignore')}"
+    )
 
 def _retrieve_git_tag(source_path: str) -> str:
     cmd = f"git -C {source_path} rev-list --tags --max-count=1"
@@ -82,24 +84,72 @@ def retrieve_git_version(source_path: str) -> str:
     tag = _retrieve_git_tag(source_path)
     return f"t{tag}-g{ver}-shallow"
 
-def get_software_version() -> str:
+def get_repo_info(source_path: str) -> Dict[str, Any]:
+    repo_info: Dict[str, Any] = {
+        "software_version": "?",
+        "git_branch": "?",
+        "git_remote": "?",
+        "git_repo_url": "?",
+        "modified_files": [],
+        "unofficial_components": []
+    }
+    try:
+        repo_info["software_version"] = retrieve_git_version(source_path)
+        cmd = f"git -C {source_path} branch --no-color"
+        branch_list = _run_git_command(cmd)
+        for line in branch_list.split("\n"):
+            if line[0] == "*":
+                repo_info["git_branch"] = line[1:].strip()
+                break
+        else:
+            return repo_info
+        if repo_info["git_branch"].startswith("(HEAD detached"):
+            parts = repo_info["git_branch"] .strip("()").split()[-1]
+            remote, _, _ = parts.partition("/")
+            if not remote:
+                return repo_info
+            repo_info["git_remote"] = remote
+        else:
+            branch = repo_info["git_branch"]
+            cmd = f"git -C {source_path} config --get branch.{branch}.remote"
+            repo_info["git_remote"] = _run_git_command(cmd)
+        cmd = f"git -C {source_path} remote get-url {repo_info['git_remote']}"
+        repo_info["git_repo_url"] = _run_git_command(cmd)
+        cmd = f"git -C {source_path} status --porcelain --ignored"
+        status = _run_git_command(cmd)
+        for line in status.split("\n"):
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+            if parts[0] == "M":
+                repo_info["modified_files"].append(parts[1])
+            elif (
+                parts[0] in ("??", "!!")
+                and parts[1].endswith(".py")
+                and parts[1].startswith("components")
+            ):
+                comp = parts[1].split("/", maxsplit=1)[-1]
+                repo_info["unofficial_components"].append(comp)
+    except Exception:
+        logging.exception("Error Retreiving Git Repo Info")
+    return repo_info
+
+def get_software_info() -> Dict[str, Any]:
+    src_path = source_info.source_path()
+    if source_info.is_git_repo():
+        return get_repo_info(str(src_path))
     pkg_ver = source_info.package_version()
     if pkg_ver is not None:
-        return pkg_ver
+        return {"software_version": pkg_ver}
     version: str = "?"
-    src_path = source_info.source_path()
-    try:
-        version = retrieve_git_version(str(src_path))
-    except Exception:
-        vfile = src_path.joinpath("moonraker/.version")
-        if vfile.exists():
-            try:
-                version = vfile.read_text().strip()
-            except Exception:
-                logging.exception("Unable to extract version from file")
-                version = "?"
-    return version
-
+    vfile = src_path.joinpath("moonraker/.version")
+    if vfile.exists():
+        try:
+            version = vfile.read_text().strip()
+        except Exception:
+            logging.exception("Unable to extract version from file")
+            version = "?"
+    return {"software_version": version}
 
 def hash_directory(
     dir_path: Union[str, pathlib.Path],

@@ -21,7 +21,7 @@ from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
-from .utils import ServerError, Sentinel, get_software_version
+from .utils import ServerError, Sentinel, get_software_info
 from .loghelper import LogManager
 
 # Annotation imports
@@ -526,7 +526,7 @@ def main(from_package: bool = True) -> None:
     }
 
     # Setup Logging
-    version = get_software_version()
+    app_args.update(get_software_info())
     if cmd_line_args.nologfile:
         app_args["log_file"] = ""
     elif cmd_line_args.logfile:
@@ -534,7 +534,6 @@ def main(from_package: bool = True) -> None:
             os.path.expanduser(cmd_line_args.logfile))
     else:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
-    app_args["software_version"] = version
     app_args["python_version"] = sys.version.replace("\n", " ")
     log_manager = LogManager(app_args, startup_warnings)
 
