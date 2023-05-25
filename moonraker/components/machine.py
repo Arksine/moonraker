@@ -148,6 +148,12 @@ class Machine:
             "/machine/system_info", ['GET'],
             self._handle_sysinfo_request)
         self.server.register_endpoint(
+            "/machine/serial_id", ['GET'],
+            self._handle_serialid_request)
+        self.server.register_endpoint(
+            "/machine/canbus_id", ['GET'],
+            self._handle_canbusid_request)
+        self.server.register_endpoint(
             "/machine/sudo/info", ["GET"], self._handle_sudo_info)
         self.server.register_endpoint(
             "/machine/sudo/password", ["POST"],
@@ -331,6 +337,22 @@ class Machine:
             "klipper": kconn.unit_name
         }
         return {"system_info": sys_info}
+
+    async def _handle_serialid_request(self,
+                                      web_request: WebRequest
+                                      ) -> Dict[str, Any]:
+        serial_id: Dict[str, Any] = {
+            'serial': "".join(os.popen('ls /dev/serial/by-id/').readlines()),
+        }
+        return {"serial_id": serial_id}
+
+    async def _handle_canbusid_request(self,
+                                      web_request: WebRequest
+                                      ) -> Dict[str, Any]:
+        canbus_id: Dict[str, Any] = {
+            'canbus': "".join(os.popen('~/klippy-env/bin/python ~/klipper/scripts/canbus_query.py can0').readlines()),
+        }
+        return {"canbus_id": canbus_id}
 
     async def _set_sudo_password(
         self, web_request: WebRequest
