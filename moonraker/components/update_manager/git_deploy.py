@@ -264,7 +264,7 @@ GIT_LOG_FMT = (
     "\"sha:%H%x1Dauthor:%an%x1Ddate:%ct%x1Dsubject:%s%x1Dmessage:%b%x1E\""
 )
 GIT_REF_FMT = (
-    "'%(if)%(*objecttype)%(then)%(*objecttype) (*objectname)"
+    "'%(if)%(*objecttype)%(then)%(*objecttype) %(*objectname)"
     "%(else)%(objecttype) %(objectname)%(end) %(refname)'"
 )
 
