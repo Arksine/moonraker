@@ -313,7 +313,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.config",
-    "id": 5616,
+    "id": 5616
 }
 ```
 Returns:
