@@ -15,6 +15,7 @@ import tempfile
 import asyncio
 import zipfile
 import time
+import math
 from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
@@ -346,10 +347,22 @@ class FileManager:
     def get_metadata_storage(self) -> MetadataStorage:
         return self.gcode_metadata
 
-    def check_file_exists(self, root: str, filename: str) -> bool:
-        root_dir = self.file_paths.get(root, "")
-        file_path = os.path.join(root_dir, filename)
-        return os.path.exists(file_path)
+    def check_file_exists(
+        self,
+        root: str,
+        filename: str,
+        modified: Optional[float] = None
+    ) -> bool:
+        if root not in self.file_paths:
+            return False
+        root_dir = pathlib.Path(self.file_paths[root])
+        file_path = root_dir.joinpath(filename)
+        if file_path.is_file():
+            if modified is None:
+                return True
+            fstat = file_path.stat()
+            return math.isclose(fstat.st_mtime, modified)
+        return False
 
     def can_access_path(self, path: StrOrPath) -> bool:
         if isinstance(path, str):
