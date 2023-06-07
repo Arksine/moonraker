@@ -200,6 +200,12 @@ def verify_source(
     return checksum, checksum == orig_chksum
 
 def load_system_module(name: str) -> ModuleType:
+    if not SYS_MOD_PATHS:
+        # no dist path detected, fall back to direct import attempt
+        try:
+            return importlib.import_module(name)
+        except ImportError as e:
+            raise ServerError(f"Unable to import module {name}") from e
     for module_path in SYS_MOD_PATHS:
         sys.path.insert(0, module_path)
         try:
@@ -207,10 +213,10 @@ def load_system_module(name: str) -> ModuleType:
         except ImportError as e:
             if not isinstance(e, ModuleNotFoundError):
                 logging.exception(f"Failed to load {name} module")
-            sys.path.pop(0)
         else:
-            sys.path.pop(0)
             break
+        finally:
+            sys.path.pop(0)
     else:
         raise ServerError(f"Unable to import module {name}")
     return module
