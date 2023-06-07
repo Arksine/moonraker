@@ -200,20 +200,20 @@ def verify_source(
     return checksum, checksum == orig_chksum
 
 def load_system_module(name: str) -> ModuleType:
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        pass
     for module_path in SYS_MOD_PATHS:
         sys.path.insert(0, module_path)
         try:
-            module = importlib.import_module(name)
+            return importlib.import_module(name)
         except ImportError as e:
             if not isinstance(e, ModuleNotFoundError):
                 logging.exception(f"Failed to load {name} module")
+        finally:
             sys.path.pop(0)
-        else:
-            sys.path.pop(0)
-            break
-    else:
-        raise ServerError(f"Unable to import module {name}")
-    return module
+    raise ServerError(f"Unable to import module {name}")
 
 def get_unix_peer_credentials(
     writer: asyncio.StreamWriter, name: str
