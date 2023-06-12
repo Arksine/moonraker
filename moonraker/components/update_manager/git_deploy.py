@@ -33,7 +33,7 @@ class GitDeploy(AppDeploy):
         super().__init__(config, cmd_helper)
         self.repo = GitRepo(
             cmd_helper, self.path, self.name, self.origin,
-            self.moved_origin, self.channel
+            self.moved_origin, self.primary_branch, self.channel
         )
         if self.type != 'git_repo':
             self.need_channel_update = True
@@ -47,6 +47,8 @@ class GitDeploy(AppDeploy):
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
         self.repo.restore_state(storage)
+        if not self.needs_refresh():
+            self.repo.log_repo_info()
         return storage
 
     async def refresh(self) -> None:
@@ -62,11 +64,8 @@ class GitDeploy(AppDeploy):
             f"Channel: {self.channel}, "
             f"Need Channel Update: {self.need_channel_update}"
         )
-        invalids = self.repo.report_invalids(self.primary_branch)
-        if invalids:
-            msgs = '\n'.join(invalids)
-            self.log_info(
-                f"Repo validation checks failed:\n{msgs}")
+        if not self.repo.check_is_valid():
+            self.log_info("Repo validation check failed")
             if self.server.is_debug_enabled():
                 self._is_valid = True
                 self.log_info(
@@ -276,6 +275,7 @@ class GitRepo:
                  alias: str,
                  origin_url: str,
                  moved_origin_url: Optional[str],
+                 primary_branch: str,
                  channel: str
                  ) -> None:
         self.server = cmd_helper.get_server()
@@ -286,7 +286,10 @@ class GitRepo:
         git_base = git_path.name
         self.backup_path = git_dir.joinpath(f".{git_base}_repo_backup")
         self.origin_url = origin_url
+        if not self.origin_url.endswith(".git"):
+            self.origin_url += ".git"
         self.moved_origin_url = moved_origin_url
+        self.primary_branch = primary_branch
         self.recovery_message = \
             f"""
             Manually restore via SSH with the following commands:
@@ -297,6 +300,7 @@ class GitRepo:
             sudo service {self.alias} start
             """
 
+        self.repo_warnings: List[str] = []
         self.init_evt: Optional[asyncio.Event] = None
         self.initialized: bool = False
         self.git_operation_lock = asyncio.Lock()
@@ -319,6 +323,10 @@ class GitRepo:
         self.current_commit: str = storage.get('current_commit', "?")
         self.upstream_commit: str = storage.get('upstream_commit', "?")
         self.upstream_url: str = storage.get('upstream_url', "?")
+        self.recovery_url: str = storage.get(
+            'recovery_url',
+            self.upstream_url if self.git_remote == "origin" else "?"
+        )
         self.full_version_string: str = storage.get('full_version_string', "?")
         self.branches: List[str] = storage.get('branches', [])
         self.dirty: bool = storage.get('dirty', False)
@@ -328,10 +336,8 @@ class GitRepo:
             'commits_behind', [])
         self.tag_data: Dict[str, Any] = storage.get('tag_data', {})
         self.diverged: bool = storage.get("diverged", False)
-        self.repo_verified: bool = storage.get(
-            "verified", storage.get("is_valid", False)
-        )
         self.repo_corrupt: bool = storage.get('corrupt', False)
+        self._check_warnings()
 
     def get_persistent_data(self) -> Dict[str, Any]:
         return {
@@ -345,6 +351,7 @@ class GitRepo:
             'current_commit': self.current_commit,
             'upstream_commit': self.upstream_commit,
             'upstream_url': self.upstream_url,
+            'recovery_url': self.recovery_url,
             'full_version_string': self.full_version_string,
             'branches': self.branches,
             'dirty': self.dirty,
@@ -353,7 +360,6 @@ class GitRepo:
             'commits_behind': self.commits_behind,
             'tag_data': self.tag_data,
             'diverged': self.diverged,
-            'verified': self.repo_verified,
             'corrupt': self.repo_corrupt
         }
 
@@ -379,7 +385,21 @@ class GitRepo:
             self.upstream_url = await self.remote(f"get-url {self.git_remote}")
             if await self._check_moved_origin():
                 need_fetch = True
-
+            if self.git_remote == "origin":
+                self.recovery_url = self.upstream_url
+            else:
+                remote_list = (await self.remote("")).splitlines()
+                logging.debug(
+                    f"Git Repo {self.alias}: Detected Remotes - {remote_list}"
+                )
+                if "origin" in remote_list:
+                    self.recovery_url = await self.remote("get-url origin")
+                else:
+                    logging.info(
+                        f"Git Repo {self.alias}: Unable to detect recovery URL, "
+                        "Hard Recovery not available"
+                    )
+                    self.recovery_url = "?"
             if need_fetch:
                 await self.fetch()
             self.diverged = await self.check_diverged()
@@ -431,7 +451,7 @@ class GitRepo:
                     if i < 30 or tag is not None:
                         commit['tag'] = tag
                         self.commits_behind.append(commit)
-
+            self._check_warnings()
             self.log_repo_info()
         except Exception:
             logging.exception(f"Git Repo {self.alias}: Initialization failure")
@@ -684,6 +704,10 @@ class GitRepo:
             return False
 
     def log_repo_info(self) -> None:
+        warnings = ""
+        if self.repo_warnings:
+            warnings = "\nRepo Warnings:\n"
+            warnings += '\n'.join([f"  {warn}" for warn in self.repo_warnings])
         logging.info(
             f"Git Repo {self.alias} Detected:\n"
             f"Owner: {self.git_owner}\n"
@@ -692,6 +716,7 @@ class GitRepo:
             f"Remote: {self.git_remote}\n"
             f"Branch: {self.git_branch}\n"
             f"Remote URL: {self.upstream_url}\n"
+            f"Recovery URL: {self.recovery_url}\n"
             f"Current Commit SHA: {self.current_commit}\n"
             f"Upstream Commit SHA: {self.upstream_commit}\n"
             f"Current Version: {self.current_version}\n"
@@ -702,27 +727,31 @@ class GitRepo:
             f"Tag Data: {self.tag_data}\n"
             f"Bound Repo: {self.bound_repo}\n"
             f"Diverged: {self.diverged}"
+            f"{warnings}"
         )
 
-    def report_invalids(self, primary_branch: str) -> List[str]:
-        invalids: List[str] = []
+    def _check_warnings(self) -> None:
+        if self.upstream_url == "?":
+            self.repo_warnings.append("Failed to detect repo url")
+            return
+        self.repo_warnings.clear()
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
         if upstream_url != self.origin_url.lower():
-            invalids.append(f"Unofficial remote url: {self.upstream_url}")
-        if self.git_branch != primary_branch or self.git_remote != "origin":
-            invalids.append(
-                "Repo not on valid remote branch, expected: "
-                f"origin/{primary_branch}, detected: "
+            self.repo_warnings.append(f"Unofficial remote url: {self.upstream_url}")
+        if self.git_branch != self.primary_branch or self.git_remote != "origin":
+            self.repo_warnings.append(
+                "Repo not on offical remote/branch, expected: "
+                f"origin/{self.primary_branch}, detected: "
                 f"{self.git_remote}/{self.git_branch}")
         if self.head_detached:
-            invalids.append("Detached HEAD detected")
+            self.repo_warnings.append("Detached HEAD detected")
         if self.diverged:
-            invalids.append("Repo has diverged from remote")
-        if not invalids:
-            self.repo_verified = True
-        return invalids
+            self.repo_warnings.append("Repo has diverged from remote")
+
+    def check_is_valid(self):
+        return not self.head_detached and not self.diverged
 
     def _verify_repo(self, check_remote: bool = False) -> None:
         if not self.valid_git_repo:
@@ -821,9 +850,9 @@ class GitRepo:
 
     async def clone(self) -> None:
         async with self.git_operation_lock:
-            if not self.repo_verified:
+            if self.recovery_url == "?":
                 raise self.server.error(
-                    "Repo has not been verified, clone aborted"
+                    "Recovery url has not been detected, clone aborted"
                 )
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Starting Clone Recovery...")
@@ -831,7 +860,7 @@ class GitRepo:
             if self.backup_path.exists():
                 await event_loop.run_in_thread(shutil.rmtree, self.backup_path)
             await self._check_lock_file_exists(remove=True)
-            git_cmd = f"clone {self.origin_url} {self.backup_path}"
+            git_cmd = f"clone {self.recovery_url} {self.backup_path}"
             try:
                 await self._run_git_cmd_async(git_cmd, 1, False, False)
             except Exception as e:
@@ -915,6 +944,8 @@ class GitRepo:
             'branch': self.git_branch,
             'owner': self.git_owner,
             'repo_name': self.git_repo_name,
+            'remote_url': self.upstream_url,
+            'recovery_url': self.recovery_url,
             'version': self.current_version,
             'remote_version': self.upstream_version,
             'current_hash': self.current_commit,
@@ -925,7 +956,8 @@ class GitRepo:
             'git_messages': self.git_messages,
             'full_version_string': self.full_version_string,
             'pristine': not self.dirty,
-            'corrupt': self.repo_corrupt
+            'corrupt': self.repo_corrupt,
+            'warnings': self.repo_warnings
         }
 
     def get_version(self, upstream: bool = False) -> Tuple[Any, ...]:
