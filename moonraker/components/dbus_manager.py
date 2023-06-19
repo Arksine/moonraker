@@ -67,15 +67,18 @@ class DbusManager:
                 "/org/freedesktop/PolicyKit1/Authority",
                 "org.freedesktop.PolicyKit1.Authority")
         except self.DbusError:
-            self.server.add_warning(
-                "Unable to find DBus PolKit Interface, this suggests PolKit "
-                "is not installed on your OS.")
+            self.polkit = None
 
     async def check_permission(self,
                                action: str,
                                err_msg: str = ""
                                ) -> bool:
         if self.polkit is None:
+            self.server.add_warning(
+                "Unable to find DBus PolKit Interface, this suggests PolKit "
+                "is not installed on your OS.",
+                "dbus_polkit"
+            )
             return False
         try:
             ret = await self.polkit.call_check_authorization(  # type: ignore
