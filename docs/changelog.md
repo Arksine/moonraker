@@ -10,19 +10,34 @@ The format is based on [Keep a Changelog].
 - **notifier**: The `attach` option now supports Jinja2 templates.
 - **notifier**: The `attach` option may now contain multiple attachments,
   each separated by a newline.
+- **notifier**: Added support for a configurable `body_format`
+- **power**: Added support for generic `http` type switches.
+- **metadata**: Added support for OrcaSlicer
 
 ### Fixed
 
 - **simplyprint**:  Fixed import error preventing the component from loading.
-- **update_manager**:  Moonraker will now restart the correct "moonraker" and
+- **update_manager**: Moonraker will now restart the correct "moonraker" and
   "klipper" services if they are not the default values.
+- **job_queue**: Fixed transition wihen auto is disabled
+- **history**: Added modification time to file existance checks.
+- **dbus_manager**: Fixed PolKit warning when PolKit features are not used.
 
 ### Changed
 
-- Bumped Apprise to version `1.3.0`.
+- **build**: Bumped apprise to version `1.3.0`.
+- **build**:  Bumped lmdb to version `1.4.1`
 - **machine**: Added `ratos-configurator` to list of default allowed services
 - **update_manager**:  It is now required that an application be "allowed"
   for Moonraker to restart it after an update.
+- **update_manager**:  Git repo validation no longer requires a match for the
+  remote URL and/or branch.
+- **update_manager**: Fixed potential security vulnerabilities in `web` type updates.
+  This change adds a validation step to the install, front-end developers may refer to
+  the [configuration documentation](./configuration.md#web-type-front-end-configuration)
+  for details.
+- **API**: The `update_manager` APIs that return status report additional fields.
+  See the [API Documentation](./web_api.md#get-update-status) for details.
 
 ## [0.8.0] - 2023-02-23
 

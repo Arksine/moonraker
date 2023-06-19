@@ -4163,7 +4163,10 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "commits_behind": [],
             "git_messages": [],
             "full_version_string": "v0.7.1-364-gecfad5c",
-            "pristine": true
+            "pristine": true,
+            "recovery_url": "https://github.com/Arksine/moonraker.git",
+            "remote_url": "https://github.com/Arksine/moonraker.git",
+            "warnings": []
         },
         "mainsail": {
             "name": "mainsail",
@@ -4175,16 +4178,20 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "info_tags": [
                 "desc=Mainsail Web Client",
                 "action=some_action"
-            ]
+            ],
+            "warnings": [],
+            "is_valid": true
         },
         "fluidd": {
             "name": "fluidd",
-            "owner": "cadriel",
-            "version": "?",
+            "owner": "fluidd-core",
+            "version": "v1.16.2",
             "remote_version": "v1.16.2",
-            "configured_type": "web_beta",
+            "configured_type": "web",
             "channel": "beta",
-            "info_tags": []
+            "info_tags": [],
+            "warnings": [],
+            "is_valid": true
         },
         "klipper": {
             "channel": "dev",
@@ -4225,7 +4232,10 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             ],
             "git_messages": [],
             "full_version_string": "v0.10.0-1-g4c8d24ae-shallow",
-            "pristine": true
+            "pristine": true,
+            "recovery_url": "https://github.com/Klipper3d/klipper.git",
+            "remote_url": "https://github.com/Klipper3d/klipper.git",
+            "warnings": []
         }
     }
 }
@@ -4299,11 +4309,19 @@ as applications have the following fields:
   configuration for each client. Client developers my define what tags,
   if any, users will configure.  They can choose to use those tags to display
   information or perform an additional action after an update if necessary.
+- `recovery_url`:  The url Moonraker will use to re-clone the repo when a
+  hard recovery is requested.  If this reports a "?" then a hard recovery is
+  not possible.
+- `remote_url`:  The url for the currently configured remote.
+- `warnings`:  An array of strings that describe warnings detected during
+  repo init.  These warnings describe potential issues, such as a mismatch
+  between the detected remote and the configured remote.  If the `is_valid`
+  field reports `False` then the warnings will contain additional context.
 
 Web clients have the following fields:
 
 - `channel`: channel to fetch updates from
-- `configured_type`: will be `web` or `web_beta`
+- `configured_type`: will be `web`
 - `name`: name of the configured client
 - `owner`: the owner of the client
 - `version`:  version of the installed client.
@@ -4312,6 +4330,13 @@ Web clients have the following fields:
   configuration for each client. Client developers my define what tags,
   if any, users will configure.  They can choose to use those tags to display
   information or perform an additional action after an update if necessary.
+- `is_valid`: A boolean that reports true if an update is possible, false
+  if an update cannot be performed.
+- `warnings`:  An array of strings that describe warnings detected during
+  repo init.  These warnings describe potential issues, such as a mismatch
+  between the detected owner and the configured owner.  If the `is_valid`
+  field reports `False` then the warnings will contain additional context.
+
 
 The `system` package has the following fields:
 

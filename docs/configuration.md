@@ -1654,6 +1654,26 @@ down into 3 basic types:
 
 ####  Web type (front-end) configuration
 
+!!! Note
+    Front-end developers that wish to deploy updates via Moonraker
+    should host releases on their GitHub repo.  In the root of each
+    release a `release_info.json` file should be present.  This
+    file must contain a JSON object with the following fields:
+
+    - `project_name`:  The name of the GitHub project
+    - `project_owner`: The User or Organization that owns the project
+    - `version`: The current release version
+
+    For example, a `release_info.json` for Mainsail might contain the
+    following:
+    ```json
+    {
+      "project_name": "mainsail",
+      "project_owner": "mainsail-crew",
+      "version": "v2.5.1"
+    }
+    ```
+
 ```ini
 # moonraker.conf
 
@@ -1669,7 +1689,11 @@ repo:
 #   For example, this could be set to fluidd-core/fluidd to update Fluidd or
 #   mainsail-crew/mainsail to update Mainsail.  This parameter must be provided.
 path:
-#   The path to the front-end's files on disk.  This parameter must be provided.
+#   The path to the front-end's files on disk.  This folder must contain a
+#   a previously installed client.   The folder must not be located within a
+#   git repo and it must not be located within a path that Moonraker has
+#   reserved, ie: it cannot share a path with another extension. This parameter
+#   must be provided.
 persistent_files:
 #   A list of newline separated file names that should persist between
 #   updates.  This is useful for static configuration files, or perhaps
