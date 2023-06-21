@@ -15,8 +15,10 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
+    from ..app import MoonrakerApp
     from .machine import Machine
 
+ZC_SERVICE_TYPE = "_moonraker._tcp.local."
 
 class AsyncRunner:
     def __init__(self, ip_version: IPVersion) -> None:
@@ -54,22 +56,55 @@ class ZeroconfRegistrar:
         addr: str = hi["address"]
         if addr.lower() == "all":
             addr = "::"
-        host_ip = ipaddress.ip_address(addr)
-        fam = socket.AF_INET6 if host_ip.version == 6 else socket.AF_INET
-        addresses: List[bytes] = [(socket.inet_pton(fam, addr))]
+        self.cfg_addr = addr
         self.bound_all = addr in ["0.0.0.0", "::"]
-        self.service_info = self._build_service_info(addresses)
         if self.bound_all:
             self.server.register_event_handler(
                 "machine:net_state_changed", self._update_service)
 
     async def component_init(self) -> None:
         logging.info("Starting Zeroconf services")
+        app: MoonrakerApp = self.server.lookup_component("application")
+        machine: Machine = self.server.lookup_component("machine")
+        app_args = self.server.get_app_args()
+        instance_uuid: str = app_args["instance_uuid"]
+        if (
+            machine.get_provider_type().startswith("systemd") and
+            "unit_name" in machine.get_moonraker_service_info()
+        ):
+            # Use the name of the systemd service unit to identify service
+            instance_name = machine.unit_name.capitalize()
+        else:
+            # Use the UUID.  First 8 hex digits should be unique enough
+            instance_name = f"Moonraker-{instance_uuid[:8]}"
+        hi = self.server.get_host_info()
+        host = hi["hostname"]
+        zc_service_props = {
+            "uuid": instance_uuid,
+            "https_port": hi["ssl_port"] if app.https_enabled() else "",
+            "version": app_args["software_version"]
+        }
         if self.bound_all:
-            machine: Machine = self.server.lookup_component("machine")
+            if not host:
+                host = machine.public_ip
             network = machine.get_system_info()["network"]
-            addresses = [x for x in self._extract_ip_addresses(network)]
-            self.service_info = self._build_service_info(addresses)
+            addresses: List[bytes] = [x for x in self._extract_ip_addresses(network)]
+        else:
+            if not host:
+                host = self.cfg_addr
+            host_addr = ipaddress.ip_address(self.cfg_addr)
+            fam = socket.AF_INET6 if host_addr.version == 6 else socket.AF_INET
+            addresses = [(socket.inet_pton(fam, str(self.cfg_addr)))]
+        zc_service_name = f"{instance_name} @ {host}.{ZC_SERVICE_TYPE}"
+        server_name = hi["hostname"] or instance_name.lower()
+        self.service_info = AsyncServiceInfo(
+            ZC_SERVICE_TYPE,
+            zc_service_name,
+            addresses=addresses,
+            port=hi["port"],
+            properties=zc_service_props,
+            server=f"{server_name}.local.",
+        )
         await self.runner.register_services([self.service_info])
 
     async def close(self) -> None:
@@ -78,21 +113,8 @@ class ZeroconfRegistrar:
     async def _update_service(self, network: Dict[str, Any]) -> None:
         if self.bound_all:
             addresses = [x for x in self._extract_ip_addresses(network)]
-            self.service_info = self._build_service_info(addresses)
+            self.service_info.addresses = addresses
             await self.runner.update_services([self.service_info])
-
-    def _build_service_info(self,
-                            addresses: Optional[List[bytes]] = None
-                            ) -> AsyncServiceInfo:
-        hi = self.server.get_host_info()
-        return AsyncServiceInfo(
-            "_moonraker._tcp.local.",
-            f"Moonraker Instance on {hi['hostname']}._moonraker._tcp.local.",
-            addresses=addresses,
-            port=hi["port"],
-            properties={"path": "/"},
-            server=f"{hi['hostname']}.local.",
-        )
 
     def _extract_ip_addresses(self, network: Dict[str, Any]) -> Iterator[bytes]:
         for ifname, ifinfo in network.items():
