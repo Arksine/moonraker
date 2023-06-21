@@ -53,6 +53,7 @@ class ZeroconfRegistrar:
         self.server = config.get_server()
         self.runner = AsyncRunner(IPVersion.All)
         hi = self.server.get_host_info()
+        self.mdns_name = config.get("mdns_hostname", hi["hostname"])
         addr: str = hi["address"]
         if addr.lower() == "all":
             addr = "::"
@@ -78,7 +79,7 @@ class ZeroconfRegistrar:
             # Use the UUID.  First 8 hex digits should be unique enough
             instance_name = f"Moonraker-{instance_uuid[:8]}"
         hi = self.server.get_host_info()
-        host = hi["hostname"]
+        host = self.mdns_name
         zc_service_props = {
             "uuid": instance_uuid,
             "https_port": hi["ssl_port"] if app.https_enabled() else "",
@@ -96,7 +97,7 @@ class ZeroconfRegistrar:
             fam = socket.AF_INET6 if host_addr.version == 6 else socket.AF_INET
             addresses = [(socket.inet_pton(fam, str(self.cfg_addr)))]
         zc_service_name = f"{instance_name} @ {host}.{ZC_SERVICE_TYPE}"
-        server_name = hi["hostname"] or instance_name.lower()
+        server_name = self.mdns_name or instance_name.lower()
         self.service_info = AsyncServiceInfo(
             ZC_SERVICE_TYPE,
             zc_service_name,
