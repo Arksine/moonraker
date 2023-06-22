@@ -298,10 +298,9 @@ class MoonrakerApp:
             await self.secure_server.close_all_connections()
         await self.wsm.close()
 
-    def register_api_transport(self,
-                               name: str,
-                               transport: APITransport
-                               ) -> Dict[str, APIDefinition]:
+    def register_api_transport(
+        self, name: str, transport: APITransport
+    ) -> Dict[str, APIDefinition]:
         self.api_transports[name] = transport
         return self.api_cache
 
@@ -323,13 +322,15 @@ class MoonrakerApp:
         for name, transport in self.api_transports.items():
             transport.register_api_handler(api_def)
 
-    def register_local_handler(self,
-                               uri: str,
-                               request_methods: List[str],
-                               callback: APICallback,
-                               transports: List[str] = ALL_TRANSPORTS,
-                               wrap_result: bool = True
-                               ) -> None:
+    def register_local_handler(
+        self,
+        uri: str,
+        request_methods: List[str],
+        callback: APICallback,
+        transports: List[str] = ALL_TRANSPORTS,
+        wrap_result: bool = True,
+        content_type: Optional[str] = None
+    ) -> None:
         if uri in self.registered_base_handlers:
             return
         api_def = self._create_api_definition(
@@ -343,17 +344,16 @@ class MoonrakerApp:
             params['callback'] = callback
             params['wrap_result'] = wrap_result
             params['is_remote'] = False
+            params['content_type'] = content_type
             self.mutable_router.add_handler(uri, DynamicRequestHandler, params)
         self.registered_base_handlers.append(uri)
         for name, transport in self.api_transports.items():
             if name in transports:
                 transport.register_api_handler(api_def)
 
-    def register_static_file_handler(self,
-                                     pattern: str,
-                                     file_path: str,
-                                     force: bool = False
-                                     ) -> None:
+    def register_static_file_handler(
+        self, pattern: str, file_path: str, force: bool = False
+    ) -> None:
         if pattern[0] != "/":
             pattern = "/server/files/" + pattern
         if os.path.isfile(file_path) or force:
@@ -369,10 +369,9 @@ class MoonrakerApp:
         params = {'path': file_path}
         self.mutable_router.add_handler(pattern, FileRequestHandler, params)
 
-    def register_upload_handler(self,
-                                pattern: str,
-                                location_prefix: Optional[str] = None
-                                ) -> None:
+    def register_upload_handler(
+        self, pattern: str, location_prefix: Optional[str] = None
+    ) -> None:
         params: Dict[str, Any] = {'max_upload_size': self.max_upload_size}
         if location_prefix is not None:
             params['location_prefix'] = location_prefix
@@ -403,12 +402,13 @@ class MoonrakerApp:
             for name, transport in self.api_transports.items():
                 transport.remove_api_handler(api_def)
 
-    def _create_api_definition(self,
-                               endpoint: str,
-                               request_methods: List[str] = [],
-                               callback: Optional[APICallback] = None,
-                               transports: List[str] = ALL_TRANSPORTS
-                               ) -> APIDefinition:
+    def _create_api_definition(
+        self,
+        endpoint: str,
+        request_methods: List[str] = [],
+        callback: Optional[APICallback] = None,
+        transports: List[str] = ALL_TRANSPORTS
+    ) -> APIDefinition:
         is_remote = callback is None
         if endpoint in self.api_cache:
             return self.api_cache[endpoint]
@@ -565,7 +565,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         methods: List[str] = [],
         need_object_parser: bool = False,
         is_remote: bool = True,
-        wrap_result: bool = True
+        wrap_result: bool = True,
+        content_type: Optional[str] = None
     ) -> None:
         super(DynamicRequestHandler, self).initialize()
         self.callback = callback
@@ -575,6 +576,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             else self._do_local_request
         self._parse_query = self._object_parser if need_object_parser \
             else self._default_parser
+        self.content_type = content_type
 
     # Converts query string values with type hints
     def _convert_type(self, value: str, hint: str) -> Any:
@@ -696,6 +698,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 e.status_code, reason=str(e)) from e
         if self.wrap_result:
             result = {'result': result}
+        elif self.content_type is not None:
+            self.set_header("Content-Type", self.content_type)
         if result is None:
             self.set_status(204)
         self._log_debug(f"HTTP Response::{req}", result)
