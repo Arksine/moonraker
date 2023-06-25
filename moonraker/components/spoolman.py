@@ -145,9 +145,10 @@ class SpoolManager:
                 self.extruded = 0
 
     async def _handle_spool_id_request(self, web_request: WebRequest):
-        if web_request.method == "GET":
+        action = web_request.get_action()
+        if action == "GET":
             return {"spool_id": self.get_active_spool()}
-        elif web_request.method == "POST":
+        elif action == "POST":
             spool_id = web_request.get_int("spool_id", None)
             await self.set_active_spool(spool_id)
             return True
