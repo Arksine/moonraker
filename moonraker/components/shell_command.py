@@ -311,6 +311,8 @@ class ShellCommand:
                     *self.command, stdin=stdpipe,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=errpipe, env=self.env, cwd=self.cwd)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logging.exception(
                 f"shell_command: Command ({self.name}) failed")
