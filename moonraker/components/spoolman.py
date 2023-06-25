@@ -26,27 +26,26 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
+
         self.highest_e_pos = 0.0
         self.extruded = 0.0
         self.sync_rate_seconds = config.getint("sync_rate", default=5, above=1)
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
-
         self.spoolman_url = f"{config.get('server').rstrip('/')}/api"
+        self.spool_id: Optional[int] = None
 
+        self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.http_client: HttpClient = self.server.lookup_component(
             "http_client"
         )
-
-        database: MoonrakerDatabase = self.server.lookup_component("database")
-        self.spool_id: Optional[int] = await database.get_item(
-            DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
+        self.database: MoonrakerDatabase = self.server.lookup_component(
+            "database"
         )
 
         self._register_notifications()
         self._register_listeners()
         self._register_endpoints()
-        self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
 
     def _register_notifications(self):
         self.server.register_notification("spoolman:active_spool_set")
@@ -66,6 +65,11 @@ class SpoolManager:
             "/spoolman/proxy",
             ["POST"],
             self._proxy_spoolman_request,
+        )
+
+    async def component_init(self) -> None:
+        self.spool_id = await self.database.get_item(
+            DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
         )
 
     async def _handle_server_ready(self):
@@ -104,8 +108,7 @@ class SpoolManager:
                 await self.track_filament_usage()
 
     async def set_active_spool(self, spool_id: Optional[int]) -> None:
-        database: MoonrakerDatabase = self.server.lookup_component("database")
-        database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
+        self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.spool_id = spool_id
         await self.server.send_event(
             "spool_manager:active_spool_set", {"spool_id": spool_id}
