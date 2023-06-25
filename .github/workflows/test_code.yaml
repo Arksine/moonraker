@@ -7,14 +7,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-      - uses: ricardochaves/python-lint@v1.4.0
+      - uses: weibullguy/python-lint-plus@v1.12.0
         with:
           python-root-list: "moonraker scripts"
-          use-pylint: false
+          virtual-env: "python-lint-plus"
+          python-version: "3.10"
           use-pycodestyle: true
-          use-flake8: false
           use-black: false
           use-mypy: true
-          use-isort: false
           extra-pycodestyle-options: "--ignore=E226,E301,E302,E303,W503,W504 --max-line-length=88 --max-doc-length=88"
           extra-mypy-options: "--ignore-missing-imports --follow-imports=silent"
