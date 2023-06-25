@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from .klippy_apis import KlippyAPI as APIComp
     from confighelper import ConfigHelper
 
-SPOOL_NAMESPACE = "spoolman"
-ACTIVE_SPOOL_KEY = "spoolman.active_spool_id"
+DB_NAMESPACE = "moonraker"
+ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
 
 class SpoolManager:
@@ -32,16 +32,15 @@ class SpoolManager:
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
 
-        self.spoolman_url = config.get("server")
-        self.spoolman_url = f"{self.spoolman_url.rstrip('/')}/api"
+        self.spoolman_url = f"{config.get('server').rstrip('/')}/api"
 
         self.http_client: HttpClient = self.server.lookup_component(
             "http_client"
         )
 
         database: MoonrakerDatabase = self.server.lookup_component("database")
-        self.spool_id = await database.get_item(
-            "moonraker", "spoolman.spool_id", None
+        self.spool_id: Optional[int] = await database.get_item(
+            DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
         )
 
         self._register_listeners()
@@ -55,9 +54,9 @@ class SpoolManager:
 
     def _register_endpoints(self):
         self.server.register_endpoint(
-            "/spoolman/set_spool",
-            ["POST"],
-            self._handle_set_spool,
+            "/spoolman/spool_id",
+            ["GET", "POST"],
+            self._handle_spool_id_request,
         )
         self.server.register_endpoint(
             "/spoolman/proxy",
@@ -100,21 +99,20 @@ class SpoolManager:
                 logging.debug("Sync period elapsed, tracking usage")
                 await self.track_filament_usage()
 
-    async def set_active_spool(self, spool_id: Optional[str]) -> bool:
+    async def set_active_spool(self, spool_id: Optional[int]) -> None:
         database: MoonrakerDatabase = self.server.lookup_component("database")
-        database.insert_item("moonraker", "spoolman.spool_id", spool_id)
+        database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.spool_id = spool_id
         await self.server.send_event(
             "spool_manager:active_spool_set", {"spool_id": spool_id}
         )
         logging.info(f"Setting active spool to: {spool_id}")
-        return True
 
-    async def get_active_spool_id(self) -> Optional[str]:
-        return await self.moonraker_db.get(ACTIVE_SPOOL_KEY, None)
+    async def get_active_spool(self) -> Optional[int]:
+        return self.spool_id
 
     async def track_filament_usage(self):
-        spool_id = await self.get_active_spool_id()
+        spool_id = self.get_active_spool()
         if spool_id is None:
             logging.debug("No active spool, skipping tracking")
             return
@@ -139,12 +137,13 @@ class SpoolManager:
 
                 self.extruded = 0
 
-    async def _handle_set_spool(self, web_request: WebRequest):
-        spool_id = web_request.get("spool_id", None)
-
-        await self.set_active_spool(spool_id)
-
-        return True
+    async def _handle_spool_id_request(self, web_request: WebRequest):
+        if web_request.method == "GET":
+            return {"spool_id": self.get_active_spool()}
+        elif web_request.method == "POST":
+            spool_id = web_request.get_int("spool_id", None)
+            await self.set_active_spool(spool_id)
+            return True
 
     async def _proxy_spoolman_request(self, web_request: WebRequest):
         method = web_request.get_str("method")
