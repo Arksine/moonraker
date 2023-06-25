@@ -43,9 +43,13 @@ class SpoolManager:
             DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
         )
 
+        self._register_notifications()
         self._register_listeners()
         self._register_endpoints()
         self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
+
+    def _register_notifications(self):
+        self.server.register_notification("spoolman:active_spool_set")
 
     def _register_listeners(self):
         self.server.register_event_handler(
@@ -73,7 +77,7 @@ class SpoolManager:
         )
         initial_e_pos = self._eposition_from_status(result)
 
-        logging.info(f"Initial epos: {initial_e_pos}")
+        logging.debug(f"Initial epos: {initial_e_pos}")
 
         if initial_e_pos is not None:
             self.highest_e_pos = initial_e_pos
