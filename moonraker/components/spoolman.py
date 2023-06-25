@@ -9,16 +9,13 @@ import asyncio
 import datetime
 import logging
 from typing import TYPE_CHECKING, Dict, Any
-from urllib.parse import urlencode
 
 if TYPE_CHECKING:
     from typing import Optional
     from moonraker.websockets import WebRequest
     from moonraker.components.http_client import HttpClient
-    from moonraker.components.database import (
-        MoonrakerDatabase,
-        NamespaceWrapper,
-    )
+    from moonraker.components.database import MoonrakerDatabase
+    from moonraker.utils import ServerError
     from .klippy_apis import KlippyAPI as APIComp
     from confighelper import ConfigHelper
 
@@ -31,24 +28,20 @@ class SpoolManager:
         self.server = config.get_server()
         self.highest_e_pos = 0.0
         self.extruded = 0.0
-        self.sync_rate_seconds = config.getint("sync_rate", 5)
+        self.sync_rate_seconds = config.getint("sync_rate", default=5, above=1)
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
 
-        self.spoolman_url = config.get("server", None)
-        if self.spoolman_url is None:
-            logging.error("Server config not set for spoolman.")
-            return
-        self.spoolman_url = f"{self.spoolman_url.rstrip('/')}/api/v1"
+        self.spoolman_url = config.get("server")
+        self.spoolman_url = f"{self.spoolman_url.rstrip('/')}/api"
 
         self.http_client: HttpClient = self.server.lookup_component(
             "http_client"
         )
 
         database: MoonrakerDatabase = self.server.lookup_component("database")
-        database.register_local_namespace(SPOOL_NAMESPACE)
-        self.moonraker_db: NamespaceWrapper = database.wrap_namespace(
-            SPOOL_NAMESPACE, parse_keys=False
+        self.spool_id = await database.get_item(
+            "moonraker", "spoolman.spool_id", None
         )
 
         self._register_listeners()
@@ -62,13 +55,13 @@ class SpoolManager:
 
     def _register_endpoints(self):
         self.server.register_endpoint(
-            r"/spoolman/set_spool$",
+            "/spoolman/set_spool",
             ["POST"],
             self._handle_set_spool,
         )
         self.server.register_endpoint(
-            r"/spoolman/[\W\w]+$",
-            ["GET", "POST", "DELETE", "PUT", "PATCH"],
+            "/spoolman/proxy",
+            ["POST"],
             self._proxy_spoolman_request,
         )
 
@@ -89,9 +82,7 @@ class SpoolManager:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
 
-    def _eposition_from_status(
-        self, status: Dict[str, Any]
-    ) -> Optional[float]:
+    def _eposition_from_status(self, status: Dict[str, Any]) -> Optional[float]:
         position = status.get("toolhead", {}).get("position", [])
         return position[3] if len(position) > 3 else None
 
@@ -110,7 +101,9 @@ class SpoolManager:
                 await self.track_filament_usage()
 
     async def set_active_spool(self, spool_id: Optional[str]) -> bool:
-        self.moonraker_db[ACTIVE_SPOOL_KEY] = spool_id
+        database: MoonrakerDatabase = self.server.lookup_component("database")
+        database.insert_item("moonraker", "spoolman.spool_id", spool_id)
+        self.spool_id = spool_id
         await self.server.send_event(
             "spool_manager:active_spool_set", {"spool_id": spool_id}
         )
@@ -154,20 +147,31 @@ class SpoolManager:
         return True
 
     async def _proxy_spoolman_request(self, web_request: WebRequest):
-        body = None
-        query = ""
-        if web_request.action != "GET":
-            body = web_request.args
-        else:
-            query = "?" + urlencode(web_request.args)
+        method = web_request.get_str("method")
+        path = web_request.get_str("path")
+        query = web_request.get_str("query", None)
+        body = web_request.get("body", None)
 
-        endpoint = web_request.endpoint[9:]  # Remove /spoolman prefix
-        full_url = f"{self.spoolman_url}{endpoint}{query}"
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+            raise ServerError(f"Invalid HTTP method: {method}")
 
-        logging.debug(f"Proxying {web_request.action} request to {full_url}")
+        if body is not None and method == "GET":
+            raise ServerError("GET requests cannot have a body")
+
+        if len(path) < 4 or path[:4] != "/v1/":
+            raise ServerError(
+                "Invalid path, must start with the API version, e.g. /v1"
+            )
+
+        if query is not None:
+            query = f"?{query}"
+
+        full_url = f"{self.spoolman_url}{path}{query}"
+
+        logging.debug(f"Proxying {method} request to {full_url}")
 
         response = await self.http_client.request(
-            method=web_request.action,
+            method=method,
             url=full_url,
             body=body,
         )
