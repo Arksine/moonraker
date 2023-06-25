@@ -173,6 +173,8 @@ class SpoolManager:
 
         if query is not None:
             query = f"?{query}"
+        else:
+            query = ""
 
         full_url = f"{self.spoolman_url}{path}{query}"
 
