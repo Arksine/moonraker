@@ -2096,13 +2096,20 @@ gcode:
 ```
 
 ### `[zeroconf]`
-Enable Zeroconf service registration allowing external services to more
-easily detect and use Moonraker instances.
+Enables support for Zeroconf (Apple Bonjour) discovery, allowing external services
+detect and use Moonraker instances.
 
 ```ini
 # moonraker.conf
 
 [zeroconf]
+mdns_hostname:
+#   The hostname used when registering the multicast DNS serivce.
+#   The instance will be available at:
+#       http://{mdns_hostname}.local:{port}/
+#   The default is the operating system's configured hostname.
+enable_ssdp:
+#   Enables discovery over UPnP/SSDP in ad.  The default is False
 ```
 
 ### `[button]`

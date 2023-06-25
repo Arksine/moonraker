@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog].
 - **notifier**: Added support for a configurable `body_format`
 - **power**: Added support for generic `http` type switches.
 - **metadata**: Added support for OrcaSlicer
+- **zeroconf**: Added support for a configurable mDNS hostname.
+- **zeroconf**: Added support for UPnP/SSDP Discovery.
 
 ### Fixed
 
