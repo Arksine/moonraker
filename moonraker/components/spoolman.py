@@ -24,16 +24,17 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
 
 class SpoolManager:
+    spool_id: Optional[int] = None
+    highest_e_pos: float = 0.0
+    extruded: float = 0.0
+
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
 
-        self.highest_e_pos = 0.0
-        self.extruded = 0.0
         self.sync_rate_seconds = config.getint("sync_rate", default=5, above=1)
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
         self.spoolman_url = f"{config.get('server').rstrip('/')}/api"
-        self.spool_id: Optional[int] = None
 
         self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.http_client: HttpClient = self.server.lookup_component(
@@ -115,7 +116,7 @@ class SpoolManager:
         )
         logging.info(f"Setting active spool to: {spool_id}")
 
-    async def get_active_spool(self) -> Optional[int]:
+    def get_active_spool(self) -> Optional[int]:
         return self.spool_id
 
     async def track_filament_usage(self):
