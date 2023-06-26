@@ -2609,6 +2609,22 @@ state_response_template:
   {set_result("energy", notification["aenergy"]["by_minute"][0]|float * 0.000001)}
 ```
 
+### `[spoolman]`
+
+Enables integration with the [Spoolman](https://github.com/Donkie/Spoolman)
+filament manager. Moonraker will automatically send filament usage updates to
+the Spoolman database.
+
+Front ends can also utilize this config to provide a built-in management tool.
+
+```ini
+# moonraker.conf
+
+[spoolman]
+server: http://192.168.0.123:7912
+#   URL to the Spoolman instance. This parameter must be provided.
+```
+
 ## Include directives
 
 It is possible to include configuration from other files via include

@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog].
 - **metadata**: Added support for OrcaSlicer
 - **zeroconf**: Added support for a configurable mDNS hostname.
 - **zeroconf**: Added support for UPnP/SSDP Discovery.
+- **spoolman**: Added integration to the
+  [Spoolman](https://github.com/Donkie/Spoolman) filament manager.
 
 ### Fixed
 
