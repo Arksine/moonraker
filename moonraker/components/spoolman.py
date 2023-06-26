@@ -136,7 +136,7 @@ class SpoolManager:
 
                 response = await self.http_client.request(
                     method="PUT",
-                    url=f"{self.spoolman_url}/spool/{spool_id}/use",
+                    url=f"{self.spoolman_url}/v1/spool/{spool_id}/use",
                     body={
                         "use_length": used_length,
                     },
