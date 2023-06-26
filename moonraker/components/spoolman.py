@@ -47,6 +47,9 @@ class SpoolManager:
         self._register_notifications()
         self._register_listeners()
         self._register_endpoints()
+        self.server.register_remote_method(
+            "spoolman_set_active_spool", self.set_active_spool
+        )
 
     def _register_notifications(self):
         self.server.register_notification("spoolman:active_spool_set")
