@@ -5308,7 +5308,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "spoolman.post_proxy",
+    "method": "spoolman.proxy",
     "params": {
         "request_method": "POST",
         "path": "/v1/spool",

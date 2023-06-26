@@ -2623,6 +2623,9 @@ Front ends can also utilize this config to provide a built-in management tool.
 [spoolman]
 server: http://192.168.0.123:7912
 #   URL to the Spoolman instance. This parameter must be provided.
+sync_rate: 5
+#   The interval, in seconds, between sync requests with the
+#   Spoolman server.  The default is 5.
 ```
 
 ## Include directives
