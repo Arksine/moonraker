@@ -2680,6 +2680,40 @@ sync_rate: 5
 #   Spoolman server.  The default is 5.
 ```
 
+#### Setting the active spool from Klipper
+
+The `spoolman` module registers the `spoolman_set_active_spool` remote method
+with Klipper.  This method may be used to set the active spool ID, or clear it,
+using gcode macros.  For example, the following could be added to Klipper's
+`printer.cfg`:
+
+```ini
+# printer.cfg
+
+[gcode_macro SET_ACTIVE_SPOOL]
+gcode:
+  {% if params.ID %}
+    {% set id = params.ID|int %}
+    {action_call_remote_method(
+       "spoolman_set_active_spool",
+       spool_id=id
+    )}
+  {% else %}
+    {action_respond_info("Parameter 'ID' is required")}
+  {% endif %}
+
+[gcode_macro CLEAR_ACTIVE_SPOOL]
+gcode:
+  {action_call_remote_method(
+    "spoolman_set_active_spool",
+    spool_id=None
+  )}
+```
+
+With the above configuration it is possible to run the `SET_ACTIVE_SPOOL ID=1`
+command to set the currently tracked spool ID to `1`, and the `CLEAR_ACTIVE_SPOOL`
+to clear spool tracking (useful when unloading filament for example).
+
 ## Include directives
 
 It is possible to include configuration from other files via include
