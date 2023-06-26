@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import pathlib
-import json
 import struct
 import operator
 import logging
@@ -15,6 +14,7 @@ from functools import reduce
 from threading import Lock as ThreadLock
 import lmdb
 from ..utils import Sentinel, ServerError
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -47,8 +47,8 @@ RECORD_ENCODE_FUNCS = {
     float: lambda x: b"d" + struct.pack("d", x),
     bool: lambda x: b"?" + struct.pack("?", x),
     str: lambda x: b"s" + x.encode(),
-    list: lambda x: json.dumps(x).encode(),
-    dict: lambda x: json.dumps(x).encode(),
+    list: lambda x: jsonw.dumps(x),
+    dict: lambda x: jsonw.dumps(x),
 }
 
 RECORD_DECODE_FUNCS = {
@@ -56,8 +56,8 @@ RECORD_DECODE_FUNCS = {
     ord("d"): lambda x: struct.unpack("d", x[1:])[0],
     ord("?"): lambda x: struct.unpack("?", x[1:])[0],
     ord("s"): lambda x: bytes(x[1:]).decode(),
-    ord("["): lambda x: json.loads(bytes(x)),
-    ord("{"): lambda x: json.loads(bytes(x)),
+    ord("["): lambda x: jsonw.loads(bytes(x)),
+    ord("{"): lambda x: jsonw.loads(bytes(x)),
 }
 
 def getitem_with_default(item: Dict, field: Any) -> Any:

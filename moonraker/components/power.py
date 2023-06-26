@@ -6,12 +6,12 @@
 
 from __future__ import annotations
 import logging
-import json
 import struct
 import socket
 import asyncio
 import time
 from urllib.parse import quote, urlencode
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -845,14 +845,14 @@ class TPLinkSmartPlug(PowerDevice):
         finally:
             writer.close()
             await writer.wait_closed()
-        return json.loads(self._decrypt(data))
+        return jsonw.loads(self._decrypt(data))
 
     def _encrypt(self, outdata: Dict[str, Any]) -> bytes:
-        data = json.dumps(outdata)
+        data = jsonw.dumps(outdata)
         key = self.START_KEY
         res = struct.pack(">I", len(data))
         for c in data:
-            val = key ^ ord(c)
+            val = key ^ c
             key = val
             res += bytes([val])
         return res

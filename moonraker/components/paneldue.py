@@ -8,12 +8,12 @@ from __future__ import annotations
 import serial
 import os
 import time
-import json
 import errno
 import logging
 import asyncio
 from collections import deque
 from ..utils import ServerError
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -536,8 +536,8 @@ class PanelDue:
                     return
 
     def write_response(self, response: Dict[str, Any]) -> None:
-        byte_resp = json.dumps(response) + "\r\n"
-        self.ser_conn.send(byte_resp.encode())
+        byte_resp = jsonw.dumps(response) + b"\r\n"
+        self.ser_conn.send(byte_resp)
 
     def _get_printer_status(self) -> str:
         # PanelDue States applicable to Klipper:

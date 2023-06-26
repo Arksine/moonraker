@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import re
-import json
 import time
 import asyncio
 import pathlib
@@ -14,6 +13,7 @@ import tempfile
 import logging
 import copy
 from ..utils import ServerError
+from ..utils import json_wrapper as jsonw
 from tornado.escape import url_unescape
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from tornado.httputil import HTTPHeaders
@@ -72,7 +72,7 @@ class HttpClient:
         self,
         method: str,
         url: str,
-        body: Optional[Union[str, List[Any], Dict[str, Any]]] = None,
+        body: Optional[Union[bytes, str, List[Any], Dict[str, Any]]] = None,
         headers: Optional[Dict[str, Any]] = None,
         connect_timeout: float = 5.,
         request_timeout: float = 10.,
@@ -87,7 +87,7 @@ class HttpClient:
         # prepare the body if required
         req_headers: Dict[str, Any] = {}
         if isinstance(body, (list, dict)):
-            body = json.dumps(body)
+            body = jsonw.dumps(body)
             req_headers["Content-Type"] = "application/json"
         cached: Optional[HttpResponse] = None
         if enable_cache:
@@ -341,8 +341,8 @@ class HttpResponse:
         self._last_modified: Optional[str] = response_headers.get(
             "last-modified", None)
 
-    def json(self, **kwargs) -> Union[List[Any], Dict[str, Any]]:
-        return json.loads(self._result, **kwargs)
+    def json(self) -> Union[List[Any], Dict[str, Any]]:
+        return jsonw.loads(self._result)
 
     def is_cachable(self) -> bool:
         return self._last_modified is not None or self._etag is not None

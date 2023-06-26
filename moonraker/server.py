@@ -23,7 +23,7 @@ from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
-from .utils import ServerError, Sentinel, get_software_info
+from .utils import ServerError, Sentinel, get_software_info, json_wrapper
 from .loghelper import LogManager
 
 # Annotation imports
@@ -585,6 +585,7 @@ def main(from_package: bool = True) -> None:
     else:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["python_version"] = sys.version.replace("\n", " ")
+    app_args["msgspec_enabled"] = json_wrapper.MSGSPEC_ENABLED
     log_manager = LogManager(app_args, startup_warnings)
 
     # Start asyncio event loop and server

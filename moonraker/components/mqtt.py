@@ -8,12 +8,12 @@ from __future__ import annotations
 import socket
 import asyncio
 import logging
-import json
 import pathlib
 import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
 from ..common import Subscribable, WebRequest, APITransport, JsonRPC
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -354,7 +354,7 @@ class MQTTClient(APITransport, Subscribable):
         if self.user_name is not None:
             self.client.username_pw_set(self.user_name, self.password)
         self.client.will_set(self.moonraker_status_topic,
-                             payload=json.dumps({'server': 'offline'}),
+                             payload=jsonw.dumps({'server': 'offline'}),
                              qos=self.qos, retain=True)
         self.client.connect_async(self.address, self.port)
         self.connect_task = self.event_loop.create_task(
@@ -558,8 +558,8 @@ class MQTTClient(APITransport, Subscribable):
         pub_fut: asyncio.Future = asyncio.Future()
         if isinstance(payload, (dict, list)):
             try:
-                payload = json.dumps(payload)
-            except json.JSONDecodeError:
+                payload = jsonw.dumps(payload)
+            except jsonw.JSONDecodeError:
                 raise self.server.error(
                     "Dict or List is not json encodable") from None
         elif isinstance(payload, bool):
@@ -661,8 +661,8 @@ class MQTTClient(APITransport, Subscribable):
             if hdl is not None:
                 self.unsubscribe(hdl)
         try:
-            payload = json.loads(ret)
-        except json.JSONDecodeError:
+            payload = jsonw.loads(ret)
+        except jsonw.JSONDecodeError:
             payload = ret.decode()
         return {
             'topic': topic,

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pathlib
 import logging
 import configparser
-import json
+from ..utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
     Dict,
@@ -73,8 +73,8 @@ class Secrets:
 
     def _parse_json(self, data: str) -> Optional[Dict[str, Any]]:
         try:
-            return json.loads(data)
-        except json.JSONDecodeError:
+            return jsonw.loads(data)
+        except jsonw.JSONDecodeError:
             return None
 
     def get_type(self) -> str:

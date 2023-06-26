@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import mimetypes
 import logging
-import json
 import traceback
 import ssl
 import pathlib
@@ -24,6 +23,7 @@ from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
 from .common import WebRequest, APIDefinition, APITransport
 from .utils import ServerError, source_info
+from .utils import json_wrapper as jsonw
 from .websockets import (
     WebsocketManager,
     WebSocket,
@@ -545,7 +545,8 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
         if 'exc_info' in kwargs:
             err['traceback'] = "\n".join(
                 traceback.format_exception(*kwargs['exc_info']))
-        self.finish({'error': err})
+        self.set_header("Content-Type", "application/json; charset=UTF-8")
+        self.finish(jsonw.dumps({'error': err}))
 
 # Due to the way Python treats multiple inheritance its best
 # to create a separate authorized handler for serving files
@@ -588,7 +589,8 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
         if 'exc_info' in kwargs:
             err['traceback'] = "\n".join(
                 traceback.format_exception(*kwargs['exc_info']))
-        self.finish({'error': err})
+        self.set_header("Content-Type", "application/json; charset=UTF-8")
+        self.finish(jsonw.dumps({'error': err}))
 
     def _check_need_auth(self) -> bool:
         if self.request.method != "GET":
@@ -623,7 +625,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         type_funcs: Dict[str, Callable] = {
             "int": int, "float": float,
             "bool": lambda x: x.lower() == "true",
-            "json": json.loads}
+            "json": jsonw.loads}
         if hint not in type_funcs:
             logging.info(f"No conversion method for type hint {hint}")
             return value
@@ -672,8 +674,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         content_type = self.request.headers.get('Content-Type', "").strip()
         if content_type.startswith("application/json"):
             try:
-                args.update(json.loads(self.request.body))
-            except json.JSONDecodeError:
+                args.update(jsonw.loads(self.request.body))
+            except jsonw.JSONDecodeError:
                 pass
         for key, value in self.path_kwargs.items():
             if value is not None:
@@ -738,11 +740,14 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 e.status_code, reason=str(e)) from e
         if self.wrap_result:
             result = {'result': result}
-        elif self.content_type is not None:
-            self.set_header("Content-Type", self.content_type)
+        self._log_debug(f"HTTP Response::{req}", result)
         if result is None:
             self.set_status(204)
-        self._log_debug(f"HTTP Response::{req}", result)
+        elif isinstance(result, dict):
+            self.set_header("Content-Type", "application/json; charset=UTF-8")
+            result = jsonw.dumps(result)
+        elif self.content_type is not None:
+            self.set_header("Content-Type", self.content_type)
         self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):
@@ -768,7 +773,8 @@ class FileRequestHandler(AuthorizedFileHandler):
             filename = await file_manager.delete_file(path)
         except self.server.error as e:
             raise tornado.web.HTTPError(e.status_code, str(e))
-        self.finish({'result': filename})
+        self.set_header("Content-Type", "application/json; charset=UTF-8")
+        self.finish(jsonw.dumps({'result': filename}))
 
     async def get(self, path: str, include_body: bool = True) -> None:
         # Set up our path instance variables.
@@ -998,7 +1004,8 @@ class FileUploadHandler(AuthorizedRequestHandler):
             self.set_header("Location", location)
             logging.debug(f"Upload Location header set: {location}")
         self.set_status(201)
-        self.finish(result)
+        self.set_header("Content-Type", "application/json; charset=UTF-8")
+        self.finish(jsonw.dumps(result))
 
 # Default Handler for unregistered endpoints
 class AuthorizedErrorHandler(AuthorizedRequestHandler):
@@ -1015,15 +1022,16 @@ class AuthorizedErrorHandler(AuthorizedRequestHandler):
         if 'exc_info' in kwargs:
             err['traceback'] = "\n".join(
                 traceback.format_exception(*kwargs['exc_info']))
-        self.finish({'error': err})
+        self.set_header("Content-Type", "application/json; charset=UTF-8")
+        self.finish(jsonw.dumps({'error': err}))
 
 class RedirectHandler(AuthorizedRequestHandler):
     def get(self, *args, **kwargs) -> None:
         url: Optional[str] = self.get_argument('url', None)
         if url is None:
             try:
-                body_args: Dict[str, Any] = json.loads(self.request.body)
-            except json.JSONDecodeError:
+                body_args: Dict[str, Any] = jsonw.loads(self.request.body)
+            except jsonw.JSONDecodeError:
                 body_args = {}
             if 'url' not in body_args:
                 raise tornado.web.HTTPError(

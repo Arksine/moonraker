@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import pathlib
 import logging
-import json
 from ..common import BaseRemoteConnection
 from ..utils import get_unix_peer_credentials
 
@@ -182,13 +181,11 @@ class UnixSocketClient(BaseRemoteConnection):
         logging.debug("Unix Socket Disconnection From _read_messages()")
         await self._on_close(reason="Read Exit")
 
-    async def write_to_socket(
-        self, message: Union[str, Dict[str, Any]]
-    ) -> None:
-        if isinstance(message, dict):
-            data = json.dumps(message).encode() + b"\x03"
-        else:
+    async def write_to_socket(self, message: Union[bytes, str]) -> None:
+        if isinstance(message, str):
             data = message.encode() + b"\x03"
+        else:
+            data = message + b"\x03"
         try:
             self.writer.write(data)
             await self.writer.drain()

@@ -17,9 +17,9 @@ import ipaddress
 import re
 import socket
 import logging
-import json
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -570,8 +570,8 @@ class Authorization:
         }
         header = {'kid': jwk_id}
         header.update(JWT_HEADER)
-        jwt_header = base64url_encode(json.dumps(header).encode())
-        jwt_payload = base64url_encode(json.dumps(payload).encode())
+        jwt_header = base64url_encode(jsonw.dumps(header))
+        jwt_payload = base64url_encode(jsonw.dumps(payload))
         jwt_msg = b".".join([jwt_header, jwt_payload])
         sig = private_key.signature(jwt_msg)
         jwt_sig = base64url_encode(sig)
@@ -582,7 +582,7 @@ class Authorization:
     ) -> Dict[str, Any]:
         message, sig = token.rsplit('.', maxsplit=1)
         enc_header, enc_payload = message.split('.')
-        header: Dict[str, Any] = json.loads(base64url_decode(enc_header))
+        header: Dict[str, Any] = jsonw.loads(base64url_decode(enc_header))
         sig_bytes = base64url_decode(sig)
 
         # verify header
@@ -597,7 +597,7 @@ class Authorization:
         public_key.verify(sig_bytes + message.encode())
 
         # validate claims
-        payload: Dict[str, Any] = json.loads(base64url_decode(enc_payload))
+        payload: Dict[str, Any] = jsonw.loads(base64url_decode(enc_payload))
         if payload['token_type'] != token_type:
             raise self.server.error(
                 f"JWT Token type mismatch: Expected {token_type}, "

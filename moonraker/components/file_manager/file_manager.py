@@ -10,7 +10,6 @@ import sys
 import pathlib
 import shutil
 import logging
-import json
 import tempfile
 import asyncio
 import zipfile
@@ -20,6 +19,7 @@ from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
 from ...utils import source_info
+from ...utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -2496,7 +2496,7 @@ class MetadataStorage:
         if not await scmd.run(timeout=timeout):
             raise self.server.error("Extract Metadata returned with error")
         try:
-            decoded_resp: Dict[str, Any] = json.loads(result.strip())
+            decoded_resp: Dict[str, Any] = jsonw.loads(result.strip())
         except Exception:
             logging.debug(f"Invalid metadata response:\n{result}")
             raise

@@ -14,13 +14,13 @@ import sys
 import subprocess
 import asyncio
 import hashlib
-import json
 import shlex
 import re
 import struct
 import socket
 import enum
 from . import source_info
+from . import json_wrapper
 
 # Annotation imports
 from typing import (
@@ -190,7 +190,7 @@ def verify_source(
     if not rfile.exists():
         return None
     try:
-        rinfo = json.loads(rfile.read_text())
+        rinfo = json_wrapper.loads(rfile.read_text())
     except Exception:
         return None
     orig_chksum = rinfo['source_checksum']

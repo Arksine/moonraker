@@ -10,8 +10,8 @@ import pathlib
 import logging
 import shutil
 import zipfile
-import json
 from ...utils import source_info
+from ...utils import json_wrapper as jsonw
 from .common import AppType, Channel
 from .base_deploy import BaseDeploy
 
@@ -94,7 +94,7 @@ class WebClientDeploy(BaseDeploy):
             if rinfo.is_file():
                 try:
                     data = await eventloop.run_in_thread(rinfo.read_text)
-                    uinfo: Dict[str, str] = json.loads(data)
+                    uinfo: Dict[str, str] = jsonw.loads(data)
                     project_name = uinfo["project_name"]
                     owner = uinfo["project_owner"]
                     self.version = uinfo["version"]
@@ -134,7 +134,7 @@ class WebClientDeploy(BaseDeploy):
             if manifest.is_file():
                 try:
                     mtext = await eventloop.run_in_thread(manifest.read_text)
-                    mdata: Dict[str, Any] = json.loads(mtext)
+                    mdata: Dict[str, Any] = jsonw.loads(mtext)
                     proj_name: str = mdata["name"].lower()
                 except Exception:
                     self.log_exc(f"Failed to load json from {manifest}")

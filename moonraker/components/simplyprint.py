@@ -7,7 +7,6 @@
 from __future__ import annotations
 import os
 import asyncio
-import json
 import logging
 import time
 import pathlib
@@ -19,6 +18,7 @@ import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
 from ..common import Subscribable, WebRequest
+from ..utils import json_wrapper as jsonw
 
 from typing import (
     TYPE_CHECKING,
@@ -261,8 +261,8 @@ class SimplyPrint(Subscribable):
     def _process_message(self, msg: str) -> None:
         self._logger.info(f"received: {msg}")
         try:
-            packet: Dict[str, Any] = json.loads(msg)
-        except json.JSONDecodeError:
+            packet: Dict[str, Any] = jsonw.loads(msg)
+        except jsonw.JSONDecodeError:
             logging.debug(f"Invalid message, not JSON: {msg}")
             return
         event: str = packet.get("type", "")
@@ -1085,7 +1085,7 @@ class SimplyPrint(Subscribable):
     async def _send_wrapper(self, packet: Dict[str, Any]) -> bool:
         try:
             assert self.ws is not None
-            await self.ws.write_message(json.dumps(packet))
+            await self.ws.write_message(jsonw.dumps(packet))
         except Exception:
             return False
         else:

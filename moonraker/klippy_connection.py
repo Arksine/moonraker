@@ -9,11 +9,11 @@ from __future__ import annotations
 import os
 import time
 import logging
-import json
 import getpass
 import asyncio
 import pathlib
 from .utils import ServerError, get_unix_peer_credentials
+from .utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -180,7 +180,7 @@ class KlippyConnection:
                 continue
             errors_remaining = 10
             try:
-                decoded_cmd = json.loads(data[:-1])
+                decoded_cmd = jsonw.loads(data[:-1])
                 self._process_command(decoded_cmd)
             except Exception:
                 logging.exception(
@@ -193,7 +193,7 @@ class KlippyConnection:
         if self.writer is None or self.closing:
             request.set_exception(ServerError("Klippy Host not connected", 503))
             return
-        data = json.dumps(request.to_dict()).encode() + b"\x03"
+        data = jsonw.dumps(request.to_dict()) + b"\x03"
         try:
             self.writer.write(data)
             await self.writer.drain()

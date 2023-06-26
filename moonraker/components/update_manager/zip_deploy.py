@@ -7,7 +7,6 @@
 from __future__ import annotations
 import os
 import pathlib
-import json
 import shutil
 import re
 import time
@@ -15,6 +14,7 @@ import zipfile
 from .app_deploy import AppDeploy
 from .common import Channel
 from ...utils import verify_source
+from ...utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -103,7 +103,7 @@ class ZipDeploy(AppDeploy):
         try:
             event_loop = self.server.get_event_loop()
             info_bytes = await event_loop.run_in_thread(info_file.read_text)
-            info: Dict[str, Any] = json.loads(info_bytes)
+            info: Dict[str, Any] = jsonw.loads(info_bytes)
         except Exception:
             self.log_exc(f"Unable to parse info file {file_name}")
             info = {}
@@ -225,7 +225,7 @@ class ZipDeploy(AppDeploy):
         info_url, content_type, size = asset_info['RELEASE_INFO']
         client = self.cmd_helper.get_http_client()
         rinfo_bytes = await client.get_file(info_url, content_type)
-        github_rinfo: Dict[str, Any] = json.loads(rinfo_bytes)
+        github_rinfo: Dict[str, Any] = jsonw.loads(rinfo_bytes)
         if github_rinfo.get(self.name, {}) != release_info:
             self._add_error(
                 "Local release info does not match the remote")
@@ -243,7 +243,7 @@ class ZipDeploy(AppDeploy):
             asset_url, content_type, size = asset_info['RELEASE_INFO']
             client = self.cmd_helper.get_http_client()
             rinfo_bytes = await client.get_file(asset_url, content_type)
-            update_release_info: Dict[str, Any] = json.loads(rinfo_bytes)
+            update_release_info: Dict[str, Any] = jsonw.loads(rinfo_bytes)
             update_info = update_release_info.get(self.name, {})
             self.lastest_hash = update_info.get('commit_hash', "?")
             self.latest_checksum = update_info.get('source_checksum', "?")
@@ -260,7 +260,7 @@ class ZipDeploy(AppDeploy):
                 asset_url, content_type, size = asset_info['COMMIT_LOG']
                 client = self.cmd_helper.get_http_client()
                 commit_bytes = await client.get_file(asset_url, content_type)
-                commit_info: Dict[str, Any] = json.loads(commit_bytes)
+                commit_info: Dict[str, Any] = jsonw.loads(commit_bytes)
                 self.commit_log = commit_info.get(self.name, [])
         if zip_file_name in asset_info:
             self.release_download_info = asset_info[zip_file_name]

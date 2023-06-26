@@ -8,7 +8,6 @@ from __future__ import annotations
 import sys
 import os
 import re
-import json
 import pathlib
 import logging
 import asyncio
@@ -23,6 +22,7 @@ import getpass
 import configparser
 from ..confighelper import FileSourceWrapper
 from ..utils import source_info
+from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -104,7 +104,7 @@ class Machine:
         self._public_ip = ""
         self.system_info: Dict[str, Any] = {
             'python': {
-                "version": sys.version_info,
+                "version": tuple(sys.version_info),
                 "version_string": sys.version.replace("\n", " ")
             },
             'cpu_info': self._get_cpu_info(),
@@ -625,7 +625,7 @@ class Machine:
         try:
             # get network interfaces
             resp = await self.addr_cmd.run_with_response(log_complete=False)
-            decoded: List[Dict[str, Any]] = json.loads(resp)
+            decoded: List[Dict[str, Any]] = jsonw.loads(resp)
             for interface in decoded:
                 if interface['operstate'] != "UP":
                     continue

@@ -11,11 +11,11 @@ import shutil
 import hashlib
 import logging
 import re
-import json
 import distro
 import asyncio
 from .common import AppType, Channel
 from .base_deploy import BaseDeploy
+from ...utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -278,7 +278,7 @@ class AppDeploy(BaseDeploy):
             deps_json = self.system_deps_json
             try:
                 ret = await eventloop.run_in_thread(deps_json.read_bytes)
-                dep_info: Dict[str, List[str]] = json.loads(ret)
+                dep_info: Dict[str, List[str]] = jsonw.loads(ret)
             except asyncio.CancelledError:
                 raise
             except Exception:

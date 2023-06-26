@@ -8,8 +8,8 @@ from __future__ import annotations
 import ipaddress
 import logging
 import copy
-import json
 from .utils import ServerError, Sentinel
+from .utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -83,7 +83,7 @@ class BaseRemoteConnection(Subscribable):
         self.is_closed: bool = False
         self.queue_busy: bool = False
         self.pending_responses: Dict[int, Future] = {}
-        self.message_buf: List[Union[str, Dict[str, Any]]] = []
+        self.message_buf: List[Union[bytes, str]] = []
         self._connected_time: float = 0.
         self._identified: bool = False
         self._client_data: Dict[str, str] = {
@@ -141,7 +141,9 @@ class BaseRemoteConnection(Subscribable):
         except Exception:
             logging.exception("Websocket Command Error")
 
-    def queue_message(self, message: Union[str, Dict[str, Any]]):
+    def queue_message(self, message: Union[bytes, str, Dict[str, Any]]):
+        if isinstance(message, dict):
+            message = jsonw.dumps(message)
         self.message_buf.append(message)
         if self.queue_busy:
             return
@@ -190,9 +192,7 @@ class BaseRemoteConnection(Subscribable):
             await self.write_to_socket(msg)
         self.queue_busy = False
 
-    async def write_to_socket(
-        self, message: Union[str, Dict[str, Any]]
-    ) -> None:
+    async def write_to_socket(self, message: Union[bytes, str]) -> None:
         raise NotImplementedError("Children must implement write_to_socket")
 
     def send_status(self,
@@ -426,7 +426,7 @@ class JsonRPC:
                 for field in ["access_token", "api_key"]:
                     if field in params:
                         output["params"][field] = "<sanitized>"
-        logging.debug(f"{self.transport} Received::{json.dumps(output)}")
+        logging.debug(f"{self.transport} Received::{jsonw.dumps(output).decode()}")
 
     def _log_response(self, resp_obj: Optional[Dict[str, Any]]) -> None:
         if not self.verbose:
@@ -438,7 +438,7 @@ class JsonRPC:
             output = copy.deepcopy(resp_obj)
             output["result"] = "<sanitized>"
         self.sanitize_response = False
-        logging.debug(f"{self.transport} Response::{json.dumps(output)}")
+        logging.debug(f"{self.transport} Response::{jsonw.dumps(output).decode()}")
 
     def register_method(self,
                         name: str,
@@ -452,14 +452,14 @@ class JsonRPC:
     async def dispatch(self,
                        data: str,
                        conn: Optional[BaseRemoteConnection] = None
-                       ) -> Optional[str]:
+                       ) -> Optional[bytes]:
         try:
-            obj: Union[Dict[str, Any], List[dict]] = json.loads(data)
+            obj: Union[Dict[str, Any], List[dict]] = jsonw.loads(data)
         except Exception:
             msg = f"{self.transport} data not json: {data}"
             logging.exception(msg)
             err = self.build_error(-32700, "Parse error")
-            return json.dumps(err)
+            return jsonw.dumps(err)
         if isinstance(obj, list):
             responses: List[Dict[str, Any]] = []
             for item in obj:
@@ -469,13 +469,13 @@ class JsonRPC:
                     self._log_response(resp)
                     responses.append(resp)
             if responses:
-                return json.dumps(responses)
+                return jsonw.dumps(responses)
         else:
             self._log_request(obj)
             response = await self.process_object(obj, conn)
             if response is not None:
                 self._log_response(response)
-                return json.dumps(response)
+                return jsonw.dumps(response)
         return None
 
     async def process_object(self,
