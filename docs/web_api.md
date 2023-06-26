@@ -5211,6 +5211,127 @@ An object containing all measurements for every configured sensor:
 }
 ```
 
+### Spoolman APIs
+The following APIs are available to interact with the Spoolman integration:
+
+#### Set active spool
+Set the ID of the spool that Moonraker should report usage to Spoolman of.
+
+HTTP request:
+```http
+POST /spoolman/spool_id
+Content-Type: application/json
+
+{
+    "spool_id": 1
+}
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "spoolman.post_spool_id",
+    "params": {
+        "spool_id": 1
+    },
+    "id": 4654
+}
+```
+
+Returns:
+
+The id of the now active spool:
+
+```json
+{
+    "spool_id": 1
+}
+```
+
+!!! note
+    Send an empty object, `{}`, to un-set the spool ID and stop any reporting.
+    The response `spool_id` will then be set to *null*
+
+#### Get active spool
+Retrieve the ID of the spool to which Moonraker reports usage for Spoolman.
+
+HTTP request:
+```http
+GET /spoolman/spool_id
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "spoolman.get_spool_id",
+    "id": 4654
+}
+```
+
+Returns:
+
+The id of the active spool:
+
+```json
+{
+    "spool_id": 1
+}
+```
+
+!!! note
+    The `spool_id` can be *null* if there is no active spool.
+
+#### Proxy
+
+Moonraker supplies a proxy endpoint where you have full access to the Spoolman
+API without having to configure the endpoint yourself.
+
+See Spoolman's [OpenAPI Description](https://donkie.github.io/Spoolman/) for
+detailed information about it's API.
+
+HTTP request:
+```http
+POST /spoolman/proxy
+Content-Type: application/json
+
+{
+    "request_method": "POST",
+    "path": "/v1/spool",
+    "query": "a=1&b=4",
+    "body": {
+        "filament_id": 1
+    }
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "spoolman.post_proxy",
+    "params": {
+        "request_method": "POST",
+        "path": "/v1/spool",
+        "query": "a=1&b=4",
+        "body": {
+            "filament_id": 1
+        }
+    },
+    "id": 4654
+}
+```
+
+The following parameters are available. `request_method` and `path` are required, the rest are optional.
+
+- `request_method`: The HTTP request method, e.g. `GET`, `POST`, `DELETE`, etc.
+- `path`: The endpoint, including API version, e.g. `/v1/filament`.
+- `query`: The query part of the URL, e.g. `filament_material=PLA&vendor_name=Prima`.
+- `body`: The request body for the request.
+
+Returns:
+
+The json response from the Spoolman server.
+
 ### OctoPrint API emulation
 Partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
@@ -6622,6 +6743,25 @@ webcam is added, removed, or updated.
 
 The `webcams` field contans an array of objects like those returned by the
 [list webcams](#list-webcams) API.
+
+#### Spoolman active spool ID changed
+
+Moonraker will emit the `notify_active_spool_set` event when the active spool
+ID for the Spoolman integration has been changed.
+
+See the [Spoolman API](#spoolman-apis) for more information.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_active_spool_set",
+    "params": [
+        {
+            "spool_id": 1
+        }
+    ]
+}
+```
 
 #### Agent Events
 Moonraker will emit the `notify_agent_event` notification when it

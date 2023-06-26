@@ -2622,6 +2622,7 @@ Front ends can also utilize this config to provide a built-in management tool.
 
 [spoolman]
 server: http://192.168.0.123:7912
+#   URL to the Spoolman instance. This parameter must be provided.
 ```
 
 ## Include directives
