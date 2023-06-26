@@ -18,6 +18,7 @@ import logging
 import signal
 import asyncio
 import uuid
+import traceback
 from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
@@ -195,8 +196,9 @@ class Server:
         if connect_to_klippy:
             self.klippy_connection.connect()
 
-    def add_log_rollover_item(self, name: str, item: str,
-                              log: bool = True) -> None:
+    def add_log_rollover_item(
+        self, name: str, item: str, log: bool = True
+    ) -> None:
         self.log_manager.set_rollover_info(name, item)
         if log and item is not None:
             logging.info(item)
@@ -300,17 +302,15 @@ class Server:
                 f"Component '{component_name}' already registered")
         self.components[component_name] = component
 
-    def register_notification(self,
-                              event_name: str,
-                              notify_name: Optional[str] = None
-                              ) -> None:
+    def register_notification(
+        self, event_name: str, notify_name: Optional[str] = None
+    ) -> None:
         wsm: WebsocketManager = self.lookup_component("websockets")
         wsm.register_notification(event_name, notify_name)
 
-    def register_event_handler(self,
-                               event: str,
-                               callback: FlexCallback
-                               ) -> None:
+    def register_event_handler(
+        self, event: str, callback: FlexCallback
+    ) -> None:
         self.events.setdefault(event, []).append(callback)
 
     def send_event(self, event: str, *args) -> asyncio.Future:
@@ -319,29 +319,38 @@ class Server:
             self._process_event, fut, event, *args)
         return fut
 
-    async def _process_event(self,
-                             fut: asyncio.Future,
-                             event: str,
-                             *args
-                             ) -> None:
+    async def _process_event(
+        self, fut: asyncio.Future, event: str, *args
+    ) -> None:
         events = self.events.get(event, [])
         coroutines: List[Coroutine] = []
-        try:
-            for func in events:
+        for func in events:
+            try:
                 ret = func(*args)
+            except Exception:
+                logging.exception(f"Error processing callback in event {event}")
+            else:
                 if ret is not None:
                     coroutines.append(ret)
-            if coroutines:
-                await asyncio.gather(*coroutines)
-        except ServerError as e:
-            logging.exception(f"Error Processing Event: {fut}")
+        if coroutines:
+            results = await asyncio.gather(*coroutines, return_exceptions=True)
+            for val in results:
+                if isinstance(val, Exception):
+                    if sys.version_info < (3, 10):
+                        exc_info = "".join(traceback.format_exception(
+                            type(val), val, val.__traceback__
+                        ))
+                    else:
+                        exc_info = "".join(traceback.format_exception(val))
+                    logging.info(
+                        f"\nError processing callback in event {event}\n{exc_info}"
+                    )
         if not fut.done():
             fut.set_result(None)
 
-    def register_remote_method(self,
-                               method_name: str,
-                               cb: FlexCallback
-                               ) -> None:
+    def register_remote_method(
+        self, method_name: str, cb: FlexCallback
+    ) -> None:
         self.klippy_connection.register_remote_method(method_name, cb)
 
     def get_host_info(self) -> Dict[str, Any]:
@@ -417,9 +426,7 @@ class Server:
         self.event_loop.register_callback(self._stop_server)
         return "ok"
 
-    async def _handle_info_request(self,
-                                   web_request: WebRequest
-                                   ) -> Dict[str, Any]:
+    async def _handle_info_request(self, web_request: WebRequest) -> Dict[str, Any]:
         raw = web_request.get_boolean("raw", False)
         file_manager: Optional[FileManager] = self.lookup_component(
             'file_manager', None)
@@ -448,9 +455,7 @@ class Server:
             'api_version_string': ".".join([str(v) for v in API_VERSION])
         }
 
-    async def _handle_config_request(self,
-                                     web_request: WebRequest
-                                     ) -> Dict[str, Any]:
+    async def _handle_config_request(self, web_request: WebRequest) -> Dict[str, Any]:
         cfg_file_list: List[Dict[str, Any]] = []
         cfg_parent = pathlib.Path(
             self.app_args["config_file"]
