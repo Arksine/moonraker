@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from moonraker.websockets import WebRequest
     from moonraker.components.http_client import HttpClient
     from moonraker.components.database import MoonrakerDatabase
-    from moonraker.utils import ServerError
     from .klippy_apis import KlippyAPI as APIComp
     from confighelper import ConfigHelper
 
@@ -27,6 +26,7 @@ class SpoolManager:
     spool_id: Optional[int] = None
     highest_e_pos: float = 0.0
     extruded: float = 0.0
+    has_printed_error_since_last_down: bool = False
 
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
@@ -109,18 +109,18 @@ class SpoolManager:
                 await self.track_filament_usage()
 
     async def set_active_spool(self, spool_id: Optional[int]) -> None:
-        self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
+        # Store the current spool usage before switching
+        if self.spool_id is not None:
+            await self.track_filament_usage()
         self.spool_id = spool_id
-        await self.server.send_event(
+        self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
+        self.server.send_event(
             "spool_manager:active_spool_set", {"spool_id": spool_id}
         )
         logging.info(f"Setting active spool to: {spool_id}")
 
-    def get_active_spool(self) -> Optional[int]:
-        return self.spool_id
-
     async def track_filament_usage(self):
-        spool_id = self.get_active_spool()
+        spool_id = self.spool_id
         if spool_id is None:
             logging.debug("No active spool, skipping tracking")
             return
@@ -141,33 +141,36 @@ class SpoolManager:
                         "use_length": used_length,
                     },
                 )
-                response.raise_for_status()
+                if response.has_error():
+                    if not self.has_printed_error_since_last_down:
+                        response.raise_for_status()
+                        self.has_printed_error_since_last_down = True
+                    return
 
+                self.has_printed_error_since_last_down = False
                 self.extruded = 0
 
     async def _handle_spool_id_request(self, web_request: WebRequest):
-        action = web_request.get_action()
-        if action == "GET":
-            return {"spool_id": self.get_active_spool()}
-        elif action == "POST":
+        if web_request.get_action() == "POST":
             spool_id = web_request.get_int("spool_id", None)
             await self.set_active_spool(spool_id)
-            return True
+        # For GET requests we will simply return the spool_id
+        return {"spool_id": self.spool_id}
 
     async def _proxy_spoolman_request(self, web_request: WebRequest):
-        method = web_request.get_str("method")
+        method = web_request.get_str("request_method")
         path = web_request.get_str("path")
         query = web_request.get_str("query", None)
         body = web_request.get("body", None)
 
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
-            raise ServerError(f"Invalid HTTP method: {method}")
+            raise self.server.error(f"Invalid HTTP method: {method}")
 
         if body is not None and method == "GET":
-            raise ServerError("GET requests cannot have a body")
+            raise self.server.error("GET requests cannot have a body")
 
         if len(path) < 4 or path[:4] != "/v1/":
-            raise ServerError(
+            raise self.server.error(
                 "Invalid path, must start with the API version, e.g. /v1"
             )
 
