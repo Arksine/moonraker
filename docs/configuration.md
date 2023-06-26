@@ -1755,16 +1755,31 @@ primary_branch:
 #   The name of the primary branch used for release code on this repo.  This
 #   option allows clients to specify 'main', or their own unique name, as
 #   the branch used for repo validity checks.  The default is master.
+virtualenv:
+#   An optional path to the virtualenv folder for Python Applications. For
+#   example, Moonraker's default virtualenv is located at ~/moonraker-env.
+#   When a virtualenv is specified Moonraker can update its Python
+#   dependencies when it detects a change to the requirements file.  The
+#   default is no virtualenv.
 env:
+#   *** DEPRICATED FOR NEW CONFIGURATIONS - USE the 'virtualenv' OPTION ***
+#
 #   The path to the extension's virtual environment executable on disk.  For
 #   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
 #   The default is no env, which disables updating python packages.
 requirements:
 #  This is the location in the repository to the extension's python
 #  requirements file. This location is relative to the root of the repository.
-#  This parameter must be provided if the "env" option is set, otherwise it
-#  should be omitted.
+#  This parameter must be provided if the 'virtualenv' or 'env' option is set,
+#  otherwise it must be omitted.
+system_dependencies:
+#  A path, relative to the repository, to a json file containing operating
+#  system package dependencies.  Application developers should refer to the
+#  "System Dependencies File Format" section of this document for details on how
+#  this file should be formatted. The default is no system dependencies.
 install_script:
+#  *** DEPRICATED FOR NEW CONFIGURATIONS - USE the 'system_dependencies' OPTION ***
+#
 #  The file location, relative to the repository, for the installation script
 #  associated with this application.  Moonraker will not run this script, instead
 #  it will parse the script searching for new "system" package dependencies that
@@ -1833,6 +1848,43 @@ info_tags:
     to grant Moonraker permission to manage its service. See the
     [allowed services](#allowed-services) section for details on which
     services Moonraker is allowed to manage and how to add additional services.
+
+#### The System Dependencies File Format
+
+When an application depends on OS packages it is possible to specify them
+in a file that Moonraker can refer to.  During an update Moonraker will
+use this file to install new dependencies if they are detected.
+
+Below is an example of Moonraker's system dependcies file, located at
+in the repository at
+[scripts/system-dependencies.json](https://github.com/Arksine/moonraker/blob/master/scripts/system-dependencies.json):
+
+```json
+{
+    "debian": [
+        "python3-virtualenv",
+        "python3-dev",
+        "python3-libgpiod",
+        "liblmdb-dev",
+        "libopenjp2-7",
+        "libsodium-dev",
+        "zlib1g-dev",
+        "libjpeg-dev",
+        "packagekit",
+        "wireless-tools",
+        "curl"
+    ]
+}
+```
+
+The general format is an object, where each key is the name of a linux
+distribution, and the value is an array of strings each naming a dependency.
+Moonraker uses Python's [distro](https://distro.readthedocs.io/en/latest/)
+package to match the detected operating system against keys in the system
+dependencies file.  It will first attempt to match against the return value
+of `distro.id()`, the fall back on the values reported by `distro.like()`.
+Following this logic, the `debian` key will be applied to Debian, Raspberry
+Pi OS, Ubuntu, and likely other Debian derived distributions.
 
 ### `[mqtt]`
 
