@@ -31,7 +31,7 @@ class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
 
-        self.sync_rate_seconds = config.getint("sync_rate", default=5, above=1)
+        self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
         self.spoolman_url = f"{config.get('server').rstrip('/')}/api"
@@ -112,6 +112,9 @@ class SpoolManager:
         # Store the current spool usage before switching
         if self.spool_id is not None:
             await self.track_filament_usage()
+        elif spool_id is not None:
+            async with self.extruded_lock:
+                self.extruded = 0
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.server.send_event(
