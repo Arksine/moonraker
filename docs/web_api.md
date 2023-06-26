@@ -3798,7 +3798,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.webcams.get_item",
-    "parmams": {
+    "params": {
         "name": "cam_name"
     },
     "id": 4654
@@ -3862,7 +3862,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.webcams.post_item",
-    "parmams": {
+    "params": {
         "name": "cam_name",
         "snapshot_url": "/webcam?action=snapshot",
         "stream_url": "/webcam?action=stream"
@@ -3948,7 +3948,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.webcams.delete_item",
-    "parmams": {
+    "params": {
         "name": "cam_name"
     },
     "id": 4654
@@ -3997,7 +3997,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.webcams.test",
-    "parmams": {
+    "params": {
         "name": "cam_name"
     },
     "id": 4654
