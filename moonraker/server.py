@@ -17,11 +17,12 @@ import socket
 import logging
 import signal
 import asyncio
+import uuid
 from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
-from .utils import ServerError, Sentinel, get_software_version
+from .utils import ServerError, Sentinel, get_software_info
 from .loghelper import LogManager
 
 # Annotation imports
@@ -509,6 +510,12 @@ def main(from_package: bool = True) -> None:
             startup_warnings.append(
                 f"Unable to create data path folder at {data_path}"
             )
+    uuid_path = data_path.joinpath(".moonraker.uuid")
+    if not uuid_path.is_file():
+        instance_uuid = uuid.uuid4().hex
+        uuid_path.write_text(instance_uuid)
+    else:
+        instance_uuid = uuid_path.read_text().strip()
     if cmd_line_args.configfile is not None:
         cfg_file: str = cmd_line_args.configfile
     else:
@@ -522,11 +529,12 @@ def main(from_package: bool = True) -> None:
         "debug": cmd_line_args.debug,
         "asyncio_debug": cmd_line_args.asyncio_debug,
         "is_backup_config": False,
-        "is_python_package": from_package
+        "is_python_package": from_package,
+        "instance_uuid": instance_uuid
     }
 
     # Setup Logging
-    version = get_software_version()
+    app_args.update(get_software_info())
     if cmd_line_args.nologfile:
         app_args["log_file"] = ""
     elif cmd_line_args.logfile:
@@ -534,7 +542,6 @@ def main(from_package: bool = True) -> None:
             os.path.expanduser(cmd_line_args.logfile))
     else:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
-    app_args["software_version"] = version
     app_args["python_version"] = sys.version.replace("\n", " ")
     log_manager = LogManager(app_args, startup_warnings)
 

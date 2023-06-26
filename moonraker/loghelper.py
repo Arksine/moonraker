@@ -7,6 +7,7 @@
 from __future__ import annotations
 import logging
 import logging.handlers
+import time
 import os
 import sys
 import asyncio
@@ -43,22 +44,26 @@ class LocalQueueHandler(logging.handlers.QueueHandler):
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, app_args: Dict[str, Any], **kwargs) -> None:
         super().__init__(app_args['log_file'], **kwargs)
-        self.rollover_info: Dict[str, str] = {
-            'header': f"{'-'*20}Moonraker Log Start{'-'*20}"
-        }
-        self.rollover_info['application_args'] = "\n".join(
-            [f"{k}: {v}" for k, v in app_args.items()])
-        lines = [line for line in self.rollover_info.values() if line]
-        if self.stream is not None:
-            self.stream.write("\n".join(lines) + "\n")
+        self.app_args = app_args
+        self.rollover_info: Dict[str, str] = {}
 
     def set_rollover_info(self, name: str, item: str) -> None:
         self.rollover_info[name] = item
 
     def doRollover(self) -> None:
         super().doRollover()
-        lines = [line for line in self.rollover_info.values() if line]
-        if self.stream is not None:
+        self.write_header()
+
+    def write_header(self) -> None:
+        if self.stream is None:
+            return
+        strtime = time.asctime(time.gmtime())
+        header = f"{'-'*20} Log Start | {strtime} {'-'*20}\n"
+        self.stream.write(header)
+        app_section = "\n".join([f"{k}: {v}" for k, v in self.app_args.items()])
+        self.stream.write(app_section + "\n")
+        if self.rollover_info:
+            lines = [line for line in self.rollover_info.values() if line]
             self.stream.write("\n".join(lines) + "\n")
 
 class LogManager:
@@ -66,6 +71,8 @@ class LogManager:
         self, app_args: Dict[str, Any], startup_warnings: List[str]
     ) -> None:
         root_logger = logging.getLogger()
+        while root_logger.hasHandlers():
+            root_logger.removeHandler(root_logger.handlers[0])
         queue: Queue = Queue()
         queue_handler = LocalQueueHandler(queue)
         root_logger.addHandler(queue_handler)
@@ -74,8 +81,8 @@ class LogManager:
         stdout_fmt = logging.Formatter(
             '[%(filename)s:%(funcName)s()] - %(message)s')
         stdout_hdlr.setFormatter(stdout_fmt)
-        for name, val in app_args.items():
-            logging.info(f"{name}: {val}")
+        app_args_str = "\n".join([f"{k}: {v}" for k, v in app_args.items()])
+        sys.stdout.write(f"\nApplication Info:\n{app_args_str}")
         self.file_hdlr: Optional[MoonrakerLoggingHandler] = None
         self.listener: Optional[logging.handlers.QueueListener] = None
         log_file: str = app_args.get('log_file', "")
@@ -88,6 +95,7 @@ class LogManager:
                 self.file_hdlr.setFormatter(formatter)
                 self.listener = logging.handlers.QueueListener(
                     queue, self.file_hdlr, stdout_hdlr)
+                self.file_hdlr.write_header()
             except Exception:
                 log_file = os.path.normpath(log_file)
                 dir_name = os.path.dirname(log_file)
