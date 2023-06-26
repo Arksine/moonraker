@@ -115,7 +115,7 @@ class SpoolManager:
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.server.send_event(
-            "spool_manager:active_spool_set", {"spool_id": spool_id}
+            "spoolman:active_spool_set", {"spool_id": spool_id}
         )
         logging.info(f"Setting active spool to: {spool_id}")
 
