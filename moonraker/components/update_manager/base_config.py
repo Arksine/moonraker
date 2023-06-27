@@ -13,7 +13,8 @@ from ...utils import source_info
 from typing import (
     TYPE_CHECKING,
     Dict,
-    Optional
+    Optional,
+    Union
 )
 
 if TYPE_CHECKING:
@@ -45,19 +46,19 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
-def get_app_type(app_path: Optional[pathlib.Path] = None) -> str:
+def get_app_type(app_path: Union[str, pathlib.Path]) -> str:
+    if isinstance(app_path, str):
+        app_path = pathlib.Path(app_path).expanduser()
     # None type will perform checks on Moonraker
     if source_info.is_git_repo(app_path):
         return "git_repo"
     else:
-        return "zip"
+        return "none"
 
-def get_base_configuration(config: ConfigHelper, channel: str) -> ConfigHelper:
+def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     server = config.get_server()
     base_cfg = copy.deepcopy(BASE_CONFIG)
-    base_cfg["moonraker"]["channel"] = channel
-    base_cfg["moonraker"]["type"] = get_app_type()
-    base_cfg["klipper"]["channel"] = "beta" if channel == "stable" else channel
+    base_cfg["moonraker"]["type"] = get_app_type(source_info.source_path())
     db: MoonrakerDatabase = server.lookup_component('database')
     base_cfg["klipper"]["path"] = db.get_item(
         "moonraker", "update_manager.klipper_path", KLIPPER_DEFAULT_PATH
@@ -65,6 +66,9 @@ def get_base_configuration(config: ConfigHelper, channel: str) -> ConfigHelper:
     base_cfg["klipper"]["env"] = db.get_item(
         "moonraker", "update_manager.klipper_exec", KLIPPER_DEFAULT_EXEC
     ).result()
-    klipper_path = pathlib.Path(base_cfg["klipper"]["path"])
-    base_cfg["klipper"]["type"] = get_app_type(klipper_path)
+    base_cfg["klipper"]["type"] = get_app_type(base_cfg["klipper"]["path"])
+    if config.has_option("channel"):
+        channel = config.get("channel")
+        base_cfg["moonraker"]["channel"] = channel
+        base_cfg["klipper"]["channel"] = channel
     return config.read_supplemental_dict(base_cfg)

@@ -123,12 +123,6 @@ class AppDeploy(BaseDeploy):
             f"Extension {self.name} managed services: {self.managed_services}"
         )
 
-    @staticmethod
-    def _is_git_repo(app_path: Union[str, pathlib.Path]) -> bool:
-        if isinstance(app_path, str):
-            app_path = pathlib.Path(app_path).expanduser()
-        return app_path.joinpath('.git').exists()
-
     def _configure_path(self, config: ConfigHelper) -> None:
         self.path = pathlib.Path(config.get('path')).expanduser().resolve()
         self._verify_path(config, 'path', self.path, check_file=False)
