@@ -109,9 +109,10 @@ class UpdateManager:
             cfg = config[section]
             name = section.split()[-1]
             if name in self.updaters:
-                self.server.add_warning(
-                    f"[update_manager]: Extension {name} already added"
-                )
+                if name not in ["klipper", "moonraker"]:
+                    self.server.add_warning(
+                        f"[update_manager]: Extension {name} already added"
+                    )
                 continue
             try:
                 client_type = cfg.get("type")

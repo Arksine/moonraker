@@ -67,8 +67,13 @@ def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
         "moonraker", "update_manager.klipper_exec", KLIPPER_DEFAULT_EXEC
     ).result()
     base_cfg["klipper"]["type"] = get_app_type(base_cfg["klipper"]["path"])
-    if config.has_option("channel"):
-        channel = config.get("channel")
-        base_cfg["moonraker"]["channel"] = channel
-        base_cfg["klipper"]["channel"] = channel
+    channel = config.get("channel", "dev")
+    base_cfg["moonraker"]["channel"] = channel
+    base_cfg["klipper"]["channel"] = channel
+    if config.has_section("update_manager moonraker"):
+        mcfg = config["update_manager moonraker"]
+        base_cfg["moonraker"]["channel"] = mcfg.get("channel", channel)
+    if config.has_section("update_manager klipper"):
+        kcfg = config["update_manager klipper"]
+        base_cfg["klipper"]["channel"] = kcfg.get("channel", channel)
     return config.read_supplemental_dict(base_cfg)
