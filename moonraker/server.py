@@ -586,6 +586,7 @@ def main(from_package: bool = True) -> None:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["python_version"] = sys.version.replace("\n", " ")
     app_args["msgspec_enabled"] = json_wrapper.MSGSPEC_ENABLED
+    app_args["uvloop_enabled"] = EventLoop.UVLOOP_ENABLED
     log_manager = LogManager(app_args, startup_warnings)
 
     # Start asyncio event loop and server

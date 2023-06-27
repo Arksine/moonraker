@@ -5,6 +5,8 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+import os
+import contextlib
 import asyncio
 import inspect
 import functools
@@ -21,12 +23,21 @@ from typing import (
     Union
 )
 
+_uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
+_uvl_enabled = False
+if _uvl_var in ["y", "yes", "true"]:
+    with contextlib.suppress(ImportError):
+        import uvloop
+        uvloop.install()
+        _uvl_enabled = True
+
 if TYPE_CHECKING:
     _T = TypeVar("_T")
     FlexCallback = Callable[..., Optional[Awaitable]]
     TimerCallback = Callable[[float], Union[float, Awaitable[float]]]
 
 class EventLoop:
+    UVLOOP_ENABLED = _uvl_enabled
     TimeoutError = asyncio.TimeoutError
     def __init__(self) -> None:
         self.reset()

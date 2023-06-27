@@ -22,6 +22,7 @@ from typing import (
     Coroutine,
     Dict,
     Set,
+    cast
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -61,8 +62,8 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
     def connection_made(
         self, transport: asyncio.transports.BaseTransport
     ) -> None:
+        transport = cast(asyncio.SubprocessTransport, transport)
         self._transport = transport
-        assert isinstance(transport, asyncio.SubprocessTransport)
         stdout_transport = transport.get_pipe_transport(1)
         if stdout_transport is not None:
             self._pipe_fds.append(1)
