@@ -23,10 +23,7 @@ class BaseDeploy:
                  cfg_hash: Optional[str] = None
                  ) -> None:
         if name is None:
-            name = config.get_name().split(maxsplit=1)[-1]
-            if name.startswith("client "):
-                # allow deprecated [update_manager client app] style names
-                name = name[7:]
+            name = self.parse_name(config)
         self.name = name
         if prefix:
             prefix = f"{prefix} {self.name}: "
@@ -40,6 +37,14 @@ class BaseDeploy:
         if cfg_hash is None:
             cfg_hash = config.get_hash().hexdigest()
         self.cfg_hash = cfg_hash
+
+    @staticmethod
+    def parse_name(config: ConfigHelper) -> str:
+        name = config.get_name().split(maxsplit=1)[-1]
+        if name.startswith("client "):
+            # allow deprecated [update_manager client app] style names
+            name = name[7:]
+        return name
 
     async def initialize(self) -> Dict[str, Any]:
         umdb = self.cmd_helper.get_umdb()

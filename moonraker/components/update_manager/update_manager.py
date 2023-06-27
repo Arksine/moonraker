@@ -107,7 +107,7 @@ class UpdateManager:
         client_sections = config.get_prefix_sections("update_manager ")
         for section in client_sections:
             cfg = config[section]
-            name = section.split()[-1]
+            name = BaseDeploy.parse_name(cfg)
             if name in self.updaters:
                 if name not in ["klipper", "moonraker"]:
                     self.server.add_warning(
