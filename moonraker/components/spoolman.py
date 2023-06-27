@@ -61,12 +61,12 @@ class SpoolManager:
 
     def _register_endpoints(self):
         self.server.register_endpoint(
-            "/spoolman/spool_id",
+            "/server/spoolman/spool_id",
             ["GET", "POST"],
             self._handle_spool_id_request,
         )
         self.server.register_endpoint(
-            "/spoolman/proxy",
+            "/server/spoolman/proxy",
             ["POST"],
             self._proxy_spoolman_request,
         )
