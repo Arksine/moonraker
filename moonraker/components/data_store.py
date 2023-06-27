@@ -96,7 +96,8 @@ class DataStore:
                 else:
                     new_store[sensor] = {}
                     for field in self.stored_fields:
-                        if field in fields:
+                        # Enforce temperature, as frontends rely on that field.
+                        if field in fields or field == "temperature":
                             new_store[sensor][self.pluralize(field)] = deque(
                                 maxlen=self.temp_store_size)
                 if sensor not in self.last_temps:

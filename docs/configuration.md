@@ -239,6 +239,13 @@ temperature_store_size: 1200
 #   that this value also applies to the "target", "power", and "fan_speed"
 #   if the sensor reports them.  The default is 1200, which is enough to
 #   store approximately 20 minutes of data at one value per second.
+temperature_store_additional_fields:
+    voc
+    rpm
+#  This list defines sensor fields to be added to the temperature store.
+#  The fields "temperature", "target", "power" and "speed" are alway recorded,
+#  if available for the sensor. This configuration is additive to that.
+#  The default is no additional fields.
 gcode_store_size:  1000
 #   The maximum number "gcode lines" to store.  The default is 1000.
 ```
