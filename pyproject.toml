@@ -44,6 +44,11 @@ repository = "https://github.com/Arksine/moonraker"
 documentation = "https://moonraker.readthedocs.io"
 changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 
+[project.optional-dependencies]
+msgspec=["msgspec>=0.18.4 ; python_version>='3.8'"]
+uvloop=["uvloop>=0.17.0"]
+speedups = ["moonraker[msgspec,uvloop]"]
+
 [tool.pdm.version]
 source = "scm"
 write_to = "moonraker/__version__.py"
