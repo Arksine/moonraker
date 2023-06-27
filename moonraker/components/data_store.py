@@ -34,6 +34,11 @@ class DataStore:
         self.temp_store_size = config.getint('temperature_store_size', 1200)
         self.gcode_store_size = config.getint('gcode_store_size', 1000)
 
+        default_fields = ["temperature", "target", "power", "speed"]
+        additional_fields: List[str] = config.getlist(
+            'temperature_store_additional_fields', [])
+        self.stored_fields = list(set(default_fields) | set(additional_fields))
+
         # Temperature Store Tracking
         self.last_temps: Dict[str, Tuple[float, ...]] = {}
         self.gcode_queue: GCQueue = deque(maxlen=self.gcode_store_size)
@@ -89,14 +94,13 @@ class DataStore:
                 if sensor in self.temperature_store:
                     new_store[sensor] = self.temperature_store[sensor]
                 else:
-                    new_store[sensor] = {
-                        'temperatures': deque(maxlen=self.temp_store_size)}
-                    for item in ["target", "power", "speed"]:
-                        if item in fields:
-                            new_store[sensor][f"{item}s"] = deque(
+                    new_store[sensor] = {}
+                    for field in self.stored_fields:
+                        if field in fields:
+                            new_store[sensor][self.pluralize(field)] = deque(
                                 maxlen=self.temp_store_size)
                 if sensor not in self.last_temps:
-                    self.last_temps[sensor] = (0., 0., 0., 0.)
+                    self.last_temps[sensor] = tuple([0.] * len(self.stored_fields))
             self.temperature_store = new_store
             # Prune unconfigured sensors in self.last_temps
             for sensor in list(self.last_temps.keys()):
@@ -114,19 +118,24 @@ class DataStore:
     def _set_current_temps(self, data: Dict[str, Any]) -> None:
         for sensor in self.temperature_store:
             if sensor in data:
-                last_val = self.last_temps[sensor]
-                self.last_temps[sensor] = (
-                    round(data[sensor].get('temperature', last_val[0]), 2),
-                    data[sensor].get('target', last_val[1]),
-                    data[sensor].get('power', last_val[2]),
-                    data[sensor].get('speed', last_val[3]))
+                last_vals = self.last_temps[sensor]
+                new_vals: List[float] = []
+                for field in self.stored_fields:
+                    default_val = last_vals[self.stored_fields.index(field)]
+                    data_val = data[sensor].get(field, default_val)
+
+                    if field == "temperature":
+                        new_vals.append(round(data_val, 2))
+                    else:
+                        new_vals.append(data_val)
+                self.last_temps[sensor] = tuple(new_vals)
 
     def _update_temperature_store(self, eventtime: float) -> float:
         # XXX - If klippy is not connected, set values to zero
         # as they are unknown?
         for sensor, vals in self.last_temps.items():
-            self.temperature_store[sensor]['temperatures'].append(vals[0])
-            for val, item in zip(vals[1:], ["targets", "powers", "speeds"]):
+            items = [self.pluralize(field) for field in self.stored_fields]
+            for val, item in zip(vals, items):
                 if item in self.temperature_store[sensor]:
                     self.temperature_store[sensor][item].append(val)
         return eventtime + TEMP_UPDATE_TIME
@@ -165,6 +174,9 @@ class DataStore:
         else:
             gc_responses = list(self.gcode_queue)
         return {'gcode_store': gc_responses}
+
+    def pluralize(self, name):
+        return f"{name[:-1]}ies" if name[-1] == "y" else f"{name}s"
 
 def load_component(config: ConfigHelper) -> DataStore:
     return DataStore(config)
