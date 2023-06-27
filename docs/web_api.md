@@ -5219,7 +5219,7 @@ Set the ID of the spool that Moonraker should report usage to Spoolman of.
 
 HTTP request:
 ```http
-POST /spoolman/spool_id
+POST /server/spoolman/spool_id
 Content-Type: application/json
 
 {
@@ -5230,7 +5230,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "spoolman.post_spool_id",
+    "method": "server.spoolman.post_spool_id",
     "params": {
         "spool_id": 1
     },
@@ -5257,13 +5257,13 @@ Retrieve the ID of the spool to which Moonraker reports usage for Spoolman.
 
 HTTP request:
 ```http
-GET /spoolman/spool_id
+GET /server/spoolman/spool_id
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "spoolman.get_spool_id",
+    "method": "server.spoolman.get_spool_id",
     "id": 4654
 }
 ```
@@ -5291,7 +5291,7 @@ detailed information about it's API.
 
 HTTP request:
 ```http
-POST /spoolman/proxy
+POST /server/spoolman/proxy
 Content-Type: application/json
 
 {
@@ -5308,7 +5308,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method": "spoolman.proxy",
+    "method": "server.spoolman.proxy",
     "params": {
         "request_method": "POST",
         "path": "/v1/spool",
