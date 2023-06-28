@@ -12,7 +12,14 @@ import pathlib
 import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
-from ..common import Subscribable, WebRequest, APITransport, JsonRPC
+from ..common import (
+    TransportType,
+    RequestType,
+    Subscribable,
+    WebRequest,
+    APITransport,
+    JsonRPC
+)
 from ..utils import json_wrapper as jsonw
 
 # Annotation imports
@@ -330,9 +337,9 @@ class MQTTClient(APITransport, Subscribable):
         self.timestamp_deque: Deque = deque(maxlen=20)
         self.api_qos = config.getint('api_qos', self.qos)
         if config.getboolean("enable_moonraker_api", True):
-            api_cache = self.server.register_api_transport("mqtt", self)
+            api_cache = self.server.register_api_transport(TransportType.MQTT, self)
             for api_def in api_cache.values():
-                if "mqtt" in api_def.supported_transports:
+                if TransportType.MQTT in api_def.supported_transports:
                     self.register_api_handler(api_def)
             self.subscribe_topic(self.api_request_topic,
                                  self._process_api_request,
@@ -366,7 +373,8 @@ class MQTTClient(APITransport, Subscribable):
             args = {'objects': self.status_objs}
             try:
                 await self.klippy.request(
-                    WebRequest("objects/subscribe", args, conn=self))
+                    WebRequest("objects/subscribe", args, conn=self)
+                )
             except self.server.error:
                 pass
 
@@ -683,10 +691,10 @@ class MQTTClient(APITransport, Subscribable):
             self.json_rpc.register_method(mqtt_method, rpc_cb)
         else:
             # Local API, uses local callback
-            for mqtt_method, req_method in \
-                    zip(api_def.jrpc_methods, api_def.request_methods):
+            req_types = api_def.request_types
+            for mqtt_method, req_type in zip(api_def.jrpc_methods, req_types):
                 rpc_cb = self._generate_local_callback(
-                    api_def.endpoint, req_method, api_def.callback)
+                    api_def.endpoint, req_type, api_def.callback)
                 self.json_rpc.register_method(mqtt_method, rpc_cb)
         logging.info(
             "Registering MQTT JSON-RPC methods: "
@@ -698,12 +706,12 @@ class MQTTClient(APITransport, Subscribable):
 
     def _generate_local_callback(self,
                                  endpoint: str,
-                                 request_method: str,
+                                 request_type: RequestType,
                                  callback: Callable[[WebRequest], Coroutine]
                                  ) -> RPCCallback:
         async def func(args: Dict[str, Any]) -> Any:
             self._check_timestamp(args)
-            result = await callback(WebRequest(endpoint, args, request_method))
+            result = await callback(WebRequest(endpoint, args, request_type))
             return result
         return func
 

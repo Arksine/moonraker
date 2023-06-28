@@ -5,9 +5,11 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+import sys
 import ipaddress
 import logging
 import copy
+from enum import Flag, auto
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
 
@@ -33,34 +35,82 @@ if TYPE_CHECKING:
     from asyncio import Future
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
+    _F = TypeVar("_F", bound="ExtendedFlag")
     IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
     AuthComp = Optional[Authorization]
 
+class ExtendedFlag(Flag):
+    @classmethod
+    def from_string(cls: Type[_F], flag_name: str) -> _F:
+        str_name = flag_name.upper()
+        for name, member in cls.__members__.items():
+            if name == str_name:
+                return cls(member.value)
+        raise ValueError(f"No flag member named {flag_name}")
+
+    @classmethod
+    def from_string_list(cls: Type[_F], flag_list: List[str]) -> _F:
+        ret = cls(0)
+        for flag in flag_list:
+            flag = flag.upper()
+            ret |= cls.from_string(flag)
+        return ret
+
+    @classmethod
+    def all(cls: Type[_F]) -> _F:
+        return ~cls(0)
+
+    if sys.version_info < (3, 11):
+        def __len__(self) -> int:
+            return bin(self._value_).count("1")
+
+        def __iter__(self):
+            for i in range(self._value_.bit_length()):
+                val = 1 << i
+                if val & self._value_ == val:
+                    yield self.__class__(val)
+
+class RequestType(ExtendedFlag):
+    """
+    The Request Type is also known as the "Request Method" for
+    HTTP/REST APIs.  The use of "Request Method" nomenclature
+    is discouraged in Moonraker as it could be confused with
+    the JSON-RPC "method" field.
+    """
+    GET = auto()
+    POST = auto()
+    DELETE = auto()
+
+class TransportType(ExtendedFlag):
+    HTTP = auto()
+    WEBSOCKET = auto()
+    MQTT = auto()
+    INTERNAL = auto()
+
 class Subscribable:
-    def send_status(self,
-                    status: Dict[str, Any],
-                    eventtime: float
-                    ) -> None:
+    def send_status(
+        self, status: Dict[str, Any], eventtime: float
+    ) -> None:
         raise NotImplementedError
 
 class APIDefinition:
-    def __init__(self,
-                 endpoint: str,
-                 http_uri: str,
-                 jrpc_methods: List[str],
-                 request_methods: Union[str, List[str]],
-                 transports: List[str],
-                 callback: Optional[Callable[[WebRequest], Coroutine]],
-                 need_object_parser: bool):
+    def __init__(
+        self,
+        endpoint: str,
+        http_uri: str,
+        jrpc_methods: List[str],
+        request_types: RequestType,
+        transports: TransportType,
+        callback: Optional[Callable[[WebRequest], Coroutine]],
+        need_object_parser: bool
+    ) -> None:
         self.endpoint = endpoint
         self.uri = http_uri
         self.jrpc_methods = jrpc_methods
-        if not isinstance(request_methods, list):
-            request_methods = [request_methods]
-        self.request_methods = request_methods
+        self.request_types = request_types
         self.supported_transports = transports
         self.callback = callback
         self.need_object_parser = need_object_parser
@@ -256,16 +306,17 @@ class BaseRemoteConnection(Subscribable):
 
 
 class WebRequest:
-    def __init__(self,
-                 endpoint: str,
-                 args: Dict[str, Any],
-                 action: Optional[str] = "",
-                 conn: Optional[Subscribable] = None,
-                 ip_addr: str = "",
-                 user: Optional[Dict[str, Any]] = None
-                 ) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        args: Dict[str, Any],
+        request_type: RequestType = RequestType(0),
+        conn: Optional[Subscribable] = None,
+        ip_addr: str = "",
+        user: Optional[Dict[str, Any]] = None
+    ) -> None:
         self.endpoint = endpoint
-        self.action = action or ""
+        self.request_type = request_type
         self.args = args
         self.conn = conn
         self.ip_addr: Optional[IPUnion] = None
@@ -278,8 +329,11 @@ class WebRequest:
     def get_endpoint(self) -> str:
         return self.endpoint
 
+    def get_request_type(self) -> RequestType:
+        return self.request_type
+
     def get_action(self) -> str:
-        return self.action
+        return self.request_type.name or ""
 
     def get_args(self) -> Dict[str, Any]:
         return self.args

@@ -11,11 +11,12 @@ import asyncio
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
 from .common import (
+    RequestType,
     WebRequest,
     BaseRemoteConnection,
     APITransport,
     APIDefinition,
-    JsonRPC
+    JsonRPC,
 )
 from .utils import ServerError
 
@@ -80,15 +81,14 @@ class WebsocketManager(APITransport):
             # Remote API, uses RPC to reach out to Klippy
             ws_method = api_def.jrpc_methods[0]
             rpc_cb = self._generate_callback(
-                api_def.endpoint, "", klippy.request
+                api_def.endpoint, RequestType(0), klippy.request
             )
             self.rpc.register_method(ws_method, rpc_cb)
         else:
             # Local API, uses local callback
-            for ws_method, req_method in \
-                    zip(api_def.jrpc_methods, api_def.request_methods):
+            for ws_method, req_type in zip(api_def.jrpc_methods, api_def.request_types):
                 rpc_cb = self._generate_callback(
-                    api_def.endpoint, req_method, api_def.callback
+                    api_def.endpoint, req_type, api_def.callback
                 )
                 self.rpc.register_method(ws_method, rpc_cb)
         logging.info(
@@ -103,15 +103,18 @@ class WebsocketManager(APITransport):
     def _generate_callback(
         self,
         endpoint: str,
-        request_method: str,
+        request_type: RequestType,
         callback: Callable[[WebRequest], Coroutine]
     ) -> RPCCallback:
         async def func(args: Dict[str, Any]) -> Any:
             sc: BaseRemoteConnection = args.pop("_socket_")
             sc.check_authenticated(path=endpoint)
             result = await callback(
-                WebRequest(endpoint, args, request_method, sc,
-                           ip_addr=sc.ip_addr, user=sc.user_info))
+                WebRequest(
+                    endpoint, args, request_type, sc,
+                    ip_addr=sc.ip_addr, user=sc.user_info
+                )
+            )
             return result
         return func
 
