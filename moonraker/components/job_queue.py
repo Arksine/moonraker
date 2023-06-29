@@ -216,7 +216,8 @@ class JobQueue:
                     self._set_queue_state("loading")
                     event_loop = self.server.get_event_loop()
                     self.pop_queue_handle = event_loop.delay_callback(
-                        0.01, self._pop_job)
+                        0.01, self._pop_job, False
+                    )
                 else:
                     qs = "ready" if self.automatic else "paused"
                     self._set_queue_state(qs)
