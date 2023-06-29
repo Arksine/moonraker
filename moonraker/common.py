@@ -491,18 +491,22 @@ class JsonRPC:
             self.process_response(obj, conn)
             return None
         if not isinstance(method_name, str):
-            return self.build_error(-32600, "Invalid Request", req_id)
+            return self.build_error(
+                -32600, "Invalid Request", req_id, method_name=str(method_name)
+            )
         method = self.methods.get(method_name, None)
         if method is None:
-            return self.build_error(-32601, "Method not found", req_id)
+            return self.build_error(
+                -32601, "Method not found", req_id, method_name=method_name
+            )
         params: Dict[str, Any] = {}
         if 'params' in obj:
             params = obj['params']
             if not isinstance(params, dict):
                 return self.build_error(
-                    -32602, f"Invalid params:", req_id, True)
-        response = await self.execute_method(method, req_id, conn, params)
-        return response
+                    -32602, f"Invalid params:", req_id, method_name=method_name
+                )
+        return await self.execute_method(method_name, method, req_id, conn, params)
 
     def process_response(
         self, obj: Dict[str, Any], conn: Optional[BaseRemoteConnection]
@@ -529,28 +533,31 @@ class JsonRPC:
             ret = result
         conn.resolve_pending_response(response_id, ret)
 
-    async def execute_method(self,
-                             callback: RPCCallback,
-                             req_id: Optional[int],
-                             conn: Optional[BaseRemoteConnection],
-                             params: Dict[str, Any]
-                             ) -> Optional[Dict[str, Any]]:
+    async def execute_method(
+        self,
+        method_name: str,
+        callback: RPCCallback,
+        req_id: Optional[int],
+        conn: Optional[BaseRemoteConnection],
+        params: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         if conn is not None:
             params["_socket_"] = conn
         try:
             result = await callback(params)
         except TypeError as e:
             return self.build_error(
-                -32602, f"Invalid params:\n{e}", req_id, True)
+                -32602, f"Invalid params:\n{e}", req_id, True, method_name
+            )
         except ServerError as e:
             code = e.status_code
             if code == 404:
                 code = -32601
             elif code == 401:
                 code = -32602
-            return self.build_error(code, str(e), req_id, True)
+            return self.build_error(code, str(e), req_id, True, method_name)
         except Exception as e:
-            return self.build_error(-31000, str(e), req_id, True)
+            return self.build_error(-31000, str(e), req_id, True, method_name)
 
         if req_id is None:
             return None
@@ -564,13 +571,17 @@ class JsonRPC:
             'id': req_id
         }
 
-    def build_error(self,
-                    code: int,
-                    msg: str,
-                    req_id: Optional[int] = None,
-                    is_exc: bool = False
-                    ) -> Dict[str, Any]:
-        log_msg = f"JSON-RPC Request Error: {code}\n{msg}"
+    def build_error(
+        self,
+        code: int,
+        msg: str,
+        req_id: Optional[int] = None,
+        is_exc: bool = False,
+        method_name: str = ""
+    ) -> Dict[str, Any]:
+        if method_name:
+            method_name = f"Requested Method: {method_name}, "
+        log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}\n{msg}"
         if is_exc:
             logging.exception(log_msg)
         else:
