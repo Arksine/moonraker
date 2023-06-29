@@ -65,12 +65,18 @@ class AsyncRunner:
 class ZeroconfRegistrar:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.runner = AsyncRunner(IPVersion.All)
         hi = self.server.get_host_info()
         self.mdns_name = config.get("mdns_hostname", hi["hostname"])
         addr: str = hi["address"]
+        self.ip_version = IPVersion.All
         if addr.lower() == "all":
             addr = "::"
+        else:
+            addr_obj = ipaddress.ip_address(addr)
+            self.ip_version = (
+                IPVersion.V4Only if addr_obj.version == 4 else IPVersion.V6Only
+            )
+        self.runner = AsyncRunner(self.ip_version)
         self.cfg_addr = addr
         self.bound_all = addr in ["0.0.0.0", "::"]
         if self.bound_all:
@@ -112,8 +118,7 @@ class ZeroconfRegistrar:
             if not host:
                 host = self.cfg_addr
             host_addr = ipaddress.ip_address(self.cfg_addr)
-            fam = socket.AF_INET6 if host_addr.version == 6 else socket.AF_INET
-            addresses = [(socket.inet_pton(fam, str(self.cfg_addr)))]
+            addresses = [host_addr.packed]
         zc_service_name = f"{instance_name} @ {host}.{ZC_SERVICE_TYPE}"
         server_name = self.mdns_name or instance_name.lower()
         self.service_info = AsyncServiceInfo(
@@ -151,9 +156,14 @@ class ZeroconfRegistrar:
             for addr_info in ifinfo["ip_addresses"]:
                 if addr_info["is_link_local"]:
                     continue
-                is_ipv6 = addr_info['family'] == "ipv6"
-                family = socket.AF_INET6 if is_ipv6 else socket.AF_INET
-                yield socket.inet_pton(family, addr_info["address"])
+                addr_obj = ipaddress.ip_address(addr_info["address"])
+                ver = addr_obj.version
+                if (
+                    (self.ip_version == IPVersion.V4Only and ver == 6) or
+                    (self.ip_version == IPVersion.V6Only and ver == 4)
+                ):
+                    continue
+                yield addr_obj.packed
 
 
 SSDP_ADDR = ("239.255.255.250", 1900)
