@@ -69,6 +69,9 @@ class BaseDeploy:
     async def update(self) -> bool:
         return False
 
+    async def rollback(self) -> bool:
+        raise self.server.error(f"Rollback not available for {self.name}")
+
     def get_update_status(self) -> Dict[str, Any]:
         return {}
 

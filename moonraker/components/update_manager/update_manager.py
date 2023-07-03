@@ -161,6 +161,9 @@ class UpdateManager:
         self.server.register_endpoint(
             "/machine/update/recover", ["POST"],
             self._handle_repo_recovery)
+        self.server.register_endpoint(
+            "/machine/update/rollback", ["POST"],
+            self._handle_rollback)
         self.server.register_notification("update_manager:update_response")
         self.server.register_notification("update_manager:update_refreshed")
 
@@ -431,9 +434,7 @@ class UpdateManager:
             )
         return ret
 
-    async def _handle_repo_recovery(self,
-                                    web_request: WebRequest
-                                    ) -> str:
+    async def _handle_repo_recovery(self, web_request: WebRequest) -> str:
         if self.kconn.is_printing():
             raise self.server.error(
                 "Recovery Attempt Refused: Klippy is printing")
@@ -454,6 +455,25 @@ class UpdateManager:
                     f"Error Recovering {app}")
                 self.cmd_helper.notify_update_response(
                     str(e), is_complete=True)
+                raise
+            finally:
+                self.cmd_helper.clear_update_info()
+        return "ok"
+
+    async def _handle_rollback(self, web_request: WebRequest) -> str:
+        if self.kconn.is_printing():
+            raise self.server.error("Rollback Attempt Refused: Klippy is printing")
+        app: str = web_request.get_str('name')
+        updater = self.updaters.get(app, None)
+        if updater is None:
+            raise self.server.error(f"Updater {app} not available", 404)
+        async with self.cmd_request_lock:
+            self.cmd_helper.set_update_info(f"rollback_{app}", id(web_request))
+            try:
+                await updater.rollback()
+            except Exception as e:
+                self.cmd_helper.notify_update_response(f"Error Rolling Back {app}")
+                self.cmd_helper.notify_update_response(str(e), is_complete=True)
                 raise
             finally:
                 self.cmd_helper.clear_update_info()
@@ -1274,6 +1294,10 @@ class WebClientDeploy(BaseDeploy):
         if self.version == "?":
             self.version = storage.get("version", "?")
         self.remote_version: str = storage.get('remote_version', "?")
+        self.rollback_version: str = storage.get('rollback_version', self.version)
+        self.rollback_repo: str = storage.get(
+            'rollback_repo', self.repo if self._valid else "?"
+        )
         self.last_error: str = storage.get('last_error', "")
         dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
         self.dl_info: Tuple[str, str, int] = cast(
@@ -1300,7 +1324,9 @@ class WebClientDeploy(BaseDeploy):
             f"Pre-release: {self._is_prerelease}\n"
             f"Download Url: {dl_url}\n"
             f"Download Size: {size}\n"
-            f"Content Type: {content_type}"
+            f"Content Type: {content_type}\n"
+            f"Rollback Version: {self.rollback_version}\n"
+            f"Rollback Repo: {self.rollback_repo}"
             f"{warn_str}"
         )
 
@@ -1314,33 +1340,37 @@ class WebClientDeploy(BaseDeploy):
         self._log_client_info()
         self._save_state()
 
-    async def _get_remote_version(self) -> None:
-        if not self._valid:
-            self.log_info("Invalid Web Installation, aborting remote refresh")
-            return
-        # Remote state
-        if self.channel == "stable":
-            resource = f"repos/{self.repo}/releases/latest"
+    async def _fetch_github_version(
+        self, repo: Optional[str] = None, tag: Optional[str] = None
+    ) -> Dict[str, Any]:
+        if repo is None:
+            if not self._valid:
+                self.log_info("Invalid Web Installation, aborting remote refresh")
+                return {}
+            repo = self.repo
+        if tag is not None:
+            resource = f"repos/{repo}/releases/tags/{tag}"
+        elif self.channel == "stable":
+            resource = f"repos/{repo}/releases/latest"
         else:
-            resource = f"repos/{self.repo}/releases?per_page=1"
+            resource = f"repos/{repo}/releases?per_page=1"
         client = self.cmd_helper.get_http_client()
         resp = await client.github_api_request(
             resource, attempts=3, retry_pause_time=.5
         )
         release: Union[List[Any], Dict[str, Any]] = {}
         if resp.status_code == 304:
-            if self.remote_version == "?" and resp.content:
+            if resp.content:
                 # Not modified, however we need to restore state from
                 # cached content
                 release = resp.json()
             else:
                 # Either not necessary or not possible to restore from cache
-                return
+                return {}
         elif resp.has_error():
-            logging.info(
-                f"Client {self.repo}: Github Request Error - {resp.error}")
+            self.log_info(f"Github Request Error - {resp.error}")
             self.last_error = str(resp.error)
-            return
+            return {}
         else:
             release = resp.json()
         result: Dict[str, Any] = {}
@@ -1350,6 +1380,12 @@ class WebClientDeploy(BaseDeploy):
         else:
             result = release
         self.last_error = ""
+        return result
+
+    async def _get_remote_version(self) -> None:
+        result = await self._fetch_github_version()
+        if not result:
+            return
         self.remote_version = result.get('name', "?")
         release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
         dl_url: str = release_asset.get('browser_download_url', "?")
@@ -1362,32 +1398,40 @@ class WebClientDeploy(BaseDeploy):
         storage = super().get_persistent_data()
         storage['version'] = self.version
         storage['remote_version'] = self.remote_version
+        storage['rollback_version'] = self.rollback_version
+        storage['rollback_repo'] = self.rollback_repo
         storage['dl_info'] = list(self.dl_info)
         storage['last_error'] = self.last_error
         return storage
 
-    async def update(self) -> bool:
+    async def update(
+        self, rollback_info: Optional[Tuple[str, str, int]] = None
+    ) -> bool:
         if not self._valid:
             raise self.server.error(
                 f"Web Client {self.name}: Invalid install detected, aborting update"
             )
-        if self.remote_version == "?":
-            await self._get_remote_version()
+        if rollback_info is not None:
+            dl_url, content_type, size = rollback_info
+            start_msg = f"Rolling Back Web Client {self.name}..."
+        else:
             if self.remote_version == "?":
-                raise self.server.error(
-                    f"Client {self.repo}: Unable to locate update")
-        dl_url, content_type, size = self.dl_info
+                await self._get_remote_version()
+                if self.remote_version == "?":
+                    raise self.server.error(
+                        f"Client {self.repo}: Unable to locate update"
+                    )
+            dl_url, content_type, size = self.dl_info
+            if self.version == self.remote_version:
+                # Already up to date
+                return False
+            start_msg = f"Updating Web Client {self.name}..."
         if dl_url == "?":
-            raise self.server.error(
-                f"Client {self.repo}: Invalid download url")
-        if self.version == self.remote_version:
-            # Already up to date
-            return False
+            raise self.server.error(f"Client {self.repo}: Invalid download url")
+        current_version = self.version
         event_loop = self.server.get_event_loop()
-        self.cmd_helper.notify_update_response(
-            f"Updating Web Client {self.name}...")
-        self.cmd_helper.notify_update_response(
-            f"Downloading Client: {self.name}")
+        self.cmd_helper.notify_update_response(start_msg)
+        self.cmd_helper.notify_update_response(f"Downloading Client: {self.name}")
         td = await self.cmd_helper.create_tempdir(self.name, "client")
         try:
             tempdir = pathlib.Path(td.name)
@@ -1406,11 +1450,33 @@ class WebClientDeploy(BaseDeploy):
             await event_loop.run_in_thread(td.cleanup)
         self.version = self.remote_version
         await self._validate_client_info()
-        self.cmd_helper.notify_update_response(
-            f"Client Update Finished: {self.name}", is_complete=True)
+        if self._valid and rollback_info is None:
+            self.rollback_version = current_version
+            self.rollback_repo = self.repo
+        msg = f"Client Update Finished: {self.name}"
+        if rollback_info is not None:
+            msg = f"Rollback Complete: {self.name}"
+        self.cmd_helper.notify_update_response(msg, is_complete=True)
         self._log_client_info()
         self._save_state()
         return True
+
+    async def rollback(self) -> bool:
+        if self.rollback_version == "?" or self.rollback_repo == "?":
+            raise self.server.error("Incomplete Rollback Data")
+        if self.rollback_version == self.version:
+            return False
+        result = await self._fetch_github_version(
+            self.rollback_repo, self.rollback_version
+        )
+        if not result:
+            raise self.server.error("Failed to retrieve release asset data")
+        release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
+        dl_url: str = release_asset.get('browser_download_url', "?")
+        content_type: str = release_asset.get('content_type', "?")
+        size: int = release_asset.get('size', 0)
+        dl_info = (dl_url, content_type, size)
+        return await self.update(dl_info)
 
     def _extract_release(self,
                          persist_dir: pathlib.Path,
@@ -1443,6 +1509,7 @@ class WebClientDeploy(BaseDeploy):
             'owner': self.owner,
             'version': self.version,
             'remote_version': self.remote_version,
+            'rollback_version': self.rollback_version,
             'configured_type': self.type,
             'channel': self.channel,
             'info_tags': self.info_tags,

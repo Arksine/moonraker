@@ -107,6 +107,7 @@ class GitDeploy(AppDeploy):
             self.notify_status("Resetting Git Repo...")
             await self.repo.reset()
             await self._update_repo_state()
+        self.repo.set_rollback_state(None)
 
         if self.repo.is_dirty() or not self._is_valid:
             raise self.server.error(
@@ -115,14 +116,18 @@ class GitDeploy(AppDeploy):
         await self.restart_service()
         self.notify_status("Reinstall Complete", is_complete=True)
 
-    async def reinstall(self):
-        # Clear the persistent storage prior to a channel swap.
-        # After the next update is complete new data will be
-        # restored.
-        umdb = self.cmd_helper.get_umdb()
-        await umdb.pop(self.name, None)
-        await self.initialize()
-        await self.recover(True, True)
+    async def rollback(self) -> bool:
+        dep_info = await self._collect_dependency_info()
+        ret = await self.repo.rollback()
+        if ret:
+            await self._update_dependencies(dep_info)
+            await self._update_repo_state(need_fetch=False)
+            await self.restart_service()
+            msg = "Rollback Complete"
+        else:
+            msg = "Rollback not performed"
+        self.notify_status(msg, is_complete=True)
+        return ret
 
     def get_update_status(self) -> Dict[str, Any]:
         status = super().get_update_status()
@@ -136,6 +141,7 @@ class GitDeploy(AppDeploy):
 
     async def _pull_repo(self) -> None:
         self.notify_status("Updating Repo...")
+        rb_state = self.repo.capture_state_for_rollback()
         try:
             await self.repo.fetch()
             if self.repo.is_detached():
@@ -156,6 +162,8 @@ class GitDeploy(AppDeploy):
                     .2, self.cmd_helper.notify_update_refreshed
                 )
             raise self.log_exc(str(e))
+        else:
+            self.repo.set_rollback_state(rb_state)
 
     async def _collect_dependency_info(self) -> Dict[str, Any]:
         pkg_deps = await self._read_system_dependencies()
@@ -273,6 +281,11 @@ class GitRepo:
         self.upstream_version: str = storage.get('upstream_version', "?")
         self.current_commit: str = storage.get('current_commit', "?")
         self.upstream_commit: str = storage.get('upstream_commit', "?")
+        self.rollback_commit: str = storage.get('rollback_commit', self.current_commit)
+        self.rollback_branch: str = storage.get('rollback_branch', self.git_branch)
+        self.rollback_version: str = storage.get(
+            'rollback_version', self.current_version
+        )
         self.upstream_url: str = storage.get('upstream_url', "?")
         self.recovery_url: str = storage.get(
             'recovery_url',
@@ -300,6 +313,9 @@ class GitRepo:
             'upstream_version': self.upstream_version,
             'current_commit': self.current_commit,
             'upstream_commit': self.upstream_commit,
+            'rollback_commit': self.rollback_commit,
+            'rollback_branch': self.rollback_branch,
+            'rollback_version': self.rollback_version,
             'upstream_url': self.upstream_url,
             'recovery_url': self.recovery_url,
             'full_version_string': self.full_version_string,
@@ -400,7 +416,6 @@ class GitRepo:
                         commit['tag'] = tag
                         self.commits_behind.append(commit)
             self._check_warnings()
-            self.log_repo_info()
         except Exception:
             logging.exception(f"Git Repo {self.alias}: Initialization failure")
             raise
@@ -408,6 +423,10 @@ class GitRepo:
             self.initialized = True
             # If no exception was raised assume the repo is not corrupt
             self.repo_corrupt = False
+            if self.rollback_commit == "?" or self.rollback_branch == "?":
+                # Reset Rollback State
+                self.set_rollback_state(None)
+            self.log_repo_info()
         finally:
             self.init_evt.set()
             self.init_evt = None
@@ -621,6 +640,9 @@ class GitRepo:
             f"Upstream Commit SHA: {self.upstream_commit}\n"
             f"Current Version: {self.current_version}\n"
             f"Upstream Version: {self.upstream_version}\n"
+            f"Rollback Commit: {self.rollback_commit}\n"
+            f"Rollback Branch: {self.rollback_branch}\n"
+            f"Rollback Version: {self.rollback_version}\n"
             f"Is Dirty: {self.dirty}\n"
             f"Is Detached: {self.head_detached}\n"
             f"Commits Behind: {len(self.commits_behind)}\n"
@@ -660,14 +682,16 @@ class GitRepo:
                 raise self.server.error(
                     f"Git Repo {self.alias}: No valid git remote detected")
 
-    async def reset(self) -> None:
-        if self.git_remote == "?" or self.git_branch == "?":
-            raise self.server.error("Cannot reset, unknown remote/branch")
+    async def reset(self, ref: Optional[str] = None) -> None:
         async with self.git_operation_lock:
-            reset_cmd = f"reset --hard {self.git_remote}/{self.git_branch}"
-            if self.is_beta:
-                reset_cmd = f"reset --hard {self.upstream_commit}"
-            await self._run_git_cmd(reset_cmd, retries=2)
+            if ref is None:
+                if self.is_beta:
+                    ref = self.upstream_commit
+                else:
+                    if self.git_remote == "?" or self.git_branch == "?":
+                        raise self.server.error("Cannot reset, unknown remote/branch")
+                    ref = f"{self.git_remote}/{self.git_branch}"
+            await self._run_git_cmd(f"reset --hard {ref}", retries=2)
             self.repo_corrupt = False
 
     async def fetch(self) -> None:
@@ -734,13 +758,16 @@ class GitRepo:
 
     async def checkout(self, branch: Optional[str] = None) -> None:
         self._verify_repo()
+        reset_commit: Optional[str] = None
         async with self.git_operation_lock:
             if branch is None:
+                # No branch is specifed so we are checking out detached
                 if self.is_beta:
-                    branch = self.upstream_commit
-                else:
-                    branch = f"{self.git_remote}/{self.git_branch}"
+                    reset_commit = self.upstream_commit
+                branch = f"{self.git_remote}/{self.git_branch}"
             await self._run_git_cmd(f"checkout -q {branch}")
+        if reset_commit is not None:
+            await self.reset(reset_commit)
 
     async def run_fsck(self) -> None:
         async with self.git_operation_lock:
@@ -772,6 +799,39 @@ class GitRepo:
             self.repo_corrupt = False
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Git Clone Complete")
+
+    async def rollback(self) -> bool:
+        if self.rollback_commit == "?" or self.rollback_branch == "?":
+            raise self.server.error("Incomplete rollback data stored, cannot rollback")
+        if self.rollback_branch != self.git_branch:
+            await self.checkout(self.rollback_branch)
+        elif self.rollback_commit == self.current_commit:
+            return False
+        await self.reset(self.rollback_commit)
+        return True
+
+    def capture_state_for_rollback(self) -> Dict[str, Any]:
+        branch = self.git_branch
+        if self.head_detached:
+            branch = f"{self.git_remote}/{self.git_branch}"
+        return {
+            "commit": self.current_commit,
+            "branch": branch,
+            "version": self.current_version
+        }
+
+    def set_rollback_state(self, rb_state: Optional[Dict[str, str]]) -> None:
+        if rb_state is None:
+            self.rollback_commit = self.current_commit
+            if self.head_detached:
+                self.rollback_branch = f"{self.git_remote}/{self.git_branch}"
+            else:
+                self.rollback_branch = self.git_branch
+            self.rollback_version = self.current_version
+        else:
+            self.rollback_commit = rb_state["commit"]
+            self.rollback_branch = rb_state["branch"]
+            self.rollback_version = rb_state["version"]
 
     async def get_commits_behind(self) -> List[Dict[str, Any]]:
         self._verify_repo()
@@ -824,6 +884,7 @@ class GitRepo:
             'recovery_url': self.recovery_url,
             'version': self.current_version,
             'remote_version': self.upstream_version,
+            'rollback_version': self.rollback_version,
             'current_hash': self.current_commit,
             'remote_hash': self.upstream_commit,
             'is_dirty': self.dirty,
