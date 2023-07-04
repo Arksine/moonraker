@@ -12,6 +12,7 @@ import shutil
 import re
 import logging
 from .app_deploy import AppDeploy
+from .common import Channel
 
 # Annotation imports
 from typing import (
@@ -239,7 +240,7 @@ class GitRepo:
                  origin_url: str,
                  moved_origin_url: Optional[str],
                  primary_branch: str,
-                 channel: str
+                 channel: Channel
                  ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -269,7 +270,7 @@ class GitRepo:
         self.git_operation_lock = asyncio.Lock()
         self.fetch_timeout_handle: Optional[asyncio.Handle] = None
         self.fetch_input_recd: bool = False
-        self.is_beta = channel == "beta"
+        self.channel = channel
 
     def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
@@ -396,7 +397,7 @@ class GitRepo:
                 "--always --tags --long --dirty")
             self.full_version_string = git_desc.strip()
             self.dirty = git_desc.endswith("dirty")
-            if self.is_beta:
+            if self.channel != Channel.DEV:
                 await self._get_beta_versions(git_desc)
             else:
                 await self._get_dev_versions(git_desc)
@@ -685,7 +686,7 @@ class GitRepo:
     async def reset(self, ref: Optional[str] = None) -> None:
         async with self.git_operation_lock:
             if ref is None:
-                if self.is_beta:
+                if self.channel != Channel.DEV:
                     ref = self.upstream_commit
                 else:
                     if self.git_remote == "?" or self.git_branch == "?":
@@ -714,7 +715,7 @@ class GitRepo:
         cmd = "pull --progress"
         if self.server.is_debug_enabled():
             cmd = f"{cmd} --rebase"
-        if self.is_beta:
+        if self.channel != Channel.DEV:
             cmd = f"{cmd} {self.git_remote} {self.upstream_commit}"
         async with self.git_operation_lock:
             await self._run_git_cmd_async(cmd)
@@ -762,7 +763,7 @@ class GitRepo:
         async with self.git_operation_lock:
             if branch is None:
                 # No branch is specifed so we are checking out detached
-                if self.is_beta:
+                if self.channel != Channel.DEV:
                     reset_commit = self.upstream_commit
                 branch = f"{self.git_remote}/{self.git_branch}"
             await self._run_git_cmd(f"checkout -q {branch}")
@@ -838,7 +839,7 @@ class GitRepo:
         if self.is_current():
             return []
         async with self.git_operation_lock:
-            if self.is_beta:
+            if self.channel != Channel.DEV:
                 ref = self.upstream_commit
             else:
                 ref = f"{self.git_remote}/{self.git_branch}"

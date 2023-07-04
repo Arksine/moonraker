@@ -9,11 +9,11 @@ import os
 import sys
 import copy
 import pathlib
+from enum import Enum
 from ...utils import source_info
 from typing import (
     TYPE_CHECKING,
     Dict,
-    Optional,
     Union
 )
 
@@ -46,19 +46,42 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
-def get_app_type(app_path: Union[str, pathlib.Path]) -> str:
+class ExtEnum(Enum):
+    @classmethod
+    def from_string(cls, enum_name: str):
+        str_name = enum_name.upper()
+        for name, member in cls.__members__.items():
+            if name == str_name:
+                return cls(member.value)
+        raise ValueError(f"No enum member named {enum_name}")
+
+    def __str__(self) -> str:
+        return self._name_.lower()  # type: ignore
+
+class AppType(ExtEnum):
+    NONE = 1
+    WEB = 2
+    GIT_REPO = 3
+    ZIP = 4
+
+class Channel(ExtEnum):
+    STABLE = 1
+    BETA = 2
+    DEV = 3
+
+def get_app_type(app_path: Union[str, pathlib.Path]) -> AppType:
     if isinstance(app_path, str):
         app_path = pathlib.Path(app_path).expanduser()
     # None type will perform checks on Moonraker
     if source_info.is_git_repo(app_path):
-        return "git_repo"
+        return AppType.GIT_REPO
     else:
-        return "none"
+        return AppType.NONE
 
 def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     server = config.get_server()
     base_cfg = copy.deepcopy(BASE_CONFIG)
-    base_cfg["moonraker"]["type"] = get_app_type(source_info.source_path())
+    base_cfg["moonraker"]["type"] = str(get_app_type(source_info.source_path()))
     db: MoonrakerDatabase = server.lookup_component('database')
     base_cfg["klipper"]["path"] = db.get_item(
         "moonraker", "update_manager.klipper_path", KLIPPER_DEFAULT_PATH
@@ -66,7 +89,7 @@ def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     base_cfg["klipper"]["env"] = db.get_item(
         "moonraker", "update_manager.klipper_exec", KLIPPER_DEFAULT_EXEC
     ).result()
-    base_cfg["klipper"]["type"] = get_app_type(base_cfg["klipper"]["path"])
+    base_cfg["klipper"]["type"] = str(get_app_type(base_cfg["klipper"]["path"]))
     channel = config.get("channel", "dev")
     base_cfg["moonraker"]["channel"] = channel
     base_cfg["klipper"]["channel"] = channel

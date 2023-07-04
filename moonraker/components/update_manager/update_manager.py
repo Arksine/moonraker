@@ -17,7 +17,7 @@ import re
 import json
 from ...utils import source_info
 from ...thirdparty.packagekit import enums as PkEnum
-from . import base_config
+from .common import AppType, Channel, get_base_configuration, get_app_type
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
@@ -62,13 +62,16 @@ UPDATE_REFRESH_INTERVAL = 3600.
 # Perform auto refresh no later than 4am
 MAX_UPDATE_HOUR = 4
 
-def get_deploy_class(type: str, default: _T) -> Union[Type[BaseDeploy], _T]:
+def get_deploy_class(
+    app_type: Union[AppType, str], default: _T
+) -> Union[Type[BaseDeploy], _T]:
+    key = AppType.from_string(app_type) if isinstance(app_type, str) else app_type
     _deployers = {
-        "web": WebClientDeploy,
-        "git_repo": GitDeploy,
-        "zip": ZipDeploy
+        AppType.WEB: WebClientDeploy,
+        AppType.GIT_REPO: GitDeploy,
+        AppType.ZIP: ZipDeploy
     }
-    return _deployers.get(type, default)
+    return _deployers.get(key, default)
 
 class UpdateManager:
     def __init__(self, config: ConfigHelper) -> None:
@@ -76,7 +79,7 @@ class UpdateManager:
         self.event_loop = self.server.get_event_loop()
         self.kconn: KlippyConnection
         self.kconn = self.server.lookup_component("klippy_connection")
-        self.app_config = base_config.get_base_configuration(config)
+        self.app_config = get_base_configuration(config)
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
         self.cmd_helper = CommandHelper(config, self.get_updaters)
         self.updaters: Dict[str, BaseDeploy] = {}
@@ -211,11 +214,11 @@ class UpdateManager:
         db: DBComp = self.server.lookup_component('database')
         db.insert_item("moonraker", "update_manager.klipper_path", kpath)
         db.insert_item("moonraker", "update_manager.klipper_exec", executable)
-        app_type = base_config.get_app_type(kpath)
+        app_type = get_app_type(kpath)
         kcfg = self.app_config["klipper"]
         kcfg.set_option("path", kpath)
         kcfg.set_option("env", executable)
-        kcfg.set_option("type", app_type)
+        kcfg.set_option("type", str(app_type))
         need_notification = not isinstance(kupdater, AppDeploy)
         kclass = get_deploy_class(app_type, BaseDeploy)
         self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
@@ -1176,13 +1179,16 @@ class WebClientDeploy(BaseDeploy):
         self.repo = config.get('repo').strip().strip("/")
         self.owner, self.project_name = self.repo.split("/", 1)
         self.path = pathlib.Path(config.get("path")).expanduser().resolve()
-        self.type = config.get('type')
-        self.channel = config.get("channel", "stable")
-        if self.channel not in ["stable", "beta"]:
-            raise config.error(
+        self.type = AppType.from_string(config.get('type'))
+        self.channel = Channel.from_string(config.get("channel", "stable"))
+        if self.channel == Channel.DEV:
+            self.server.add_warning(
                 f"Invalid Channel '{self.channel}' for config "
                 f"section [{config.get_name()}], type: {self.type}. "
-                f"Must be one of the following: stable, beta")
+                f"Must be one of the following: stable, beta. "
+                f"Falling back to beta channel"
+            )
+            self.channel = Channel.BETA
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.persistent_files: List[str] = []
         self.warnings: List[str] = []
@@ -1350,7 +1356,7 @@ class WebClientDeploy(BaseDeploy):
             repo = self.repo
         if tag is not None:
             resource = f"repos/{repo}/releases/tags/{tag}"
-        elif self.channel == "stable":
+        elif self.channel == Channel.STABLE:
             resource = f"repos/{repo}/releases/latest"
         else:
             resource = f"repos/{repo}/releases?per_page=1"
@@ -1510,8 +1516,8 @@ class WebClientDeploy(BaseDeploy):
             'version': self.version,
             'remote_version': self.remote_version,
             'rollback_version': self.rollback_version,
-            'configured_type': self.type,
-            'channel': self.channel,
+            'configured_type': str(self.type),
+            'channel': str(self.channel),
             'info_tags': self.info_tags,
             'last_error': self.last_error,
             'is_valid': self._valid,

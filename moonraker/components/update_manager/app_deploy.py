@@ -14,6 +14,7 @@ import re
 import json
 import distro
 import asyncio
+from .common import AppType, Channel
 from .base_deploy import BaseDeploy
 
 # Annotation imports
@@ -36,12 +37,12 @@ if TYPE_CHECKING:
 MIN_PIP_VERSION = (23, 0)
 
 SUPPORTED_CHANNELS = {
-    "zip": ["stable", "beta"],
-    "git_repo": ["dev", "beta"]
+    AppType.ZIP: [Channel.STABLE, Channel.BETA],
+    AppType.GIT_REPO: list(Channel)
 }
 TYPE_TO_CHANNEL = {
-    "zip": "beta",
-    "git_repo": "dev"
+    AppType.ZIP: Channel.BETA,
+    AppType.GIT_REPO: Channel.DEV
 }
 
 DISTRO_ALIASES = [distro.id()]
@@ -54,26 +55,26 @@ class AppDeploy(BaseDeploy):
         super().__init__(config, cmd_helper, prefix=prefix)
         self.config = config
         type_choices = list(TYPE_TO_CHANNEL.keys())
-        self.type = config.get('type').lower()
+        self.type = AppType.from_string(config.get('type'))
         if self.type not in type_choices:
+            str_types = [str(t) for t in type_choices]
             raise config.error(
-                f"Config Error: Section [{config.get_name()}], Option "
-                f"'type: {self.type}': value must be one "
-                f"of the following choices: {type_choices}"
+                f"Section [{config.get_name()}], Option 'type: {self.type}': "
+                f"value must be one of the following choices: {str_types}"
             )
-        self.channel = config.get(
-            "channel", TYPE_TO_CHANNEL[self.type]
+        self.channel = Channel.from_string(
+            config.get("channel", str(TYPE_TO_CHANNEL[self.type]))
         )
         self.channel_invalid: bool = False
         if self.channel not in SUPPORTED_CHANNELS[self.type]:
+            str_channels = [str(c) for c in SUPPORTED_CHANNELS[self.type]]
             self.channel_invalid = True
             invalid_channel = self.channel
             self.channel = TYPE_TO_CHANNEL[self.type]
             self.server.add_warning(
                 f"[{config.get_name()}]: Invalid value '{invalid_channel}' for "
                 f"option 'channel'. Type '{self.type}' supports the following "
-                f"channels: {SUPPORTED_CHANNELS[self.type]}.  Falling back to "
-                f"channel '{self.channel}"
+                f"channels: {str_channels}.  Falling back to channel '{self.channel}'"
             )
         self.virtualenv: Optional[pathlib.Path] = None
         self.py_exec: Optional[pathlib.Path] = None
@@ -220,7 +221,7 @@ class AppDeploy(BaseDeploy):
             self.log_info(f"Stored pip version: {ver_str}")
         return storage
 
-    def get_configured_type(self) -> str:
+    def get_configured_type(self) -> AppType:
         return self.type
 
     def check_same_paths(self,
@@ -347,11 +348,11 @@ class AppDeploy(BaseDeploy):
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
-            'channel': self.channel,
+            'channel': str(self.channel),
             'debug_enabled': self.server.is_debug_enabled(),
             'channel_invalid': self.channel_invalid,
             'is_valid': self._is_valid,
-            'configured_type': self.type,
+            'configured_type': str(self.type),
             'info_tags': self.info_tags
         }
 

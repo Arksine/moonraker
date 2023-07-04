@@ -13,6 +13,7 @@ import re
 import time
 import zipfile
 from .app_deploy import AppDeploy
+from .common import Channel
 from ...utils import verify_source
 
 # Annotation imports
@@ -195,7 +196,7 @@ class ZipDeploy(AppDeploy):
         current_release: Dict[str, Any] = {}
         for release in releases:
             if not latest_release:
-                if self.channel != "stable":
+                if self.channel != Channel.STABLE:
                     # Allow the beta channel to update regardless
                     latest_release = release
                 elif not release['prerelease']:
