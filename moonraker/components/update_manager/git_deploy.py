@@ -103,6 +103,16 @@ class GitDeploy(AppDeploy):
         dep_info = await self._collect_dependency_info()
         if hard:
             await self.repo.clone()
+            if self.channel != Channel.DEV:
+                if self.repo.upstream_commit != "?":
+                    # If on beta or stable reset to the latest tagged
+                    # upstream commit
+                    await self.repo.reset()
+                else:
+                    self.notify_status(
+                        f"No upstream commit for repo on {self.channel} channel, "
+                        "skipping reset."
+                    )
             await self._update_repo_state()
         else:
             self.notify_status("Resetting Git Repo...")
