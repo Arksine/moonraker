@@ -788,9 +788,9 @@ class GitRepo:
             if self.backup_path.exists():
                 await event_loop.run_in_thread(shutil.rmtree, self.backup_path)
             await self._check_lock_file_exists(remove=True)
-            git_cmd = f"clone {self.recovery_url} {self.backup_path}"
+            cmd = f"clone --filter=blob:none {self.recovery_url} {self.backup_path}"
             try:
-                await self._run_git_cmd_async(git_cmd, 1, False, False)
+                await self._run_git_cmd_async(cmd, 1, False, False)
             except Exception as e:
                 self.cmd_helper.notify_update_response(
                     f"Git Repo {self.alias}: Git Clone Failed")
