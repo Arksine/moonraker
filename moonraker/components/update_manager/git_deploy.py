@@ -19,7 +19,6 @@ from ...utils.versions import GitVersion
 from typing import (
     TYPE_CHECKING,
     Any,
-    Tuple,
     Optional,
     Dict,
     List,
@@ -402,20 +401,16 @@ class GitRepo:
             self.current_commit = await self.rev_parse("HEAD")
             git_desc = await self.describe("--always --tags --long --dirty --abbrev=8")
             cur_ver = GitVersion(git_desc.strip())
-            if self.channel != Channel.DEV:
-                await self._get_beta_versions(cur_ver)
-            else:
-                await self._get_dev_versions(cur_ver)
+            upstream_ver = await self._get_upstream_version()
+            await self._set_versions(cur_ver, upstream_ver)
 
             # Get Commits Behind
             self.commits_behind = []
             cbh = await self.get_commits_behind()
             if cbh:
                 tagged_commits = await self.get_tagged_commits()
-                debug_msg = '\n'.join([f"{k}: {v}" for k, v in
-                                       tagged_commits.items()])
-                logging.debug(f"Git Repo {self.alias}: Tagged Commits\n"
-                              f"{debug_msg}")
+                debug_msg = '\n'.join([f"{k}: {v}" for k, v in tagged_commits.items()])
+                logging.debug(f"Git Repo {self.alias}: Tagged Commits\n{debug_msg}")
                 for i, commit in enumerate(cbh):
                     tag = tagged_commits.get(commit['sha'], None)
                     if i < 30 or tag is not None:
@@ -486,51 +481,73 @@ class GitRepo:
             logging.debug(f"Move Request Failed: {resp.error}")
         return moved
 
-    async def _get_dev_versions(self, current_version: GitVersion) -> None:
-        self.upstream_commit = await self.rev_parse(
-            f"{self.git_remote}/{self.git_branch}"
-        )
-        upstream_ver_str = await self.describe(
-            f"{self.git_remote}/{self.git_branch} --always --tags --long --abbrev=8"
-        )
-        upstream_version = GitVersion(upstream_ver_str)
-        # Get the latest tag as a fallback for shallow clones
-        commit, tag = await self._parse_latest_tag()
-        # Check for shallow clones
-        if current_version.is_fallback() and tag != "?":
-            count = await self.rev_list(f"{tag}..HEAD --count")
-            current_version = GitVersion(f"{tag}-{count}-g{current_version}-shallow")
-        if not upstream_version.is_valid_version() and tag != "?":
-            count = await self.rev_list(f"{tag}..{self.upstream_commit} --count")
-            upstream_version = GitVersion(f"{tag}-{count}")
+    async def _get_upstream_version(self) -> GitVersion:
+        if self.channel == Channel.DEV:
+            self.upstream_commit = await self.rev_parse(
+                f"{self.git_remote}/{self.git_branch}"
+            )
+            upstream_ver_str = await self.describe(
+                f"{self.git_remote}/{self.git_branch} --always --tags --long --abbrev=8"
+            )
+        else:
+            tagged_commits = await self.get_tagged_commits()
+            upstream_commit = upstream_ver_str = "?"
+            for sha, tag in tagged_commits.items():
+                ver = GitVersion(tag)
+                if not ver.is_valid_version():
+                    continue
+                if (
+                    (self.channel == Channel.STABLE and ver.is_final_release()) or
+                    (self.channel == Channel.BETA and not ver.is_alpha_release())
+                ):
+                    upstream_commit = sha
+                    upstream_ver_str = tag
+                    break
+            self.upstream_commit = upstream_commit
+        return GitVersion(upstream_ver_str)
+
+    async def _set_versions(
+        self, current_version: GitVersion, upstream_version: GitVersion
+    ) -> None:
+        if not current_version.is_valid_version():
+            log_msg = (
+                f"Git repo {self.alias}: Failed to detect current version, got "
+                f"'{current_version}'. "
+            )
+            tag = upstream_version.infer_last_tag()
+            count = await self.rev_list("HEAD --count")
+            sha_part = ""
+            if current_version.is_fallback():
+                sha_part = f"-g{current_version}"
+            elif self.current_commit not in ("?", ""):
+                sha_part = f"-g{self.current_commit[:8]}"
+            current_version = GitVersion(f"{tag}-{count}{sha_part}-inferred")
+            log_msg += f"Falling back to inferred version: {current_version}"
+            logging.info(log_msg)
+        if self.channel == Channel.DEV:
+            if not upstream_version.is_valid_version():
+                log_msg = (
+                    f"Git repo {self.alias}: Failed to detect upstream version, got "
+                    f"'{upstream_version}'. "
+                )
+                tag = current_version.tag
+                if current_version.inferred:
+                    count = await self.rev_list(f"{self.upstream_commit} --count")
+                else:
+                    log_msg += "\nRemote has diverged, approximating dev count. "
+                    count = await self.rev_list(f"{self.upstream_commit}..HEAD --count")
+                    count = str(int(count) + current_version.dev_count)
+                upstream_version = GitVersion(f"{tag}-{count}-inferred")
+                log_msg += f"Falling back to inferred version: {upstream_version}"
+                logging.info(log_msg)
+        else:
+            if not upstream_version.is_valid_version():
+                self.upstream_commit = self.current_commit
+                upstream_version = current_version
+            elif upstream_version <= current_version:
+                self.upstream_commit = self.current_commit
         self.current_version = current_version
         self.upstream_version = upstream_version
-
-    async def _get_beta_versions(self, current_version: GitVersion) -> None:
-        upstream_commit, upstream_tag = await self._parse_latest_tag()
-        if current_version.is_fallback() and upstream_tag != "?":
-            count = await self.rev_list(f"{upstream_tag}..HEAD --count")
-            ver_string = f"{upstream_tag}-{count}-g{current_version}-shallow"
-            current_version = GitVersion(ver_string)
-        self.upstream_commit = upstream_commit
-        if self.current_version.tag == upstream_tag or upstream_tag == "?":
-            self.upstream_commit = self.current_commit
-        self.current_version = current_version
-        self.upstream_version = GitVersion(upstream_tag)
-
-    async def _parse_latest_tag(self) -> Tuple[str, str]:
-        commit = tag = "?"
-        try:
-            commit = await self.rev_list("--tags --max-count=1")
-            if not commit:
-                return "?", "?"
-            tag = await self.describe(f"--tags {commit}")
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            return "?", "?"
-        version = GitVersion(tag)
-        return commit, version.tag
 
     async def wait_for_init(self) -> None:
         if self.init_evt is not None:
@@ -591,18 +608,13 @@ class GitRepo:
 
     async def check_diverged(self) -> bool:
         self._verify_repo(check_remote=True)
+        if self.head_detached:
+            return False
         async with self.git_operation_lock:
-            if self.head_detached:
-                return False
-            cmd = (
-                "merge-base --is-ancestor HEAD "
-                f"{self.git_remote}/{self.git_branch}"
-            )
+            cmd = f"merge-base --is-ancestor HEAD {self.git_remote}/{self.git_branch}"
             for _ in range(3):
                 try:
-                    await self._run_git_cmd(
-                        cmd, retries=1, corrupt_msg="error: "
-                    )
+                    await self._run_git_cmd(cmd, retries=1, corrupt_msg="error: ")
                 except self.cmd_helper.scmd_error as err:
                     if err.return_code == 1:
                         return True
@@ -847,13 +859,14 @@ class GitRepo:
                 commits_behind.append(dict(cbh))  # type: ignore
             return commits_behind
 
-    async def get_tagged_commits(self) -> Dict[str, Any]:
+    async def get_tagged_commits(self, count: int = 100) -> Dict[str, str]:
         self._verify_repo()
         async with self.git_operation_lock:
             resp = await self._run_git_cmd(
-                "for-each-ref --count=10 --sort='-creatordate' "
-                f"--format={GIT_REF_FMT} 'refs/tags'")
-            tagged_commits: Dict[str, Any] = {}
+                f"for-each-ref --count={count} --sort='-creatordate' "
+                f"--contains=HEAD --format={GIT_REF_FMT} 'refs/tags'"
+            )
+            tagged_commits: Dict[str, str] = {}
             for line in resp.split('\n'):
                 parts = line.strip().split()
                 if len(parts) != 3 or parts[0] != "commit":
