@@ -294,10 +294,6 @@ class GitRepo:
         self.upstream_version = GitVersion(storage.get('upstream_version', "?"))
         self.current_commit: str = storage.get('current_commit', "?")
         self.upstream_commit: str = storage.get('upstream_commit', "?")
-        self.rollback_commit: str = storage.get('rollback_commit', self.current_commit)
-        self.rollback_branch: str = storage.get('rollback_branch', self.git_branch)
-        rbv = storage.get('rollback_version', self.current_version)
-        self.rollback_version = GitVersion(str(rbv))
         self.upstream_url: str = storage.get('upstream_url', "?")
         self.recovery_url: str = storage.get(
             'recovery_url',
@@ -309,6 +305,11 @@ class GitRepo:
         self.commits_behind: List[Dict[str, Any]] = storage.get('commits_behind', [])
         self.diverged: bool = storage.get("diverged", False)
         self.repo_corrupt: bool = storage.get('corrupt', False)
+        def_rbs = self.capture_state_for_rollback()
+        self.rollback_commit: str = storage.get('rollback_commit', self.current_commit)
+        self.rollback_branch: str = storage.get('rollback_branch', def_rbs["branch"])
+        rbv = storage.get('rollback_version', self.current_version)
+        self.rollback_version = GitVersion(str(rbv))
         self._check_warnings()
 
     def get_persistent_data(self) -> Dict[str, Any]:
@@ -816,7 +817,8 @@ class GitRepo:
     def capture_state_for_rollback(self) -> Dict[str, Any]:
         branch = self.git_branch
         if self.head_detached:
-            branch = f"{self.git_remote}/{self.git_branch}"
+            valid = "?" not in (self.git_remote, self.git_branch)
+            branch = f"{self.git_remote}/{self.git_branch}" if valid else "?"
         return {
             "commit": self.current_commit,
             "branch": branch,
@@ -825,16 +827,10 @@ class GitRepo:
 
     def set_rollback_state(self, rb_state: Optional[Dict[str, Any]]) -> None:
         if rb_state is None:
-            self.rollback_commit = self.current_commit
-            if self.head_detached:
-                self.rollback_branch = f"{self.git_remote}/{self.git_branch}"
-            else:
-                self.rollback_branch = self.git_branch
-            self.rollback_version = self.current_version
-        else:
-            self.rollback_commit = rb_state["commit"]
-            self.rollback_branch = rb_state["branch"]
-            self.rollback_version = rb_state["version"]
+            rb_state = self.capture_state_for_rollback()
+        self.rollback_commit = rb_state["commit"]
+        self.rollback_branch = rb_state["branch"]
+        self.rollback_version = rb_state["version"]
 
     async def get_commits_behind(self) -> List[Dict[str, Any]]:
         self._verify_repo()
