@@ -58,7 +58,7 @@ class GitDeploy(AppDeploy):
 
     async def _update_repo_state(self, need_fetch: bool = True) -> None:
         self._is_valid = False
-        await self.repo.initialize(need_fetch=need_fetch)
+        await self.repo.refresh_repo_state(need_fetch=need_fetch)
         self.log_info(f"Channel: {self.channel}")
         if not self.repo.check_is_valid():
             self.log_info("Repo validation check failed")
@@ -336,7 +336,7 @@ class GitRepo:
             'corrupt': self.repo_corrupt
         }
 
-    async def initialize(self, need_fetch: bool = True) -> None:
+    async def refresh_repo_state(self, need_fetch: bool = True) -> None:
         if self.init_evt is not None:
             # No need to initialize multiple requests
             await self.init_evt.wait()
@@ -346,12 +346,9 @@ class GitRepo:
         self.init_evt = asyncio.Event()
         self.git_messages.clear()
         try:
-            await self.update_repo_status()
+            await self._check_repo_status()
             self._verify_repo()
-            if not self.head_detached:
-                # lookup remote via git config
-                self.git_remote = await self.get_config_item(
-                    f"branch.{self.git_branch}.remote")
+            await self._find_current_branch()
 
             # Fetch the upstream url.  If the repo has been moved,
             # set the new url
@@ -376,17 +373,6 @@ class GitRepo:
             if need_fetch:
                 await self.fetch()
             self.diverged = await self.check_diverged()
-
-            # Populate list of current branches
-            blist = await self.list_branches()
-            self.branches = []
-            for branch in blist:
-                branch = branch.strip()
-                if branch[0] == "*":
-                    branch = branch[2:]
-                if branch[0] == "(":
-                    continue
-                self.branches.append(branch)
 
             # Parse GitHub Owner from URL
             owner_match = re.match(r"https?://[^/]+/([^/]+)", self.upstream_url)
@@ -432,6 +418,78 @@ class GitRepo:
         finally:
             self.init_evt.set()
             self.init_evt = None
+
+    async def _check_repo_status(self) -> bool:
+        async with self.git_operation_lock:
+            self.valid_git_repo = False
+            if not self.git_path.joinpath(".git").exists():
+                logging.info(
+                    f"Git Repo {self.alias}: path '{self.git_path}'"
+                    " is not a valid git repo")
+                return False
+            await self._wait_for_lock_release()
+            retries = 3
+            while retries:
+                self.git_messages.clear()
+                try:
+                    cmd = "status --porcelain -b"
+                    resp: Optional[str] = await self._run_git_cmd(cmd, retries=1)
+                except Exception:
+                    retries -= 1
+                    resp = None
+                    # Attempt to recover from "loose object" error
+                    if retries and self.repo_corrupt:
+                        if not await self._repair_loose_objects():
+                            # Since we are unable to recover, immediately
+                            # return
+                            return False
+                else:
+                    break
+            if resp is None:
+                return False
+            self.valid_git_repo = True
+            return True
+
+    async def _find_current_branch(self) -> None:
+        # Populate list of current branches
+        blist = await self.list_branches()
+        current_branch = ""
+        self.branches = []
+        for branch in blist:
+            branch = branch.strip()
+            if not branch:
+                continue
+            if branch[0] == "*":
+                branch = branch[2:].strip()
+                current_branch = branch
+            if branch[0] == "(":
+                continue
+            self.branches.append(branch)
+        if current_branch.startswith("(HEAD detached"):
+            self.head_detached = True
+            ref_name = current_branch.split()[-1][:-1]
+            remote_list = (await self.remote("")).splitlines()
+            for remote in remote_list:
+                remote = remote.strip()
+                if not remote:
+                    continue
+                if ref_name.startswith(remote):
+                    self.git_branch = ref_name[len(remote)+1:]
+                    self.git_remote = remote
+                    break
+            else:
+                if self.git_remote == "?":
+                    msg = "Resolve by manually checking out a branch via SSH."
+                else:
+                    prev = f"{self.git_remote}/{self.git_branch}"
+                    msg = f"Defaulting to previously tracked {prev}."
+                logging.info(f"Git Repo {self.alias}: {current_branch} {msg}")
+        else:
+            self.head_detached = False
+            self.git_branch = current_branch
+            self.git_remote = await self.get_config_item(
+                f"branch.{self.git_branch}.remote"
+            )
 
     async def _check_moved_origin(self) -> bool:
         detected_origin = self.upstream_url.lower().strip()
@@ -557,56 +615,6 @@ class GitRepo:
                 raise self.server.error(
                     f"Git Repo {self.alias}: Initialization failure")
 
-    async def update_repo_status(self) -> bool:
-        async with self.git_operation_lock:
-            self.valid_git_repo = False
-            if not self.git_path.joinpath(".git").exists():
-                logging.info(
-                    f"Git Repo {self.alias}: path '{self.git_path}'"
-                    " is not a valid git repo")
-                return False
-            await self._wait_for_lock_release()
-            retries = 3
-            while retries:
-                self.git_messages.clear()
-                try:
-                    resp: Optional[str] = await self._run_git_cmd(
-                        "status -u no", retries=1)
-                except Exception:
-                    retries -= 1
-                    resp = None
-                    # Attempt to recover from "loose object" error
-                    if retries and self.repo_corrupt:
-                        if not await self._repair_loose_objects():
-                            # Since we are unable to recover, immediately
-                            # return
-                            return False
-                else:
-                    break
-            if resp is None:
-                return False
-            resp = resp.strip().split('\n', 1)[0]
-            self.head_detached = resp.startswith("HEAD detached")
-            branch_info = resp.split()[-1]
-            if self.head_detached:
-                bparts = branch_info.split("/", 1)
-                if len(bparts) == 2:
-                    self.git_remote, self.git_branch = bparts
-                else:
-                    if self.git_remote == "?":
-                        msg = "Resolve by manually checking out" \
-                            " a branch via SSH."
-                    else:
-                        msg = "Defaulting to previously tracked " \
-                            f"{self.git_remote}/{self.git_branch}."
-                    logging.info(
-                        f"Git Repo {self.alias}: HEAD detached on untracked "
-                        f"commit {branch_info}. {msg}")
-            else:
-                self.git_branch = branch_info
-            self.valid_git_repo = True
-            return True
-
     async def check_diverged(self) -> bool:
         self._verify_repo(check_remote=True)
         if self.head_detached:
@@ -726,7 +734,7 @@ class GitRepo:
     async def list_branches(self) -> List[str]:
         self._verify_repo()
         async with self.git_operation_lock:
-            resp = await self._run_git_cmd("branch --list")
+            resp = await self._run_git_cmd("branch --list --no-color")
             return resp.strip().split("\n")
 
     async def remote(self, command: str) -> str:
