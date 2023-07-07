@@ -242,22 +242,24 @@ GIT_REF_FMT = (
 )
 
 class GitRepo:
-    def __init__(self,
-                 cmd_helper: CommandHelper,
-                 git_path: pathlib.Path,
-                 alias: str,
-                 origin_url: str,
-                 moved_origin_url: Optional[str],
-                 primary_branch: str,
-                 channel: Channel
-                 ) -> None:
+    def __init__(
+        self,
+        cmd_helper: CommandHelper,
+        src_path: pathlib.Path,
+        alias: str,
+        origin_url: str,
+        moved_origin_url: Optional[str],
+        primary_branch: str,
+        channel: Channel
+    ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
         self.alias = alias
-        self.git_path = git_path
-        git_dir = git_path.parent
-        git_base = git_path.name
+        self.src_path = src_path
+        git_dir = src_path.parent
+        git_base = src_path.name
         self.backup_path = git_dir.joinpath(f".{git_base}_repo_backup")
+        self.git_folder_path = src_path.joinpath(".git")
         self.origin_url = origin_url
         if not self.origin_url.endswith(".git"):
             self.origin_url += ".git"
@@ -422,9 +424,18 @@ class GitRepo:
     async def _check_repo_status(self) -> bool:
         async with self.git_operation_lock:
             self.valid_git_repo = False
-            if not self.git_path.joinpath(".git").exists():
+            if self.git_folder_path.is_file():
+                # Submodules have a file that contain the path to
+                # the .git folder
+                eventloop = self.server.get_event_loop()
+                data = await eventloop.run_in_thread(self.git_folder_path.read_text)
+                ident, _, gitdir = data.partition(":")
+                if ident.strip() != "gitdir" or not gitdir.strip():
+                    return False
+                self.git_folder_path = pathlib.Path(gitdir).expanduser().resolve()
+            if not self.git_folder_path.is_dir():
                 logging.info(
-                    f"Git Repo {self.alias}: path '{self.git_path}'"
+                    f"Git Repo {self.alias}: path '{self.src_path}'"
                     " is not a valid git repo")
                 return False
             await self._wait_for_lock_release()
@@ -643,7 +654,7 @@ class GitRepo:
             f"Git Repo {self.alias} Detected:\n"
             f"Owner: {self.git_owner}\n"
             f"Repository Name: {self.git_repo_name}\n"
-            f"Path: {self.git_path}\n"
+            f"Path: {self.src_path}\n"
             f"Remote: {self.git_remote}\n"
             f"Branch: {self.git_branch}\n"
             f"Remote URL: {self.upstream_url}\n"
@@ -804,10 +815,10 @@ class GitRepo:
                 self.cmd_helper.notify_update_response(
                     f"Git Repo {self.alias}: Git Clone Failed")
                 raise self.server.error("Git Clone Error") from e
-            if self.git_path.exists():
-                await event_loop.run_in_thread(shutil.rmtree, self.git_path)
+            if self.src_path.exists():
+                await event_loop.run_in_thread(shutil.rmtree, self.src_path)
             await event_loop.run_in_thread(
-                shutil.move, str(self.backup_path), str(self.git_path))
+                shutil.move, str(self.backup_path), str(self.src_path))
             self.repo_corrupt = False
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Git Clone Complete")
@@ -918,7 +929,7 @@ class GitRepo:
         return self.current_commit == self.upstream_commit
 
     async def _check_lock_file_exists(self, remove: bool = False) -> bool:
-        lock_path = self.git_path.joinpath(".git/index.lock")
+        lock_path = self.git_folder_path.joinpath("index.lock")
         if lock_path.is_file():
             if remove:
                 logging.info(f"Git Repo {self.alias}: Git lock file found "
@@ -952,7 +963,7 @@ class GitRepo:
         try:
             await self.cmd_helper.run_cmd_with_response(
                 "find .git/objects/ -type f -empty | xargs rm",
-                timeout=10., retries=1, cwd=str(self.git_path))
+                timeout=10., retries=1, cwd=str(self.src_path))
             await self._run_git_cmd_async(
                 "fetch --all -p", retries=1, fix_loose=False)
             await self._run_git_cmd("fsck --full", timeout=300., retries=1)
@@ -984,7 +995,7 @@ class GitRepo:
         env = os.environ.copy()
         env.update(GIT_ENV_VARS)
         if need_git_path:
-            git_cmd = f"git -C {self.git_path} {cmd}"
+            git_cmd = f"git -C {self.src_path} {cmd}"
         else:
             git_cmd = f"git {cmd}"
         scmd = self.cmd_helper.build_shell_command(
@@ -1064,7 +1075,7 @@ class GitRepo:
                            ) -> str:
         try:
             return await self.cmd_helper.run_cmd_with_response(
-                f"git -C {self.git_path} {git_args}",
+                f"git -C {self.src_path} {git_args}",
                 timeout=timeout, retries=retries, env=env, sig_idx=2)
         except self.cmd_helper.scmd_error as e:
             stdout = e.stdout.decode().strip()
