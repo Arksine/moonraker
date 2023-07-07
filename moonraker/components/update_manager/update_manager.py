@@ -236,7 +236,9 @@ class UpdateManager:
 
     async def _handle_auto_refresh(self, eventtime: float) -> float:
         cur_hour = time.localtime(time.time()).tm_hour
+        log_remaining_time = True
         if self.initial_refresh_complete:
+            log_remaining_time = False
             # Update when the local time is between 12AM and 5AM
             if cur_hour >= MAX_UPDATE_HOUR:
                 return eventtime + UPDATE_REFRESH_INTERVAL
@@ -256,7 +258,7 @@ class UpdateManager:
         async with self.cmd_request_lock:
             try:
                 for name, updater in list(self.updaters.items()):
-                    if updater.needs_refresh():
+                    if updater.needs_refresh(log_remaining_time):
                         await updater.refresh()
                         need_notify = True
             except Exception:

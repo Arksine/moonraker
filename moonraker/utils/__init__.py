@@ -250,3 +250,17 @@ def get_unix_peer_credentials(
         "user_id": uid,
         "group_id": gid
     }
+
+def pretty_print_time(seconds: int) -> str:
+    if seconds == 0:
+        return "0 Seconds"
+    fmt_list: List[str] = []
+    times: Dict[str, int] = {}
+    times["Day"], seconds = divmod(seconds, 86400)
+    times["Hour"], seconds = divmod(seconds, 3600)
+    times["Minute"], times["Second"] = divmod(seconds, 60)
+    for ident, val in times.items():
+        if val == 0:
+            continue
+        fmt_list.append(f"{val} {ident}" if val == 1 else f"{val} {ident}s")
+    return ", ".join(fmt_list)
