@@ -25,7 +25,8 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
-    from ...components import shell_command
+    from ..shell_command import ShellCommand
+    from ..machine import Machine
     from .update_manager import CommandHelper
     from ..http_client import HttpClient
 
@@ -45,7 +46,7 @@ class GitDeploy(AppDeploy):
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
-        self.repo.restore_state(storage)
+        await self.repo.restore_state(storage)
         if not self.needs_refresh():
             self.repo.log_repo_info()
         return storage
@@ -226,6 +227,9 @@ class GitDeploy(AppDeploy):
                 except Exception:
                     self.notify_status("Node Package Update failed")
 
+    async def close(self) -> None:
+        await self.repo.unset_current_instance()
+
 
 GIT_ASYNC_TIMEOUT = 300.
 GIT_ENV_VARS = {
@@ -276,6 +280,7 @@ class GitRepo:
             """
 
         self.repo_warnings: List[str] = []
+        self.managing_instances: List[str] = []
         self.init_evt: Optional[asyncio.Event] = None
         self.initialized: bool = False
         self.git_operation_lock = asyncio.Lock()
@@ -283,7 +288,7 @@ class GitRepo:
         self.fetch_input_recd: bool = False
         self.channel = channel
 
-    def restore_state(self, storage: Dict[str, Any]) -> None:
+    async def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
         self.git_owner: str = storage.get('git_owner', "?")
         self.git_repo_name: str = storage.get('git_repo_name', "?")
@@ -312,6 +317,8 @@ class GitRepo:
         self.rollback_branch: str = storage.get('rollback_branch', def_rbs["branch"])
         rbv = storage.get('rollback_version', self.current_version)
         self.rollback_version = GitVersion(str(rbv))
+        if self.valid_git_repo:
+            await self.set_current_instance()
         self._check_warnings()
 
     def get_persistent_data(self) -> Dict[str, Any]:
@@ -459,7 +466,8 @@ class GitRepo:
             if resp is None:
                 return False
             self.valid_git_repo = True
-            return True
+        await self.set_current_instance()
+        return True
 
     async def _find_current_branch(self) -> None:
         # Populate list of current branches
@@ -498,9 +506,8 @@ class GitRepo:
         else:
             self.head_detached = False
             self.git_branch = current_branch
-            self.git_remote = await self.get_config_item(
-                f"branch.{self.git_branch}.remote"
-            )
+            rkey = f"branch.{self.git_branch}.remote"
+            self.git_remote = (await self.config_get(rkey)) or "?"
 
     async def _check_moved_origin(self) -> bool:
         detected_origin = self.upstream_url.lower().strip()
@@ -692,6 +699,17 @@ class GitRepo:
             self.repo_warnings.append("Detached HEAD detected")
         if self.diverged:
             self.repo_warnings.append("Repo has diverged from remote")
+        if len(self.managing_instances) > 1:
+            instances = "\n".join([f"  {ins}" for ins in self.managing_instances])
+            self.repo_warnings.append(
+                f"Multiple instances of Moonraker managing this repo:\n"
+                f"{instances}"
+            )
+        ro_msg = f"Git Repo {self.alias}: No warnings detected"
+        if self.repo_warnings:
+            ro_msg = f"Git Repo {self.alias} Warnings Detected:\n"
+            ro_msg += "\n".join(self.repo_warnings)
+        self.server.add_log_rollover_item(f"umgr_{self.alias}_warn", ro_msg, log=False)
 
     def check_is_valid(self):
         return not self.head_detached and not self.diverged
@@ -773,11 +791,50 @@ class GitRepo:
             resp = await self._run_git_cmd(f"rev-list {args}".strip())
             return resp.strip()
 
-    async def get_config_item(self, item: str) -> str:
+    async def config_get(
+        self,
+        key: str,
+        pattern: str = "",
+        get_all: bool = False,
+        local_only: bool = False
+    ) -> Optional[str]:
+        local = "--local " if local_only else ""
+        cmd = f"{local}--get-all" if get_all else f"{local}--get"
+        args = f"{cmd} {key} '{pattern}'" if pattern else f"{cmd} {key}"
+        try:
+            return await self.config_cmd(args)
+        except self.cmd_helper.scmd_error as e:
+            if e.return_code == 1:
+                return None
+            raise
+
+    async def config_set(self, key: str, value: str) -> None:
+        await self.config_cmd(f"{key} '{value}'")
+
+    async def config_add(self, key: str, value: str) -> None:
+        await self.config_cmd(f"--add {key} '{value}'")
+
+    async def config_unset(
+        self, key: str, pattern: str = "", unset_all: bool = False
+    ) -> None:
+        cmd = "--unset-all" if unset_all else "--unset"
+        args = f"{cmd} {key} '{pattern}'" if pattern else f"{cmd} {key}"
+        await self.config_cmd(args)
+
+    async def config_cmd(self, args: str) -> str:
         self._verify_repo()
+        verbose = self.server.is_verbose_enabled()
         async with self.git_operation_lock:
-            resp = await self._run_git_cmd(f"config --get {item}")
-            return resp.strip()
+            for attempt in range(3):
+                try:
+                    return await self._run_git_cmd(
+                        f"config {args}", retries=1, log_complete=verbose
+                    )
+                except self.cmd_helper.scmd_error as e:
+                    if 1 <= (e.return_code or 10) <= 6 or attempt == 2:
+                        raise
+            raise self.server.error("Failed to run git-config")
+
 
     async def checkout(self, branch: Optional[str] = None) -> None:
         self._verify_repo()
@@ -891,6 +948,50 @@ class GitRepo:
                 tagged_commits[sha] = tag
             # Return tagged commits as SHA keys mapped to tag values
             return tagged_commits
+
+    async def set_current_instance(self) -> None:
+        # Check to see if multiple instances of Moonraker are configured
+        # to manage this repo
+        full_id = self._get_instance_id()
+        self.managing_instances.clear()
+        try:
+            instances = await self.config_get(
+                "moonraker.instance", get_all=True, local_only=True
+            )
+            if instances is None:
+                await self.config_set("moonraker.instance", full_id)
+                self.managing_instances = [full_id]
+            else:
+                det_instances = [
+                    ins.strip() for ins in instances.split("\n") if ins.strip()
+                ]
+                if full_id not in det_instances:
+                    await self.config_add("moonraker.instance", full_id)
+                    det_instances.append(full_id)
+                self.managing_instances = det_instances
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logging.info(
+                f"Git Repo {self.alias}: Moonraker Instance Validation Error, {e}"
+            )
+
+    async def unset_current_instance(self) -> None:
+        full_id = self._get_instance_id()
+        if full_id not in self.managing_instances:
+            return
+        try:
+            await self.config_unset("moonraker.instance", pattern=full_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logging.info(f"Git repo {self.alias}: Error removing instance, {e}")
+
+    def _get_instance_id(self) -> str:
+        machine: Machine = self.server.lookup_component("machine")
+        cur_name = machine.unit_name
+        cur_uuid: str = self.server.get_app_args()["instance_uuid"]
+        return f"{cur_name}@{cur_uuid}"
 
     def get_repo_status(self) -> Dict[str, Any]:
         return {
@@ -1043,10 +1144,9 @@ class GitRepo:
             logging.debug(
                 f"Git Repo {self.alias}: {out}")
 
-    async def _check_process_active(self,
-                                    scmd: shell_command.ShellCommand,
-                                    cmd_name: str
-                                    ) -> None:
+    async def _check_process_active(
+        self, scmd: ShellCommand, cmd_name: str
+    ) -> None:
         ret = scmd.get_return_code()
         if ret is not None:
             logging.debug(f"Git Repo {self.alias}: {cmd_name} returned")
@@ -1066,17 +1166,24 @@ class GitRepo:
             # Cancel with SIGKILL
             await scmd.cancel(2)
 
-    async def _run_git_cmd(self,
-                           git_args: str,
-                           timeout: float = 20.,
-                           retries: int = 5,
-                           env: Optional[Dict[str, str]] = None,
-                           corrupt_msg: str = "fatal: "
-                           ) -> str:
+    async def _run_git_cmd(
+        self,
+        git_args: str,
+        timeout: float = 20.,
+        retries: int = 5,
+        env: Optional[Dict[str, str]] = None,
+        corrupt_msg: str = "fatal: ",
+        log_complete: bool = True
+    ) -> str:
         try:
             return await self.cmd_helper.run_cmd_with_response(
                 f"git -C {self.src_path} {git_args}",
-                timeout=timeout, retries=retries, env=env, sig_idx=2)
+                timeout=timeout,
+                retries=retries,
+                env=env,
+                sig_idx=2,
+                log_complete=log_complete
+            )
         except self.cmd_helper.scmd_error as e:
             stdout = e.stdout.decode().strip()
             stderr = e.stderr.decode().strip()

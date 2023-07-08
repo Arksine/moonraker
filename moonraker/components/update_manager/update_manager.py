@@ -484,9 +484,13 @@ class UpdateManager:
                 self.cmd_helper.clear_update_info()
         return "ok"
 
-    def close(self) -> None:
+    async def close(self) -> None:
         if self.refresh_timer is not None:
             self.refresh_timer.stop()
+        for updater in self.updaters.values():
+            ret = updater.close()
+            if ret is not None:
+                await ret
 
 class CommandHelper:
     def __init__(

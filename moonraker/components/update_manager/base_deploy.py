@@ -9,7 +9,7 @@ import logging
 import time
 from ...utils import pretty_print_time
 
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Dict, Any, Optional, Coroutine
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ...utils import ServerError
@@ -110,3 +110,6 @@ class BaseDeploy:
         log_msg = f"{self.prefix}{msg}"
         logging.debug(log_msg)
         self.cmd_helper.notify_update_response(log_msg, is_complete)
+
+    def close(self) -> Optional[Coroutine]:
+        return None
