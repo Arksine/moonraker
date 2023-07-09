@@ -47,6 +47,7 @@ class GitDeploy(AppDeploy):
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
         await self.repo.restore_state(storage)
+        self._is_valid = self.repo.is_valid()
         if not self.needs_refresh():
             self.repo.log_repo_info()
         return storage
@@ -61,16 +62,10 @@ class GitDeploy(AppDeploy):
         self._is_valid = False
         await self.repo.refresh_repo_state(need_fetch=need_fetch)
         self.log_info(f"Channel: {self.channel}")
-        if not self.repo.check_is_valid():
-            self.log_info("Repo validation check failed")
-            if self.server.is_debug_enabled():
-                self._is_valid = True
-                self.log_info(
-                    "Repo debug enabled, overriding validity checks")
-            else:
-                self.log_info("Updates on repo disabled")
+        self._is_valid = self.repo.is_valid()
+        if not self._is_valid:
+            self.log_info("Repo validation check failed, updates disabled")
         else:
-            self._is_valid = True
             self.log_info("Validity check for git repo passed")
         self._save_state()
 
@@ -103,6 +98,11 @@ class GitDeploy(AppDeploy):
         self.notify_status("Attempting Repo Recovery...")
         dep_info = await self._collect_dependency_info()
         if hard:
+            if self.repo.is_submodule_or_worktree():
+                raise self.server.error(
+                    f"Cannot re-clone git repo {self.name}, it is either "
+                    f"a submodule or worktree."
+                )
             await self.repo.clone()
             if self.channel != Channel.DEV:
                 if self.repo.upstream_commit != "?":
@@ -287,6 +287,7 @@ class GitRepo:
         self.fetch_timeout_handle: Optional[asyncio.Handle] = None
         self.fetch_input_recd: bool = False
         self.channel = channel
+        self.is_shallow = False
 
     async def restore_state(self, storage: Dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
@@ -310,6 +311,7 @@ class GitRepo:
         self.head_detached: bool = storage.get('head_detached', False)
         self.git_messages: List[str] = storage.get('git_messages', [])
         self.commits_behind: List[Dict[str, Any]] = storage.get('commits_behind', [])
+        self.commits_behind_count: int = storage.get('cbh_count', 0)
         self.diverged: bool = storage.get("diverged", False)
         self.repo_corrupt: bool = storage.get('corrupt', False)
         def_rbs = self.capture_state_for_rollback()
@@ -317,6 +319,8 @@ class GitRepo:
         self.rollback_branch: str = storage.get('rollback_branch', def_rbs["branch"])
         rbv = storage.get('rollback_version', self.current_version)
         self.rollback_version = GitVersion(str(rbv))
+        if not await self._detect_git_dir():
+            self.valid_git_repo = False
         if self.valid_git_repo:
             await self.set_current_instance()
         self._check_warnings()
@@ -341,6 +345,7 @@ class GitRepo:
             'head_detached': self.head_detached,
             'git_messages': self.git_messages,
             'commits_behind': self.commits_behind,
+            'cbh_count': self.commits_behind_count,
             'diverged': self.diverged,
             'corrupt': self.repo_corrupt
         }
@@ -402,8 +407,8 @@ class GitRepo:
 
             # Get Commits Behind
             self.commits_behind = []
-            cbh = await self.get_commits_behind()
-            if cbh:
+            if self.commits_behind_count > 0:
+                cbh = await self.get_commits_behind()
                 tagged_commits = await self.get_tagged_commits()
                 debug_msg = '\n'.join([f"{k}: {v}" for k, v in tagged_commits.items()])
                 logging.debug(f"Git Repo {self.alias}: Tagged Commits\n{debug_msg}")
@@ -431,16 +436,7 @@ class GitRepo:
     async def _check_repo_status(self) -> bool:
         async with self.git_operation_lock:
             self.valid_git_repo = False
-            if self.git_folder_path.is_file():
-                # Submodules have a file that contain the path to
-                # the .git folder
-                eventloop = self.server.get_event_loop()
-                data = await eventloop.run_in_thread(self.git_folder_path.read_text)
-                ident, _, gitdir = data.partition(":")
-                if ident.strip() != "gitdir" or not gitdir.strip():
-                    return False
-                self.git_folder_path = pathlib.Path(gitdir).expanduser().resolve()
-            if not self.git_folder_path.is_dir():
+            if not await self._detect_git_dir():
                 logging.info(
                     f"Git Repo {self.alias}: path '{self.src_path}'"
                     " is not a valid git repo")
@@ -468,6 +464,21 @@ class GitRepo:
             self.valid_git_repo = True
         await self.set_current_instance()
         return True
+
+    async def _detect_git_dir(self) -> bool:
+        if self.git_folder_path.is_file():
+            # Submodules have a file that contain the path to
+            # the .git folder
+            eventloop = self.server.get_event_loop()
+            data = await eventloop.run_in_thread(self.git_folder_path.read_text)
+            ident, _, gitdir = data.partition(":")
+            if ident.strip() != "gitdir" or not gitdir.strip():
+                return False
+            self.git_folder_path = pathlib.Path(gitdir).expanduser().resolve()
+        if self.git_folder_path.is_dir():
+            self.is_shallow = self.git_folder_path.joinpath("shallow").is_file()
+            return True
+        return False
 
     async def _find_current_branch(self) -> None:
         # Populate list of current branches
@@ -559,6 +570,7 @@ class GitRepo:
         return moved
 
     async def _get_upstream_version(self) -> GitVersion:
+        self.commits_behind_count = 0
         if self.channel == Channel.DEV:
             self.upstream_commit = await self.rev_parse(
                 f"{self.git_remote}/{self.git_branch}"
@@ -581,6 +593,9 @@ class GitRepo:
                     upstream_ver_str = tag
                     break
             self.upstream_commit = upstream_commit
+        if self.upstream_commit != "?":
+            rl_args = f"HEAD..{self.upstream_commit} --count"
+            self.commits_behind_count = int(await self.rev_list(rl_args))
         return GitVersion(upstream_ver_str)
 
     async def _set_versions(
@@ -612,8 +627,7 @@ class GitRepo:
                     count = await self.rev_list(f"{self.upstream_commit} --count")
                 else:
                     log_msg += "\nRemote has diverged, approximating dev count. "
-                    count = await self.rev_list(f"{self.upstream_commit}..HEAD --count")
-                    count = str(int(count) + current_version.dev_count)
+                    count = str(self.commits_behind_count + current_version.dev_count)
                 upstream_version = GitVersion(f"{tag}-{count}-inferred")
                 log_msg += f"Falling back to inferred version: {upstream_version}"
                 logging.info(log_msg)
@@ -675,7 +689,8 @@ class GitRepo:
             f"Rollback Version: {self.rollback_version}\n"
             f"Is Dirty: {self.current_version.dirty}\n"
             f"Is Detached: {self.head_detached}\n"
-            f"Commits Behind: {len(self.commits_behind)}\n"
+            f"Is Shallow: {self.is_shallow}\n"
+            f"Commits Behind Count: {self.commits_behind_count}\n"
             f"Diverged: {self.diverged}"
             f"{warnings}"
         )
@@ -699,6 +714,8 @@ class GitRepo:
             self.repo_warnings.append("Detached HEAD detected")
         if self.diverged:
             self.repo_warnings.append("Repo has diverged from remote")
+        if self.is_dirty():
+            self.repo_warnings.append("Repo has modified files (dirty)")
         if len(self.managing_instances) > 1:
             instances = "\n".join([f"  {ins}" for ins in self.managing_instances])
             self.repo_warnings.append(
@@ -710,9 +727,6 @@ class GitRepo:
             ro_msg = f"Git Repo {self.alias} Warnings Detected:\n"
             ro_msg += "\n".join(self.repo_warnings)
         self.server.add_log_rollover_item(f"umgr_{self.alias}_warn", ro_msg, log=False)
-
-    def check_is_valid(self):
-        return not self.head_detached and not self.diverged
 
     def _verify_repo(self, check_remote: bool = False) -> None:
         if not self.valid_git_repo:
@@ -1010,6 +1024,7 @@ class GitRepo:
             'is_dirty': self.current_version.dirty,
             'detached': self.head_detached,
             'commits_behind': self.commits_behind,
+            'commits_behind_count': self.commits_behind_count,
             'git_messages': self.git_messages,
             'full_version_string': self.current_version.full_version,
             'pristine': not self.current_version.dirty,
@@ -1028,6 +1043,31 @@ class GitRepo:
 
     def is_current(self) -> bool:
         return self.current_commit == self.upstream_commit
+
+    def is_submodule_or_worktree(self):
+        return (
+            self.src_path.joinpath(".git").is_file() and
+            self.git_folder_path.parent.name in ("modules", "worktrees")
+        )
+
+    def is_valid(self) -> bool:
+        return (
+            not self.is_damaged() and
+            not self.has_recoverable_errors()
+        )
+
+    def is_damaged(self) -> bool:
+        # A damaged repo requires a clone to recover
+        return not self.valid_git_repo or self.repo_corrupt
+
+    def has_recoverable_errors(self) -> bool:
+        # These errors should be recoverable using a git reset
+        detached_err = False if self.server.is_debug_enabled() else self.head_detached
+        return (
+            self.diverged or
+            self.is_dirty() or
+            detached_err
+        )
 
     async def _check_lock_file_exists(self, remove: bool = False) -> bool:
         lock_path = self.git_folder_path.joinpath("index.lock")
