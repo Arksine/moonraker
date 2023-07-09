@@ -2468,9 +2468,11 @@ class MetadataStorage:
         if self.enable_object_proc:
             timeout = 300.
             cmd += " --check-objects"
-        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
-        scmd = shell_cmd.build_shell_command(cmd, log_stderr=True)
-        result = await scmd.run_with_response(timeout=timeout)
+        result = bytearray()
+        sc: SCMDComp = self.server.lookup_component('shell_command')
+        scmd = sc.build_shell_command(cmd, callback=result.extend, log_stderr=True)
+        if not await scmd.run(timeout=timeout):
+            raise self.server.error("Extract Metadata returned with error")
         try:
             decoded_resp: Dict[str, Any] = json.loads(result.strip())
         except Exception:
