@@ -581,8 +581,8 @@ class JsonRPC:
     ) -> Dict[str, Any]:
         if method_name:
             method_name = f"Requested Method: {method_name}, "
-        log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}\n{msg}"
-        if is_exc:
+        log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}, Message: {msg}"
+        if is_exc and self.verbose:
             logging.exception(log_msg)
         else:
             logging.info(log_msg)
