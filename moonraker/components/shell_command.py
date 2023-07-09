@@ -46,7 +46,6 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
         self,
         limit: int,
         loop: asyncio.events.AbstractEventLoop,
-        program_name: str = "",
         std_out_cb: OutputCallback = None,
         std_err_cb: OutputCallback = None,
         log_stderr: bool = False
@@ -54,7 +53,6 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
         self._loop = loop
         self._pipe_fds: List[int] = []
         super().__init__(limit, loop)
-        self.program_name = program_name
         self.std_out_cb = std_out_cb
         self.std_err_cb = std_err_cb
         self.log_stderr = log_stderr
@@ -94,7 +92,7 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
                     msg = data.decode(errors='ignore')
                 else:
                     msg = data
-                logging.info(f"{self.program_name}: {msg}")
+                logging.info(msg)
         if cb is not None:
             if isinstance(data, str):
                 data = data.encode()
@@ -288,9 +286,9 @@ class ShellCommand:
 
         def protocol_factory():
             return ShellCommandProtocol(
-                limit=2**20, loop=loop, program_name=self.command[0],
-                std_out_cb=self.std_out_cb, std_err_cb=self.std_err_cb,
-                log_stderr=self.log_stderr)
+                limit=2**20, loop=loop, std_out_cb=self.std_out_cb,
+                std_err_cb=self.std_err_cb, log_stderr=self.log_stderr
+            )
         try:
             stdpipe: Optional[int] = None
             if has_input:
