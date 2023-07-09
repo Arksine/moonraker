@@ -17,6 +17,7 @@ import tempfile
 import zipfile
 import shutil
 import uuid
+import logging
 from PIL import Image
 
 # Annotation imports
@@ -35,9 +36,8 @@ if TYPE_CHECKING:
 UFP_MODEL_PATH = "/3D/model.gcode"
 UFP_THUMB_PATH = "/Metadata/thumbnail.png"
 
-def log_to_stderr(msg: str) -> None:
-    sys.stderr.write(f"{msg}\n")
-    sys.stderr.flush()
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+logger = logging.getLogger("metadata")
 
 # regex helpers
 def _regex_find_floats(pattern: str,
@@ -144,12 +144,12 @@ class BaseSlicer(object):
         if match is not None:
             # Objects already processed
             fname = os.path.basename(self.path)
-            log_to_stderr(
+            logger.info(
                 f"File '{fname}' currently supports cancellation, "
                 "processing aborted"
             )
             if match.group(1).startswith("DEFINE_OBJECT"):
-                log_to_stderr(
+                logger.info(
                     "Legacy object processing detected.  This is not "
                     "compatible with official versions of Klipper."
                 )
@@ -229,7 +229,7 @@ class BaseSlicer(object):
             try:
                 os.mkdir(thumb_dir)
             except Exception:
-                log_to_stderr(f"Unable to create thumb dir: {thumb_dir}")
+                logger.info(f"Unable to create thumb dir: {thumb_dir}")
                 return None
         thumb_base = os.path.splitext(os.path.basename(self.path))[0]
         parsed_matches: List[Dict[str, Any]] = []
@@ -239,12 +239,12 @@ class BaseSlicer(object):
             info = _regex_find_ints(r".*", lines[0])
             data = "".join(lines[1:-1])
             if len(info) != 3:
-                log_to_stderr(
+                logger.info(
                     f"MetadataError: Error parsing thumbnail"
                     f" header: {lines[0]}")
                 continue
             if len(data) != info[2]:
-                log_to_stderr(
+                logger.info(
                     f"MetadataError: Thumbnail Size Mismatch: "
                     f"detected {info[2]}, actual {len(data)}")
                 continue
@@ -283,7 +283,7 @@ class BaseSlicer(object):
                         'relative_path': rel_path_small
                     })
             except Exception as e:
-                log_to_stderr(str(e))
+                logger.info(str(e))
         return parsed_matches
 
     def parse_layer_count(self) -> Optional[int]:
@@ -564,7 +564,7 @@ class Cura(BaseSlicer):
                     'relative_path': rel_path_small
                 })
         except Exception as e:
-            log_to_stderr(str(e))
+            logger.info(str(e))
             return None
         return thumbs
 
@@ -978,10 +978,10 @@ def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
             preprocess_m486
         )
     except ImportError:
-        log_to_stderr("Module 'preprocess-cancellation' failed to load")
+        logger.info("Module 'preprocess-cancellation' failed to load")
         return False
     fname = os.path.basename(file_path)
-    log_to_stderr(
+    logger.info(
         f"Performing Object Processing on file: {fname}, "
         f"sliced by {name}"
     )
@@ -999,7 +999,7 @@ def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
                     elif isinstance(slicer, IdeaMaker):
                         processor = preprocess_ideamaker
                     else:
-                        log_to_stderr(
+                        logger.info(
                             f"Object Processing Failed, slicer {name}"
                             "not supported"
                         )
@@ -1007,7 +1007,7 @@ def process_objects(file_path: str, slicer: BaseSlicer, name: str) -> bool:
                     for line in processor(in_file):
                         out_file.write(line)
                 except Exception as e:
-                    log_to_stderr(f"Object processing failed: {e}")
+                    logger.info(f"Object processing failed: {e}")
                     return False
         if os.path.islink(file_path):
             file_path = os.path.realpath(file_path)
@@ -1065,7 +1065,7 @@ def extract_metadata(
 
 def extract_ufp(ufp_path: str, dest_path: str) -> None:
     if not os.path.isfile(ufp_path):
-        log_to_stderr(f"UFP file Not Found: {ufp_path}")
+        logger.info(f"UFP file Not Found: {ufp_path}")
         sys.exit(-1)
     thumb_name = os.path.splitext(
         os.path.basename(dest_path))[0] + ".png"
@@ -1088,12 +1088,12 @@ def extract_ufp(ufp_path: str, dest_path: str) -> None:
                     os.mkdir(dest_thumb_dir)
                 shutil.move(tmp_thumb_path, dest_thumb_path)
     except Exception:
-        log_to_stderr(traceback.format_exc())
+        logger.info(traceback.format_exc())
         sys.exit(-1)
     try:
         os.remove(ufp_path)
     except Exception:
-        log_to_stderr(f"Error removing ufp file: {ufp_path}")
+        logger.info(f"Error removing ufp file: {ufp_path}")
 
 def main(path: str,
          filename: str,
@@ -1105,12 +1105,12 @@ def main(path: str,
         extract_ufp(ufp, file_path)
     metadata: Dict[str, Any] = {}
     if not os.path.isfile(file_path):
-        log_to_stderr(f"File Not Found: {file_path}")
+        logger.info(f"File Not Found: {file_path}")
         sys.exit(-1)
     try:
         metadata = extract_metadata(file_path, check_objects)
     except Exception:
-        log_to_stderr(traceback.format_exc())
+        logger.info(traceback.format_exc())
         sys.exit(-1)
     fd = sys.stdout.fileno()
     data = json.dumps(
@@ -1145,5 +1145,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     check_objects = args.check_objects
     enabled_msg = "enabled" if check_objects else "disabled"
-    log_to_stderr(f"Object Processing is {enabled_msg}")
+    logger.info(f"Object Processing is {enabled_msg}")
     main(args.path, args.filename, args.ufp, check_objects)
