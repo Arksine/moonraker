@@ -881,6 +881,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
     def prepare(self) -> None:
         super(FileUploadHandler, self).prepare()
+        logging.info(f"Upload Request Received from {self.request.remote_ip}")
         fm: FileManager = self.server.lookup_component("file_manager")
         fm.check_write_enabled()
         if self.request.method == "POST":
@@ -932,6 +933,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
             debug_msg += f"\n{name}: {value}"
         debug_msg += f"\nChecksum: {calc_chksum}"
         logging.debug(debug_msg)
+        logging.info(f"Processing Uploaded File: {self._file.multipart_filename}")
         try:
             result = await self.file_manager.finalize_upload(form_args)
         except ServerError as e:
