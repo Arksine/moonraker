@@ -680,7 +680,8 @@ class PackageDeploy(BaseDeploy):
             except Exception:
                 pass
             else:
-                logging.info("PackageDeploy: Using PackageKit Provider")
+                self.log_info("PackageDeploy: PackageKit Provider Configured")
+                self.prefix = "PackageKit: "
                 try_fallback = False
         if try_fallback:
             # Check to see of the apt command is available
@@ -694,7 +695,8 @@ class PackageDeploy(BaseDeploy):
                     "Unable to initialize System Update Provider for "
                     f"distribution: {dist_id}")
             else:
-                logging.info("PackageDeploy: Using APT CLI Provider")
+                self.log_info("PackageDeploy: Using APT CLI Provider")
+                self.prefix = "Package Manager APT: "
                 provider = fallback
         self.provider = provider
         return storage
@@ -709,7 +711,7 @@ class PackageDeploy(BaseDeploy):
         except shell_cmd.error:
             return None
         # APT Command found should be available
-        logging.debug(f"APT package manager detected: {ret}")
+        self.log_debug(f"APT package manager detected: {ret}")
         provider = AptCliProvider(self.cmd_helper)
         try:
             await provider.initialize()
@@ -724,11 +726,12 @@ class PackageDeploy(BaseDeploy):
                 await self._update_package_cache(force=True)
             self.available_packages = await self.provider.get_packages()
             pkg_msg = "\n".join(self.available_packages)
-            logging.info(
+            self.log_info(
                 f"Detected {len(self.available_packages)} package updates:"
-                f"\n{pkg_msg}")
+                f"\n{pkg_msg}"
+            )
         except Exception:
-            logging.exception("Error Refreshing System Packages")
+            self.log_exc("Error Refreshing System Packages")
         # Update Persistent Storage
         self._save_state()
 
