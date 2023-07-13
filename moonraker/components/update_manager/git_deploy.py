@@ -98,26 +98,20 @@ class GitDeploy(AppDeploy):
         self.notify_status("Attempting Repo Recovery...")
         dep_info = await self._collect_dependency_info()
         if hard:
-            if self.repo.is_submodule_or_worktree():
-                raise self.server.error(
-                    f"Cannot re-clone git repo {self.name}, it is either "
-                    f"a submodule or worktree."
-                )
             await self.repo.clone()
-            if self.channel != Channel.DEV:
-                if self.repo.upstream_commit != "?":
-                    # If on beta or stable reset to the latest tagged
-                    # upstream commit
-                    await self.repo.reset()
-                else:
-                    self.notify_status(
-                        f"No upstream commit for repo on {self.channel} channel, "
-                        "skipping reset."
-                    )
             await self._update_repo_state()
         else:
             self.notify_status("Resetting Git Repo...")
-            await self.repo.reset()
+            reset_ref = await self.repo.get_recovery_ref()
+            if self.repo.is_dirty():
+                # Try to restore modified files.  If the attempt fails we
+                # can still try the reset
+                try:
+                    await self.repo.checkout("-- .")
+                except self.server.error:
+                    pass
+            await self.repo.checkout(self.primary_branch)
+            await self.repo.reset(reset_ref)
             await self._update_repo_state()
         self.repo.set_rollback_state(None)
 
@@ -647,24 +641,29 @@ class GitRepo:
                 raise self.server.error(
                     f"Git Repo {self.alias}: Initialization failure")
 
-    async def check_diverged(self) -> bool:
-        self._verify_repo(check_remote=True)
-        if self.head_detached:
-            return False
+    async def is_ancestor(self, ancestor_ref: str, descendent_ref: str) -> bool:
+        self._verify_repo()
+        cmd = f"merge-base --is-ancestor {ancestor_ref} {descendent_ref}"
         async with self.git_operation_lock:
-            cmd = f"merge-base --is-ancestor HEAD {self.git_remote}/{self.git_branch}"
             for _ in range(3):
                 try:
                     await self._run_git_cmd(cmd, retries=1, corrupt_msg="error: ")
                 except self.cmd_helper.scmd_error as err:
                     if err.return_code == 1:
-                        return True
+                        return False
                     if self.repo_corrupt:
                         raise
                 else:
                     break
-                await asyncio.sleep(.5)
+                await asyncio.sleep(.2)
+            return True
+
+    async def check_diverged(self) -> bool:
+        self._verify_repo(check_remote=True)
+        if self.head_detached:
             return False
+        descendent = f"{self.git_remote}/{self.git_branch}"
+        return not (await self.is_ancestor("HEAD", descendent))
 
     def log_repo_info(self) -> None:
         warnings = ""
@@ -868,6 +867,11 @@ class GitRepo:
             await self._run_git_cmd("fsck --full", timeout=300., retries=1)
 
     async def clone(self) -> None:
+        if self.is_submodule_or_worktree():
+            raise self.server.error(
+                f"Cannot clone git repo {self.alias}, it is a {self.get_repo_type()} "
+                "of another git repo."
+            )
         async with self.git_operation_lock:
             if self.recovery_url == "?":
                 raise self.server.error(
@@ -891,8 +895,20 @@ class GitRepo:
             await event_loop.run_in_thread(
                 shutil.move, str(self.backup_path), str(self.src_path))
             self.repo_corrupt = False
+            self.valid_git_repo = True
             self.cmd_helper.notify_update_response(
                 f"Git Repo {self.alias}: Git Clone Complete")
+        if self.current_commit != "?":
+            try:
+                can_reset = await self.is_ancestor(self.current_commit, "HEAD")
+            except self.server.error:
+                can_reset = False
+            if can_reset:
+                self.cmd_helper.notify_update_response(
+                    f"Git Repo {self.alias}: Moving HEAD to previous "
+                    f"commit {self.current_commit}"
+                )
+                await self.reset(self.current_commit)
 
     async def rollback(self) -> bool:
         if self.rollback_commit == "?" or self.rollback_branch == "?":
@@ -1068,6 +1084,35 @@ class GitRepo:
             self.is_dirty() or
             detached_err
         )
+
+    def get_repo_type(self) -> str:
+        type_name = self.git_folder_path.parent.name
+        if type_name == "modules":
+            return "submodule"
+        elif type_name == "worktrees":
+            return "worktree"
+        return "repo"
+
+    async def get_recovery_ref(self) -> str:
+        """ Fetch the best reference for a 'reset' recovery attempt
+
+        Returns the ref to reset to for "soft" recovery requests.  The
+        preference is to reset to the current commit, however that is
+        only possible if the commit is known and if it is an ancestor of
+        the primary branch.
+        """
+        remote = await self.config_get(f"branch.{self.primary_branch}.remote")
+        if remote is None:
+            raise self.server.error(
+                f"Failed to find remote for primary branch '{self.primary_branch}'"
+            )
+        upstream_ref = f"{remote}/{self.primary_branch}"
+        if (
+            self.current_commit != "?" and
+            await self.is_ancestor(self.current_commit, upstream_ref)
+        ):
+            return self.current_commit
+        return upstream_ref
 
     async def _check_lock_file_exists(self, remove: bool = False) -> bool:
         lock_path = self.git_folder_path.joinpath("index.lock")
