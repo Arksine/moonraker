@@ -962,11 +962,13 @@ class GitRepo:
             return commits_behind
 
     async def get_tagged_commits(self, count: int = 100) -> Dict[str, str]:
-        self._verify_repo()
+        self._verify_repo(check_remote=True)
+        tip = f"{self.git_remote}/{self.git_branch}"
+        cnt_arg = f"--count={count} " if count > 0 else ""
         async with self.git_operation_lock:
             resp = await self._run_git_cmd(
-                f"for-each-ref --count={count} --sort='-creatordate' "
-                f"--contains=HEAD --format={GIT_REF_FMT} 'refs/tags'"
+                f"for-each-ref {cnt_arg}--sort='-creatordate' --contains=HEAD "
+                f"--merged={tip} --format={GIT_REF_FMT} 'refs/tags'"
             )
             tagged_commits: Dict[str, str] = {}
             for line in resp.split('\n'):
