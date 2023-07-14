@@ -1219,17 +1219,20 @@ class WebClientDeploy(BaseDeploy):
         self._is_fallback = False
         eventloop = self.server.get_event_loop()
         self.warnings.clear()
+        repo_parent = source_info.find_git_repo(self.path)
+        homedir = pathlib.Path("~").expanduser()
         if not self._path_writable:
             self.warnings.append(
                 f"Location at option 'path: {self.path}' is not writable."
             )
         elif not self.path.is_dir():
             self.warnings.append(
-                f"Location at option 'path: {self.path}' does not exist."
+                f"Location at option 'path: {self.path}' is not a directory."
             )
-        elif source_info.within_git_repo(self.path):
+        elif repo_parent is not None and repo_parent != homedir:
             self.warnings.append(
-                f"Location at option 'path: {self.path}' is a git repo."
+                f"Location at option 'path: {self.path}' is within a git repo. Found "
+                f".git folder at '{repo_parent.joinpath('.git')}'"
             )
         else:
             rinfo = self.path.joinpath("release_info.json")

@@ -26,15 +26,15 @@ def is_git_repo(src_path: Optional[pathlib.Path] = None) -> bool:
         src_path = source_path()
     return src_path.joinpath(".git").is_dir()
 
-def within_git_repo(src_path: Optional[pathlib.Path] = None) -> bool:
+def find_git_repo(src_path: Optional[pathlib.Path] = None) -> Optional[pathlib.Path]:
     if src_path is None:
         src_path = source_path()
     if src_path.joinpath(".git").is_dir():
-        return True
+        return src_path
     for parent in src_path.parents:
         if parent.joinpath(".git").is_dir():
-            return True
-    return False
+            return parent
+    return None
 
 def is_dist_package(src_path: Optional[pathlib.Path] = None) -> bool:
     if src_path is None:
