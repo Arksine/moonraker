@@ -238,6 +238,7 @@ GIT_REF_FMT = (
     "'%(if)%(*objecttype)%(then)%(*objecttype) %(*objectname)"
     "%(else)%(objecttype) %(objectname)%(end) %(refname)'"
 )
+SRC_EXTS = (".py", ".c", ".cpp")
 
 class GitRepo:
     def __init__(
@@ -308,6 +309,8 @@ class GitRepo:
         self.commits_behind_count: int = storage.get('cbh_count', 0)
         self.diverged: bool = storage.get("diverged", False)
         self.repo_corrupt: bool = storage.get('corrupt', False)
+        self.modified_files: List[str] = storage.get("modified_files", [])
+        self.untracked_files: List[str] = storage.get("untracked_files", [])
         def_rbs = self.capture_state_for_rollback()
         self.rollback_commit: str = storage.get('rollback_commit', self.current_commit)
         self.rollback_branch: str = storage.get('rollback_branch', def_rbs["branch"])
@@ -341,7 +344,9 @@ class GitRepo:
             'commits_behind': self.commits_behind,
             'cbh_count': self.commits_behind_count,
             'diverged': self.diverged,
-            'corrupt': self.repo_corrupt
+            'corrupt': self.repo_corrupt,
+            'modified_files': self.modified_files,
+            'untracked_files': self.untracked_files
         }
 
     async def refresh_repo_state(self, need_fetch: bool = True) -> None:
@@ -455,6 +460,21 @@ class GitRepo:
                     break
             if resp is None:
                 return False
+            self.modified_files.clear()
+            self.untracked_files.clear()
+            for line in resp.splitlines():
+                parts = line.strip().split(maxsplit=1)
+                if len(parts) != 2:
+                    continue
+                prefix, fname = [p.strip() for p in parts]
+                if prefix == "M":
+                    # modified file
+                    self.modified_files.append(fname)
+                elif prefix == "??":
+                    # untracked file
+                    ext = pathlib.Path(fname).suffix
+                    if ext in SRC_EXTS:
+                        self.untracked_files.append(fname)
             self.valid_git_repo = True
         await self.set_current_instance()
         return True
@@ -714,7 +734,14 @@ class GitRepo:
         if self.diverged:
             self.repo_warnings.append("Repo has diverged from remote")
         if self.is_dirty():
-            self.repo_warnings.append("Repo has modified files (dirty)")
+            self.repo_warnings.append(
+                "Repo is dirty.  Detected the following modifed files: "
+                f"{self.modified_files}"
+            )
+        if self.untracked_files:
+            self.repo_warnings.append(
+                f"Repo has untracked source files: {self.untracked_files}"
+            )
         if len(self.managing_instances) > 1:
             instances = "\n".join([f"  {ins}" for ins in self.managing_instances])
             self.repo_warnings.append(
@@ -1026,6 +1053,7 @@ class GitRepo:
         return f"{cur_name}@{cur_uuid}"
 
     def get_repo_status(self) -> Dict[str, Any]:
+        no_untrk_src = len(self.untracked_files) == 0
         return {
             'detected_type': "git_repo",
             'remote_alias': self.git_remote,
@@ -1045,7 +1073,7 @@ class GitRepo:
             'commits_behind_count': self.commits_behind_count,
             'git_messages': self.git_messages,
             'full_version_string': self.current_version.full_version,
-            'pristine': not self.current_version.dirty,
+            'pristine': no_untrk_src and not self.current_version.dirty,
             'corrupt': self.repo_corrupt,
             'warnings': self.repo_warnings
         }
