@@ -1,5 +1,22 @@
 ##
-This document keeps a record of all changes to Moonraker's web APIs.
+This document keeps a record of notable changes to Moonraker's Web API.
+
+### July 18th 2023
+- Moonraker API Version 1.3.0
+- Added [Spoolman](web_api.md#spoolman-apis) APIs.
+- Added [Rollback](web_api.md#rollback-to-the-previous-version) API to
+  the `update_manager`
+- The `update_manager` status response has new fields for items of the
+  `git_repo` and `web` types:
+  - `recovery_url`: Url of the repo a "hard" recovery will fetch from
+  - `rollback_version`: Version the extension will revert to when a rollback
+    is requested
+  - `warnings`: An array of strings containing various warnings detected
+    during repo init.  Some warnings may explain an invalid state while
+    others may alert users to potential issues, such as a `git_repo` remote
+    url not matching the expected (ie: configured) url.
+  - Additionally, the `need_channel_update` field has been removed as the method
+    changing channels is done exclusively in the configuration.
 
 ### February 20th 2023
 - The following new endpoints are available when at least one `[sensor]`

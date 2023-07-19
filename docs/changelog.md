@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog].
 - **zeroconf**: Added support for UPnP/SSDP Discovery.
 - **spoolman**: Added integration to the
   [Spoolman](https://github.com/Donkie/Spoolman) filament manager.
+- **update_manager**: Added support for update rollbacks
+- **update_manager**: Added support for stable `git_repo` updates
 
 ### Fixed
 
@@ -47,7 +49,7 @@ The format is based on [Keep a Changelog].
   configurations should use the `virtualenv` option.
 - **update_manager**: The `install_script` option for the `git_repo` has been
   deprecated, new configurations should use the `system_dependencies` option.
-- **API**: The `update_manager` APIs that return status report additional fields.
+- **update_manager**: APIs that return status report additional fields.
   See the [API Documentation](./web_api.md#get-update-status) for details.
 
 ## [0.8.0] - 2023-02-23

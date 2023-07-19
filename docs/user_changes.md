@@ -1,6 +1,18 @@
 ##
-This file will track changes that require user intervention,
-such as a configuration change or a reinstallation.
+This file tracks configuration changes and deprecations.  Additionally
+changest to Moonraker that require user intervention will be tracked
+here.
+
+### July 18th 2023
+- The following changes have been made to `[update_manager <name>]`
+  extensions of the `git_repo` type:
+  - The `env` option has been deprecated.  New configurations should
+    use the `virtualenv` option in its place.
+  - The `install_script` option has been deprecated. New configurations
+    should use the `system_dependencies` option to specify system package
+    dependencies.
+- Configuration options for `[spoolman]` have been added
+- Configuration options for `[sensor]` have been added
 
 ### Februrary 8th 2023
 - The `provider` option in the `[machine]` section no longer accepts
