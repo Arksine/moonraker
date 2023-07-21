@@ -113,10 +113,6 @@ class ExtensionManager:
         return await conn.call_method(method, args)
 
     async def start_unix_server(self) -> None:
-        data_path = pathlib.Path(self.server.get_app_args()["data_path"])
-        comms_path = data_path.joinpath("comms")
-        if not comms_path.exists():
-            comms_path.mkdir()
         sock_path = pathlib.Path(self.server.get_app_args()["api_server"])
         logging.info(f"Creating Unix Domain Socket at '{sock_path}'")
         self.uds_server = await asyncio.start_unix_server(
