@@ -113,15 +113,18 @@ class ExtensionManager:
         return await conn.call_method(method, args)
 
     async def start_unix_server(self) -> None:
-        data_path = pathlib.Path(self.server.get_app_args()["data_path"])
-        comms_path = data_path.joinpath("comms")
-        if not comms_path.exists():
-            comms_path.mkdir()
-        sock_path = comms_path.joinpath("moonraker.sock")
+        sockfile: str = self.server.get_app_args()["unix_socket_path"]
+        sock_path = pathlib.Path(sockfile).expanduser().resolve()
         logging.info(f"Creating Unix Domain Socket at '{sock_path}'")
-        self.uds_server = await asyncio.start_unix_server(
-            self.on_unix_socket_connected, sock_path, limit=UNIX_BUFFER_LIMIT
-        )
+        try:
+            self.uds_server = await asyncio.start_unix_server(
+                self.on_unix_socket_connected, sock_path, limit=UNIX_BUFFER_LIMIT
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception(f"Failed to create Unix Domain Socket: {sock_path}")
+            self.uds_server = None
 
     def on_unix_socket_connected(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter

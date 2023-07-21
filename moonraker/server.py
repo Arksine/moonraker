@@ -484,10 +484,14 @@ def main(from_package: bool = True) -> None:
     )
     parser.add_argument(
         "-c", "--configfile", default=None, metavar='<configfile>',
-        help="Location of moonraker configuration file")
+        help="Path to Moonraker's configuration file")
     parser.add_argument(
         "-l", "--logfile", default=None, metavar='<logfile>',
-        help="log file name and location")
+        help="Path to Moonraker's log file")
+    parser.add_argument(
+        "-u", "--unixsocket", default=None, metavar="<unixsocket>",
+        help="Path to Moonraker's unix domain socket"
+    )
     parser.add_argument(
         "-n", "--nologfile", action='store_true',
         help="disable logging to a file")
@@ -525,6 +529,13 @@ def main(from_package: bool = True) -> None:
         cfg_file: str = cmd_line_args.configfile
     else:
         cfg_file = str(data_path.joinpath("config/moonraker.conf"))
+    if cmd_line_args.unixsocket is not None:
+        unix_sock: str = cmd_line_args.unixsocket
+    else:
+        comms_dir = data_path.joinpath("comms")
+        if not comms_dir.exists():
+            comms_dir.mkdir()
+        unix_sock = str(comms_dir.joinpath("moonraker.sock"))
     app_args = {
         "data_path": str(data_path),
         "is_default_data_path": cmd_line_args.datapath is None,
@@ -535,7 +546,8 @@ def main(from_package: bool = True) -> None:
         "asyncio_debug": cmd_line_args.asyncio_debug,
         "is_backup_config": False,
         "is_python_package": from_package,
-        "instance_uuid": instance_uuid
+        "instance_uuid": instance_uuid,
+        "unix_socket_path": unix_sock
     }
 
     # Setup Logging
