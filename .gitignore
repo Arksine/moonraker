@@ -12,3 +12,4 @@ start_moonraker
 build
 dist
 .pdm-build
+.vscode
