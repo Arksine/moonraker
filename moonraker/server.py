@@ -489,6 +489,10 @@ def main(from_package: bool = True) -> None:
         "-l", "--logfile", default=None, metavar='<logfile>',
         help="log file name and location")
     parser.add_argument(
+        "-a", "--api-server", default=None, metavar='<socketfile>',
+        help="api server unix domain socket filename"
+    )
+    parser.add_argument(
         "-n", "--nologfile", action='store_true',
         help="disable logging to a file")
     parser.add_argument(
@@ -549,6 +553,18 @@ def main(from_package: bool = True) -> None:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["python_version"] = sys.version.replace("\n", " ")
     log_manager = LogManager(app_args, startup_warnings)
+
+    # Setup unix socket
+    if cmd_line_args.api_server:
+        app_args["api_server"] = os.path.normpath(
+            os.path.expanduser(cmd_line_args.api_server))
+    else:
+        data_path = pathlib.Path(app_args["data_path"])
+        comms_path = data_path.joinpath("comms")
+        if not comms_path.exists():
+            comms_path.mkdir()
+        sock_path = comms_path.joinpath("moonraker.sock")
+        app_args["api_server"] = os.path.normpath(os.path.expanduser(sock_path))
 
     # Start asyncio event loop and server
     event_loop = EventLoop()

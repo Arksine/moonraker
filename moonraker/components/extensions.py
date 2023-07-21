@@ -117,7 +117,7 @@ class ExtensionManager:
         comms_path = data_path.joinpath("comms")
         if not comms_path.exists():
             comms_path.mkdir()
-        sock_path = comms_path.joinpath("moonraker.sock")
+        sock_path = pathlib.Path(self.server.get_app_args()["api_server"])
         logging.info(f"Creating Unix Domain Socket at '{sock_path}'")
         self.uds_server = await asyncio.start_unix_server(
             self.on_unix_socket_connected, sock_path, limit=UNIX_BUFFER_LIMIT
