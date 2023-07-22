@@ -34,7 +34,7 @@ missing one or both, you can simply add the bare sections to `printer.cfg`:
 path: ~/printer_data/gcodes
 ```
 
-### Enabling the Unix Socket
+### Enabling Klipper's Unix Domain Socket Server
 
 After Klipper is installed it may be necessary to modify its `defaults` file in
 order to enable the Unix Domain Socket.  Begin by opening the file in your
@@ -326,7 +326,7 @@ This section is intended for users that need to write their own
 installation script.  Detailed are the command line arguments
 available to Moonraker:
 ```
-usage: moonraker.py [-h]p [-d <data path>] [-c <configfile>] [-l <logfile>] [-n]
+usage: moonraker.py [-h] [-d <data path>] [-c <configfile>] [-l <logfile>] [-u <unixsocket>] [-n] [-v] [-g] [-o]
 
 Moonraker - Klipper API Server
 
@@ -335,9 +335,11 @@ options:
   -d <data path>, --datapath <data path>
                         Location of Moonraker Data File Path
   -c <configfile>, --configfile <configfile>
-                        Location of moonraker configuration file
+                        Path to Moonraker's configuration file
   -l <logfile>, --logfile <logfile>
-                        log file name and location
+                        Path to Moonraker's log file
+  -u <unixsocket>, --unixsocket <unixsocket>
+                        Path to Moonraker's unix domain socket
   -n, --nologfile       disable logging to a file
   -v, --verbose         Enable verbose logging
   -g, --debug           Enable Moonraker debug features
@@ -348,6 +350,7 @@ The default configuration is:
 - `data path`: `$HOME/printer_data`
 - `config file`: `$HOME/printer_data/config/moonraker.conf`
 - `log file`: `$HOME/printer_data/logs/moonraker.log`
+- `unix socket`: `$HOME/printer_data/comms/moonraker.sock`
 - logging to a file is enabled
 - Verbose logging is disabled
 - Moonraker's debug features are disabled
@@ -357,6 +360,12 @@ The default configuration is:
     While the `data path` option may be omitted it is recommended that it
     always be included for new installations.  This allows Moonraker
     to differentiate between new and legacy installations.
+
+!!! Warning
+    Moonraker's `--unixsocket` option should not be confused with Klipper's
+    `--api-server` option.  The `unixsocket` option for Moonraker specifies
+    the path where Moonraker will create a unix domain socket that serves its
+    JSON-RPC API.
 
 If is necessary to run Moonraker without logging to a file the
 `-n` option may be used, for example:

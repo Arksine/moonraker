@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog].
   [Spoolman](https://github.com/Donkie/Spoolman) filament manager.
 - **update_manager**: Added support for update rollbacks
 - **update_manager**: Added support for stable `git_repo` updates
+- **server**: Added a `--unixsocket` command line option
 
 ### Fixed
 
