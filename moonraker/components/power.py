@@ -809,10 +809,9 @@ class TPLinkSmartPlug(PowerDevice):
             # TPLink device controls multiple devices
             if self.output_id is not None:
                 sysinfo = await self._send_tplink_command("info")
-                dev_id = sysinfo["system"]["get_sysinfo"]["deviceId"]
-                out_cmd["context"] = {
-                    'child_ids': [f"{dev_id}{self.output_id:02}"]
-                }
+                children = sysinfo["system"]["get_sysinfo"]["children"]
+                child_id = children[self.output_id]["id"]
+                out_cmd["context"] = {"child_ids": [f"{child_id}"]}
         elif command == "info":
             out_cmd = {'system': {'get_sysinfo': {}}}
         elif command == "clear_rules":
