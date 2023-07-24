@@ -4166,7 +4166,12 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "pristine": true,
             "recovery_url": "https://github.com/Arksine/moonraker.git",
             "remote_url": "https://github.com/Arksine/moonraker.git",
-            "warnings": []
+            "warnings": [],
+            "anomalies": [
+                "Unofficial remote url: https://github.com/Arksine/moonraker-fork.git",
+                "Repo not on offical remote/branch, expected: origin/master, detected: altremote/altbranch",
+                "Detached HEAD detected"
+            ]
         },
         "mainsail": {
             "name": "mainsail",
@@ -4181,6 +4186,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
                 "action=some_action"
             ],
             "warnings": [],
+            "anomalies": [],
             "is_valid": true
         },
         "fluidd": {
@@ -4193,6 +4199,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "channel": "beta",
             "info_tags": [],
             "warnings": [],
+            "anomalies": [],
             "is_valid": true
         },
         "klipper": {
@@ -4237,7 +4244,8 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "pristine": true,
             "recovery_url": "https://github.com/Klipper3d/klipper.git",
             "remote_url": "https://github.com/Klipper3d/klipper.git",
-            "warnings": []
+            "warnings": [],
+            "anomalies": [],
         }
     }
 }
@@ -4307,9 +4315,14 @@ fields:
   not possible.
 - `remote_url`:  The url for the currently configured remote.
 - `warnings`:  An array of strings that describe warnings detected during
-  repo init.  These warnings describe potential issues, such as a mismatch
-  between the detected remote and the configured remote.  If the `is_valid`
-  field reports `false` then the warnings will contain additional context.
+  repo init.  These warnings provide additional context when the `is_valid`
+  field reports `true`.
+- `anomalies`:  An array of strings that describe anomalies found during
+  initialization.  An anomaly can be defined as an unexpected condition, they
+  will not result in an invalid state, nor will they prevent an update.  For
+  example, when the detected remote url does not match the configured/expected
+  url Moonraker will fall back to the detected url and report this condition
+  as an anomaly.
 
 Extensions configured with the `web` type will contain the following fields:
 
@@ -4328,9 +4341,14 @@ Extensions configured with the `web` type will contain the following fields:
 - `is_valid`: A boolean that reports true if an update is possible, false
   if an update cannot be performed.
 - `warnings`:  An array of strings that describe warnings detected during
-  repo init.  These warnings describe potential issues, such as a mismatch
-  between the detected owner and the configured owner.  If the `is_valid`
-  field reports `False` then the warnings will contain additional context.
+  updater init.  These warnings add context when the `is_valid` field reports
+  `true`.
+- `anomalies`:  An array of strings that describe anomalies found during
+  initialization.  An anomaly can be defined as an unexpected condition, they
+  will not result in an invalid state, nor will they prevent an update.
+  For example, when the configured repo to check for updates does not match
+  the detected repo Moonraker will fall back to the detected repo and report
+  this condition as an anomaly.
 
 
 The `system` object contains the following fields:
