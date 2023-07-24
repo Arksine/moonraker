@@ -686,10 +686,9 @@ class GitRepo:
         return not (await self.is_ancestor("HEAD", descendent))
 
     def log_repo_info(self) -> None:
-        warnings = ""
-        if self.repo_warnings:
-            warnings = "\nRepo Warnings:\n"
-            warnings += '\n'.join([f"  {warn}" for warn in self.repo_warnings])
+        warnings = self._generate_warn_msg()
+        if warnings:
+            warnings = "\nRepo Warnings:\n" + warnings
         logging.info(
             f"Git Repo {self.alias} Detected:\n"
             f"Owner: {self.git_owner}\n"
@@ -715,10 +714,10 @@ class GitRepo:
         )
 
     def _check_warnings(self) -> None:
+        self.repo_warnings.clear()
         if self.upstream_url == "?":
             self.repo_warnings.append("Failed to detect repo url")
             return
-        self.repo_warnings.clear()
         upstream_url = self.upstream_url.lower()
         if upstream_url[-4:] != ".git":
             upstream_url += ".git"
@@ -738,21 +737,30 @@ class GitRepo:
                 "Repo is dirty.  Detected the following modifed files: "
                 f"{self.modified_files}"
             )
-        if self.untracked_files:
-            self.repo_warnings.append(
-                f"Repo has untracked source files: {self.untracked_files}"
-            )
         if len(self.managing_instances) > 1:
             instances = "\n".join([f"  {ins}" for ins in self.managing_instances])
             self.repo_warnings.append(
                 f"Multiple instances of Moonraker managing this repo:\n"
                 f"{instances}"
             )
+        self._generate_warn_msg()
+
+    def _generate_warn_msg(self) -> str:
+        extra_warnings = []
+        if self.untracked_files:
+            extra_warnings.append(
+                f"Repo has untracked source files: {self.untracked_files}"
+            )
         ro_msg = f"Git Repo {self.alias}: No warnings detected"
-        if self.repo_warnings:
-            ro_msg = f"Git Repo {self.alias} Warnings Detected:\n"
-            ro_msg += "\n".join(self.repo_warnings)
+        warn_msg = ""
+        if self.repo_warnings or extra_warnings:
+            ro_msg = f"Git Repo {self.alias}: Warnings detected:\n"
+            warn_msg = "\n".join(
+                [f"  {warn}" for warn in self.repo_warnings + extra_warnings]
+            )
+            ro_msg += warn_msg
         self.server.add_log_rollover_item(f"umgr_{self.alias}_warn", ro_msg, log=False)
+        return warn_msg
 
     def _verify_repo(self, check_remote: bool = False) -> None:
         if not self.valid_git_repo:
