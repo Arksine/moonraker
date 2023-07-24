@@ -55,6 +55,7 @@ class WebClientDeploy(BaseDeploy):
         self.info_tags: List[str] = config.getlist("info_tags", [])
         self.persistent_files: List[str] = []
         self.warnings: List[str] = []
+        self.anomalies: List[str] = []
         self.version: str = "?"
         pfiles = config.getlist('persistent_files', None)
         if pfiles is not None:
@@ -103,7 +104,7 @@ class WebClientDeploy(BaseDeploy):
                     self._valid = True
                     detected_repo = f"{owner}/{project_name}"
                     if self.repo.lower() != detected_repo.lower():
-                        self.warnings.append(
+                        self.anomalies.append(
                             f"Value at option 'repo: {self.repo}' does not match "
                             f"detected repo '{detected_repo}', falling back to "
                             "detected version."
@@ -142,7 +143,7 @@ class WebClientDeploy(BaseDeploy):
                     owner = fallback_defs[proj_name]
                     detected_repo = f"{owner}/{proj_name}"
                     if detected_repo != self.repo.lower():
-                        self.warnings.append(
+                        self.anomalies.append(
                             f"Value at option 'repo: {self.repo}' does not match "
                             f"detected repo '{detected_repo}', falling back to "
                             "detected version."
@@ -180,9 +181,11 @@ class WebClientDeploy(BaseDeploy):
 
     def _log_client_info(self) -> None:
         warn_str = ""
-        if self.warnings:
+        if self.warnings or self.anomalies:
             warn_str = "\nWarnings:\n"
-            warn_str += "\n".join([f" {item}" for item in self.warnings])
+            warn_str += "\n".join(
+                [f" {item}" for item in self.warnings + self.anomalies]
+            )
         dl_url, content_type, size = self.dl_info
         logging.info(
             f"Web Client {self.name} Detected:\n"
@@ -387,5 +390,6 @@ class WebClientDeploy(BaseDeploy):
             'info_tags': self.info_tags,
             'last_error': self.last_error,
             'is_valid': self._valid,
-            'warnings': self.warnings
+            'warnings': self.warnings,
+            'anomalies': self.anomalies
         }
