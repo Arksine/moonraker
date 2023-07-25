@@ -474,37 +474,62 @@ class Server:
         }
 
 def main(from_package: bool = True) -> None:
+    def get_env_bool(key: str) -> bool:
+        return os.getenv(key, "").lower() in ["y", "yes", "true"]
+
     # Parse start arguments
     parser = argparse.ArgumentParser(
         description="Moonraker - Klipper API Server")
     parser.add_argument(
-        "-d", "--datapath", default=None,
+        "-d", "--datapath",
+        default=os.getenv("MOONRAKER_DATA_PATH"),
         metavar='<data path>',
         help="Location of Moonraker Data File Path"
     )
     parser.add_argument(
-        "-c", "--configfile", default=None, metavar='<configfile>',
-        help="Path to Moonraker's configuration file")
+        "-c", "--configfile",
+        default=os.getenv("MOONRAKER_CONFIG_PATH"),
+        metavar='<configfile>',
+        help="Path to Moonraker's configuration file"
+    )
     parser.add_argument(
-        "-l", "--logfile", default=None, metavar='<logfile>',
-        help="Path to Moonraker's log file")
+        "-l", "--logfile",
+        default=os.getenv("MOONRAKER_LOG_PATH"),
+        metavar='<logfile>',
+        help="Path to Moonraker's log file"
+    )
     parser.add_argument(
-        "-u", "--unixsocket", default=None, metavar="<unixsocket>",
+        "-u", "--unixsocket",
+        default=os.getenv("MOONRAKER_UDS_PATH"),
+        metavar="<unixsocket>",
         help="Path to Moonraker's unix domain socket"
     )
     parser.add_argument(
-        "-n", "--nologfile", action='store_true',
-        help="disable logging to a file")
+        "-n", "--nologfile",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_DISABLE_FILE_LOG"),
+        help="disable logging to a file"
+    )
     parser.add_argument(
-        "-v", "--verbose", action="store_true",
+        "-v", "--verbose",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_VERBOSE_LOGGING"),
         help="Enable verbose logging"
     )
     parser.add_argument(
-        "-g", "--debug", action="store_true",
+        "-g", "--debug",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_ENABLE_DEBUG"),
         help="Enable Moonraker debug features"
     )
     parser.add_argument(
-        "-o", "--asyncio-debug", action="store_true",
+        "-o", "--asyncio-debug",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_ASYNCIO_DEBUG"),
         help="Enable asyncio debug flag"
     )
     cmd_line_args = parser.parse_args()
