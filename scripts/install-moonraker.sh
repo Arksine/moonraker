@@ -131,13 +131,12 @@ install_script()
     ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
     if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
         rm -f $ENV_FILE
-        args="MOONRAKER_ARGS=\"-m moonraker"
-        [ -n "${CONFIG_PATH}" ] && args="${args} -c ${CONFIG_PATH}"
-        [ -n "${LOG_PATH}" ] && args="${args} -l ${LOG_PATH}"
-        args="${args} -d ${DATA_PATH}"
-        args="${args}\""
-        args="${args}\nPYTHONPATH=\"${SRCDIR}\""
-        echo -e $args > $ENV_FILE
+        env_vars="MOONRAKER_DATA_PATH=\"${DATA_PATH}\""
+        [ -n "${CONFIG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_CONFIG_PATH=\"${CONFIG_PATH}\""
+        [ -n "${LOG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_LOG_PATH=\"${LOG_PATH}\""
+        env_vars="${env_vars}\nMOONRAKER_ARGS=\"-m moonraker\""
+        env_vars="${env_vars}\nPYTHONPATH=\"${SRCDIR}\"\n"
+        echo -e $env_vars > $ENV_FILE
     fi
     [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
     report_status "Installing system start script..."
