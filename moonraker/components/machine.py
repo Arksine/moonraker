@@ -1481,7 +1481,6 @@ Restart=always
 RestartSec=10
 """  # noqa: E122
 
-ENVIRONMENT = "MOONRAKER_ARGS=\"%s%s\"%s"
 TEMPLATE_NAME = "password_request.html"
 
 class ValidationError(Exception):
@@ -1661,28 +1660,29 @@ class InstallValidator:
         if not sysd_data.exists():
             sysd_data.mkdir()
         env_file = sysd_data.joinpath("moonraker.env")
-        cmd_args = f"-d {self.data_path}"
+        env_vars: Dict[str, str] = {
+            "MOONRAKER_DATA_PATH": str(self.data_path)
+        }
         cfg_file = pathlib.Path(app_args["config_file"])
         fm: FileManager = self.server.lookup_component("file_manager")
         cfg_path = fm.get_directory("config")
         log_path = fm.get_directory("logs")
         if not cfg_path or not cfg_file.parent.samefile(cfg_path):
-            # Configuration file does not exist in config path
-            cmd_args += f" -c {cfg_file}"
+            env_vars["MOONRAKER_CONFIG_PATH"] = str(cfg_file)
         elif cfg_file.name != "moonraker.conf":
             cfg_file = self.data_path.joinpath(f"config/{cfg_file.name}")
-            cmd_args += f" -c {cfg_file}"
+            env_vars["MOONRAKER_CONFIG_PATH"] = str(cfg_file)
         if not app_args["log_file"]:
             #  No log file configured
-            cmd_args += f" -n"
+            env_vars["MOONRAKER_DISABLE_FILE_LOG"] = "y"
         else:
             # Log file does not exist in log path
             log_file = pathlib.Path(app_args["log_file"])
             if not log_path or not log_file.parent.samefile(log_path):
-                cmd_args += f" -l {log_file}"
+                env_vars["MOONRAKER_LOG_PATH"] = str(log_file)
             elif log_file.name != "moonraker.log":
                 cfg_file = self.data_path.joinpath(f"logs/{log_file.name}")
-                cmd_args += f" -l {log_file}"
+                env_vars["MOONRAKER_LOG_PATH"] = str(log_file)
         # backup existing service files
         self._update_backup_path()
         svc_bkp_path = self.backup_path.joinpath("service")
@@ -1696,26 +1696,25 @@ class InstallValidator:
         src_path = source_info.source_path()
         exec_path = pathlib.Path(sys.executable)
         py_exec = exec_path.parent.joinpath("python")
-        pythonpath = ""
-        src_arg = ""
         if exec_path.name == "python" or py_exec.is_file():
             # Default to loading via the python executable.  This
             # makes it possible to switch between git repos, pip
             # releases and git releases without reinstalling the
             # service.
             exec_path = py_exec
-            src_arg = "-m moonraker "
+            env_vars["MOONRAKER_ARGS"] = "-m moonraker"
         if not source_info.is_dist_package():
             # This module isn't in site/dist packages,
             # add PYTHONPATH env variable
-            pythonpath = f"\nPYTHONPATH=\"{src_path}\""
+            env_vars["PYTHONPATH"] = str(src_path)
         tmp_svc.write_text(
             SYSTEMD_UNIT
             % (SERVICE_VERSION, user, env_file, exec_path)
         )
         try:
             # write new environment
-            env_file.write_text(ENVIRONMENT % (src_arg, cmd_args, pythonpath))
+            envout = "\n".join(f"{key}=\"{val}\"" for key, val in env_vars.items())
+            env_file.write_text(envout)
             await machine.exec_sudo_command(
                 f"cp -f {tmp_svc} {svc_dest}", tries=5, timeout=60.)
             await machine.exec_sudo_command(
