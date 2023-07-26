@@ -293,31 +293,11 @@ Following are some items to take note of:
   Version 1).
 - The `moonraker-admin` supplementary group is used to grant policykit
   permissions.
-- The `EnvironmentFile` field contains Moonraker's arguments.  More on this
-  below.
+- The `EnvironmentFile` field contains Moonraker's arguments.  See the
+  [environment file section](#the-environment-file) for details.
 - The `ExecStart` field begins with the python executable, followed by
   by the enviroment variable `MOONRAKER_ARGS`.  This variable is set in
   the environment file.
-
-#### The Environment File
-
-The environment file, `moonraker.env`. is created in the data path during
-installation. A default installation's environment file will contain the path
-to `moonraker.py` and the data path option, ie:
-
-```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data"
-```
-
-A legacy installation converted to the updated flexible service unit
-might contain the following:
-
-```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
-```
-
-Post installation it is simple to customize the [arguments](#command-line-usage)
-supplied to Moonraker by editing this file and restarting the service.
 
 
 ### Command line usage
@@ -347,6 +327,7 @@ options:
 ```
 
 The default configuration is:
+
 - `data path`: `$HOME/printer_data`
 - `config file`: `$HOME/printer_data/config/moonraker.conf`
 - `log file`: `$HOME/printer_data/logs/moonraker.log`
@@ -373,11 +354,65 @@ If is necessary to run Moonraker without logging to a file the
 ~/moonraker-env/bin/python ~/moonraker/moonraker/moonraker.py -d ~/printer_data -n
 ```
 
-In general it is not recommended to install Moonraker with file logging
-disabled.  While moonraker will still log to stdout, all requests for support
-must be accompanied by moonraker.log.
+!!! Tip
+    It is not recommended to install Moonraker with file logging disabled
+    While moonraker will still log to stdout, all requests for support
+    must be accompanied by `moonraker.log`.
 
-These options may be changed by editing `moonraker.env`.
+Each command line argument has an associated enviroment variable that may
+be used to specify options in place of the command line.
+
+- `MOONRAKER_DATA_PATH="<data path>"`: equivalent to `-d <data path>`
+- `MOONRAKER_CONFIG_PATH="<configfile>"`: equivalent to `-c <configfile>`
+- `MOONRAKER_LOG_PATH="<logfile>"`: equivalent to `-l <logfile>`
+- `MOONRAKER_UDS_PATH="<unixsocket>"`: equivalent to `-u <unixsocket>`
+- `MOONRAKER_DISABLE_FILE_LOG="y"`: equivalent to `-n`
+- `MOONRAKER_VERBOSE_LOGGING="y"`: equivalent to `-v`
+- `MOONRAKER_ENABLE_DEBUG="y"`: equivalent to `-g`.
+- `MOONRAKER_ASYNCIO_DEBUG="y"`: equivalent to `-o`
+
+!!! Note
+    Command line arguments take priority over environment variables when
+    both are specified.
+
+[The environment file](#the-environment-file) may be used to set Moonraker's
+command line arguments and/or environment variables.
+
+### The environment file
+
+The environment file, `moonraker.env`. is created in the data path during
+installation. A default installation's environment file will contain the path
+to `moonraker.py` and the data path option, ie:
+
+```
+MOONRAKER_DATA_PATH="/home/pi/printer_data"
+MOONRAKER_ARGS="-m moonraker"
+PYTHONPATH="/home/pi/moonraker"
+```
+
+A legacy installation converted to the updated flexible service unit
+might contain the following.  Note that this example uses command line
+arguments instead of environment variables, either would be acceptable:
+
+```
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
+```
+
+Post installation it is simple to customize
+[arguments and/or environment variables](#command-line-usage)
+supplied to Moonraker by editing this file and restarting the service.
+The following example sets a custom config file path, log file path,
+enables verbose logging, and enables debug features:
+
+```
+MOONRAKER_DATA_PATH="/home/pi/printer_data"
+MOONRAKER_CONFIG_PATH="/home/pi/printer_data/config/moonraker-1.conf"
+MOONRAKER_LOG_PATH="/home/pi/printer_data/logs/moonraker-1.log"
+MOONRAKER_VERBOSE_LOGGING="y"
+MOONRAKER_ENABLE_DEBUG="y"
+MOONRAKER_ARGS="-m moonraker"
+PYTHONPATH="/home/pi/moonraker"
+```
 
 ### PolicyKit Permissions
 
