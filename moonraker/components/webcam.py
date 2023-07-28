@@ -335,12 +335,12 @@ class WebCam:
                 attr = getattr(self, field)
             except AttributeError:
                 continue
-            if isinstance(attr, int):
-                val: Any = web_request.get_int(field)
+            if isinstance(attr, bool):
+                val: Any = web_request.get_boolean(field)
+            elif isinstance(attr, int):
+                val = web_request.get_int(field)
             elif isinstance(attr, float):
                 val = web_request.get_float(field)
-            elif isinstance(attr, bool):
-                val = web_request.get_boolean(field)
             elif isinstance(attr, str):
                 val = web_request.get_str(field)
             else:
