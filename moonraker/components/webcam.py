@@ -399,19 +399,19 @@ class WebCam:
     @classmethod
     def from_database(cls, server: Server, cam_data: Dict[str, Any]) -> WebCam:
         webcam: Dict[str, Any] = {}
-        webcam["name"] = cam_data["name"]
-        webcam["enabled"] = cam_data.get("enabled", True)
-        webcam["icon"] = cam_data.get("icon", "mdiWebcam")
-        webcam["aspect_ratio"] = cam_data.get("aspectRatio", "4:3")
-        webcam["location"] = cam_data.get("location", "printer")
-        webcam["service"] = cam_data.get("service", "mjpegstreamer")
-        webcam["target_fps"] = cam_data.get("targetFps", 15)
-        webcam["target_fps_idle"] = cam_data.get("targetFpsIdle", 5)
-        webcam["stream_url"] = cam_data.get("urlStream", "")
-        webcam["snapshot_url"] = cam_data.get("urlSnapshot", "")
-        webcam["flip_horizontal"] = cam_data.get("flipX", False)
-        webcam["flip_vertical"] = cam_data.get("flipY", False)
-        webcam["rotation"] = cam_data.get("rotation", webcam.get("rotate", 0))
+        webcam["name"] = str(cam_data["name"])
+        webcam["enabled"] = bool(cam_data.get("enabled", True))
+        webcam["icon"] = str(cam_data.get("icon", "mdiWebcam"))
+        webcam["aspect_ratio"] = str(cam_data.get("aspectRatio", "4:3"))
+        webcam["location"] = str(cam_data.get("location", "printer"))
+        webcam["service"] = str(cam_data.get("service", "mjpegstreamer"))
+        webcam["target_fps"] = int(cam_data.get("targetFps", 15))
+        webcam["target_fps_idle"] = int(cam_data.get("targetFpsIdle", 5))
+        webcam["stream_url"] = str(cam_data.get("urlStream", ""))
+        webcam["snapshot_url"] = str(cam_data.get("urlSnapshot", ""))
+        webcam["flip_horizontal"] = bool(cam_data.get("flipX", False))
+        webcam["flip_vertical"] = bool(cam_data.get("flipY", False))
+        webcam["rotation"] = int(cam_data.get("rotation", webcam.get("rotate", 0)))
         webcam["extra_data"] = cam_data.get("extra_data", {})
         webcam["source"] = "database"
         return cls(server, **webcam)
