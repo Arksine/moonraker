@@ -381,6 +381,7 @@ class WebClientDeploy(BaseDeploy):
     def get_update_status(self) -> Dict[str, Any]:
         return {
             'name': self.name,
+            'repo_name': self.project_name,
             'owner': self.owner,
             'version': self.version,
             'remote_version': self.remote_version,
