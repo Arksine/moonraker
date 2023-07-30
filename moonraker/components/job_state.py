@@ -25,8 +25,6 @@ class JobState:
         self.last_print_stats: Dict[str, Any] = {}
         self.server.register_event_handler(
             "server:klippy_started", self._handle_started)
-        self.server.register_event_handler(
-            "server:status_update", self._status_update)
 
     async def _handle_started(self, state: str) -> None:
         if state != "ready":
@@ -34,7 +32,7 @@ class JobState:
         kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
         try:
-            result = await kapis.subscribe_objects(sub)
+            result = await kapis.subscribe_objects(sub, self._status_update)
         except self.server.error as e:
             logging.info(f"Error subscribing to print_stats")
         self.last_print_stats = result.get("print_stats", {})
@@ -42,7 +40,7 @@ class JobState:
             state = self.last_print_stats["state"]
             logging.info(f"Job state initialized: {state}")
 
-    async def _status_update(self, data: Dict[str, Any]) -> None:
+    async def _status_update(self, data: Dict[str, Any], _: float) -> None:
         if 'print_stats' not in data:
             return
         ps = data['print_stats']

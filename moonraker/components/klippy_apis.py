@@ -18,11 +18,14 @@ from typing import (
     List,
     TypeVar,
     Mapping,
+    Callable,
+    Coroutine
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
+    SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
     _T = TypeVar("_T")
 
 INFO_ENDPOINT = "info"
@@ -39,11 +42,13 @@ class KlippyAPI(Subscribable):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.klippy: Klippy = self.server.lookup_component("klippy_connection")
+        self.eventloop = self.server.get_event_loop()
         app_args = self.server.get_app_args()
         self.version = app_args.get('software_version')
         # Maintain a subscription for all moonraker requests, as
         # we do not want to overwrite them
         self.host_subscription: Subscription = {}
+        self.subscription_callbacks: List[SubCallback] = []
 
         # Register GCode Aliases
         self.server.register_endpoint(
@@ -58,6 +63,13 @@ class KlippyAPI(Subscribable):
             "/printer/restart", ['POST'], self._gcode_restart)
         self.server.register_endpoint(
             "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._on_klippy_disconnect
+        )
+
+    def _on_klippy_disconnect(self) -> None:
+        self.host_subscription.clear()
+        self.subscription_callbacks.clear()
 
     async def _gcode_pause(self, web_request: WebRequest) -> str:
         return await self.pause_print()
@@ -197,16 +209,18 @@ class KlippyAPI(Subscribable):
         params = {'objects': objects}
         result = await self._send_klippy_request(
             STATUS_ENDPOINT, params, default)
-        if isinstance(result, dict) and 'status' in result:
-            return result['status']
+        if isinstance(result, dict) and "status" in result:
+            return result["status"]
         if default is not Sentinel.MISSING:
             return default
         raise self.server.error("Invalid response received from Klippy", 500)
 
-    async def subscribe_objects(self,
-                                objects: Mapping[str, Optional[List[str]]],
-                                default: Union[Sentinel, _T] = Sentinel.MISSING
-                                ) -> Union[_T, Dict[str, Any]]:
+    async def subscribe_objects(
+        self,
+        objects: Mapping[str, Optional[List[str]]],
+        callback: Optional[SubCallback] = None,
+        default: Union[Sentinel, _T] = Sentinel.MISSING
+    ) -> Union[_T, Dict[str, Any]]:
         for obj, items in objects.items():
             if obj in self.host_subscription:
                 prev = self.host_subscription[obj]
@@ -217,11 +231,13 @@ class KlippyAPI(Subscribable):
                     self.host_subscription[obj] = uitems
             else:
                 self.host_subscription[obj] = items
-        params = {'objects': self.host_subscription}
+        params = {'objects': dict(self.host_subscription)}
         result = await self._send_klippy_request(
             SUBSCRIPTION_ENDPOINT, params, default)
-        if isinstance(result, dict) and 'status' in result:
-            return result['status']
+        if isinstance(result, dict) and "status" in result:
+            if callback is not None:
+                self.subscription_callbacks.append(callback)
+            return result["status"]
         if default is not Sentinel.MISSING:
             return default
         raise self.server.error("Invalid response received from Klippy", 500)
@@ -237,10 +253,11 @@ class KlippyAPI(Subscribable):
             {'response_template': {"method": method_name},
              'remote_method': method_name})
 
-    def send_status(self,
-                    status: Dict[str, Any],
-                    eventtime: float
-                    ) -> None:
+    def send_status(
+        self, status: Dict[str, Any], eventtime: float
+    ) -> None:
+        for cb in self.subscription_callbacks:
+            self.eventloop.register_callback(cb, status, eventtime)
         self.server.send_event("server:status_update", status)
 
 def load_component(config: ConfigHelper) -> KlippyAPI:

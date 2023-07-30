@@ -77,16 +77,11 @@ class SpoolManager:
         )
 
     async def _handle_server_ready(self):
-        self.server.register_event_handler(
-            "server:status_update", self._handle_status_update
-        )
         result = await self.klippy_apis.subscribe_objects(
-            {"toolhead": ["position"]}
+            {"toolhead": ["position"]}, self._handle_status_update, {}
         )
         initial_e_pos = self._eposition_from_status(result)
-
         logging.debug(f"Initial epos: {initial_e_pos}")
-
         if initial_e_pos is not None:
             self.highest_e_pos = initial_e_pos
         else:
@@ -97,7 +92,7 @@ class SpoolManager:
         position = status.get("toolhead", {}).get("position", [])
         return position[3] if len(position) > 3 else None
 
-    async def _handle_status_update(self, status: Dict[str, Any]) -> None:
+    async def _handle_status_update(self, status: Dict[str, Any], _: float) -> None:
         epos = self._eposition_from_status(status)
         if epos and epos > self.highest_e_pos:
             async with self.extruded_lock:

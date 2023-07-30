@@ -230,8 +230,6 @@ class PanelDue:
         self.server.register_event_handler(
             "server:klippy_disconnect", self._process_klippy_disconnect)
         self.server.register_event_handler(
-            "server:status_update", self.handle_status_update)
-        self.server.register_event_handler(
             "server:gcode_response", self.handle_gcode_response)
 
         self.server.register_remote_method(
@@ -320,7 +318,9 @@ class PanelDue:
         self.heaters.extend(extruders)
         try:
             status: Dict[str, Any]
-            status = await self.klippy_apis.subscribe_objects(sub_args)
+            status = await self.klippy_apis.subscribe_objects(
+                sub_args, self.handle_status_update
+            )
         except self.server.error:
             logging.exception("Unable to complete subscription request")
         else:
@@ -337,7 +337,7 @@ class PanelDue:
         self.last_printer_state = 'O'
         self.is_shutdown = self.is_shutdown = False
 
-    def handle_status_update(self, status: Dict[str, Any]) -> None:
+    def handle_status_update(self, status: Dict[str, Any], _: float) -> None:
         for obj, items in status.items():
             if obj in self.printer_state:
                 self.printer_state[obj].update(items)

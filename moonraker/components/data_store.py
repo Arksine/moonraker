@@ -42,9 +42,6 @@ class DataStore:
         self.temp_update_timer = eventloop.register_timer(
             self._update_temperature_store)
 
-        # Register status update event
-        self.server.register_event_handler(
-            "server:status_update", self._set_current_temps)
         self.server.register_event_handler(
             "server:gcode_response", self._update_gcode_store)
         self.server.register_event_handler(
@@ -78,7 +75,9 @@ class DataStore:
             sub: Dict[str, Optional[List[str]]] = {s: None for s in sensors}
             try:
                 status: Dict[str, Any]
-                status = await klippy_apis.subscribe_objects(sub)
+                status = await klippy_apis.subscribe_objects(
+                    sub, self._set_current_temps
+                )
             except self.server.error as e:
                 logging.info(f"Error subscribing to sensors: {e}")
                 return
@@ -111,7 +110,7 @@ class DataStore:
             self.temperature_store = {}
             self.temp_update_timer.stop()
 
-    def _set_current_temps(self, data: Dict[str, Any]) -> None:
+    def _set_current_temps(self, data: Dict[str, Any], _: float = 0.) -> None:
         for sensor in self.temperature_store:
             if sensor in data:
                 last_val = self.last_temps[sensor]

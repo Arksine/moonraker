@@ -594,13 +594,11 @@ class KlipperDevice(PowerDevice):
                 f"for option 'object_name' in section [{config.get_name()}]")
 
         self.server.register_event_handler(
-            "server:status_update", self._status_update)
-        self.server.register_event_handler(
             "server:klippy_ready", self._handle_ready)
         self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_disconnect)
 
-    def _status_update(self, data: Dict[str, Any]) -> None:
+    def _status_update(self, data: Dict[str, Any], _: float) -> None:
         self._set_state_from_data(data)
 
     def get_device_info(self) -> Dict[str, Any]:
@@ -611,7 +609,7 @@ class KlipperDevice(PowerDevice):
     async def _handle_ready(self) -> None:
         kapis: APIComp = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {self.object_name: None}
-        data = await kapis.subscribe_objects(sub, None)
+        data = await kapis.subscribe_objects(sub, self._status_update, None)
         if not self._validate_data(data):
             self.state == "error"
         else:
