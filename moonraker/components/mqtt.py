@@ -482,7 +482,7 @@ class MQTTClient(APITransport, Subscribable):
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                if type(last_err) != type(e) or last_err.args != e.args:
+                if type(last_err) is not type(e) or last_err.args != e.args:
                     logging.exception("MQTT Connection Error")
                     last_err = e
                 continue
