@@ -33,6 +33,8 @@ The format is based on [Keep a Changelog].
 - **job_queue**: Fixed a bug where the `job_transition_gcode` runs when the
   queue is started.  It will now only run between jobs during automatic
   transition.
+- **klippy_connection**:  Fixed a race condition that can result in
+  skipped subscription updates.
 
 ### Changed
 
