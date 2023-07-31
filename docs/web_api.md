@@ -923,8 +923,8 @@ An object where the top level items are "eventtime" and "status".  The
     }
 }
 ```
-See [printer_objects.md](printer_objects.md) for details on the printer objects
-available for query.
+See [Klipper's status reference](https://www.klipper3d.org/Status_Reference.html) for
+details on the printer objects available for query.
 
 #### Subscribe to printer object status
 HTTP request:
@@ -987,8 +987,8 @@ the `/printer/objects/query`:
 }
 ```
 
-See [printer_objects.md](printer_objects.md) for details on the printer objects
-available for subscription.
+See [Klipper's status reference](https://www.klipper3d.org/Status_Reference.html) for
+details on the printer objects available for subscription.
 
 Status updates for subscribed objects are sent asynchronously over the
 websocket.  See the [notify_status_update](#subscriptions)
