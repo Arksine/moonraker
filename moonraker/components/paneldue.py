@@ -29,6 +29,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
+    from ..klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager as FMComp
     FlexCallback = Callable[..., Optional[Coroutine]]
@@ -167,10 +168,8 @@ class PanelDue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.file_manager: FMComp = \
-            self.server.lookup_component('file_manager')
-        self.klippy_apis: APIComp = \
-            self.server.lookup_component('klippy_apis')
+        self.file_manager: FMComp = self.server.lookup_component('file_manager')
+        self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
         self.kinematics: str = "none"
         self.machine_name = config.get('machine_name', "Klipper")
         self.firmware_name: str = "Repetier | Klipper"
@@ -182,10 +181,8 @@ class PanelDue:
         self.debug_queue: Deque[str] = deque(maxlen=100)
 
         # Initialize tracked state.
-        self.printer_state: Dict[str, Dict[str, Any]] = {
-            'gcode_move': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'fan': {}, 'display_status': {}, 'print_stats': {},
-            'idle_timeout': {}, 'gcode_macro PANELDUE_BEEP': {}}
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        self.printer_state: Dict[str, Dict[str, Any]] = kconn.get_subscription_cache()
         self.extruder_count: int = 0
         self.heaters: List[str] = []
         self.is_ready: bool = False
@@ -216,24 +213,24 @@ class PanelDue:
             # command is the value
             self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
-
-        self.non_trivial_keys = config.getlist('non_trivial_keys',
-                                               ["Klipper state"])
+        self.non_trivial_keys = config.getlist('non_trivial_keys', ["Klipper state"])
         self.ser_conn = SerialConnection(config, self)
         logging.info("PanelDue Configured")
 
         # Register server events
         self.server.register_event_handler(
-            "server:klippy_ready", self._process_klippy_ready)
+            "server:klippy_ready", self._process_klippy_ready
+        )
         self.server.register_event_handler(
-            "server:klippy_shutdown", self._process_klippy_shutdown)
+            "server:klippy_shutdown", self._process_klippy_shutdown
+        )
         self.server.register_event_handler(
-            "server:klippy_disconnect", self._process_klippy_disconnect)
+            "server:klippy_disconnect", self._process_klippy_disconnect
+        )
         self.server.register_event_handler(
-            "server:gcode_response", self.handle_gcode_response)
-
-        self.server.register_remote_method(
-            "paneldue_beep", self.paneldue_beep)
+            "server:gcode_response", self.handle_gcode_response
+        )
+        self.server.register_remote_method("paneldue_beep", self.paneldue_beep)
 
         # These commands are directly executued on the server and do not to
         # make a request to Klippy
@@ -271,8 +268,7 @@ class PanelDue:
         while retries:
             try:
                 printer_info = await self.klippy_apis.get_klippy_info()
-                cfg_status = await self.klippy_apis.query_objects(
-                    {'configfile': None})
+                cfg_status = await self.klippy_apis.query_objects({'configfile': None})
             except self.server.error:
                 logging.exception("PanelDue initialization request failed")
                 retries -= 1
@@ -282,10 +278,8 @@ class PanelDue:
                 continue
             break
 
-        self.firmware_name = "Repetier | Klipper " + \
-            printer_info['software_version']
-        config: Dict[str, Any] = cfg_status.get(
-            'configfile', {}).get('config', {})
+        self.firmware_name = "Repetier | Klipper " + printer_info['software_version']
+        config: Dict[str, Any] = cfg_status.get('configfile', {}).get('config', {})
         printer_cfg: Dict[str, Any] = config.get('printer', {})
         self.kinematics = printer_cfg.get('kinematics', "none")
 
@@ -295,36 +289,35 @@ class PanelDue:
             f"Kinematics: {self.kinematics}\n"
             f"Printer Config: {config}\n")
 
-        # Initalize printer state and make subscription request
-        self.printer_state = {
-            'gcode_move': {}, 'toolhead': {}, 'virtual_sdcard': {},
-            'fan': {}, 'display_status': {}, 'print_stats': {},
-            'idle_timeout': {}, 'gcode_macro PANELDUE_BEEP': {}}
-        sub_args = {k: None for k in self.printer_state.keys()}
+        # Make subscription request
+        sub_args: Dict[str, Optional[List[str]]] = {
+            "motion_report": None,
+            "gcode_move": None,
+            "toolhead": None,
+            "virtual_sdcard": None,
+            "fan": None,
+            "display_status": None,
+            "print_stats": None,
+            "idle_timeout": None,
+            "gcode_macro PANELDUE_BEEP": None
+        }
         self.extruder_count = 0
         self.heaters = []
         extruders = []
         for cfg in config:
             if cfg.startswith("extruder"):
                 self.extruder_count += 1
-                self.printer_state[cfg] = {}
                 extruders.append(cfg)
                 sub_args[cfg] = None
             elif cfg == "heater_bed":
-                self.printer_state[cfg] = {}
                 self.heaters.append(cfg)
                 sub_args[cfg] = None
         extruders.sort()
         self.heaters.extend(extruders)
         try:
-            status: Dict[str, Any]
-            status = await self.klippy_apis.subscribe_objects(
-                sub_args, self.handle_status_update
-            )
+            await self.klippy_apis.subscribe_objects(sub_args)
         except self.server.error:
             logging.exception("Unable to complete subscription request")
-        else:
-            self.printer_state.update(status)
         self.is_shutdown = False
         self.is_ready = True
 
@@ -335,14 +328,8 @@ class PanelDue:
         # Tell the PD that the printer is "off"
         self.write_response({'status': 'O'})
         self.last_printer_state = 'O'
+        self.is_ready = False
         self.is_shutdown = self.is_shutdown = False
-
-    def handle_status_update(self, status: Dict[str, Any], _: float) -> None:
-        for obj, items in status.items():
-            if obj in self.printer_state:
-                self.printer_state[obj].update(items)
-            else:
-                self.printer_state[obj] = items
 
     def paneldue_beep(self, frequency: int, duration: float) -> None:
         duration = int(duration * 1000.)
@@ -560,9 +547,9 @@ class PanelDue:
         if self.is_shutdown:
             return 'S'
 
-        printer_state = self.printer_state
+        p_state = self.printer_state
         sd_state: str
-        sd_state = printer_state['print_stats'].get('state', "standby")
+        sd_state = p_state.get("print_stats", {}).get("state", "standby")
         if sd_state == "printing":
             if self.last_printer_state == 'A':
                 # Resuming
@@ -570,8 +557,9 @@ class PanelDue:
             # Printing
             return 'P'
         elif sd_state == "paused":
-            p_active = printer_state['idle_timeout'].get(
-                'state', 'Idle') == "Printing"
+            p_active = (
+                p_state.get("idle_timeout", {}).get("state", 'Idle') == "Printing"
+            )
             if p_active and self.last_printer_state != 'A':
                 # Pausing
                 return 'D'
@@ -617,25 +605,28 @@ class PanelDue:
             response['axes'] = 3
 
         p_state = self.printer_state
+        toolhead = p_state.get("toolhead", {})
+        gcode_move = p_state.get("gcode_move", {})
         self.last_printer_state = self._get_printer_status()
         response['status'] = self.last_printer_state
-        response['babystep'] = round(p_state['gcode_move'].get(
-            'homing_origin', [0., 0., 0., 0.])[2], 3)
+        response['babystep'] = round(
+            gcode_move.get('homing_origin', [0., 0., 0., 0.])[2], 3
+        )
 
         # Current position
         pos: List[float]
         homed_pos: str
         sfactor: float
-        pos = p_state['toolhead'].get('position', [0., 0., 0., 0.])
+        pos = p_state.get("motion_report", {}).get('live_position', [0., 0., 0., 0.])
         response['pos'] = [round(p, 2) for p in pos[:3]]
-        homed_pos = p_state['toolhead'].get('homed_axes', "")
+        homed_pos = toolhead.get('homed_axes', "")
         response['homed'] = [int(a in homed_pos) for a in "xyz"]
-        sfactor = round(p_state['gcode_move'].get('speed_factor', 1.) * 100, 2)
+        sfactor = round(gcode_move.get('speed_factor', 1.) * 100, 2)
         response['sfactor'] = sfactor
 
         # Print Progress Tracking
-        sd_status = p_state['virtual_sdcard']
-        print_stats = p_state['print_stats']
+        sd_status = p_state.get('virtual_sdcard', {})
+        print_stats = p_state.get('print_stats', {})
         fname: str = print_stats.get('filename', "")
         sd_print_state: Optional[str] = print_stats.get('state')
         if sd_print_state in ['printing', 'paused']:
@@ -663,8 +654,9 @@ class PanelDue:
                     obj_height: Optional[float]
                     obj_height = self.file_metadata.get('object_height')
                     if obj_height:
-                        cur_height: float = p_state['gcode_move'].get(
-                            'gcode_position', [0., 0., 0., 0.])[2]
+                        cur_height: float = gcode_move.get(
+                            'gcode_position', [0., 0., 0., 0.]
+                        )[2]
                         hpct = min(1., cur_height / obj_height)
                         times_left.append(int(est_time - est_time * hpct))
                 else:
@@ -678,13 +670,13 @@ class PanelDue:
             self.current_file = ""
             self.file_metadata = {}
 
-        fan_speed: Optional[float] = p_state['fan'].get('speed')
+        fan_speed: Optional[float] = p_state.get('fan', {}).get('speed')
         if fan_speed is not None:
             response['fanPercent'] = [round(fan_speed * 100, 1)]
 
         extruder_name: str = ""
         if self.extruder_count > 0:
-            extruder_name = p_state['toolhead'].get('extruder', "")
+            extruder_name = toolhead.get('extruder', "")
             if extruder_name:
                 tool = 0
                 if extruder_name != "extruder":
@@ -692,12 +684,12 @@ class PanelDue:
                 response['tool'] = tool
 
         # Report Heater Status
-        efactor: float = round(p_state['gcode_move'].get(
-            'extrude_factor', 1.) * 100., 2)
+        efactor: float = round(gcode_move.get('extrude_factor', 1.) * 100., 2)
 
         for name in self.heaters:
-            temp: float = round(p_state[name].get('temperature', 0.0), 1)
-            target: float = round(p_state[name].get('target', 0.0), 1)
+            htr_state = p_state.get(name, {})
+            temp: float = round(htr_state.get('temperature', 0.0), 1)
+            target: float = round(htr_state.get('target', 0.0), 1)
             response.setdefault('heaters', []).append(temp)
             response.setdefault('active', []).append(target)
             response.setdefault('standby', []).append(target)
@@ -710,7 +702,7 @@ class PanelDue:
                 response.setdefault('hstat', []).append(2 if target else 0)
 
         # Display message (via M117)
-        msg: str = p_state['display_status'].get('message', "")
+        msg: str = p_state.get('display_status', {}).get('message', "")
         if msg and msg != self.last_message:
             response['message'] = msg
             # reset the message so it only shows once.  The paneldue
