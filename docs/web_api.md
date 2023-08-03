@@ -487,16 +487,28 @@ included.
 #### Request Cached Temperature Data
 HTTP request:
 ```http
-GET /server/temperature_store
+GET /server/temperature_store?include_monitors=false
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
     "method": "server.temperature_store",
+    "params": {
+        "include_monitors": false
+    },
     "id": 2313
 }
 ```
+
+Parameters:
+
+- `include_monitors`: _Optional, defaults to `false`._  When set to `true`
+  the response will include sensors reported as `temperature monitors` by
+  Klipper.  A temperature monitor may report `null` values in the `temperatures`
+  field, applications should be sure that they are modified to handle this
+  condition before setting `inlcude_monitors` to `true`.
+
 Returns:
 
 An object where the keys are the available temperature sensor names, and with
