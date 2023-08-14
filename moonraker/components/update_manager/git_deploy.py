@@ -366,13 +366,13 @@ class GitRepo:
 
             # Fetch the upstream url.  If the repo has been moved,
             # set the new url
-            self.upstream_url = await self.remote(f"get-url {self.git_remote}")
+            self.upstream_url = await self.remote(f"get-url {self.git_remote}", True)
             if await self._check_moved_origin():
                 need_fetch = True
             if self.git_remote == "origin":
                 self.recovery_url = self.upstream_url
             else:
-                remote_list = (await self.remote("")).splitlines()
+                remote_list = (await self.remote()).splitlines()
                 logging.debug(
                     f"Git Repo {self.alias}: Detected Remotes - {remote_list}"
                 )
@@ -513,7 +513,7 @@ class GitRepo:
         if current_branch.startswith("(HEAD detached"):
             self.head_detached = True
             ref_name = current_branch.split()[-1][:-1]
-            remote_list = (await self.remote("")).splitlines()
+            remote_list = (await self.remote()).splitlines()
             for remote in remote_list:
                 remote = remote.strip()
                 if not remote:
@@ -568,7 +568,8 @@ class GitRepo:
                     f"from {self.upstream_url} to {self.origin_url}")
                 moved = True
                 await self.remote(
-                    f"set-url {self.git_remote} {self.origin_url}")
+                    f"set-url {self.git_remote} {self.origin_url}", True
+                )
                 self.upstream_url = self.origin_url
                 if self.moved_origin_url is not None:
                     moved_origin = self.moved_origin_url.lower().strip()
@@ -821,8 +822,8 @@ class GitRepo:
             resp = await self._run_git_cmd("branch --list --no-color")
             return resp.strip().split("\n")
 
-    async def remote(self, command: str) -> str:
-        self._verify_repo(check_remote=True)
+    async def remote(self, command: str = "", validate: bool = False) -> str:
+        self._verify_repo(check_remote=validate)
         async with self.git_operation_lock:
             resp = await self._run_git_cmd(
                 f"remote {command}")
