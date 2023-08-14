@@ -82,7 +82,7 @@ class LogManager:
             '[%(filename)s:%(funcName)s()] - %(message)s')
         stdout_hdlr.setFormatter(stdout_fmt)
         app_args_str = "\n".join([f"{k}: {v}" for k, v in app_args.items()])
-        sys.stdout.write(f"\nApplication Info:\n{app_args_str}")
+        sys.stdout.write(f"\nApplication Info:\n{app_args_str}\n")
         self.file_hdlr: Optional[MoonrakerLoggingHandler] = None
         self.listener: Optional[logging.handlers.QueueListener] = None
         log_file: str = app_args.get('log_file', "")
