@@ -12,6 +12,7 @@ CONFIG_PATH="${MOONRAKER_CONFIG_PATH}"
 LOG_PATH="${MOONRAKER_LOG_PATH}"
 DATA_PATH="${MOONRAKER_DATA_PATH}"
 INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
+SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
 SERVICE_VERSION="1"
 MACHINE_PROVIDER="systemd_cli"
 
@@ -88,6 +89,11 @@ create_virtualenv()
 
     # Install/update dependencies
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
+
+    if [ ${SPEEDUPS} = "y" ]; then
+        report_status "Installing Speedups..."
+        ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-speedups.txt
+    fi
 }
 
 # Step 5: Initialize data folder
@@ -233,12 +239,13 @@ set -e
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
 
 # Parse command line arguments
-while getopts "rfzxc:l:d:a:" arg; do
+while getopts "rfzxsc:l:d:a:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
         f) FORCE_DEFAULTS="y";;
         z) DISABLE_SYSTEMCTL="y";;
         x) SKIP_POLKIT="y";;
+        s) SPEEDUPS="y";;
         c) CONFIG_PATH=$OPTARG;;
         l) LOG_PATH=$OPTARG;;
         d) DATA_PATH=$OPTARG;;

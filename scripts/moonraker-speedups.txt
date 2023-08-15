@@ -1,0 +1,2 @@
+msgspec>=0.18.4 ; python_version>='3.8'
+uvloop>=0.17.0
