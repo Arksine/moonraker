@@ -148,6 +148,9 @@ particularly for those upgrading:
   Skips installation of [polkit rules](#policykit-permissions).  This may be
   necessary to install Moonraker on systems that do not have policykit
   installed.
+- `-s`:
+  Installs Moonraker's [speedup](#optional-speedups) Python packages in the
+  Python environment.
 
 Additionally, installation may be customized with the following environment
 variables:
@@ -160,6 +163,7 @@ variables:
 - `MOONRAKER_CONFIG_PATH`
 - `MOONAKER_LOG_PATH`
 - `MOONRAKER_DATA_PATH`
+- `MOONRAKER_SPEEDUPS`
 
 When the script completes it should start both Moonraker and Klipper. In
 `klippy.log` you should find the following entry:
@@ -413,6 +417,32 @@ MOONRAKER_ENABLE_DEBUG="y"
 MOONRAKER_ARGS="-m moonraker"
 PYTHONPATH="/home/pi/moonraker"
 ```
+
+# Optional Speedups
+
+Moonraker supports two optional Python packages that can be used to reduce
+its CPU load:
+
+- [msgspec](https://github.com/jcrist/msgspec): Replaces the builtin `json`
+  encoder/decoder.  Requires Python >= 3.8.
+- [uvloop](https://github.com/MagicStack/uvloop/): Replaces the default asyncio
+  eventloop implementation.
+
+If these packages are installed in Moonraker's python environment Moonraker will
+load them.  For existing installations this can be done manually with a command
+like:
+
+```
+~/moonraker-env/bin/pip install -r ~/moonraker/scripts/moonraker-speedups.txt
+```
+
+After installing the speedup packages it is possible to revert back to the
+default implementation by specifying one or both of the following
+environment variables in [moonraker.env](#the-environment-file):
+
+- `MOONRAKER_ENABLE_MSGSPEC="n"`
+- `MOONRAKER_ENABLE_UVLOOP="n"`
+
 
 ### PolicyKit Permissions
 

@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog].
 - **server**: Command line options may also be specified as env variables
 - **server**: Added a `route_prefix` option
 - **webcam**: Webcam APIs can now specify cameras by `uid` or `name`
+- **deps**:  Added support for optional `msgspec` and `uvloop` packages
 
 ### Fixed
 
