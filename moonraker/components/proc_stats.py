@@ -6,12 +6,15 @@
 
 from __future__ import annotations
 import asyncio
+import struct
+import fcntl
 import time
 import re
 import os
 import pathlib
 import logging
 from collections import deque
+from ..utils import ioctl_macros
 
 # Annotation imports
 from typing import (
@@ -29,7 +32,6 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from ..websockets import WebsocketManager
-    from . import shell_command
     STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
@@ -62,13 +64,10 @@ class ProcStats:
         self.watchdog = Watchdog(self)
         self.stat_update_timer = self.event_loop.register_timer(
             self._handle_stat_update)
-        self.vcgencmd: Optional[shell_command.ShellCommand] = None
+        self.vcgencmd: Optional[VCGenCmd] = None
         if os.path.exists(VC_GEN_CMD_FILE):
             logging.info("Detected 'vcgencmd', throttle checking enabled")
-            shell_cmd: shell_command.ShellCommandFactory
-            shell_cmd = self.server.load_component(config, "shell_command")
-            self.vcgencmd = shell_cmd.build_shell_command(
-                "vcgencmd get_throttled")
+            self.vcgencmd = VCGenCmd()
             self.server.register_notification("proc_stats:cpu_throttled")
         else:
             logging.info("Unable to find 'vcgencmd', throttle checking "
@@ -171,17 +170,19 @@ class ProcStats:
             'system_memory': self.memory_usage,
             'websocket_connections': websocket_count
         })
-        if not self.update_sequence % THROTTLE_CHECK_INTERVAL:
-            if self.vcgencmd is not None:
-                ts = await self._check_throttled_state()
-                cur_throttled = ts['bits']
-                if cur_throttled & ~self.total_throttled:
-                    self.server.add_log_rollover_item(
-                        'throttled', f"CPU Throttled Flags: {ts['flags']}")
-                if cur_throttled != self.last_throttled:
-                    self.server.send_event("proc_stats:cpu_throttled", ts)
-                self.last_throttled = cur_throttled
-                self.total_throttled |= cur_throttled
+        if (
+            not self.update_sequence % THROTTLE_CHECK_INTERVAL
+            and self.vcgencmd is not None
+        ):
+            ts = await self._check_throttled_state()
+            cur_throttled = ts['bits']
+            if cur_throttled & ~self.total_throttled:
+                self.server.add_log_rollover_item(
+                    'throttled', f"CPU Throttled Flags: {ts['flags']}")
+            if cur_throttled != self.last_throttled:
+                self.server.send_event("proc_stats:cpu_throttled", ts)
+            self.last_throttled = cur_throttled
+            self.total_throttled |= cur_throttled
         for cb in self.stat_callbacks:
             ret = cb(self.update_sequence)
             if ret is not None:
@@ -192,19 +193,18 @@ class ProcStats:
         return eventtime + STAT_UPDATE_TIME
 
     async def _check_throttled_state(self) -> Dict[str, Any]:
-        async with self.throttle_check_lock:
-            assert self.vcgencmd is not None
-            try:
-                resp = await self.vcgencmd.run_with_response(
-                    timeout=.5, log_complete=False)
-                ts = int(resp.strip().split("=")[-1], 16)
-            except Exception:
-                return {'bits': 0, 'flags': ["?"]}
-            flags = []
-            for flag, desc in THROTTLED_FLAGS.items():
-                if flag & ts:
-                    flags.append(desc)
-            return {'bits': ts, 'flags': flags}
+        ret = {'bits': 0, 'flags': ["?"]}
+        if self.vcgencmd is not None:
+            async with self.throttle_check_lock:
+                try:
+                    resp = await self.event_loop.run_in_thread(self.vcgencmd.run)
+                    ret["bits"] = tstate = int(resp.strip().split("=")[-1], 16)
+                    ret["flags"] = [
+                        desc for flag, desc in THROTTLED_FLAGS.items() if flag & tstate
+                    ]
+                except Exception:
+                    pass
+        return ret
 
     def _read_system_files(self) -> Tuple:
         mem, units = self._get_memory_usage()
@@ -338,6 +338,52 @@ class Watchdog:
 
     def stop(self):
         self.watchdog_timer.stop()
+
+class VCGenCmd:
+    """
+    This class uses the BCM2835 Mailbox to directly query the throttled
+    state.  This should be less resource intensive than calling "vcgencmd"
+    in a subprocess.
+    """
+    VCIO_PATH = pathlib.Path("/dev/vcio")
+    MAX_STRING_SIZE = 1024
+    GET_RESULT_CMD = 0x00030080
+    UINT_SIZE = struct.calcsize("@I")
+    def __init__(self) -> None:
+        self.cmd_struct = struct.Struct(f"@6I{self.MAX_STRING_SIZE}sI")
+        self.cmd_buf = bytearray(self.cmd_struct.size)
+        self.mailbox_req = ioctl_macros.IOWR(100, 0, "c_char_p")
+        self.err_logged: bool = False
+
+    def run(self, cmd: str = "get_throttled") -> str:
+        with self.VCIO_PATH.open("rb") as f:
+            self.cmd_struct.pack_into(
+                self.cmd_buf, 0,
+                self.cmd_struct.size,
+                0x00000000,
+                self.GET_RESULT_CMD,
+                self.MAX_STRING_SIZE,
+                0,
+                0,
+                cmd.encode("utf-8"),
+                0x00000000
+            )
+            try:
+                fcntl.ioctl(f.fileno(), self.mailbox_req, self.cmd_buf)
+            except OSError:
+                if not self.err_logged:
+                    logging.exception("VCIO gcgencmd failed")
+                    self.err_logged = True
+                return ""
+        result = self.cmd_struct.unpack_from(self.cmd_buf)
+        ret: int = result[5]
+        if ret:
+            logging.info(f"vcgencmd returned {ret}")
+        resp: bytes = result[6]
+        null_index = resp.find(b'\x00')
+        if null_index <= 0:
+            return ""
+        return resp[:null_index].decode()
 
 def load_component(config: ConfigHelper) -> ProcStats:
     return ProcStats(config)
