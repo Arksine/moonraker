@@ -760,11 +760,11 @@ class Authorization:
             return False
         return self.failed_logins.get(ip_addr, 0) >= self.max_logins
 
-    def check_authorized(self,
-                         request: HTTPServerRequest
-                         ) -> Optional[Dict[str, Any]]:
+    def check_authorized(
+        self, request: HTTPServerRequest, endpoint: str = "",
+    ) -> Optional[Dict[str, Any]]:
         if (
-            request.path in self.permitted_paths
+            endpoint in self.permitted_paths
             or request.method == "OPTIONS"
         ):
             return None

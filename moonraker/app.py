@@ -168,6 +168,22 @@ class MoonrakerApp:
         self.key_path: pathlib.Path = self._get_path_option(
             config, 'ssl_key_path')
 
+        # Route Prefix
+        home_pattern = "/"
+        self._route_prefix: str = ""
+        route_prefix = config.get("route_prefix", None)
+        if route_prefix is not None:
+            rparts = route_prefix.strip("/").split("/")
+            rp = "/".join(
+                [url_escape(part, plus=False) for part in rparts if part]
+            )
+            if not rp:
+                raise config.error(
+                    f"Invalid value for option 'route_prefix': {route_prefix}"
+                )
+            self._route_prefix = f"/{rp}"
+            home_pattern = f"{self._route_prefix}/?"
+
         # Set Up Websocket and Authorization Managers
         self.wsm = WebsocketManager(self.server)
         self.internal_transport = InternalTransport(self.server)
@@ -196,10 +212,10 @@ class MoonrakerApp:
         self.mutable_router = MutableRouter(self)
         app_handlers: List[Any] = [
             (AnyMatches(), self.mutable_router),
-            (r"/", WelcomeHandler),
-            (r"/websocket", WebSocket),
-            (r"/klippysocket", BridgeSocket),
-            (r"/server/redirect", RedirectHandler)
+            (home_pattern, WelcomeHandler),
+            (f"{self._route_prefix}/websocket", WebSocket),
+            (f"{self._route_prefix}/klippysocket", BridgeSocket),
+            (f"{self._route_prefix}/server/redirect", RedirectHandler)
         ]
         self.app = tornado.web.Application(app_handlers, **app_args)
         self.get_handler_delegate = self.app.get_handler_delegate
@@ -242,6 +258,15 @@ class MoonrakerApp:
                 f"{path} does not exist"
             )
         return item
+
+    @property
+    def route_prefix(self):
+        return self._route_prefix
+
+    def parse_endpoint(self, http_path: str) -> str:
+        if not self._route_prefix or not http_path.startswith(self._route_prefix):
+            return http_path
+        return http_path[len(self._route_prefix):]
 
     def listen(self, host: str, port: int, ssl_port: int) -> None:
         if host.lower() == "all":
@@ -317,7 +342,8 @@ class MoonrakerApp:
         params['callback'] = api_def.endpoint
         params['need_object_parser'] = api_def.need_object_parser
         self.mutable_router.add_handler(
-            api_def.uri, DynamicRequestHandler, params)
+            f"{self._route_prefix}{api_def.uri}", DynamicRequestHandler, params
+        )
         self.registered_base_handlers.append(api_def.uri)
         for name, transport in self.api_transports.items():
             transport.register_api_handler(api_def)
@@ -345,7 +371,9 @@ class MoonrakerApp:
             params['wrap_result'] = wrap_result
             params['is_remote'] = False
             params['content_type'] = content_type
-            self.mutable_router.add_handler(uri, DynamicRequestHandler, params)
+            self.mutable_router.add_handler(
+                f"{self._route_prefix}{uri}", DynamicRequestHandler, params
+            )
         self.registered_base_handlers.append(uri)
         for name, transport in self.api_transports.items():
             if name in transports:
@@ -367,15 +395,21 @@ class MoonrakerApp:
             return
         logging.debug(f"Registering static file: ({pattern}) {file_path}")
         params = {'path': file_path}
-        self.mutable_router.add_handler(pattern, FileRequestHandler, params)
+        self.mutable_router.add_handler(
+            f"{self._route_prefix}{pattern}", FileRequestHandler, params
+        )
 
     def register_upload_handler(
-        self, pattern: str, location_prefix: Optional[str] = None
+        self, pattern: str, location_prefix: str = "server/files"
     ) -> None:
         params: Dict[str, Any] = {'max_upload_size': self.max_upload_size}
-        if location_prefix is not None:
-            params['location_prefix'] = location_prefix
-        self.mutable_router.add_handler(pattern, FileUploadHandler, params)
+        location_prefix = location_prefix.strip("/")
+        if self._route_prefix:
+            location_prefix = f"{self._route_prefix.strip('/')}/{location_prefix}"
+        params['location_prefix'] = location_prefix
+        self.mutable_router.add_handler(
+            f"{self._route_prefix}{pattern}", FileUploadHandler, params
+        )
 
     def register_debug_handler(
         self,
@@ -461,6 +495,7 @@ class MoonrakerApp:
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
+        self.endpoint: str = ""
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -473,9 +508,11 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
+        app: MoonrakerApp = self.server.lookup_component("application")
+        self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = auth.check_authorized(self.request)
+            self.current_user = auth.check_authorized(self.request, self.endpoint)
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -519,6 +556,7 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
                    ) -> None:
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
         self.server: Server = self.settings['server']
+        self.endpoint: str = ""
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -531,9 +569,11 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
+        app: MoonrakerApp = self.server.lookup_component("application")
+        self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None and self._check_need_auth():
-            self.current_user = auth.check_authorized(self.request)
+            self.current_user = auth.check_authorized(self.request, self.endpoint)
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -645,8 +685,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             resp = args
             if isinstance(args, dict):
                 if (
-                    self.request.path.startswith("/access") or
-                    self.request.path.startswith("/machine/sudo/password")
+                    self.endpoint.startswith("/access") or
+                    self.endpoint.startswith("/machine/sudo/password")
                 ):
                     resp = {key: "<sanitized>" for key in args}
             elif isinstance(args, str):
@@ -669,7 +709,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                                 ) -> Any:
         assert callable(self.callback)
         return await self.callback(
-            WebRequest(self.request.path, args, self.request.method,
+            WebRequest(self.endpoint, args, self.request.method,
                        conn=conn, ip_addr=self.request.remote_ip or "",
                        user=self.current_user))
 
@@ -720,7 +760,7 @@ class FileRequestHandler(AuthorizedFileHandler):
             f"filename*=UTF-8\'\'{utf8_basename}")
 
     async def delete(self, path: str) -> None:
-        path = self.request.path.lstrip("/").split("/", 2)[-1]
+        path = self.endpoint.lstrip("/").split("/", 2)[-1]
         path = url_unescape(path, plus=False)
         file_manager: FileManager
         file_manager = self.server.lookup_component('file_manager')
