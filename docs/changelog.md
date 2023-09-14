@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog].
 - **update_manager**: Added support for stable `git_repo` updates
 - **server**: Added a `--unixsocket` command line option
 - **server**: Command line options may also be specified as env variables
+- **server**: Added a `route_prefix` option
 
 ### Fixed
 

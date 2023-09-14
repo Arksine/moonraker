@@ -58,6 +58,17 @@ klippy_uds_address: /tmp/klippy_uds
 #     klippy_uds_address: {data_path}/comms/klippy.sock
 #
 #   Default is /tmp/klippy_uds.
+route_prefix:
+#   A prefix prepended to the path for each HTTP endpoint.  For example
+#   if the route_prefix is set to moonraker/printer1, then the server info
+#   endpoint is available at:
+#     http://myprinter.local/moonraker/printer1/server/info
+#
+#   This is primarily useful for installations that feature multiple instances
+#   of Moonraker, as it allows a reverse proxy identify the correct instance based
+#   on the path and redirect requests without a rewrite.  Note that frontends must feature
+#   support for HTTP endpoints with a route prefix to communicate with Moonraker when
+#   this option is set. The default is no route prefix.
 max_upload_size: 1024
 #   The maximum size allowed for a file upload (in MiB).  Default is 1024 MiB.
 max_websocket_connections:
