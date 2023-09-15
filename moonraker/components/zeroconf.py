@@ -100,7 +100,8 @@ class ZeroconfRegistrar:
         zc_service_props = {
             "uuid": instance_uuid,
             "https_port": hi["ssl_port"] if app.https_enabled() else "",
-            "version": app_args["software_version"]
+            "version": app_args["software_version"],
+            "route_prefix": app.route_prefix
         }
         if self.bound_all:
             if not host:
@@ -272,7 +273,8 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
         if len(name) > 64:
             name = name[:64]
         self.name = name
-        self.base_url = f"http://{host_name_or_ip}:{port}"
+        app: MoonrakerApp = self.server.lookup_component("application")
+        self.base_url = f"http://{host_name_or_ip}:{port}{app.route_prefix}"
         self.response_headers = [
             f"USN: uuid:{self.unique_id}::upnp:rootdevice",
             f"LOCATION: {self.base_url}/server/zeroconf/ssdp",
