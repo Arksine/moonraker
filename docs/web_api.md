@@ -3745,6 +3745,7 @@ A list of configured webcams:
 {
     "webcams": [
         {
+            "id": "59b7d256-0db9-47bf-bf5f-b9e4a6f61488",
             "name": "testcam3",
             "location": "door",
             "service": "mjpegstreamer",
@@ -3762,6 +3763,7 @@ A list of configured webcams:
             "source": "config"
         },
         {
+            "id": "2986b491-2bc8-4cad-9dae-c5a500ba6511",
             "name": "tc2",
             "location": "printer",
             "service": "mjpegstreamer",
@@ -3779,6 +3781,7 @@ A list of configured webcams:
             "source": "database"
         },
         {
+            "id": "cd68e494-b7c4-4ef0-a54e-61b8661bc9b6",
             "name": "TestCam",
             "location": "printer",
             "service": "mjpegstreamer",
@@ -3804,6 +3807,7 @@ A list of configured webcams:
 HTTP request:
 ```http
 GET /server/webcams/item?name=cam_name
+GET /server/webcams/item?uuid=cd68e494-b7c4-4ef0-a54e-61b8661bc9b6
 ```
 JSON-RPC request:
 ```json
@@ -3811,7 +3815,8 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.webcams.get_item",
     "params": {
-        "name": "cam_name"
+        "name": "cam_name",
+        "uuid": "cd68e494-b7c4-4ef0-a54e-61b8661bc9b6"
     },
     "id": 4654
 }
@@ -3820,8 +3825,13 @@ JSON-RPC request:
 Parameters:
 
 - `name`: The name of the camera to request information for.  If the named
-  camera is not available the request will return with an error.  This
-  parameter must be provided.
+  camera is not available the request will return with an error. This parameter is optional.
+
+- `uuid`: The id of the camera to request information for.  If the
+  camera is not available the request will return with an error. This parameter is optional.
+
+!!! Warning
+    For every request either the `name` or `uuid` parameter must be specified. If both parameters are specified, the `name` parameter will be used.
 
 Returns:
 
@@ -3830,6 +3840,7 @@ The full configuration for the requested webcam:
 ```json
 {
     "webcam": {
+        "id": "cd68e494-b7c4-4ef0-a54e-61b8661bc9b6",
         "name": "TestCam",
         "location": "printer",
         "service": "mjpegstreamer",
@@ -3885,8 +3896,10 @@ JSON-RPC request:
 
 Parameters:
 
+- `uuid`: The id of the camera update.  This parameter must
+  be provided to update a cam and must be omitted to add a new one.
 - `name`: The name of the camera to add or update.  This parameter must
-  be provided for new entries.
+  be provided for new entries and can also be used to update exisiting once if the `uuid` os omitted.
 - `location`: A description of the webcam location, ie: what the webcam is
   observing.  The default is `printer` for new entries.
 - `icon`:  The name of the icon to use for the camera. The default is `mdiWebcam`
@@ -3954,6 +3967,7 @@ The full configuration for the added/updated webcam:
 HTTP request:
 ```http
 DELETE /server/webcams/item?name=cam_name
+DELETE /server/webcams/item?uuid=cd68e494-b7c4-4ef0-a54e-61b8661bc9b6
 ```
 JSON-RPC request:
 ```json
@@ -3970,8 +3984,12 @@ JSON-RPC request:
 Parameters:
 
 - `name`: The name of the camera to delete.  If the named camera is not
-  available the request will return with an error.  This parameter must
-  be provided.
+  available the request will return with an error.  This parameter is optional.
+- `uuid`: The id of the camera to delete.  If the camera is not
+  available the request will return with an error.  This parameter is optional.
+
+!!! Warning
+    For every request either the `name` or `uuid` parameter must be specified. If both parameters are specified, the `name` parameter will be used.
 
 Returns:
 
@@ -4003,6 +4021,7 @@ reachable.
 HTTP request:
 ```http
 POST /server/webcams/test?name=cam_name
+POST /server/webcams/test?uuid=cd68e494-b7c4-4ef0-a54e-61b8661bc9b6
 ```
 JSON-RPC request:
 ```json
@@ -4019,8 +4038,12 @@ JSON-RPC request:
 Parameters:
 
 - `name`: The name of the camera to test.  If the named camera is not
-  available the request will return with an error.  This parameter must
-  be provided.
+  available the request will return with an error.  This parameter is optional.
+- `uuid`: The id of the camera to test.  If the camera is not
+  available the request will return with an error.  This parameter is optional.
+
+!!! Warning
+    For every request either the `name` or `uuid` parameter must be specified. If both parameters are specified, the `name` parameter will be used.
 
 Returns: Test results in the following format
 

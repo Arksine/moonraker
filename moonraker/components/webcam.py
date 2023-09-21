@@ -47,7 +47,7 @@ class WebcamManager:
         for section in prefix_sections:
             cam_cfg = config[section]
             webcam = WebCam.from_config(cam_cfg)
-            self.webcams[webcam.name] = webcam
+            self.webcams[webcam.id] = webcam
 
         self.server.register_endpoint(
             "/server/webcams/list", ["GET"], self._handle_webcam_list
@@ -70,12 +70,12 @@ class WebcamManager:
             self._set_default_host_ip(machine.public_ip)
         db: MoonrakerDatabase = self.server.lookup_component("database")
         saved_cams: Dict[str, Any] = await db.get_item("webcams", default={})
-        for cam_data in saved_cams.values():
+        for uid, cam_data in saved_cams.items():
             try:
-                webcam = WebCam.from_database(self.server, cam_data)
-                if webcam.name in self.webcams:
+                webcam = WebCam.from_database(self.server, uid, cam_data)
+                if webcam.id in self.webcams:
                     continue
-                self.webcams[webcam.name] = webcam
+                self.webcams[webcam.id] = webcam
             except Exception:
                 logging.exception("Failed to process webcam from db")
                 continue
@@ -101,7 +101,7 @@ class WebcamManager:
     def _list_webcams(self) -> List[Dict[str, Any]]:
         return [wc.as_dict() for wc in self.webcams.values()]
 
-    async def _find_dbcam_by_uuid(
+    async def _find_dbcam_by_name(
         self, name: str
     ) -> Tuple[str, Dict[str, Any]]:
         db: MoonrakerDatabase = self.server.lookup_component("database")
@@ -111,21 +111,28 @@ class WebcamManager:
             if name == cam_data["name"]:
                 return uid, cam_data
         return "", {}
+    async def _find_dbcam_by_uuid(
+        self, uid: str
+    ) -> Tuple[str, Dict[str, Any]]:
+        db: MoonrakerDatabase = self.server.lookup_component("database")
+        found_cam: Dict[str, Any]
+        found_cam = await db.get_item("webcams", uid, default={})
+        if found_cam:
+            return uid, found_cam
+        return "", {}
 
     async def _save_cam(self, webcam: WebCam) -> None:
-        uid, cam_data = await self._find_dbcam_by_uuid(webcam.name)
-        if not uid:
-            uid = str(uuid.uuid4())
+        _, cam_data = await self._find_dbcam_by_uuid(webcam.id)
         for mfield, dbfield in CAM_FIELDS.items():
             cam_data[dbfield] = getattr(webcam, mfield)
         cam_data["location"] = webcam.location
         cam_data["rotation"] = webcam.rotation
         cam_data["extra_data"] = webcam.extra_data
         db: MoonrakerDatabase = self.server.lookup_component("database")
-        db.insert_item("webcams", uid, cam_data)
+        db.insert_item("webcams", webcam.id, cam_data)
 
     async def _delete_cam(self, webcam: WebCam) -> None:
-        uid, cam = await self._find_dbcam_by_uuid(webcam.name)
+        uid, _ = await self._find_dbcam_by_uuid(webcam.id)
         if not uid:
             return
         db: MoonrakerDatabase = self.server.lookup_component("database")
@@ -135,35 +142,42 @@ class WebcamManager:
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
         action = web_request.get_action()
-        name = web_request.get_str("name")
+        name: Optional[str] = web_request.get_str("name", default=None)
+        cam_id: str
+
+        if name:
+            cam_id, _ = await self._find_dbcam_by_name(name)
+        else:
+            cam_id = web_request.get_str("uuid")
+
         webcam_data: Dict[str, Any] = {}
         if action == "GET":
-            if name not in self.webcams:
-                raise self.server.error(f"Webcam {name} not found", 404)
-            webcam_data = self.webcams[name].as_dict()
+            if not cam_id or cam_id not in self.webcams:
+                raise self.server.error(f"Webcam {cam_id} not found", 404)
+            webcam_data = self.webcams[cam_id].as_dict()
         elif action == "POST":
-            webcam = self.webcams.get(name, None)
+            webcam = self.webcams.get(cam_id, None)
             if webcam is not None:
                 if webcam.source == "config":
                     raise self.server.error(
-                        f"Cannot overwrite webcam '{name}' sourced from "
+                        f"Cannot overwrite webcam '{cam_id}' sourced from "
                         "Moonraker configuration"
                     )
                 webcam.update(web_request)
             else:
                 webcam = WebCam.from_web_request(self.server, web_request)
-                self.webcams[name] = webcam
+                self.webcams[webcam.id] = webcam
             webcam_data = webcam.as_dict()
             await self._save_cam(webcam)
         elif action == "DELETE":
-            if name not in self.webcams:
-                raise self.server.error(f"Webcam {name} not found", 404)
-            elif self.webcams[name].source == "config":
+            if cam_id not in self.webcams:
+                raise self.server.error(f"Webcam {cam_id} not found", 404)
+            elif self.webcams[cam_id].source == "config":
                 raise self.server.error(
-                    f"Cannot delete webcam '{name}' sourced from "
+                    f"Cannot delete webcam '{cam_id}' sourced from "
                     "Moonraker configuration"
                 )
-            webcam = self.webcams.pop(name)
+            webcam = self.webcams.pop(cam_id)
             webcam_data = webcam.as_dict()
             await self._delete_cam(webcam)
         if action != "GET":
@@ -180,13 +194,20 @@ class WebcamManager:
     async def _handle_webcam_test(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
-        name = web_request.get_str("name")
-        if name not in self.webcams:
-            raise self.server.error(f"Webcam '{name}' not found", 404)
+        name: Optional[str] = web_request.get_str("name", default=None)
+        cam_id: str
+        if name:
+            cam_id, _ = await self._find_dbcam_by_name(name)
+        else:
+            cam_id = web_request.get_str("uuid")
+
+
+        if cam_id not in self.webcams:
+            raise self.server.error(f"Webcam '{cam_id}' not found", 404)
         client: HttpClient = self.server.lookup_component("http_client")
-        cam = self.webcams[name]
+        cam = self.webcams[cam_id]
         result: Dict[str, Any] = {
-            "name": name,
+            "uuid": cam_id,
             "snapshot_reachable": False
         }
         for img_type in ["snapshot", "stream"]:
@@ -207,6 +228,7 @@ class WebCam:
     _default_host: str = "http://127.0.0.1"
     def __init__(self, server: Server, **kwargs) -> None:
         self._server = server
+        self.id: str = kwargs["id"]
         self.enabled: bool = kwargs["enabled"]
         self.icon: str = kwargs["icon"]
         self.aspect_ratio: str = kwargs["aspect_ratio"]
@@ -332,6 +354,8 @@ class WebCam:
     def update(self, web_request: WebRequest) -> None:
         for field in web_request.get_args().keys():
             try:
+                if field == "id":
+                    continue
                 attr = getattr(self, field)
             except AttributeError:
                 continue
@@ -354,6 +378,7 @@ class WebCam:
     @classmethod
     def from_config(cls, config: ConfigHelper) -> WebCam:
         webcam: Dict[str, Any] = {}
+        webcam["id"] = str(uuid.uuid4())
         webcam["name"] = config.get_name().split(maxsplit=1)[-1]
         webcam["enabled"] = config.getboolean("enabled", True)
         webcam["icon"] = config.get("icon", "mdiWebcam")
@@ -379,6 +404,7 @@ class WebCam:
         cls, server: Server, web_request: WebRequest
     ) -> WebCam:
         webcam: Dict[str, Any] = {}
+        webcam["id"] = str(uuid.uuid4())
         webcam["name"] = web_request.get_str("name")
         webcam["enabled"] = web_request.get_boolean("enabled", True)
         webcam["icon"] = web_request.get_str("icon", "mdiWebcam")
@@ -397,8 +423,14 @@ class WebCam:
         return cls(server, **webcam)
 
     @classmethod
-    def from_database(cls, server: Server, cam_data: Dict[str, Any]) -> WebCam:
+    def from_database(
+        cls,
+        server: Server,
+        cam_uuid: str,
+        cam_data: Dict[str, Any]
+    ) -> WebCam:
         webcam: Dict[str, Any] = {}
+        webcam["id"] = cam_uuid
         webcam["name"] = str(cam_data["name"])
         webcam["enabled"] = bool(cam_data.get("enabled", True))
         webcam["icon"] = str(cam_data.get("icon", "mdiWebcam"))
