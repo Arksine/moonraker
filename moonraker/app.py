@@ -10,17 +10,21 @@ import mimetypes
 import logging
 import json
 import traceback
+import socket
 import ssl
 import pathlib
 import urllib.parse
 import tornado
 import tornado.iostream
 import tornado.httputil
+import tornado.netutil
 import tornado.web
+from contextlib import closing
 from inspect import isclass
 from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
+from tornado.httpserver import HTTPServer
 from tornado.log import access_log
 from .common import WebRequest, APIDefinition, APITransport
 from .utils import ServerError, source_info
@@ -46,7 +50,6 @@ from typing import (
     AsyncGenerator,
 )
 if TYPE_CHECKING:
-    from tornado.httpserver import HTTPServer
     from .server import Server
     from .eventloop import EventLoop
     from .confighelper import ConfigHelper
@@ -269,6 +272,20 @@ class MoonrakerApp:
         return http_path[len(self._route_prefix):]
 
     def listen(self, host: str, port: int, ssl_port: int) -> None:
+        if "LISTEN_FDS" in os.environ:
+            assert int(os.environ["LISTEN_FDS"]) >= 1
+            logging.info("Using socket activation, only serve HTTP and the actual port might not match the port in config.")
+            self.http_server = HTTPServer(self.app, max_body_size=MAX_BODY_SIZE, xheaders=True)
+            with closing(socket.fromfd(3, -1, -1)) as sock_tmp:
+                sock = socket.fromfd(3,
+                    sock_tmp.getsockopt(socket.SOL_SOCKET, socket.SO_DOMAIN),
+                    sock_tmp.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE),
+                    sock_tmp.getsockopt(socket.SOL_SOCKET, socket.SO_PROTOCOL),
+                )
+                sock.setblocking(0)
+                sock.listen(tornado.netutil._DEFAULT_BACKLOG)
+                self.http_server.add_socket(sock)
+            return
         if host.lower() == "all":
             host = ""
         self.http_server = self.app.listen(
@@ -312,7 +329,7 @@ class MoonrakerApp:
         return self.server
 
     def https_enabled(self) -> bool:
-        return self.cert_path.exists() and self.key_path.exists()
+        return self.cert_path.exists() and self.key_path.exists() and "LISTEN_FDS" not in os.environ
 
     async def close(self) -> None:
         if self.http_server is not None:
