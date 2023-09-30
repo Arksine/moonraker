@@ -3720,6 +3720,7 @@ The name of the new feed and the action taken.  The `action` will be
 ```
 
 ### Webcam APIs
+
 The following APIs are available to manage webcam configuration:
 
 #### List Webcams
@@ -3759,7 +3760,8 @@ A list of configured webcams:
             "rotation": 90,
             "aspect_ratio": "4:3",
             "extra_data": {},
-            "source": "config"
+            "source": "config",
+            "uid": "55d3801e-fdc1-438d-8728-2fff8b83b909"
         },
         {
             "name": "tc2",
@@ -3776,7 +3778,8 @@ A list of configured webcams:
             "rotation": 0,
             "aspect_ratio": "4:3",
             "extra_data": {},
-            "source": "database"
+            "source": "database",
+            "uid": "65e51c8a-6763-41d4-8e76-345bb6e8e7c3"
         },
         {
             "name": "TestCam",
@@ -3793,7 +3796,8 @@ A list of configured webcams:
             "rotation": 0,
             "aspect_ratio": "4:3",
             "extra_data": {},
-            "source": "database"
+            "source": "database",
+            "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
         }
     ]
 }
@@ -3803,7 +3807,7 @@ A list of configured webcams:
 
 HTTP request:
 ```http
-GET /server/webcams/item?name=cam_name
+GET /server/webcams/item?uid=341778f9-387f-455b-8b69-ff68442d41d9
 ```
 JSON-RPC request:
 ```json
@@ -3811,7 +3815,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.webcams.get_item",
     "params": {
-        "name": "cam_name"
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     },
     "id": 4654
 }
@@ -3819,9 +3823,11 @@ JSON-RPC request:
 
 Parameters:
 
-- `name`: The name of the camera to request information for.  If the named
-  camera is not available the request will return with an error.  This
-  parameter must be provided.
+- `uid`:  The webcam's assigned unique ID.  This parameter is optional, when
+  not specified the request will fallback to the `name` parameter.
+- `name`: The name of the webcam to request information for.  If the named
+  webcam is not available the request will return with an error.  This
+  parameter must be provided when the `uid` is omitted.
 
 Returns:
 
@@ -3844,7 +3850,8 @@ The full configuration for the requested webcam:
         "rotation": 0,
         "aspect_ratio": "4:3",
         "extra_data": {},
-        "source": "database"
+        "source": "database",
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     }
 }
 ```
@@ -3885,6 +3892,8 @@ JSON-RPC request:
 
 Parameters:
 
+- `uid`:  The unique ID of the webcam.  This parameter may be specified to
+  modify an existing webcam.  New entries must omit the `uid`.
 - `name`: The name of the camera to add or update.  This parameter must
   be provided for new entries.
 - `location`: A description of the webcam location, ie: what the webcam is
@@ -3919,6 +3928,12 @@ Parameters:
   object.  This may be used to store any additional webcam options and/or data. The
   default is an empty object for new entries.
 
+!!! Tip
+    When modifying existing entries it is possible to rename an existing item by
+    specifying its current `uid` and a new value for `name`.  Keep in mind that
+    names must be unique, an attempt to rename an existing webcam to another name
+    that is reserved will result in an error.
+
 Returns:
 
 The full configuration for the added/updated webcam:
@@ -3940,7 +3955,8 @@ The full configuration for the added/updated webcam:
         "rotation": 0,
         "aspect_ratio": "4:3",
         "extra_data": {},
-        "source": "database"
+        "source": "database",
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     }
 }
 ```
@@ -3953,7 +3969,7 @@ The full configuration for the added/updated webcam:
 
 HTTP request:
 ```http
-DELETE /server/webcams/item?name=cam_name
+DELETE /server/webcams/uid?name=341778f9-387f-455b-8b69-ff68442d41d9
 ```
 JSON-RPC request:
 ```json
@@ -3961,7 +3977,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.webcams.delete_item",
     "params": {
-        "name": "cam_name"
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     },
     "id": 4654
 }
@@ -3969,9 +3985,11 @@ JSON-RPC request:
 
 Parameters:
 
-- `name`: The name of the camera to delete.  If the named camera is not
+- `uid`:  The webcam's assigned unique ID.  This parameter is optional, when
+  not specified the request will fallback to the `name` parameter.
+- `name`: The name of the webcam to delete.  If the named webcam is not
   available the request will return with an error.  This parameter must
-  be provided.
+  be provided when the `uid` is omitted.
 
 Returns:
 
@@ -3989,7 +4007,8 @@ The full configuration of the deleted webcam:
         "flip_horizontal": false,
         "flip_vertical": false,
         "rotation": 0,
-        "source": "database"
+        "source": "database",
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     }
 }
 ```
@@ -4002,7 +4021,7 @@ reachable.
 
 HTTP request:
 ```http
-POST /server/webcams/test?name=cam_name
+POST /server/webcams/test?uid=341778f9-387f-455b-8b69-ff68442d41d9
 ```
 JSON-RPC request:
 ```json
@@ -4010,7 +4029,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.webcams.test",
     "params": {
-        "name": "cam_name"
+        "uid": "341778f9-387f-455b-8b69-ff68442d41d9"
     },
     "id": 4654
 }
@@ -4018,9 +4037,11 @@ JSON-RPC request:
 
 Parameters:
 
-- `name`: The name of the camera to test.  If the named camera is not
+- `uid`:  The webcam's assigned unique ID.  This parameter is optional, when
+  not specified the request will fallback to the `name` parameter.
+- `name`: The name of the webcam to test.  If the named webcam is not
   available the request will return with an error.  This parameter must
-  be provided.
+  be provided when the `uid` is omitted.
 
 Returns: Test results in the following format
 
