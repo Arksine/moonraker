@@ -1645,6 +1645,9 @@ class InotifyNode:
             return True
         return self.parent_node.is_processing()
 
+    def has_child_node(self, child_name: str):
+        return child_name in self.child_nodes
+
     def add_event(self, evt_name: str, timeout: float) -> None:
         if evt_name in self.pending_node_events:
             self.reset_event(evt_name, timeout)
@@ -1912,11 +1915,9 @@ class InotifyObserver(BaseFileSystemObserver):
             action = "delete_dir"
         self.notify_filelist_changed(action, root, item_path)
 
-    def _schedule_pending_move(self,
-                               evt: InotifyEvent,
-                               parent_node: InotifyNode,
-                               is_dir: bool
-                               ) -> None:
+    def _schedule_pending_move(
+        self, evt: InotifyEvent, parent_node: InotifyNode, is_dir: bool
+    ) -> None:
         hdl = self.event_loop.delay_callback(
             INOTIFY_MOVE_TIME, self._handle_move_timeout,
             evt.cookie, is_dir)
@@ -1948,34 +1949,55 @@ class InotifyObserver(BaseFileSystemObserver):
         node_path = node.get_path()
         full_path = os.path.join(node_path, evt.name)
         if evt.mask & iFlags.CREATE:
-            self.sync_lock.add_pending_path("create_dir", full_path)
-            logging.debug(f"Inotify directory create: {root}, "
-                          f"{node_path}, {evt.name}")
-            node.create_child_node(evt.name)
+            logging.debug(f"Inotify directory create: {root}, {node_path}, {evt.name}")
+            if self.file_manager.check_reserved_path(full_path, True, False):
+                logging.debug(
+                    f"Inotify - ignoring create watch at reserved path: {full_path}"
+                )
+            else:
+                self.sync_lock.add_pending_path("create_dir", full_path)
+                node.create_child_node(evt.name)
         elif evt.mask & iFlags.DELETE:
-            logging.debug(f"Inotify directory delete: {root}, "
-                          f"{node_path}, {evt.name}")
+            logging.debug(f"Inotify directory delete: {root}, {node_path}, {evt.name}")
             node.schedule_child_delete(evt.name, True)
         elif evt.mask & iFlags.MOVED_FROM:
-            logging.debug(f"Inotify directory move from: {root}, "
-                          f"{node_path}, {evt.name}")
-            self._schedule_pending_move(evt, node, True)
+            logging.debug(
+                f"Inotify directory move from: {root}, {node_path}, {evt.name}"
+            )
+            if node.has_child_node(evt.name):
+                self._schedule_pending_move(evt, node, True)
+            else:
+                logging.debug(
+                    f"Inotify - Child node with name {evt.name} does not exist"
+                )
         elif evt.mask & iFlags.MOVED_TO:
-            logging.debug(f"Inotify directory move to: {root}, "
-                          f"{node_path}, {evt.name}")
+            logging.debug(f"Inotify directory move to: {root}, {node_path}, {evt.name}")
             moved_evt = self.pending_moves.pop(evt.cookie, None)
             if moved_evt is not None:
                 self.sync_lock.add_pending_path("move_dir", full_path)
                 # Moved from a currently watched directory
                 prev_parent, child_name, hdl = moved_evt
                 hdl.cancel()
-                prev_parent.move_child_node(child_name, evt.name, node)
+                if self.file_manager.check_reserved_path(full_path, True, False):
+                    # Previous node was renamed/moved to a reserved path.  To API
+                    # consumers this will appear as deleted
+                    logging.debug(
+                        f"Inotify - deleting prev folder {child_name} moved to "
+                        f"reserved path: {full_path}"
+                    )
+                    prev_parent.schedule_child_delete(child_name, True)
+                else:
+                    prev_parent.move_child_node(child_name, evt.name, node)
             else:
-                # Moved from an unwatched directory, for our
-                # purposes this is the same as creating a
-                # directory
-                self.sync_lock.add_pending_path("create_dir", full_path)
-                node.create_child_node(evt.name)
+                # Moved from an unwatched directory, for our purposes this is the same
+                # as creating a directory
+                if self.file_manager.check_reserved_path(full_path, True, False):
+                    logging.debug(
+                        f"Inotify - ignoring moved folder to reserved path: {full_path}"
+                    )
+                else:
+                    self.sync_lock.add_pending_path("create_dir", full_path)
+                    node.create_child_node(evt.name)
 
     def _process_file_event(self, evt: InotifyEvent, node: InotifyNode) -> None:
         ext: str = os.path.splitext(evt.name)[-1].lower()
