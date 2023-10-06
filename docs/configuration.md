@@ -10,15 +10,41 @@ which configuration file is being referenced A basic
 [sample configuration](./moonraker.conf) in the `docs` directory.
 
 Moonraker uses an ini style configuration very close to that of Klipper.
-Inline comments are supported, prefixed by either a `#` or `;`.  If it
-is necessary to use one of those characters in an option, they may be
-escaped using backslash, ie `\#`.  For example:
+Comments are supported and may be specified by either a `#` or `;` character.
+Inline comments are also supported and are evaluated according to the following
+rules:
+
+- At least one whitespace character must separate the configuration data and the
+  comment specifier.
+- Specifiers that are not preceded by whitespace will be considered part of
+  the configuration.
+- If it is necessary for a value to include whitespace followed by one
+  of the comment specifiers, the specifier may be escaped using a backslash,
+  ie: ` \#`.
+- Only specifiers preceded by whitespace may be escaped.
+
+For example:
 
 ```ini
 # This is a comment
 [section_name] # This is a comment
-opt: \# This is not a comment
+opt_one: http://this.is/#not-a-comment
+opt_two: This is also \# not a comment
+opt_three: This is the value # this is a comment
+opt_four: Once again\# not a comment
 ```
+
+- Option `opt_one` resolves to a value of `http://this.is/#not-a-comment`.
+  The `#` is not preceded by whitespace and not evaluated as an inline comment.
+- Option `opt_two`, resolves to a value of `This is also # not a comment`.  The
+  ` \#` is evaluated as valid escape sequence.  The backslash is removed and the
+  resulting `#` is stored in the value.
+- Option `opt_three` resolves to a value of `This is the value`.  The comment
+  specifier is preceded by whitespace, thus the remainder of the line is
+  evaluted as a comment and removed from the option.
+- Option `opt_four` resolves to a value of `Once again\# not a comment`.
+  The `\` character is not preceded by whitespace and not evaluated as
+  an escape sequence, thus the escape character is not removed from the value.
 
 Moonraker uses strict parsing rules.  A configuration file may not
 contain multiple sections of the same name.  A section may not contain
