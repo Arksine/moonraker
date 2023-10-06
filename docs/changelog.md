@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog].
   transition.
 - **klippy_connection**:  Fixed a race condition that can result in
   skipped subscription updates.
+- **configheler**: Fixed inline comment parsing.
 
 ### Changed
 
