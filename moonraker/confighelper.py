@@ -952,13 +952,12 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     # ignore lines that contain only whitespace/comments
                     continue
                 line = line.expandtabs(tabsize=4)
-                # Remove inline comments
-                for prefix in "#;":
-                    icmt = line.find(prefix)
-                    if icmt > 0 and line[icmt-1] != "\\":
-                        # inline comment, remove it
-                        line = line[:icmt]
-                        break
+                # Search for and remove inline comments
+                cmt_match = re.search(r" +[#;]", line)
+                if cmt_match is not None:
+                    line = line[:cmt_match.start()]
+                # Unescape prefix chars that are preceded by whitespace
+                line = re.sub(r" \\(#|;)", r" \1", line)
                 line_indent = len(line) - len(line.lstrip())
                 if opt_indent != -1 and line_indent > opt_indent:
                     # Multi-line value, append to buffer and resume parsing
