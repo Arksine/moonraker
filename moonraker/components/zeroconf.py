@@ -346,7 +346,7 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
         try:
             parts = data.decode().split("\r\n\r\n", maxsplit=1)
             header = parts[0]
-        except ValueError as e:
+        except ValueError:
             logging.exception("Data Decode Error")
             return
         hlines = header.splitlines()
