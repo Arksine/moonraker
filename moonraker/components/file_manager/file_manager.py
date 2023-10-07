@@ -1888,7 +1888,7 @@ class InotifyObserver(BaseFileSystemObserver):
 
     def log_nodes(self) -> None:
         if self.server.is_verbose_enabled():
-            debug_msg = f"Inotify Watches After Scan:"
+            debug_msg = "Inotify Watches After Scan:"
             for wdesc, node in self.watched_nodes.items():
                 wdir = node.get_path()
                 wroot = node.get_root()
