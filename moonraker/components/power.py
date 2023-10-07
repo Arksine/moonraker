@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from .klippy_apis import KlippyAPI as APIComp
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
-    from .http_client import HttpClient, HttpResponse
+    from .http_client import HttpClient
     from klippy_connection import KlippyConnection
 
 class PrinterPower:
@@ -966,7 +966,7 @@ class Tasmota(HTTPDevice):
             state: str = res[f"POWER{self.output_id}"].lower()
         except KeyError as e:
             if self.output_id == 1:
-                state = res[f"POWER"].lower()
+                state = res["POWER"].lower()
             else:
                 raise KeyError(e)
         return state
@@ -978,7 +978,7 @@ class Tasmota(HTTPDevice):
                 state = res[f"POWER{self.output_id}"].lower()
             except KeyError as e:
                 if self.output_id == 1:
-                    state = res[f"POWER"].lower()
+                    state = res["POWER"].lower()
                 else:
                     raise KeyError(e)
         return state
@@ -1003,21 +1003,21 @@ class Shelly(HTTPDevice):
         if self.password != "":
             out_pwd = f"{quote(self.user)}:{quote(self.password)}@"
         else:
-            out_pwd = f""
+            out_pwd = ""
         query = urlencode(query_args)
         url = f"{self.protocol}://{out_pwd}{quote(self.addr)}/{out_cmd}?{query}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
         res = await self._send_shelly_command("info")
-        state: str = res[f"ison"]
-        timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
+        state: str = res["ison"]
+        timer_remaining = res["timer_remaining"] if self.timer != "" else 0
         return "on" if state and timer_remaining == 0 else "off"
 
     async def _send_power_request(self, state: str) -> str:
         res = await self._send_shelly_command(state)
-        state = res[f"ison"]
-        timer_remaining = res[f"timer_remaining"] if self.timer != "" else 0
+        state = res["ison"]
+        timer_remaining = res["timer_remaining"] if self.timer != "" else 0
         return "on" if state and timer_remaining == 0 else "off"
 
 
@@ -1100,10 +1100,10 @@ class HomeSeer(HTTPDevice):
 
     async def _send_status_request(self) -> str:
         res = await self._send_homeseer("getstatus")
-        return res[f"Devices"][0]["status"].lower()
+        return res["Devices"][0]["status"].lower()
 
     async def _send_power_request(self, state: str) -> str:
-        res = await self._send_homeseer(
+        await self._send_homeseer(
             "controldevicebylabel", state.capitalize()
         )
         return state
@@ -1146,7 +1146,7 @@ class HomeAssistant(HTTPDevice):
 
     async def _send_status_request(self) -> str:
         res = await self._send_homeassistant_command("info")
-        return res[f"state"]
+        return res["state"]
 
     async def _send_power_request(self, state: str) -> str:
         await self._send_homeassistant_command(state)
@@ -1170,18 +1170,18 @@ class Loxonev1(HTTPDevice):
         if self.password != "":
             out_pwd = f"{quote(self.user)}:{quote(self.password)}@"
         else:
-            out_pwd = f""
+            out_pwd = ""
         url = f"http://{out_pwd}{quote(self.addr)}/{out_cmd}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
         res = await self._send_loxonev1_command("info")
-        state = res[f"LL"][f"value"]
+        state = res["LL"]["value"]
         return "on" if int(state) == 1 else "off"
 
     async def _send_power_request(self, state: str) -> str:
         res = await self._send_loxonev1_command(state)
-        state = res[f"LL"][f"value"]
+        state = res["LL"]["value"]
         return "on" if int(state) == 1 else "off"
 
 
