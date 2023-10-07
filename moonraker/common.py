@@ -504,7 +504,7 @@ class JsonRPC:
             params = obj['params']
             if not isinstance(params, dict):
                 return self.build_error(
-                    -32602, f"Invalid params:", req_id, method_name=method_name
+                    -32602, "Invalid params:", req_id, method_name=method_name
                 )
         return await self.execute_method(method_name, method, req_id, conn, params)
 
