@@ -23,7 +23,6 @@ from .utils import ServerError
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
     Optional,
     Callable,
     Coroutine,
