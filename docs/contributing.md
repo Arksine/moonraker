@@ -105,24 +105,23 @@ By making a contribution to this project, I certify that:
 ```
 #### Code Style
 Python methods should be fully annotated. Variables should be annotated where
-the type cannot be inferred. Moonraker uses the `mypy` static type checker for
-code validation with the following options:
+the type cannot be inferred. Moonraker uses `mypy` version 1.5.1 for static
+type checking with the following options:
 
   - `--ignore-missing-imports`
   - `--follow-imports=silent`
 
-No line in the source code should exceed 80 characters.  Be sure there is no
+No line in the source code should exceed 88 characters.  Be sure there is no
 trailing whitespace.  To validate code before submission one may use
-`pycodestyle` with the following options:
+`flake8` version 6.1.0 with the following options:
 
   - `--ignore=E226,E301,E302,E303,W503,W504`
-  - `--max-line-length=80`
-  - `--max-doc-length=80`
+  - `--max-line-length=88`
+  - `--max-doc-length=88`
 
 Generally speaking, each line in submitted documentation should also be no
-longer than 80 characters, however there are situations where this isn't
-possible, such as long hyperlinks or example return values.  Documentation
-isn't linted, so it
+longer than 88 characters, however there are situations where this isn't
+possible, such as long hyperlinks or example return values.
 
-Don't peek into the member variables of another class.  Use getters or
+Avoid peeking into the member variables of another class.  Use getters or
 properties to access object state.
