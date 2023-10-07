@@ -466,7 +466,8 @@ class WLED:
         if status is None and preset == -1 and brightness == -1 and \
            intensity == -1 and speed == -1:
             logging.info(
-                f"Invalid state received but no control or preset data passed")
+                "Invalid state received but no control or preset data passed"
+            )
             return
 
         if strip not in self.strips:
