@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .file_manager.file_manager import FileManager
-    from .http_client import HttpClient
     from .klippy_apis import KlippyAPI as APIComp
 
 class Notifier:
@@ -120,7 +119,6 @@ class Notifier:
         name = web_request.get_str("name")
         if name not in self.notifiers:
             raise self.server.error(f"Notifier '{name}' not found", 404)
-        client: HttpClient = self.server.lookup_component("http_client")
         notifier = self.notifiers[name]
 
         kapis: APIComp = self.server.lookup_component('klippy_apis')
