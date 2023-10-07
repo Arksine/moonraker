@@ -33,8 +33,8 @@ class JobState:
         sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
         try:
             result = await kapis.subscribe_objects(sub, self._status_update)
-        except self.server.error as e:
-            logging.info(f"Error subscribing to print_stats")
+        except self.server.error:
+            logging.info("Error subscribing to print_stats")
         self.last_print_stats = result.get("print_stats", {})
         if "state" in self.last_print_stats:
             state = self.last_print_stats["state"]
