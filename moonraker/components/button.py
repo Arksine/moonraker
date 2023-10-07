@@ -27,7 +27,7 @@ class ButtonManager:
         for section in prefix_sections:
             cfg = config[section]
             # Reserve the "type" option for future use
-            btn_type = cfg.get('type', "gpio")
+            btn_type = cfg.get('type', "gpio")  # noqa: F841
             try:
                 btn = GpioButton(cfg)
             except Exception as e:
