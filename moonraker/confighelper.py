@@ -420,7 +420,7 @@ class ConfigHelper:
 
     def read_supplemental_dict(self, obj: Dict[str, Any]) -> ConfigHelper:
         if not obj:
-            raise ConfigError(f"Cannot ready Empty Dict")
+            raise ConfigError("Cannot ready Empty Dict")
         source = DictSourceWrapper()
         source.read_dict(obj)
         sections = source.config.sections()
