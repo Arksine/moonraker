@@ -1259,7 +1259,8 @@ class GitRepo:
                     # since the attept to repair failed, bypass retries
                     # and immediately raise an exception
                     raise self.server.error(
-                        f"Unable to repair loose objects, use hard recovery")
+                        "Unable to repair loose objects, use hard recovery"
+                    )
             retries -= 1
             await asyncio.sleep(.5)
             await self._check_lock_file_exists(remove=True)

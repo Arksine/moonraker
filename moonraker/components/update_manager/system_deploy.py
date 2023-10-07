@@ -422,7 +422,7 @@ class PackageKitTransaction:
                                  status_code: int,
                                  percent_complete: int
                                  ) -> None:
-        status = PkEnum.Status.from_index(status_code)
+        status = PkEnum.Status.from_index(status_code)  # noqa: F841
         # NOTE: This signal doesn't seem to fire predictably,
         # nor does it seem to provide a consistent "percent complete"
         # parameter.

@@ -482,7 +482,7 @@ class AppDeploy(BaseDeploy):
             await self.cmd_helper.run_cmd(
                 f"virtualenv {self.venv_args} {env_path}", timeout=300.)
         except Exception:
-            self.log_exc(f"Error creating virtualenv")
+            self.log_exc("Error creating virtualenv")
             return
         if not self.py_exec.exists():
             raise self.log_exc("Failed to create new virtualenv", False)
