@@ -368,7 +368,7 @@ class Server:
         return self.klippy_connection.state
 
     def _handle_term_signal(self) -> None:
-        logging.info(f"Exiting with signal SIGTERM")
+        logging.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
 
     async def _stop_server(self, exit_reason: str = "restart") -> None:
