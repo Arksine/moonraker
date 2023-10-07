@@ -202,7 +202,7 @@ class Machine:
             else:
                 for key, val in info.items():
                     sys_info_msg += f"\n  {key}: {val}"
-        sys_info_msg += f"\n\n***Allowed Services***"
+        sys_info_msg += "\n\n***Allowed Services***"
         for svc in self._allowed_services:
             sys_info_msg += f"\n  {svc}"
         self.server.add_log_rollover_item('system_info', sys_info_msg, log=log)
@@ -2003,7 +2003,7 @@ class InstallValidator:
             await self._check_configuration()
         except asyncio.CancelledError:
             raise
-        except Exception as e:
+        except Exception:
             logging.exception(f"{name} validation failed")
             raise self.server.error(
                 f"{name} validation failed", 500
