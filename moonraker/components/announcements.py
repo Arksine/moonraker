@@ -17,8 +17,7 @@ from typing import (
     List,
     Dict,
     Any,
-    Optional,
-    Union
+    Optional
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
