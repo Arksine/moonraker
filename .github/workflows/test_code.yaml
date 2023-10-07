@@ -12,8 +12,9 @@ jobs:
           python-root-list: "moonraker scripts"
           virtual-env: "python-lint-plus"
           python-version: "3.10"
-          use-pycodestyle: true
-          use-black: false
+          use-flake8: true
+          flake8-version: "==6.1.0"
           use-mypy: true
-          extra-pycodestyle-options: "--ignore=E226,E301,E302,E303,W503,W504 --max-line-length=88 --max-doc-length=88"
+          mypy-version: "==1.5.1"
+          extra-flake8-options: "--ignore=E226,E301,E302,E303,W503,W504 --max-line-length=88 --max-doc-length=88"
           extra-mypy-options: "--ignore-missing-imports --follow-imports=silent"
