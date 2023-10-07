@@ -1054,7 +1054,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             try:
-                user = auth.check_authorized(self.request)
+                auth.check_authorized(self.request)
             except tornado.web.HTTPError:
                 authorized = False
             else:
