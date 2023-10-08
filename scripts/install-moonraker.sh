@@ -14,7 +14,6 @@ DATA_PATH="${MOONRAKER_DATA_PATH}"
 INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
 SERVICE_VERSION="1"
-MACHINE_PROVIDER="systemd_cli"
 
 package_decode_script=$( cat << EOF
 import sys
@@ -111,6 +110,12 @@ init_data_path()
     [ -n "${CONFIG_PATH}" ] && config_file=${CONFIG_PATH}
     # Write initial configuration for first time installs
     if [ ! -f $SERVICE_FILE ] && [ ! -e "${config_file}" ]; then
+        # detect machine provider
+        if [ "$( systemctl is-active dbus )" = "active" ]; then
+            provider="systemd_dbus"
+        else
+            provider="systemd_cli"
+        fi
         report_status "Writing Config File ${config_file}:\n"
         /bin/sh -c "cat > ${config_file}" << EOF
 # Moonraker Configuration File
@@ -123,7 +128,7 @@ port: 7125
 klippy_uds_address: /tmp/klippy_uds
 
 [machine]
-provider: ${MACHINE_PROVIDER}
+provider: ${provider}
 
 EOF
         cat ${config_file}
@@ -177,7 +182,7 @@ EOF
 # Step 7: Validate/Install polkit rules
 check_polkit_rules()
 {
-    if [ ! -x "$(command -v pkaction)" ]; then
+    if [ ! -x "$(command -v pkaction || true)" ]; then
         return
     fi
     POLKIT_VERSION="$( pkaction --version | grep -Po "(\d+\.?\d*)" )"
@@ -204,10 +209,7 @@ check_polkit_rules()
         else
             report_status "Installing PolKit Rules"
             ${SRCDIR}/scripts/set-policykit-rules.sh -z
-            MACHINE_PROVIDER="systemd_dbus"
         fi
-    else
-        MACHINE_PROVIDER="systemd_dbus"
     fi
 }
 
