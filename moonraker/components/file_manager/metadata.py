@@ -557,7 +557,7 @@ class Cura(BaseSlicer):
                     'relative_path': rel_path_full
                 })
                 # Create 32x32 thumbnail
-                im.thumbnail((32, 32), Image.ANTIALIAS)
+                im.thumbnail((32, 32), Image.Resampling.LANCZOS)
                 im.save(thumb_path_small, format="PNG")
                 thumbs.insert(0, {
                     'width': im.width, 'height': im.height,
