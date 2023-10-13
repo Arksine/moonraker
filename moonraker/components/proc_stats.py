@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
+VCIO_PATH = "/dev/vcio"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
@@ -65,7 +66,7 @@ class ProcStats:
         self.stat_update_timer = self.event_loop.register_timer(
             self._handle_stat_update)
         self.vcgencmd: Optional[VCGenCmd] = None
-        if os.path.exists(VC_GEN_CMD_FILE):
+        if os.path.exists(VC_GEN_CMD_FILE) and os.path.exists(VCIO_PATH):
             logging.info("Detected 'vcgencmd', throttle checking enabled")
             self.vcgencmd = VCGenCmd()
             self.server.register_notification("proc_stats:cpu_throttled")
@@ -345,7 +346,6 @@ class VCGenCmd:
     state.  This should be less resource intensive than calling "vcgencmd"
     in a subprocess.
     """
-    VCIO_PATH = pathlib.Path("/dev/vcio")
     MAX_STRING_SIZE = 1024
     GET_RESULT_CMD = 0x00030080
     UINT_SIZE = struct.calcsize("@I")
@@ -356,7 +356,8 @@ class VCGenCmd:
         self.err_logged: bool = False
 
     def run(self, cmd: str = "get_throttled") -> str:
-        with self.VCIO_PATH.open("rb") as f:
+        try:
+            fd = os.open(VCIO_PATH, os.O_RDWR)
             self.cmd_struct.pack_into(
                 self.cmd_buf, 0,
                 self.cmd_struct.size,
@@ -368,13 +369,14 @@ class VCGenCmd:
                 cmd.encode("utf-8"),
                 0x00000000
             )
-            try:
-                fcntl.ioctl(f.fileno(), self.mailbox_req, self.cmd_buf)
-            except OSError:
-                if not self.err_logged:
-                    logging.exception("VCIO gcgencmd failed")
-                    self.err_logged = True
-                return ""
+            fcntl.ioctl(fd, self.mailbox_req, self.cmd_buf)
+        except OSError:
+            if not self.err_logged:
+                logging.exception("VCIO vcgencmd failed")
+                self.err_logged = True
+            return ""
+        finally:
+            os.close(fd)
         result = self.cmd_struct.unpack_from(self.cmd_buf)
         ret: int = result[5]
         if ret:
