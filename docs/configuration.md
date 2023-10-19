@@ -147,7 +147,7 @@ enable_inotify_warnings: True
 #   option to suppress warnings when necessary.  The default is True.
 ```
 
-!!! Note:
+!!! Note
     Previously the `[file_manager]` section contained `config_path` and
     `log_path` options. These options are now deprecated, as both locations
     are determined by the `data path` configured on the command line.
@@ -255,7 +255,7 @@ gcode:
 
 ### `[database]`
 
-!!! Note:
+!!! Note
     This section no long has configuration options.  Previously the
     `database_path` option was used to determine the locatation of
     the database folder, it is now determined by the `data path`
