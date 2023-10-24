@@ -107,6 +107,9 @@ class SpoolManager:
                 await self.track_filament_usage()
 
     async def set_active_spool(self, spool_id: Optional[int]) -> None:
+        if self.spool_id == spool_id:
+            logging.info(f"Spool ID already set to: {spool_id}")
+            return
         # Store the current spool usage before switching
         if self.spool_id is not None:
             await self.track_filament_usage()
