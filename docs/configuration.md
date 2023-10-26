@@ -1198,6 +1198,58 @@ token: smartthings-bearer-token
 device: smartthings-device-id
 ```
 
+####  Domoticz (HTTP)
+
+Here an example for a Domoticz Light/Switch device with idx 1234.
+https://www.domoticz.com/wiki/Domoticz_API/JSON_URL%27s#Turn_a_light.2Fswitch_on.2Foff
+
+Authentication with basic header stored in Moonraker.secrets (see the [secrets]
+documentation for details).
+You have to convert your "username:password" to base64 and put in Moonraker.secrets file.
+
+!!! Note
+    If http unsecure is required, configure Domoticz to allow basic auth on http.
+    https://www.domoticz.com/wiki/Security#API_Protection
+
+```ini
+# moonraker.conf
+
+[power printer_domoticz]
+type: http
+on_url: https://domoticz-ip<:port>/json.htm?type=command&param=switchlight&switchcmd=On&idx=1234
+off_url: https://domoticz-ip<:port>/json.htm?type=command&param=switchlight&switchcmd=Off&idx=1234
+status_url: https://domoticz-ip<:port>/json.htm?type=command&param=getdevices&rid=1234
+request_template:
+  {% do http_request.add_header("Authorization", "Basic %s" % secrets.domoticz_credentials.base64userpass) %}
+  {% do http_request.send() %}
+response_template:
+  # Domoticz does not return device state in the response to on and off
+  # commands making it necessary to request device status.
+  {% if command in ["on", "off"] %}
+    # Some delay is necessary to ensure that Domoticz has finished processing
+    # the command.  This example sleeps for 1 second, more or less may be required
+    # depending on the type of switch, speed of the Domoticz host, etc.
+    {% do async_sleep(1.0) %}
+    # Set the request method, clear the body, set the url
+    {% do http_request.set_method("GET") %}
+    {% do http_request.set_body(None) %}
+    {% do http_request.set_url(urls.status) %}
+    # Note: The Authorization header was set in the "request_template".  Since the
+    # http request object is shared between both templates it is not necessary to
+    # add it again unless we perform a "reset()" on the request.
+    {% set response = http_request.send() %}
+    # Raise an exception if we don't get a successful response.  This is handled
+    # for us after executing the response template, however sending a request here
+    # requires that
+    {% do response.raise_for_status() %}
+  {% endif %}
+  # We use the `last_response` method to fetch the result and decode the
+  # json response.
+  {% set resp = http_request.last_response().json() %}
+  # The expression below will render "on" or "off".
+  {resp.result[0].Status.lower()}
+```
+
 #### Hue Device Configuration
 
 The following options are available for `hue` device types:
