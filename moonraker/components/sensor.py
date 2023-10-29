@@ -102,6 +102,9 @@ class BaseSensor:
     def get_sensor_measurements(self) -> Dict[str, List[Union[int, float]]]:
         return {key: list(values) for key, values in self.values.items()}
 
+    def get_last_value(self) -> Dict[str, Union[int, float]]:
+        return self.last_value
+
     def get_name(self) -> str:
         return self.config.name
 
@@ -226,6 +229,12 @@ class Sensors:
                     f"Failed to configure sensor [{cfg.get_name()}]\n{e}"
                 )
                 continue
+
+    def get_sensor(self, sensor_id: str) -> Optional[BaseSensor]:
+        """
+        return the sensor if exists
+        """
+        return self.sensors.get(sensor_id)
 
     def _update_sensor_values(self, eventtime: float) -> float:
         """

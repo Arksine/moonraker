@@ -17,7 +17,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from .sensor import BaseSensor, Sensors
+    from .sensor import BaseSensor
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,7 @@ class DeltaMeasurement:
 class EnergyMeter:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        sensors: Sensors = self.server.load_component(config, "sensor")
-        self.sensors = sensors.sensors
+        self.sensors = self.server.load_component(config, "sensor")
         self.config = EnergyMeterConfiguration(
             sensor=config.get("sensor"),
             field=config.get("field", "energy"),
@@ -93,7 +92,7 @@ class EnergyMeter:
                 "Can not start another measurement when currently active."
             )
             return None
-        sensor: Optional[BaseSensor] = self.sensors.get(self.config.sensor)
+        sensor: Optional[BaseSensor] = self.sensors.get_sensor(self.config.sensor)
         if sensor is None:
             logging.warning(
                 "Could not start measurement: sensor '%s' is missing",
@@ -101,8 +100,8 @@ class EnergyMeter:
             )
             return None
         self.active_msmnt = DeltaMeasurement()
-        msmnts: Dict[str, Union[int, float]] = {key: values[0] for key, values
-                                                in sensor.values.items()}
+        msmnts: Dict[str, Union[int, float]] = sensor.get_last_value()
+
         self._update_values(msmnts)
 
         return self.active_msmnt
