@@ -16,6 +16,7 @@ import tornado
 import tornado.iostream
 import tornado.httputil
 import tornado.web
+from asyncio import Lock
 from inspect import isclass
 from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
@@ -29,7 +30,7 @@ from .websockets import (
     WebSocket,
     BridgeSocket
 )
-from streaming_form_data import StreamingFormDataParser
+from streaming_form_data import StreamingFormDataParser, ParseFailedException
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
 # Annotation imports
@@ -924,6 +925,8 @@ class FileUploadHandler(AuthorizedRequestHandler):
         self.file_manager: FileManager = self.server.lookup_component(
             'file_manager')
         self.max_upload_size = max_upload_size
+        self.parse_lock = Lock()
+        self.parse_error: Optional[ParseFailedException] = None
 
     def prepare(self) -> None:
         super(FileUploadHandler, self).prepare()
@@ -949,11 +952,24 @@ class FileUploadHandler(AuthorizedRequestHandler):
                 self._parser.register(name, target)
 
     async def data_received(self, chunk: bytes) -> None:
-        if self.request.method == "POST":
-            evt_loop = self.server.get_event_loop()
-            await evt_loop.run_in_thread(self._parser.data_received, chunk)
+        if self.request.method == "POST" and self.parse_error is None:
+            async with self.parse_lock:
+                evt_loop = self.server.get_event_loop()
+                try:
+                    await evt_loop.run_in_thread(self._parser.data_received, chunk)
+                except ParseFailedException as err:
+                    self.parse_error = err
 
     async def post(self) -> None:
+        if self.parse_error is not None:
+            self._file.on_finish()
+            try:
+                os.remove(self._file.filename)
+            except Exception:
+                pass
+            raise self.server.error(
+                "File Upload Parsing Failed", 500
+            ) from self.parse_error
         form_args = {}
         chk_target = self._targets.pop('checksum')
         calc_chksum = self._sha256_target.value.lower()
