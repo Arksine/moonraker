@@ -926,11 +926,15 @@ class FileUploadHandler(AuthorizedRequestHandler):
             'file_manager')
         self.max_upload_size = max_upload_size
         self.parse_lock = Lock()
-        self.parse_error: Optional[ParseFailedException] = None
+        self.parse_failed: bool = False
 
     def prepare(self) -> None:
         super(FileUploadHandler, self).prepare()
-        logging.info(f"Upload Request Received from {self.request.remote_ip}")
+        content_type: str = self.request.headers.get("Content-Type", "")
+        logging.info(
+            f"Upload Request Received from {self.request.remote_ip}\n"
+            f"Content-Type: {content_type}"
+        )
         fm: FileManager = self.server.lookup_component("file_manager")
         fm.check_write_enabled()
         if self.request.method == "POST":
@@ -952,24 +956,23 @@ class FileUploadHandler(AuthorizedRequestHandler):
                 self._parser.register(name, target)
 
     async def data_received(self, chunk: bytes) -> None:
-        if self.request.method == "POST" and self.parse_error is None:
+        if self.request.method == "POST" and not self.parse_failed:
             async with self.parse_lock:
                 evt_loop = self.server.get_event_loop()
                 try:
                     await evt_loop.run_in_thread(self._parser.data_received, chunk)
-                except ParseFailedException as err:
-                    self.parse_error = err
+                except ParseFailedException:
+                    logging.exception("Chunk Parsing Error")
+                    self.parse_failed = True
 
     async def post(self) -> None:
-        if self.parse_error is not None:
+        if self.parse_failed:
             self._file.on_finish()
             try:
                 os.remove(self._file.filename)
             except Exception:
                 pass
-            raise self.server.error(
-                "File Upload Parsing Failed", 500
-            ) from self.parse_error
+            raise tornado.web.HTTPError(500, "File Upload Parsing Failed")
         form_args = {}
         chk_target = self._targets.pop('checksum')
         calc_chksum = self._sha256_target.value.lower()
@@ -982,9 +985,11 @@ class FileUploadHandler(AuthorizedRequestHandler):
                     os.remove(self._file.filename)
                 except Exception:
                     pass
-                raise self.server.error(
+                raise tornado.web.HTTPError(
+                    422,
                     f"File checksum mismatch: expected {recd_cksum}, "
-                    f"calculated {calc_chksum}", 422)
+                    f"calculated {calc_chksum}"
+                )
         for name, target in self._targets.items():
             if target.value:
                 form_args[name] = target.value.decode()
