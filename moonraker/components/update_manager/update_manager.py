@@ -193,17 +193,18 @@ class UpdateManager:
         kpath: str = kinfo['klipper_path']
         executable: str = kinfo['python_path']
         kupdater = self.updaters.get('klipper')
+        app_type = get_app_type(kpath)
         if (
-            isinstance(kupdater, AppDeploy) and
-            kupdater.check_same_paths(kpath, executable)
+            (isinstance(kupdater, AppDeploy) and
+             kupdater.check_same_paths(kpath, executable)) or
+            (app_type == AppType.NONE and type(kupdater) is BaseDeploy)
         ):
-            # Current Klipper Updater is valid
+            # Current Klipper Updater is valid or unnecessary
             return
         # Update paths in the database
         db: DBComp = self.server.lookup_component('database')
         db.insert_item("moonraker", "update_manager.klipper_path", kpath)
         db.insert_item("moonraker", "update_manager.klipper_exec", executable)
-        app_type = get_app_type(kpath)
         kcfg = self.app_config["klipper"]
         kcfg.set_option("path", kpath)
         kcfg.set_option("env", executable)
