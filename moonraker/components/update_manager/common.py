@@ -9,7 +9,7 @@ import os
 import sys
 import copy
 import pathlib
-from enum import Enum
+from ...common import ExtendedEnum
 from ...utils import source_info
 from typing import (
     TYPE_CHECKING,
@@ -46,25 +46,13 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
-class ExtEnum(Enum):
-    @classmethod
-    def from_string(cls, enum_name: str):
-        str_name = enum_name.upper()
-        for name, member in cls.__members__.items():
-            if name == str_name:
-                return cls(member.value)
-        raise ValueError(f"No enum member named {enum_name}")
-
-    def __str__(self) -> str:
-        return self._name_.lower()  # type: ignore
-
-class AppType(ExtEnum):
+class AppType(ExtendedEnum):
     NONE = 1
     WEB = 2
     GIT_REPO = 3
     ZIP = 4
 
-class Channel(ExtEnum):
+class Channel(ExtendedEnum):
     STABLE = 1
     BETA = 2
     DEV = 3

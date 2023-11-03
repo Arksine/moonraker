@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import Subscribable, WebRequest
+from ..common import Subscribable, WebRequest, JobEvent
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -28,6 +28,7 @@ from typing import (
     List,
     Union,
     Any,
+    Callable,
 )
 if TYPE_CHECKING:
     from ..app import InternalTransport
@@ -157,19 +158,7 @@ class SimplyPrint(Subscribable):
         self.server.register_event_handler(
             "server:klippy_disconnect", self._on_klippy_disconnected)
         self.server.register_event_handler(
-            "job_state:started", self._on_print_start)
-        self.server.register_event_handler(
-            "job_state:paused", self._on_print_paused)
-        self.server.register_event_handler(
-            "job_state:resumed", self._on_print_resumed)
-        self.server.register_event_handler(
-            "job_state:standby", self._on_print_standby)
-        self.server.register_event_handler(
-            "job_state:complete", self._on_print_complete)
-        self.server.register_event_handler(
-            "job_state:error", self._on_print_error)
-        self.server.register_event_handler(
-            "job_state:cancelled", self._on_print_cancelled)
+            "job_state:state_changed", self._on_job_state_changed)
         self.server.register_event_handler(
             "klippy_apis:pause_requested", self._on_pause_requested)
         self.server.register_event_handler(
@@ -542,7 +531,7 @@ class SimplyPrint(Subscribable):
     async def _on_klippy_ready(self) -> None:
         last_stats: Dict[str, Any] = self.job_state.get_last_stats()
         if last_stats["state"] == "printing":
-            self._on_print_start(last_stats, last_stats, False)
+            self._on_print_started(last_stats, last_stats, False)
         else:
             self._update_state("operational")
         query: Optional[Dict[str, Any]]
@@ -674,7 +663,14 @@ class SimplyPrint(Subscribable):
         self.cache.reset_print_state()
         self.printer_status = {}
 
-    def _on_print_start(
+    def _on_job_state_changed(self, job_event: JobEvent, *args) -> None:
+        callback: Optional[Callable] = getattr(self, f"_on_print_{job_event}", None)
+        if callback is not None:
+            callback(*args)
+        else:
+            logging.info(f"No defined callback for Job Event: {job_event}")
+
+    def _on_print_started(
         self,
         prev_stats: Dict[str, Any],
         new_stats: Dict[str, Any],

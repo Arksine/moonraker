@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import time
 import logging
+from ..common import JobEvent
 
 # Annotation imports
 from typing import (
@@ -46,11 +47,8 @@ class JobQueue:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_shutdown)
         self.server.register_event_handler(
-            "job_state:complete", self._on_job_complete)
-        self.server.register_event_handler(
-            "job_state:error", self._on_job_abort)
-        self.server.register_event_handler(
-            "job_state:cancelled", self._on_job_abort)
+            "job_state:state_changed", self._on_job_state_changed
+        )
 
         self.server.register_notification("job_queue:job_queue_changed")
         self.server.register_remote_method("pause_job_queue", self.pause_queue)
@@ -85,10 +83,13 @@ class JobQueue:
         if not self.queued_jobs and self.automatic:
             self._set_queue_state("ready")
 
-    async def _on_job_complete(self,
-                               prev_stats: Dict[str, Any],
-                               new_stats: Dict[str, Any]
-                               ) -> None:
+    async def _on_job_state_changed(self, job_event: JobEvent, *args) -> None:
+        if job_event == JobEvent.COMPLETE:
+            await self._on_job_complete()
+        elif job_event.aborted:
+            await self._on_job_abort()
+
+    async def _on_job_complete(self) -> None:
         if not self.automatic:
             return
         async with self.lock:
@@ -99,10 +100,7 @@ class JobQueue:
                 self.pop_queue_handle = event_loop.delay_callback(
                     self.job_delay, self._pop_job)
 
-    async def _on_job_abort(self,
-                            prev_stats: Dict[str, Any],
-                            new_stats: Dict[str, Any]
-                            ) -> None:
+    async def _on_job_abort(self) -> None:
         async with self.lock:
             if self.queued_jobs:
                 self._set_queue_state("paused")

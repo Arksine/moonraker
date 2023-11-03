@@ -9,7 +9,7 @@ import sys
 import ipaddress
 import logging
 import copy
-from enum import Flag, auto
+from enum import Enum, Flag, auto
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
 
@@ -89,6 +89,39 @@ class TransportType(ExtendedFlag):
     WEBSOCKET = auto()
     MQTT = auto()
     INTERNAL = auto()
+
+class ExtendedEnum(Enum):
+    @classmethod
+    def from_string(cls, enum_name: str):
+        str_name = enum_name.upper()
+        for name, member in cls.__members__.items():
+            if name == str_name:
+                return cls(member.value)
+        raise ValueError(f"No enum member named {enum_name}")
+
+    def __str__(self) -> str:
+        return self._name_.lower()  # type: ignore
+
+class JobEvent(ExtendedEnum):
+    STANDBY = 1
+    STARTED = 2
+    PAUSED = 3
+    RESUMED = 4
+    COMPLETE = 5
+    ERROR = 6
+    CANCELLED = 7
+
+    @property
+    def finished(self) -> bool:
+        return self.value >= 5
+
+    @property
+    def aborted(self) -> bool:
+        return self.value >= 6
+
+    @property
+    def is_printing(self) -> bool:
+        return self.value in [2, 4]
 
 class Subscribable:
     def send_status(
