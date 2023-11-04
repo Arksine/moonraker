@@ -1003,14 +1003,16 @@ class Creality(BaseSlicer):
     def parse_filament_total(self) -> Optional[float]:
         filament_total = _regex_find_first(
             r";Filament used:(\d+\.?\d*)m", self.header_data)
-        filament_total = filament_total * 1000
-        return filament_total
+        if filament_total:
+            return filament_total * 1000
+        return None
 
     def parse_filament_weight_total(self) -> Optional[float]:
         filament_total = _regex_find_first(
             r";Filament used:(\d+\.?\d*)m", self.header_data)
-        filament_weight_total = filament_total * 5.88
-        return filament_weight_total
+        if filament_total:
+            return filament_total * 5.88
+        return None
 
     def parse_estimated_time(self) -> Optional[float]:
         total_time = _regex_find_first(
@@ -1019,11 +1021,11 @@ class Creality(BaseSlicer):
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
         return _regex_find_first(
-            r";Print Temperature:(\d+\.?\d*)", self.footer_data)
+            r";Print Temperature:(\d+\.?\d*)", self.header_data)
 
     def parse_first_layer_bed_temp(self) -> Optional[float]:
         return _regex_find_first(
-            r";Bed Temperature:(\d+\.?\d*)", self.footer_data)
+            r";Bed Temperature:(\d+\.?\d*)", self.header_data)
 
 
 READ_SIZE = 512 * 1024
