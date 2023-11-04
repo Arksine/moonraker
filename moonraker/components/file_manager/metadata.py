@@ -946,11 +946,90 @@ class KiriMoto(BaseSlicer):
             r"; firstLayerBedTemp = (\d+\.?\d*)", self.header_data
         )
 
+class Creality(BaseSlicer):
+    def check_identity(self, data: str) -> Optional[Dict[str, str]]:
+        aliases = {
+            'Creative3D': r"Creative3D",
+            'Creality': r"Creality"
+        }
+        pattern = r'Version : V([\d\.]+)'
+        match_version = re.search(pattern, data)
+        slicer_version = match_version.group(1) if match_version else "1.0"
+        for name, expr in aliases.items():
+            match = re.search(expr, data)
+            # ;Creality Print Version : V4.3.7.6456
+            if match:
+                return {
+                    'slicer': name,
+                    'slicer_version': slicer_version
+                }
+        return None
+
+    def parse_first_layer_height(self) -> Optional[float]:
+        return _regex_find_first(
+            r";MINZ:(\d+\.?\d*)", self.header_data)
+
+
+    def parse_layer_height(self) -> Optional[float]:
+        pattern = r";Layer\sheight:\s(\d+\.?\d*)"
+        self.layer_height = _regex_find_first(
+            pattern, self.header_data)
+        return self.layer_height
+
+    def parse_object_height(self) -> Optional[float]:
+        matches = re.findall(
+            r";MAXZ:(\d+\.?\d*)", self.header_data)
+        if matches:
+            try:
+                matches = [float(m) for m in matches]
+            except Exception:
+                pass
+            else:
+                return max(matches)
+        return self._parse_max_float(r"G1\sZ\d+\.\d*\sF", self.header_data)
+
+    def parse_layer_count(self) -> Optional[int]:
+        return _regex_find_int(
+            r";LAYER_COUNT\:(\d+)", self.header_data)
+
+    def parse_filament_type(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Material Type:(\S+)", self.header_data)
+
+    def parse_filament_name(self) -> Optional[str]:
+        return _regex_find_string(
+            r";Material Name:(.+)", self.header_data)
+
+    def parse_filament_total(self) -> Optional[float]:
+        filament_total = _regex_find_first(
+            r";Filament used:(\d+\.?\d*)m", self.header_data)
+        filament_total = filament_total * 1000
+        return filament_total
+
+    def parse_filament_weight_total(self) -> Optional[float]:
+        filament_total = _regex_find_first(
+            r";Filament used:(\d+\.?\d*)m", self.header_data)
+        filament_weight_total = filament_total * 5.88
+        return filament_weight_total
+
+    def parse_estimated_time(self) -> Optional[float]:
+        total_time = _regex_find_first(
+            r";TIME:(\d+)", self.header_data)
+        return total_time
+
+    def parse_first_layer_extr_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r";Print Temperature:(\d+\.?\d*)", self.footer_data)
+
+    def parse_first_layer_bed_temp(self) -> Optional[float]:
+        return _regex_find_first(
+            r";Bed Temperature:(\d+\.?\d*)", self.footer_data)
+
 
 READ_SIZE = 512 * 1024
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
     PrusaSlicer, Slic3rPE, Slic3r, Cura, Simplify3D,
-    KISSlicer, IdeaMaker, IceSL, KiriMoto
+    KISSlicer, IdeaMaker, IceSL, KiriMoto, Creality
 ]
 SUPPORTED_DATA = [
     'gcode_start_byte',
