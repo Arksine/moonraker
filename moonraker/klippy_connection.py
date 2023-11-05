@@ -26,7 +26,8 @@ from typing import (
     Dict,
     List,
     Set,
-    Tuple
+    Tuple,
+    Union
 )
 if TYPE_CHECKING:
     from .server import Server
@@ -495,7 +496,10 @@ class KlippyConnection:
                 result = "ok"
             request.set_result(result)
         else:
+            err: Union[str, Dict[str, str]]
             err = cmd.get('error', "Malformed Klippy Response")
+            if isinstance(err, dict):
+                err = err.get("message", "Malformed Klippy Response")
             request.set_exception(ServerError(err, 400))
 
     async def _execute_method(self, method_name: str, **kwargs) -> None:
