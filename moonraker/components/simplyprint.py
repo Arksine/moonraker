@@ -358,11 +358,11 @@ class SimplyPrint(Subscribable):
         elif demand == "gcode":
             if not kconn.is_connected():
                 return
-            script_list = args.get("list", [])
+            script_list: List[str] = args.get("list", [])
+            ident: Optional[str] = args.get("identifier", None)
             if script_list:
                 script = "\n".join(script_list)
-                coro = self.klippy_apis.run_gcode(script, None)
-                self.eventloop.create_task(coro)
+                self.eventloop.create_task(self._handle_gcode_demand(script, ident))
         elif demand == "webcam_snapshot":
             self.eventloop.create_task(self.webcam_stream.post_image(args))
         elif demand == "file":
@@ -406,6 +406,26 @@ class SimplyPrint(Subscribable):
         else:
             self.sp_info[name] = data
             self.spdb[name] = data
+
+    async def _handle_gcode_demand(
+        self, script: str, ident: Optional[str]
+    ) -> None:
+        success: bool = True
+        msg: Optional[str] = None
+        try:
+            await self.klippy_apis.run_gcode(script)
+        except self.server.error as e:
+            msg = str(e)
+            success = False
+        if ident is not None:
+            self.send_sp(
+                "gcode_executed",
+                {
+                    "identifier": ident,
+                    "success": success,
+                    "message": msg
+                }
+            )
 
     async def _call_internal_api(self, method: str, **kwargs) -> Any:
         itransport: InternalTransport
