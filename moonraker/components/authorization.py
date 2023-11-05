@@ -20,6 +20,7 @@ import logging
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType, TransportType
 
 # Annotation imports
 from typing import (
@@ -226,32 +227,42 @@ class Authorization:
         self.permitted_paths.add("/access/refresh_jwt")
         self.permitted_paths.add("/access/info")
         self.server.register_endpoint(
-            "/access/login", ['POST'], self._handle_login,
-            transports=['http', 'websocket'])
+            "/access/login", RequestType.POST, self._handle_login,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/logout", ['POST'], self._handle_logout,
-            transports=['http', 'websocket'])
+            "/access/logout", RequestType.POST, self._handle_logout,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
-            transports=['http', 'websocket'])
+            "/access/refresh_jwt", RequestType.POST, self._handle_refresh_jwt,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request, transports=['http', 'websocket'])
+            "/access/user", RequestType.all(), self._handle_user_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/users/list", ['GET'], self._handle_list_request,
-            transports=['http', 'websocket'])
+            "/access/users/list", RequestType.GET, self._handle_list_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/user/password", ['POST'], self._handle_password_reset,
-            transports=['http', 'websocket'])
+            "/access/user/password", RequestType.POST, self._handle_password_reset,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, transports=['http', 'websocket'])
+            "/access/api_key", RequestType.GET | RequestType.POST,
+            self._handle_apikey_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/oneshot_token", ['GET'],
-            self._handle_oneshot_request, transports=['http', 'websocket'])
+            "/access/oneshot_token", RequestType.GET, self._handle_oneshot_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/info", ['GET'],
-            self._handle_info_request, transports=['http', 'websocket'])
+            "/access/info", RequestType.GET, self._handle_info_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         wsm.register_notification("authorization:user_created")
         wsm.register_notification(
@@ -274,8 +285,7 @@ class Authorization:
         self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
     async def _handle_apikey_request(self, web_request: WebRequest) -> str:
-        action = web_request.get_action()
-        if action.upper() == 'POST':
+        if web_request.get_request_type() == RequestType.POST:
             self.api_key = uuid.uuid4().hex
             self.users[API_USER]['api_key'] = self.api_key
             self._sync_user(API_USER)
@@ -360,11 +370,11 @@ class Authorization:
             'action': 'user_jwt_refresh'
         }
 
-    async def _handle_user_request(self,
-                                   web_request: WebRequest
-                                   ) -> Dict[str, Any]:
-        action = web_request.get_action()
-        if action == "GET":
+    async def _handle_user_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        req_type = web_request.get_request_type()
+        if req_type == RequestType.GET:
             user = web_request.get_current_user()
             if user is None:
                 return {
@@ -378,10 +388,10 @@ class Authorization:
                     'source': user.get("source", "moonraker"),
                     'created_on': user.get('created_on')
                 }
-        elif action == "POST":
+        elif req_type == RequestType.POST:
             # Create User
             return await self._login_jwt_user(web_request, create=True)
-        elif action == "DELETE":
+        elif req_type == RequestType.DELETE:
             # Delete User
             return self._delete_jwt_user(web_request)
         raise self.server.error("Invalid Request Method")

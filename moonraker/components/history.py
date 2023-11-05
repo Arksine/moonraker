@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 import logging
 from asyncio import Lock
-from ..common import JobEvent
+from ..common import JobEvent, RequestType
 
 # Annotation imports
 from typing import (
@@ -54,14 +54,19 @@ class History:
         self.server.register_notification("history:history_changed")
 
         self.server.register_endpoint(
-            "/server/history/job", ['GET', 'DELETE'], self._handle_job_request)
+            "/server/history/job", RequestType.GET | RequestType.DELETE,
+            self._handle_job_request
+        )
         self.server.register_endpoint(
-            "/server/history/list", ['GET'], self._handle_jobs_list)
+            "/server/history/list", RequestType.GET, self._handle_jobs_list
+        )
         self.server.register_endpoint(
-            "/server/history/totals", ['GET'], self._handle_job_totals)
+            "/server/history/totals", RequestType.GET, self._handle_job_totals
+        )
         self.server.register_endpoint(
-            "/server/history/reset_totals", ['POST'],
-            self._handle_job_total_reset)
+            "/server/history/reset_totals", RequestType.POST,
+            self._handle_job_total_reset
+        )
 
         database.register_local_namespace(HIST_NAMESPACE)
         self.history_ns = database.wrap_namespace(HIST_NAMESPACE,
@@ -78,14 +83,14 @@ class History:
                                   web_request: WebRequest
                                   ) -> Dict[str, Any]:
         async with self.request_lock:
-            action = web_request.get_action()
-            if action == "GET":
+            req_type = web_request.get_request_type()
+            if req_type == RequestType.GET:
                 job_id = web_request.get_str("uid")
                 if job_id not in self.cached_job_ids:
                     raise self.server.error(f"Invalid job uid: {job_id}", 404)
                 job = await self.history_ns[job_id]
                 return {"job": self._prep_requested_job(job, job_id)}
-            if action == "DELETE":
+            if req_type == RequestType.DELETE:
                 all = web_request.get_boolean("all", False)
                 if all:
                     deljobs = self.cached_job_ids

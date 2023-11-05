@@ -14,6 +14,7 @@ from itertools import cycle
 from email.utils import formatdate
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
+from ..common import RequestType, TransportType
 
 from typing import (
     TYPE_CHECKING,
@@ -214,9 +215,9 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
             auth.register_permited_path("/server/zeroconf/ssdp")
         self.server.register_endpoint(
             "/server/zeroconf/ssdp",
-            ["GET"],
+            RequestType.GET,
             self._handle_xml_request,
-            transports=["http"],
+            transports=TransportType.HTTP,
             wrap_result=False,
             content_type="application/xml"
         )

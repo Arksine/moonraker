@@ -9,6 +9,7 @@ import asyncio
 import datetime
 import logging
 from typing import TYPE_CHECKING, Dict, Any
+from ..common import RequestType
 
 if TYPE_CHECKING:
     from typing import Optional
@@ -64,12 +65,12 @@ class SpoolManager:
     def _register_endpoints(self):
         self.server.register_endpoint(
             "/server/spoolman/spool_id",
-            ["GET", "POST"],
+            RequestType.GET | RequestType.POST,
             self._handle_spool_id_request,
         )
         self.server.register_endpoint(
             "/server/spoolman/proxy",
-            ["POST"],
+            RequestType.POST,
             self._proxy_spoolman_request,
         )
 
@@ -157,7 +158,7 @@ class SpoolManager:
                 self.extruded = 0
 
     async def _handle_spool_id_request(self, web_request: WebRequest):
-        if web_request.get_action() == "POST":
+        if web_request.get_request_type() == RequestType.POST:
             spool_id = web_request.get_int("spool_id", None)
             await self.set_active_spool(spool_id)
         # For GET requests we will simply return the spool_id

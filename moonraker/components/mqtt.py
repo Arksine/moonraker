@@ -303,14 +303,18 @@ class MQTTClient(APITransport, Subscribable):
         self.pending_responses: List[asyncio.Future] = []
         self.pending_acks: Dict[int, asyncio.Future] = {}
 
+        # We don't need to register these endpoints over the MQTT transport as they
+        # are redundant.  MQTT clients can already publish and subscribe.
+        ep_transports = TransportType.all() & ~TransportType.MQTT
         self.server.register_endpoint(
-            "/server/mqtt/publish", ["POST"],
-            self._handle_publish_request,
-            transports=["http", "websocket", "internal"])
+            "/server/mqtt/publish", RequestType.POST, self._handle_publish_request,
+            transports=ep_transports
+        )
         self.server.register_endpoint(
-            "/server/mqtt/subscribe", ["POST"],
+            "/server/mqtt/subscribe", RequestType.POST,
             self._handle_subscription_request,
-            transports=["http", "websocket", "internal"])
+            transports=ep_transports
+        )
 
         # Subscribe to API requests
         self.json_rpc = JsonRPC(self.server, transport="MQTT")

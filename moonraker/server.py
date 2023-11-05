@@ -25,6 +25,7 @@ from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
 from .utils import ServerError, Sentinel, get_software_info, json_wrapper
 from .loghelper import LogManager
+from .common import RequestType
 
 # Annotation imports
 from typing import (
@@ -102,11 +103,14 @@ class Server:
             self.add_warning(warning)
 
         self.register_endpoint(
-            "/server/info", ['GET'], self._handle_info_request)
+            "/server/info", RequestType.GET, self._handle_info_request
+        )
         self.register_endpoint(
-            "/server/config", ['GET'], self._handle_config_request)
+            "/server/config", RequestType.GET, self._handle_config_request
+        )
         self.register_endpoint(
-            "/server/restart", ['POST'], self._handle_server_restart)
+            "/server/restart", RequestType.POST, self._handle_server_restart
+        )
         self.register_notification("server:klippy_ready")
         self.register_notification("server:klippy_shutdown")
         self.register_notification("server:klippy_disconnect",

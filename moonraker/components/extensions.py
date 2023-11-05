@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import pathlib
 import logging
-from ..common import BaseRemoteConnection
+from ..common import BaseRemoteConnection, RequestType, TransportType
 from ..utils import get_unix_peer_credentials
 
 # Annotation imports
@@ -35,19 +35,19 @@ class ExtensionManager:
         self.agent_methods: Dict[int, List[str]] = {}
         self.uds_server: Optional[asyncio.AbstractServer] = None
         self.server.register_endpoint(
-            "/connection/register_remote_method", ["POST"],
+            "/connection/register_remote_method", RequestType.POST,
             self._register_agent_method,
-            transports=["websocket"]
+            transports=TransportType.WEBSOCKET
         )
         self.server.register_endpoint(
-            "/connection/send_event", ["POST"], self._handle_agent_event,
-            transports=["websocket"]
+            "/connection/send_event", RequestType.POST, self._handle_agent_event,
+            transports=TransportType.WEBSOCKET
         )
         self.server.register_endpoint(
-            "/server/extensions/list", ["GET"], self._handle_list_extensions
+            "/server/extensions/list", RequestType.GET, self._handle_list_extensions
         )
         self.server.register_endpoint(
-            "/server/extensions/request", ["POST"], self._handle_call_agent
+            "/server/extensions/request", RequestType.POST, self._handle_call_agent
         )
 
     def register_agent(self, connection: BaseRemoteConnection) -> None:

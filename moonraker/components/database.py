@@ -15,6 +15,7 @@ from threading import Lock as ThreadLock
 import lmdb
 from ..utils import Sentinel, ServerError
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -174,15 +175,17 @@ class MoonrakerDatabase:
         self.insert_item("moonraker", "database.unsafe_shutdowns",
                          unsafe_shutdowns + 1)
         self.server.register_endpoint(
-            "/server/database/list", ['GET'], self._handle_list_request)
+            "/server/database/list", RequestType.GET, self._handle_list_request
+        )
         self.server.register_endpoint(
-            "/server/database/item", ["GET", "POST", "DELETE"],
-            self._handle_item_request)
+            "/server/database/item", RequestType.all(), self._handle_item_request
+        )
         self.server.register_debug_endpoint(
-            "/debug/database/list", ['GET'], self._handle_list_request)
+            "/debug/database/list", RequestType.GET, self._handle_list_request
+        )
         self.server.register_debug_endpoint(
-            "/debug/database/item", ["GET", "POST", "DELETE"],
-            self._handle_item_request)
+            "/debug/database/item", RequestType.all(), self._handle_item_request
+        )
 
     def get_database_path(self) -> str:
         return self.database_path
@@ -735,7 +738,7 @@ class MoonrakerDatabase:
     async def _handle_item_request(self,
                                    web_request: WebRequest
                                    ) -> Dict[str, Any]:
-        action = web_request.get_action()
+        req_type = web_request.get_request_type()
         is_debug = web_request.get_endpoint().startswith("/debug/")
         namespace = web_request.get_str("namespace")
         if namespace in self.forbidden_namespaces and not is_debug:
@@ -744,7 +747,7 @@ class MoonrakerDatabase:
                 " is forbidden", 403)
         key: Any
         valid_types: Tuple[type, ...]
-        if action != "GET":
+        if req_type != RequestType.GET:
             if namespace in self.protected_namespaces and not is_debug:
                 raise self.server.error(
                     f"Write access to namespace '{namespace}'"
@@ -758,16 +761,17 @@ class MoonrakerDatabase:
             raise self.server.error(
                 "Value for argument 'key' is an invalid type: "
                 f"{type(key).__name__}")
-        if action == "GET":
+        if req_type == RequestType.GET:
             val = await self.get_item(namespace, key)
-        elif action == "POST":
+        elif req_type == RequestType.POST:
             val = web_request.get("value")
             await self.insert_item(namespace, key, val)
-        elif action == "DELETE":
+        elif req_type == RequestType.DELETE:
             val = await self.delete_item(namespace, key, drop_empty_db=True)
 
         if is_debug:
-            self.debug_counter[action.lower()] += 1
+            name = req_type.name or str(req_type).split(".", 1)[-1]
+            self.debug_counter[name.lower()] += 1
             await self.insert_item(
                 "moonraker", "database.debug_counter", self.debug_counter
             )

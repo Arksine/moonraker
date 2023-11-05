@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 from ..utils import Sentinel
-from ..common import WebRequest, Subscribable
+from ..common import WebRequest, Subscribable, RequestType
 
 # Annotation imports
 from typing import (
@@ -52,17 +52,23 @@ class KlippyAPI(Subscribable):
 
         # Register GCode Aliases
         self.server.register_endpoint(
-            "/printer/print/pause", ['POST'], self._gcode_pause)
+            "/printer/print/pause", RequestType.POST, self._gcode_pause
+        )
         self.server.register_endpoint(
-            "/printer/print/resume", ['POST'], self._gcode_resume)
+            "/printer/print/resume", RequestType.POST, self._gcode_resume
+        )
         self.server.register_endpoint(
-            "/printer/print/cancel", ['POST'], self._gcode_cancel)
+            "/printer/print/cancel", RequestType.POST, self._gcode_cancel
+        )
         self.server.register_endpoint(
-            "/printer/print/start", ['POST'], self._gcode_start_print)
+            "/printer/print/start", RequestType.POST, self._gcode_start_print
+        )
         self.server.register_endpoint(
-            "/printer/restart", ['POST'], self._gcode_restart)
+            "/printer/restart", RequestType.POST, self._gcode_restart
+        )
         self.server.register_endpoint(
-            "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
+            "/printer/firmware_restart", RequestType.POST, self._gcode_firmware_restart
+        )
         self.server.register_event_handler(
             "server:klippy_disconnect", self._on_klippy_disconnect
         )

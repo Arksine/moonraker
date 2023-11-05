@@ -10,7 +10,7 @@ import apprise
 import logging
 import pathlib
 import re
-from ..common import JobEvent
+from ..common import JobEvent, RequestType
 
 # Annotation imports
 from typing import (
@@ -76,10 +76,10 @@ class Notifier:
 
     def register_endpoints(self, config: ConfigHelper):
         self.server.register_endpoint(
-            "/server/notifiers/list", ["GET"], self._handle_notifier_list
+            "/server/notifiers/list", RequestType.GET, self._handle_notifier_list
         )
         self.server.register_debug_endpoint(
-            "/debug/notifiers/test", ["POST"], self._handle_notifier_test
+            "/debug/notifiers/test", RequestType.POST, self._handle_notifier_test
         )
 
     async def _handle_notifier_list(

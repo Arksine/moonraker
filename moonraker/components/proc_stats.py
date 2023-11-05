@@ -15,6 +15,7 @@ import pathlib
 import logging
 from collections import deque
 from ..utils import ioctl_macros
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -79,9 +80,11 @@ class ProcStats:
         self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
         self.meminfo_file = pathlib.Path(MEM_AVAIL_PATH)
         self.server.register_endpoint(
-            "/machine/proc_stats", ["GET"], self._handle_stat_request)
+            "/machine/proc_stats", RequestType.GET, self._handle_stat_request
+        )
         self.server.register_event_handler(
-            "server:klippy_shutdown", self._handle_shutdown)
+            "server:klippy_shutdown", self._handle_shutdown
+        )
         self.server.register_notification("proc_stats:proc_stat_update")
         self.proc_stat_queue: Deque[Dict[str, Any]] = deque(maxlen=30)
         self.last_update_time = time.time()

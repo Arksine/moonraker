@@ -20,6 +20,7 @@ from inotify_simple import INotify
 from inotify_simple import flags as iFlags
 from ...utils import source_info
 from ...utils import json_wrapper as jsonw
+from ...common import RequestType, TransportType
 
 # Annotation imports
 from typing import (
@@ -108,27 +109,37 @@ class FileManager:
 
         # Register file management endpoints
         self.server.register_endpoint(
-            "/server/files/list", ['GET'], self._handle_filelist_request)
+            "/server/files/list", RequestType.GET, self._handle_filelist_request
+        )
         self.server.register_endpoint(
-            "/server/files/metadata", ['GET'], self._handle_metadata_request)
+            "/server/files/metadata", RequestType.GET, self._handle_metadata_request
+        )
         self.server.register_endpoint(
-            "/server/files/metascan", ['POST'], self._handle_metascan_request)
+            "/server/files/metascan", RequestType.POST, self._handle_metascan_request
+        )
         self.server.register_endpoint(
-            "/server/files/thumbnails", ['GET'], self._handle_list_thumbs)
+            "/server/files/thumbnails", RequestType.GET, self._handle_list_thumbs
+        )
         self.server.register_endpoint(
-            "/server/files/roots", ['GET'], self._handle_list_roots)
+            "/server/files/roots", RequestType.GET, self._handle_list_roots
+        )
         self.server.register_endpoint(
-            "/server/files/directory", ['GET', 'POST', 'DELETE'],
-            self._handle_directory_request)
+            "/server/files/directory", RequestType.all(),
+            self._handle_directory_request
+        )
         self.server.register_endpoint(
-            "/server/files/move", ['POST'], self._handle_file_move_copy)
+            "/server/files/move", RequestType.POST, self._handle_file_move_copy
+        )
         self.server.register_endpoint(
-            "/server/files/copy", ['POST'], self._handle_file_move_copy)
+            "/server/files/copy", RequestType.POST, self._handle_file_move_copy
+        )
         self.server.register_endpoint(
-            "/server/files/zip", ['POST'], self._handle_zip_files)
+            "/server/files/zip", RequestType.POST, self._handle_zip_files
+        )
         self.server.register_endpoint(
-            "/server/files/delete_file", ['DELETE'], self._handle_file_delete,
-            transports=["websocket"])
+            "/server/files/delete_file", RequestType.DELETE, self._handle_file_delete,
+            transports=TransportType.WEBSOCKET
+        )
         # register client notificaitons
         self.server.register_notification("file_manager:filelist_changed")
 
@@ -474,8 +485,8 @@ class FileManager:
                                         ) -> Dict[str, Any]:
         directory = web_request.get_str('path', "gcodes")
         root, dir_path = self._convert_request_path(directory)
-        method = web_request.get_action()
-        if method == 'GET':
+        req_type = web_request.get_request_type()
+        if req_type == RequestType.GET:
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
             dir_info = self._list_directory(dir_path, root, is_extended)
@@ -483,7 +494,7 @@ class FileManager:
         async with self.sync_lock:
             self.check_reserved_path(dir_path, True)
             action = "create_dir"
-            if method == 'POST' and root in self.full_access_roots:
+            if req_type == RequestType.POST and root in self.full_access_roots:
                 # Create a new directory
                 self.sync_lock.setup("create_dir", dir_path)
                 try:
@@ -491,7 +502,7 @@ class FileManager:
                 except Exception as e:
                     raise self.server.error(str(e))
                 self.fs_observer.on_item_create(root, dir_path, is_dir=True)
-            elif method == 'DELETE' and root in self.full_access_roots:
+            elif req_type == RequestType.DELETE and root in self.full_access_roots:
                 # Remove a directory
                 action = "delete_dir"
                 if directory.strip("/") == root:

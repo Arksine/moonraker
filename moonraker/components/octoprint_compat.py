@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import logging
+from ..common import RequestType, TransportType
 
 # Annotation imports
 from typing import (
@@ -65,22 +66,27 @@ class OctoPrintCompat:
 
         # Version & Server information
         self.server.register_endpoint(
-            '/api/version', ['GET'], self._get_version,
-            transports=['http'], wrap_result=False)
+            '/api/version', RequestType.GET, self._get_version,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/server', ['GET'], self._get_server,
-            transports=['http'], wrap_result=False)
+            '/api/server', RequestType.GET, self._get_server,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # Login, User & Settings
         self.server.register_endpoint(
-            '/api/login', ['POST'], self._post_login_user,
-            transports=['http'], wrap_result=False)
+            '/api/login', RequestType.POST, self._post_login_user,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/currentuser', ['GET'], self._post_login_user,
-            transports=['http'], wrap_result=False)
+            '/api/currentuser', RequestType.GET, self._post_login_user,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/settings', ['GET'], self._get_settings,
-            transports=['http'], wrap_result=False)
+            '/api/settings', RequestType.GET, self._get_settings,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # File operations
         # Note that file upload is handled in file_manager.py
@@ -88,30 +94,34 @@ class OctoPrintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', ['GET'], self._get_job,
-            transports=['http'], wrap_result=False)
+            '/api/job', RequestType.GET, self._get_job,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
-            '/api/printer', ['GET'], self._get_printer,
-            transports=['http'], wrap_result=False)
+            '/api/printer', RequestType.GET, self._get_printer,
+            transports=TransportType.HTTP, wrap_result=False)
         self.server.register_endpoint(
-            '/api/printer/command', ['POST'], self._post_command,
-            transports=['http'], wrap_result=False)
+            '/api/printer/command', RequestType.POST, self._post_command,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         # TODO: head/tool/bed/chamber specific read/issue
 
         # Printer profiles
         self.server.register_endpoint(
-            '/api/printerprofiles', ['GET'], self._get_printerprofiles,
-            transports=['http'], wrap_result=False)
+            '/api/printerprofiles', RequestType.GET, self._get_printerprofiles,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # Upload Handlers
         self.server.register_upload_handler(
             "/api/files/local", location_prefix="api/files/moonraker")
         self.server.register_endpoint(
-            "/api/files/moonraker/(?P<relative_path>.+)", ['POST'],
-            self._select_file, transports=['http'], wrap_result=False)
+            "/api/files/moonraker/(?P<relative_path>.+)", RequestType.POST,
+            self._select_file, transports=TransportType.HTTP, wrap_result=False
+        )
 
         # System
         # TODO: shutdown/reboot/restart operations

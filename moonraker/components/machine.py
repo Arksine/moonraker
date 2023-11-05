@@ -23,6 +23,7 @@ import configparser
 from ..confighelper import FileSourceWrapper
 from ..utils import source_info
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -132,26 +133,29 @@ class Machine:
         self.sudo_requests: List[Tuple[SudoCallback, str]] = []
 
         self.server.register_endpoint(
-            "/machine/reboot", ['POST'], self._handle_machine_request)
+            "/machine/reboot", RequestType.POST, self._handle_machine_request
+        )
         self.server.register_endpoint(
-            "/machine/shutdown", ['POST'], self._handle_machine_request)
+            "/machine/shutdown", RequestType.POST, self._handle_machine_request
+        )
         self.server.register_endpoint(
-            "/machine/services/restart", ['POST'],
-            self._handle_service_request)
+            "/machine/services/restart", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/services/stop", ['POST'],
-            self._handle_service_request)
+            "/machine/services/stop", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/services/start", ['POST'],
-            self._handle_service_request)
+            "/machine/services/start", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/system_info", ['GET'],
-            self._handle_sysinfo_request)
+            "/machine/system_info", RequestType.GET, self._handle_sysinfo_request
+        )
         self.server.register_endpoint(
-            "/machine/sudo/info", ["GET"], self._handle_sudo_info)
+            "/machine/sudo/info", RequestType.GET, self._handle_sudo_info
+        )
         self.server.register_endpoint(
-            "/machine/sudo/password", ["POST"],
-            self._set_sudo_password)
+            "/machine/sudo/password", RequestType.POST, self._set_sudo_password
+        )
 
         self.server.register_notification("machine:service_state_changed")
         self.server.register_notification("machine:sudo_alert")

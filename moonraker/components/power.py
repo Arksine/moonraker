@@ -12,6 +12,7 @@ import asyncio
 import time
 from urllib.parse import quote, urlencode
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -74,20 +75,24 @@ class PrinterPower:
             self.devices[dev.get_name()] = dev
 
         self.server.register_endpoint(
-            "/machine/device_power/devices", ['GET'],
-            self._handle_list_devices)
+            "/machine/device_power/devices", RequestType.GET, self._handle_list_devices
+        )
         self.server.register_endpoint(
-            "/machine/device_power/status", ['GET'],
-            self._handle_batch_power_request)
+            "/machine/device_power/status", RequestType.GET,
+            self._handle_batch_power_request
+        )
         self.server.register_endpoint(
-            "/machine/device_power/on", ['POST'],
-            self._handle_batch_power_request)
+            "/machine/device_power/on", RequestType.POST,
+            self._handle_batch_power_request
+        )
         self.server.register_endpoint(
-            "/machine/device_power/off", ['POST'],
-            self._handle_batch_power_request)
+            "/machine/device_power/off", RequestType.POST,
+            self._handle_batch_power_request
+        )
         self.server.register_endpoint(
-            "/machine/device_power/device", ['GET', 'POST'],
-            self._handle_single_power_request)
+            "/machine/device_power/device", RequestType.GET | RequestType.POST,
+            self._handle_single_power_request
+        )
         self.server.register_remote_method(
             "set_device_power", self.set_device_power)
         self.server.register_event_handler(
@@ -122,34 +127,35 @@ class PrinterPower:
                 )
                 await dev.process_request("on")
 
-    async def _handle_list_devices(self,
-                                   web_request: WebRequest
-                                   ) -> Dict[str, Any]:
+    async def _handle_list_devices(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
         dev_list = [d.get_device_info() for d in self.devices.values()]
         output = {"devices": dev_list}
         return output
 
-    async def _handle_single_power_request(self,
-                                           web_request: WebRequest
-                                           ) -> Dict[str, Any]:
+    async def _handle_single_power_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
         dev_name: str = web_request.get_str('device')
-        req_action = web_request.get_action()
+        req_type = web_request.get_request_type()
         if dev_name not in self.devices:
             raise self.server.error(f"No valid device named {dev_name}")
         dev = self.devices[dev_name]
-        if req_action == 'GET':
+        if req_type == RequestType.GET:
             action = "status"
-        elif req_action == "POST":
+        elif req_type == RequestType.POST:
             action = web_request.get_str('action').lower()
             if action not in ["on", "off", "toggle"]:
-                raise self.server.error(
-                    f"Invalid requested action '{action}'")
+                raise self.server.error(f"Invalid requested action '{action}'")
+        else:
+            raise self.server.error(f"Invalid Request Type: {req_type}")
         result = await dev.process_request(action)
         return {dev_name: result}
 
-    async def _handle_batch_power_request(self,
-                                          web_request: WebRequest
-                                          ) -> Dict[str, Any]:
+    async def _handle_batch_power_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
         args = web_request.get_args()
         ep = web_request.get_endpoint()
         if not args:

@@ -12,6 +12,7 @@ import os
 import sys
 import asyncio
 from queue import SimpleQueue as Queue
+from .common import RequestType
 
 # Annotation imports
 from typing import (
@@ -112,7 +113,7 @@ class LogManager:
     def set_server(self, server: Server) -> None:
         self.server = server
         self.server.register_endpoint(
-            "/server/logs/rollover", ['POST'], self._handle_log_rollover
+            "/server/logs/rollover", RequestType.POST, self._handle_log_rollover
         )
 
     def set_rollover_info(self, name: str, item: str) -> None:
