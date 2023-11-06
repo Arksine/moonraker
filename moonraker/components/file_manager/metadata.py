@@ -775,7 +775,7 @@ class IdeaMaker(BaseSlicer):
         if filament:
             return sum(filament)
         return None
-        
+
     def parse_filament_type(self) -> Optional[str]:
         return (
             _regex_find_string(r";Filament\sType\s.\d:\s(.*)", self.header_data) or
