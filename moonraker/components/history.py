@@ -6,7 +6,12 @@ from __future__ import annotations
 import time
 import logging
 from asyncio import Lock
-from ..common import JobEvent, RequestType
+from ..common import (
+    JobEvent,
+    RequestType,
+    HistoryFieldData,
+    FieldTracker
+)
 
 # Annotation imports
 from typing import (
@@ -15,18 +20,30 @@ from typing import (
     Union,
     Optional,
     Dict,
-    List,
+    List
 )
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .database import MoonrakerDatabase as DBComp
     from .job_state import JobState
     from .file_manager.file_manager import FileManager
+    Totals = Dict[str, Union[float, int]]
+    AuxTotals = List[Dict[str, Any]]
+
 
 HIST_NAMESPACE = "history"
 HIST_VERSION = 1
 MAX_JOBS = 10000
+BASE_TOTALS = {
+    "total_jobs": 0,
+    "total_time": 0.,
+    "total_print_time": 0.,
+    "total_filament_used": 0.,
+    "longest_job": 0.,
+    "longest_print": 0.
+}
 
 class History:
     def __init__(self, config: ConfigHelper) -> None:
@@ -34,17 +51,13 @@ class History:
         self.file_manager: FileManager = self.server.lookup_component(
             'file_manager')
         self.request_lock = Lock()
+        FieldTracker.class_init(self)
+        self.auxiliary_fields: List[HistoryFieldData] = []
         database: DBComp = self.server.lookup_component("database")
-        self.job_totals: Dict[str, float] = database.get_item(
-            "moonraker", "history.job_totals",
-            {
-                'total_jobs': 0,
-                'total_time': 0.,
-                'total_print_time': 0.,
-                'total_filament_used': 0.,
-                'longest_job': 0.,
-                'longest_print': 0.
-            }).result()
+        hist_info: Dict[str, Any]
+        hist_info = database.get_item("moonraker", "history", {}).result()
+        self.job_totals: Totals = hist_info.get("job_totals", dict(BASE_TOTALS))
+        self.aux_totals: AuxTotals = hist_info.get("aux_totals", [])
 
         self.server.register_event_handler(
             "server:klippy_disconnect", self._handle_disconnect)
@@ -75,6 +88,7 @@ class History:
 
         self.current_job: Optional[PrinterJob] = None
         self.current_job_id: Optional[str] = None
+        self.job_paused: bool = False
         self.next_job_id: int = 0
         self.cached_job_ids = self.history_ns.keys().result()
         if self.cached_job_ids:
@@ -189,30 +203,30 @@ class History:
 
             return {"count": count, "jobs": jobs}
 
-    async def _handle_job_totals(self,
-                                 web_request: WebRequest
-                                 ) -> Dict[str, Dict[str, float]]:
-        return {'job_totals': self.job_totals}
-
-    async def _handle_job_total_reset(self,
-                                      web_request: WebRequest,
-                                      ) -> Dict[str, Dict[str, float]]:
-        if self.current_job is not None:
-            raise self.server.error(
-                "Job in progress, cannot reset totals")
-        last_totals = dict(self.job_totals)
-        self.job_totals = {
-            'total_jobs': 0,
-            'total_time': 0.,
-            'total_print_time': 0.,
-            'total_filament_used': 0.,
-            'longest_job': 0.,
-            'longest_print': 0.
+    async def _handle_job_totals(
+        self, web_request: WebRequest
+    ) -> Dict[str, Union[Totals, AuxTotals]]:
+        return {
+            "job_totals": self.job_totals,
+            "auxiliary_totals": self.aux_totals
         }
+
+    async def _handle_job_total_reset(
+        self, web_request: WebRequest
+    ) -> Dict[str, Union[Totals, AuxTotals]]:
+        if self.current_job is not None:
+            raise self.server.error("Job in progress, cannot reset totals")
+        last_totals = self.job_totals
+        self.job_totals = dict(BASE_TOTALS)
+        last_aux_totals = self.aux_totals
+        self._update_aux_totals(reset=True)
         database: DBComp = self.server.lookup_component("database")
-        await database.insert_item(
-            "moonraker", "history.job_totals", self.job_totals)
-        return {'last_totals': last_totals}
+        await database.insert_item("moonraker", "history.job_totals", self.job_totals)
+        await database.insert_item("moonraker", "history.aux_totals", self.aux_totals)
+        return {
+            "last_totals": last_totals,
+            "last_auxiliary_totals": last_aux_totals
+        }
 
     def _on_job_state_changed(
         self,
@@ -220,6 +234,7 @@ class History:
         prev_stats: Dict[str, Any],
         new_stats: Dict[str, Any]
     ) -> None:
+        self.job_paused = job_event == JobEvent.PAUSED
         if job_event == JobEvent.STARTED:
             if self.current_job is not None:
                 # Finish with the previous state
@@ -251,6 +266,9 @@ class History:
         self.current_job = job
         self.current_job_id = job_id
         self.grab_job_metadata()
+        for field in self.auxiliary_fields:
+            field.tracker.reset()
+        self.current_job.set_aux_data(self.auxiliary_fields)
         self.history_ns[job_id] = job.get_stats()
         self.cached_job_ids.append(job_id)
         self.next_job_id += 1
@@ -281,6 +299,7 @@ class History:
         self.current_job.finish(status, pstats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
+        self.current_job.set_aux_data(self.auxiliary_fields)
         self.save_current_job()
         self._update_job_totals()
         logging.debug(
@@ -332,17 +351,30 @@ class History:
         if self.current_job is None:
             return
         job = self.current_job
-        self.job_totals['total_jobs'] += 1
-        self.job_totals['total_time'] += job.get('total_duration')
-        self.job_totals['total_print_time'] += job.get('print_duration')
-        self.job_totals['total_filament_used'] += job.get('filament_used')
-        self.job_totals['longest_job'] = max(
-            self.job_totals['longest_job'], job.get('total_duration'))
-        self.job_totals['longest_print'] = max(
-            self.job_totals['longest_print'], job.get('print_duration'))
+        self._accumulate_total("total_jobs", 1)
+        self._accumulate_total("total_time", job.total_duration)
+        self._accumulate_total("total_print_time", job.print_duration)
+        self._accumulate_total("total_filament_used", job.filament_used)
+        self._maximize_total("longest_job", job.total_duration)
+        self._maximize_total("longest_print", job.print_duration)
+        self._update_aux_totals()
         database: DBComp = self.server.lookup_component("database")
-        database.insert_item(
-            "moonraker", "history.job_totals", self.job_totals)
+        database.insert_item("moonraker", "history.job_totals", self.job_totals)
+        database.insert_item("moonraker", "history.aux_totals", self.aux_totals)
+
+    def _accumulate_total(self, field: str, val: Union[int, float]) -> None:
+        self.job_totals[field] += val
+
+    def _maximize_total(self, field: str, val: Union[int, float]) -> None:
+        self.job_totals[field] = max(self.job_totals[field], val)
+
+    def _update_aux_totals(self, reset: bool = False) -> None:
+        last_totals = self.aux_totals
+        self.aux_totals = [
+            field.get_totals(last_totals, reset)
+            for field in self.auxiliary_fields
+            if field.has_totals()
+        ]
 
     def send_history_event(self, evt_action: str) -> None:
         if self.current_job is None or self.current_job_id is None:
@@ -363,6 +395,20 @@ class History:
         )
         return job
 
+    def register_auxiliary_field(self, new_field: HistoryFieldData) -> None:
+        for field in self.auxiliary_fields:
+            if field == new_field:
+                raise self.server.error(
+                    f"Field {field.name} already registered by "
+                    f"provider {field.provider}."
+                )
+        self.auxiliary_fields.append(new_field)
+
+    def tracking_enabled(self, check_paused: bool) -> bool:
+        if self.current_job is None:
+            return False
+        return not self.job_paused if check_paused else True
+
     def on_exit(self) -> None:
         jstate: JobState = self.server.lookup_component("job_state")
         last_ps = jstate.get_last_stats()
@@ -378,6 +424,7 @@ class PrinterJob:
         self.status: str = "in_progress"
         self.start_time = time.time()
         self.total_duration: float = 0.
+        self.auxiliary_data: List[Dict[str, Any]] = []
         self.update_from_ps(data)
 
     def finish(self,
@@ -401,10 +448,14 @@ class PrinterJob:
             return
         setattr(self, name, val)
 
+    def set_aux_data(self, fields: List[HistoryFieldData]) -> None:
+        self.auxiliary_data = [field.as_dict() for field in fields]
+
     def update_from_ps(self, data: Dict[str, Any]) -> None:
         for i in data:
             if hasattr(self, i):
                 setattr(self, i, data[i])
+
 
 def load_component(config: ConfigHelper) -> History:
     return History(config)
