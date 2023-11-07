@@ -6071,6 +6071,97 @@ Returns:
 returned.  Once received, Moonraker will broadcast this event via
 the [agent event notification](#agent-events) to all other connections.
 
+#### Register a method with Klipper
+
+Allows agents to register remote methods with Klipper.  These methods
+may be called in `gcode_macros`.
+
+!!! Note
+    This API is only available to websocket connections that have
+    identified themselves as an `agent` type.
+
+HTTP Request: Not Available
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"connection.register_remote_method",
+    "params": {
+        "method_name": "firemon_alert_heated"
+    }
+}
+```
+
+Parameters:
+
+- `method_name`: The name of the desired method.  Agents should make sure that
+  the name is unique.  One recommendation is to prefix the agent's name
+  to each method it registers.
+
+Returns:
+
+`ok` if registration is successful.  An error is returned if the method name
+is already registered.
+
+!!! Note
+    Methods registered by agents will persist until the agent disconnects.
+    Upon connection, it is only necessary that they register their desired
+    methods once.
+
+Example:
+
+Presume an application named `firemon` has connected to Moonraker's websocket
+and identified itself as an `agent`. After identification it registers a
+remote method named `firemon_alert_heated`.
+
+In addition, the user the following `gcode_macro` configured in `printer.cfg`:
+
+```ini
+# printer.cfg
+
+[gcode_macro ALERT_HEATED]
+gcode:
+  {% if not params %}
+    {action_call_remote_method("firemon_alert_heated")}
+  {% else %}
+    {% set htr = params.HEATER|default("unknown") %}
+    {% set tmp = params.TEMP|default(0)|float %}
+    {action_call_remote_method(
+        "firemon_alert_heated", heater=htr, temp=tmp)}
+  {% endif %}
+
+
+```
+
+When the `ALERT_HEATED HEATER=extruder TEMP=200` gcode is executed by Klipper,
+the agent will receive the following:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"firemon_alert_heated",
+    "params": {
+        "heater": "extruder",
+        "temp": 200
+    }
+}
+```
+
+When the `ALERT_HEATED` gcode is executed with no parameters, the agent will
+receive the following:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method":"monitor_alert_heated"
+}
+```
+
+!!! Note
+    Methods called from Klipper never contain the "id" field, as Klipper
+    does not accept return values to remote methods.
+
 ### Debug APIs
 
 The APIs in this section are available when Moonraker the debug argument
