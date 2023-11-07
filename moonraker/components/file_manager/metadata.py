@@ -777,12 +777,16 @@ class IdeaMaker(BaseSlicer):
         return None
 
     def parse_filament_type(self) -> Optional[str]:
-        return _regex_find_string(
-            r";Filament\stype\s=\s(.*)", self.header_data)
+        return (
+            _regex_find_string(r";Filament\sType\s.\d:\s(.*)", self.header_data) or
+            _regex_find_string(r";Filament\stype\s=\s(.*)", self.header_data)
+        )
 
     def parse_filament_name(self) -> Optional[str]:
-        return _regex_find_string(
-            r";Filament\sname\s=\s(.*)", self.header_data)
+        return (
+            _regex_find_string(r";Filament\sName\s.\d:\s(.*)", self.header_data) or
+            _regex_find_string(r";Filament\sname\s=\s(.*)", self.header_data)
+        )
 
     def parse_filament_weight_total(self) -> Optional[float]:
         pi = 3.141592653589793
