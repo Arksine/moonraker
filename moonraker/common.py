@@ -206,22 +206,35 @@ class BaseRemoteConnection(Subscribable):
             'method': "notify_status_update",
             'params': [status, eventtime]})
 
-    def call_method(
+    def call_method_with_response(
         self,
         method: str,
-        params: Optional[Union[List, Dict[str, Any]]] = None
+        params: Optional[Union[List, Dict[str, Any]]] = None,
     ) -> Awaitable:
         fut = self.eventloop.create_future()
-        msg = {
+        msg: Dict[str, Any] = {
             'jsonrpc': "2.0",
             'method': method,
             'id': id(fut)
         }
-        if params is not None:
+        if params:
             msg["params"] = params
         self.pending_responses[id(fut)] = fut
         self.queue_message(msg)
         return fut
+
+    def call_method(
+        self,
+        method: str,
+        params: Optional[Union[List, Dict[str, Any]]] = None
+    ) -> None:
+        msg: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": method
+        }
+        if params:
+            msg["params"] = params
+        self.queue_message(msg)
 
     def send_notification(self, name: str, data: List) -> None:
         self.wsm.notify_clients(name, data, [self._uid])

@@ -31,7 +31,7 @@ from typing import (
 if TYPE_CHECKING:
     from .server import Server
     from .app import MoonrakerApp
-    from .common import WebRequest, Subscribable
+    from .common import WebRequest, Subscribable, BaseRemoteConnection
     from .confighelper import ConfigHelper
     from .components.klippy_apis import KlippyAPI
     from .components.file_manager.file_manager import FileManager
@@ -71,6 +71,7 @@ class KlippyConnection:
         self._klippy_identified: bool = False
         self._klippy_initializing: bool = False
         self._klippy_started: bool = False
+        self._methods_registered: bool = False
         self._klipper_version: str = ""
         self._missing_reqs: Set[str] = set()
         self._peer_cred: Dict[str, int] = {}
@@ -223,6 +224,34 @@ class KlippyConnection:
             # These methods need to be registered with Klippy
             self.klippy_reg_methods.append(method_name)
 
+    def register_method_from_agent(
+        self, connection: BaseRemoteConnection, method_name: str
+    ) -> Optional[Awaitable]:
+        if connection.client_data["type"] != "agent":
+            raise self.server.error(
+                "Only connections of the 'agent' type can register methods"
+            )
+        if method_name in self.remote_methods:
+            raise self.server.error(
+                f"Remote method ({method_name}) already registered"
+            )
+
+        def _on_agent_method_received(**kwargs) -> None:
+            connection.call_method(method_name, kwargs)
+        self.remote_methods[method_name] = _on_agent_method_received
+        self.klippy_reg_methods.append(method_name)
+        if self._methods_registered and self._state != "disconnected":
+            coro = self.klippy_apis.register_method(method_name)
+            return self.event_loop.create_task(coro)
+        return None
+
+    def unregister_method(self, method_name: str):
+        self.remote_methods.pop(method_name, None)
+        try:
+            self.klippy_reg_methods.remove(method_name)
+        except ValueError:
+            pass
+
     def connect(self) -> Awaitable[bool]:
         if (
             self.is_connected() or
@@ -298,6 +327,7 @@ class KlippyConnection:
         self._klippy_identified = False
         self._klippy_started = False
         self._klippy_initializing = True
+        self._methods_registered = False
         self._missing_reqs.clear()
         self.init_attempts = 0
         self._state = "startup"
@@ -393,6 +423,7 @@ class KlippyConnection:
                     except ServerError:
                         logging.exception(
                             f"Unable to register method '{method}'")
+                self._methods_registered = True
                 if self._state == "ready":
                     logging.info("Klippy ready")
                     await self.server.send_event("server:klippy_ready")
@@ -669,6 +700,7 @@ class KlippyConnection:
         self._klippy_identified = False
         self._klippy_initializing = False
         self._klippy_started = False
+        self._methods_registered = False
         self._state = "disconnected"
         self._state_message = "Klippy Disconnected"
         for request in self.pending_requests.values():

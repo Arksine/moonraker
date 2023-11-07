@@ -32,7 +32,13 @@ class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.agents: Dict[str, BaseRemoteConnection] = {}
+        self.agent_methods: Dict[int, List[str]] = {}
         self.uds_server: Optional[asyncio.AbstractServer] = None
+        self.server.register_endpoint(
+            "/connection/register_remote_method", ["POST"],
+            self._register_agent_method,
+            transports=["websocket"]
+        )
         self.server.register_endpoint(
             "/connection/send_event", ["POST"], self._handle_agent_event,
             transports=["websocket"]
@@ -66,6 +72,10 @@ class ExtensionManager:
     def remove_agent(self, connection: BaseRemoteConnection) -> None:
         name = connection.client_data["name"]
         if name in self.agents:
+            klippy: Klippy = self.server.lookup_component("klippy_connection")
+            registered_methods = self.agent_methods.pop(connection.uid, [])
+            for method in registered_methods:
+                klippy.unregister_method(method)
             del self.agents[name]
             evt: Dict[str, Any] = {"agent": name, "event": "disconnected"}
             connection.send_notification("agent_event", [evt])
@@ -90,6 +100,16 @@ class ExtensionManager:
         conn.send_notification("agent_event", [evt])
         return "ok"
 
+    async def _register_agent_method(self, web_request: WebRequest) -> str:
+        conn = web_request.get_client_connection()
+        if conn is None:
+            raise self.server.error("No connection detected")
+        method_name = web_request.get_str("method_name")
+        klippy: Klippy = self.server.lookup_component("klippy_connection")
+        klippy.register_method_from_agent(conn, method_name)
+        self.agent_methods.setdefault(conn.uid, []).append(method_name)
+        return "ok"
+
     async def _handle_list_extensions(
         self, web_request: WebRequest
     ) -> Dict[str, List[Dict[str, Any]]]:
@@ -109,7 +129,7 @@ class ExtensionManager:
         if agent not in self.agents:
             raise self.server.error(f"Agent {agent} not connected")
         conn = self.agents[agent]
-        return await conn.call_method(method, args)
+        return await conn.call_method_with_response(method, args)
 
     async def start_unix_server(self) -> None:
         sockfile: str = self.server.get_app_args()["unix_socket_path"]

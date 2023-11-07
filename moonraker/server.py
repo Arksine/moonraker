@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     FlexCallback = Callable[..., Optional[Coroutine]]
     _T = TypeVar("_T", Sentinel, Any)
 
-API_VERSION = (1, 3, 0)
+API_VERSION = (1, 4, 0)
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
