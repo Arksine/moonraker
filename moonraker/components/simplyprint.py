@@ -813,10 +813,12 @@ class SimplyPrint(Subscribable):
             mem_pct = sys_mem["used"] / sys_mem["total"] * 100
         cpu_data = {
             "usage": int(cpu["cpu"] + .5),
-            "temp": int(proc_stats["cpu_temp"] + .5),
             "memory": int(mem_pct + .5),
             "flags": self.cache.throttled_state.get("bits", 0)
         }
+        temp: Optional[float] = proc_stats["cpu_temp"]
+        if temp is not None:
+            cpu_data["temp"] = int(temp + .5)
         diff = self._get_object_diff(cpu_data, self.cache.cpu_info)
         if diff:
             self.cache.cpu_info.update(cpu_data)
