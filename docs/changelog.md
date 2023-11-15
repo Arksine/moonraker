@@ -61,6 +61,8 @@ The format is based on [Keep a Changelog].
 - **update_manager**: APIs that return status report additional fields.
   See the [API Documentation](./web_api.md#get-update-status) for details.
 - **proc_stats**: Improved performance of Raspberry Pi CPU throttle detection.
+- **power**:  Bound services are now processed during initialization when
+  `initial_state` is configured.
 
 ## [0.8.0] - 2023-02-23
 

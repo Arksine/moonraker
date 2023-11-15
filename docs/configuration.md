@@ -616,6 +616,9 @@ type:
 #   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
 #   smartthings, mqtt or hue.
 #   This parameter must be provided.
+initial_state: off
+#    The state the power device should be initialized to.  May be on or
+#    off.  When this option is not specifed no initial state will be set.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
 #   the "shutdown" state.  This option applies to all device types.
@@ -654,6 +657,10 @@ bound_services:
 #   the Moonraker service can not be bound to a power device.  Note that
 #   service names are case sensitive.
 #
+#   When the "initial_state" option is explcitly configured bound services
+#   will be synced with the current state.  For example, if the initial_state
+#   is "off", all bound services will be stopped after device initialization.
+#
 #   The default is no services are bound to the device.
 ```
 
@@ -679,10 +686,6 @@ pin: gpiochip0/gpio26
 #      !gpiochip0/gpio26
 #      !gpio26
 #    This parameter must be provided for "gpio" type devices
-initial_state: off
-#    The initial state for GPIO type devices.  May be on or
-#    off.  When moonraker starts the device will be set to this
-#    state.  Default is off.
 timer:
 #    A time (in seconds) after which the device will power off after being.
 #    switched on. This effectively turns the device into a  momentary switch.
@@ -833,10 +836,6 @@ pin: gpiochip0/gpio26
 #      !gpiochip0/gpio26
 #      !gpio26
 #    This parameter must be provided for "gpio" type devices
-initial_state: off
-#    The initial state for GPIO type devices.  May be on or
-#    off.  When moonraker starts the device will be set to this
-#    state.  Default is off.
 timer:
 #    A time (in seconds) after which the device will power off after being.
 #    switched on. This effectively turns the device into a  momentary switch.
