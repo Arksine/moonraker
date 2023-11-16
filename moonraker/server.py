@@ -368,9 +368,6 @@ class Server:
     def get_klippy_info(self) -> Dict[str, Any]:
         return self.klippy_connection.klippy_info
 
-    def get_klippy_state(self) -> str:
-        return self.klippy_connection.state
-
     def _handle_term_signal(self) -> None:
         logging.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
@@ -447,7 +444,7 @@ class Server:
             ]
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
-            'klippy_state': self.klippy_connection.state,
+            'klippy_state': str(self.klippy_connection.state),
             'components': list(self.components.keys()),
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,

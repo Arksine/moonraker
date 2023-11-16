@@ -14,6 +14,7 @@ import asyncio
 import pathlib
 from .utils import ServerError, get_unix_peer_credentials
 from .utils import json_wrapper as jsonw
+from .common import KlippyState
 
 # Annotation imports
 from typing import (
@@ -78,8 +79,8 @@ class KlippyConnection:
         self._peer_cred: Dict[str, int] = {}
         self._service_info: Dict[str, Any] = {}
         self.init_attempts: int = 0
-        self._state: str = "disconnected"
-        self._state_message: str = "Klippy Disconnected"
+        self._state: KlippyState = KlippyState.DISCONNECTED
+        self._state.set_message("Klippy Disconnected")
         self.subscriptions: Dict[Subscribable, Subscription] = {}
         self.subscription_cache: Dict[str, Dict[str, Any]] = {}
         # Setup remote methods accessable to Klippy.  Note that all
@@ -106,14 +107,14 @@ class KlippyConnection:
         return self.server.lookup_component("klippy_apis")
 
     @property
-    def state(self) -> str:
+    def state(self) -> KlippyState:
         if self.is_connected() and not self._klippy_started:
-            return "startup"
+            return KlippyState.STARTUP
         return self._state
 
     @property
     def state_message(self) -> str:
-        return self._state_message
+        return self._state.message
 
     @property
     def klippy_info(self) -> Dict[str, Any]:
@@ -241,7 +242,7 @@ class KlippyConnection:
             connection.call_method(method_name, kwargs)
         self.remote_methods[method_name] = _on_agent_method_received
         self.klippy_reg_methods.append(method_name)
-        if self._methods_registered and self._state != "disconnected":
+        if self._methods_registered and self._state != KlippyState.DISCONNECTED:
             coro = self.klippy_apis.register_method(method_name)
             return self.event_loop.create_task(coro)
         return None
@@ -331,7 +332,7 @@ class KlippyConnection:
         self._methods_registered = False
         self._missing_reqs.clear()
         self.init_attempts = 0
-        self._state = "startup"
+        self._state = KlippyState.STARTUP
         while self.server.is_running():
             await asyncio.sleep(INIT_TIME)
             await self._check_ready()
@@ -391,8 +392,10 @@ class KlippyConnection:
             msg = f"Klipper Version: {version}"
             self.server.add_log_rollover_item("klipper_version", msg)
         self._klippy_info = dict(result)
+        state_message: str = self._state.message
         if "state_message" in self._klippy_info:
-            self._state_message = self._klippy_info["state_message"]
+            state_message = self._klippy_info["state_message"]
+            self._state.set_message(state_message)
         if "state" not in result:
             return
         if send_id:
@@ -400,19 +403,20 @@ class KlippyConnection:
             await self.server.send_event("server:klippy_identified")
             # Request initial endpoints to register info, emergency stop APIs
             await self._request_endpoints()
-        self._state = result["state"]
-        if self._state != "startup":
+        self._state = KlippyState.from_string(result["state"], state_message)
+        if self._state != KlippyState.STARTUP:
             await self._request_initial_subscriptions()
             # Register remaining endpoints available
             await self._request_endpoints()
             startup_state = self._state
-            await self.server.send_event(
-                "server:klippy_started", startup_state
-            )
+            await self.server.send_event("server:klippy_started", startup_state)
             self._klippy_started = True
-            if self._state != "ready":
-                logging.info("\n" + self._state_message)
-                if self._state == "shutdown" and startup_state != "shutdown":
+            if self._state != KlippyState.READY:
+                logging.info("\n" + self._state.message)
+                if (
+                    self._state == KlippyState.SHUTDOWN and
+                    startup_state != KlippyState.SHUTDOWN
+                ):
                     # Klippy shutdown during startup event
                     self.server.send_event("server:klippy_shutdown")
             else:
@@ -425,10 +429,10 @@ class KlippyConnection:
                         logging.exception(
                             f"Unable to register method '{method}'")
                 self._methods_registered = True
-                if self._state == "ready":
+                if self._state == KlippyState.READY:
                     logging.info("Klippy ready")
                     await self.server.send_event("server:klippy_ready")
-                    if self._state == "shutdown":
+                    if self._state == KlippyState.SHUTDOWN:
                         # Klippy shutdown during ready event
                         self.server.send_event("server:klippy_shutdown")
                 else:
@@ -520,21 +524,23 @@ class KlippyConnection:
             self.subscription_cache.setdefault(field, {}).update(item)
         if 'webhooks' in status:
             wh: Dict[str, str] = status['webhooks']
+            state_message: str = self._state.message
             if "state_message" in wh:
-                self._state_message = wh["state_message"]
+                state_message = wh["state_message"]
+                self._state.set_message(state_message)
             # XXX - process other states (startup, ready, error, etc)?
             if "state" in wh:
-                state = wh["state"]
+                new_state = KlippyState.from_string(wh["state"], state_message)
                 if (
-                    state == "shutdown" and
+                    new_state == KlippyState.SHUTDOWN and
                     not self._klippy_initializing and
-                    self._state != "shutdown"
+                    self._state != KlippyState.SHUTDOWN
                 ):
                     # If the shutdown state is received during initialization
                     # defer the event, the init routine will handle it.
                     logging.info("Klippy has shutdown")
                     self.server.send_event("server:klippy_shutdown")
-                self._state = state
+                self._state = new_state
         for conn, sub in self.subscriptions.items():
             conn_status: Dict[str, Any] = {}
             for name, fields in sub.items():
@@ -657,7 +663,7 @@ class KlippyConnection:
         return self.writer is not None and not self.closing
 
     def is_ready(self) -> bool:
-        return self._state == "ready"
+        return self._state == KlippyState.READY
 
     def is_printing(self) -> bool:
         if not self.is_ready():
@@ -705,8 +711,8 @@ class KlippyConnection:
         self._klippy_initializing = False
         self._klippy_started = False
         self._methods_registered = False
-        self._state = "disconnected"
-        self._state_message = "Klippy Disconnected"
+        self._state = KlippyState.DISCONNECTED
+        self._state.set_message("Klippy Disconnected")
         for request in self.pending_requests.values():
             request.set_exception(ServerError("Klippy Disconnected", 503))
         self.pending_requests = {}

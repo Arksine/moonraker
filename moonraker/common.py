@@ -123,6 +123,37 @@ class JobEvent(ExtendedEnum):
     def is_printing(self) -> bool:
         return self.value in [2, 4]
 
+class KlippyState(ExtendedEnum):
+    DISCONNECTED = 1
+    STARTUP = 2
+    READY = 3
+    ERROR = 4
+    SHUTDOWN = 5
+
+    @classmethod
+    def from_string(cls, enum_name: str, msg: str = ""):
+        str_name = enum_name.upper()
+        for name, member in cls.__members__.items():
+            if name == str_name:
+                instance = cls(member.value)
+                if msg:
+                    instance.set_message(msg)
+                return instance
+        raise ValueError(f"No enum member named {enum_name}")
+
+
+    def set_message(self, msg: str) -> None:
+        self._state_message: str = msg
+
+    @property
+    def message(self) -> str:
+        if hasattr(self, "_state_message"):
+            return self._state_message
+        return ""
+
+    def startup_complete(self) -> bool:
+        return self.value > 2
+
 class Subscribable:
     def send_status(
         self, status: Dict[str, Any], eventtime: float

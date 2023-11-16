@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import Subscribable, WebRequest, JobEvent
+from ..common import Subscribable, WebRequest, JobEvent, KlippyState
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -640,12 +640,12 @@ class SimplyPrint(Subscribable):
             self.cache.firmware_info.update(ui_data)
             self.send_sp("machine_data", ui_data)
 
-    def _on_klippy_startup(self, state: str) -> None:
-        if state != "ready":
+    def _on_klippy_startup(self, state: KlippyState) -> None:
+        if state != KlippyState.READY:
             self._update_state("error")
             kconn: KlippyConnection
             kconn = self.server.lookup_component("klippy_connection")
-            self.send_sp("printer_error", {"error": kconn.state_message})
+            self.send_sp("printer_error", {"error": kconn.state.message})
         self.send_sp("connection", {"new": "connected"})
         self._send_firmware_data()
 
@@ -653,7 +653,7 @@ class SimplyPrint(Subscribable):
         self._update_state("error")
         kconn: KlippyConnection
         kconn = self.server.lookup_component("klippy_connection")
-        self.send_sp("printer_error", {"error": kconn.state_message})
+        self.send_sp("printer_error", {"error": kconn.state.message})
 
     def _on_klippy_disconnected(self) -> None:
         self._update_state("offline")
@@ -927,10 +927,11 @@ class SimplyPrint(Subscribable):
         self.send_sp("temps", temp_data)
 
     def _update_state_from_klippy(self) -> None:
-        kstate = self.server.get_klippy_state()
-        if kstate == "ready":
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
+        if klippy_state == KlippyState.READY:
             sp_state = "operational"
-        elif kstate in ["error", "shutdown"]:
+        elif klippy_state in [KlippyState.ERROR, KlippyState.SHUTDOWN]:
             sp_state = "error"
         else:
             sp_state = "offline"
@@ -1613,7 +1614,8 @@ class PrintHandler:
         self.simplyprint.send_sp("file_progress", data)
 
     async def _check_can_print(self) -> bool:
-        if self.server.get_klippy_state() != "ready":
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        if kconn.state != KlippyState.READY:
             return False
         kapi: KlippyAPI = self.server.lookup_component("klippy_apis")
         try:

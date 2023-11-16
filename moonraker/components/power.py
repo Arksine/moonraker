@@ -12,7 +12,7 @@ import asyncio
 import time
 from urllib.parse import quote, urlencode
 from ..utils import json_wrapper as jsonw
-from ..common import RequestType
+from ..common import RequestType, KlippyState
 
 # Annotation imports
 from typing import (
@@ -262,11 +262,11 @@ class PowerDevice:
             'initial_state', None
         )
 
-    def _schedule_firmware_restart(self, state: str = "") -> None:
+    def _schedule_firmware_restart(self, state: KlippyState) -> None:
         if not self.need_scheduled_restart:
             return
         self.need_scheduled_restart = False
-        if state == "ready":
+        if state == KlippyState.READY:
             logging.info(
                 f"Power Device {self.name}: Klipper reports 'ready', "
                 "aborting FIRMWARE_RESTART"
@@ -304,8 +304,9 @@ class PowerDevice:
             await self.process_bound_services()
         if self.state == "on" and self.klipper_restart:
             self.need_scheduled_restart = True
-            klippy_state = self.server.get_klippy_state()
-            if klippy_state in ["disconnected", "startup"]:
+            kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+            klippy_state = kconn.state
+            if not klippy_state.startup_complete():
                 # If klippy is currently disconnected or hasn't proceeded past
                 # the startup state, schedule the restart in the
                 # "klippy_started" event callback.
@@ -338,7 +339,8 @@ class PowerDevice:
                 self.off_when_shutdown_delay, self._power_off_on_shutdown)
 
     def _power_off_on_shutdown(self) -> None:
-        if self.server.get_klippy_state() != "shutdown":
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        if kconn.state != KlippyState.SHUTDOWN:
             return
         logging.info(
             f"Powering off device '{self.name}' due to klippy shutdown")

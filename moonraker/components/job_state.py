@@ -15,7 +15,7 @@ from typing import (
     Dict,
     List,
 )
-from ..common import JobEvent
+from ..common import JobEvent, KlippyState
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .klippy_apis import KlippyAPI
@@ -27,8 +27,8 @@ class JobState:
         self.server.register_event_handler(
             "server:klippy_started", self._handle_started)
 
-    async def _handle_started(self, state: str) -> None:
-        if state != "ready":
+    async def _handle_started(self, state: KlippyState) -> None:
+        if state != KlippyState.READY:
             return
         kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {"print_stats": None}

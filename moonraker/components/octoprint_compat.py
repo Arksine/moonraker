@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 import logging
-from ..common import RequestType, TransportType
+from ..common import RequestType, TransportType, KlippyState
 
 # Annotation imports
 from typing import (
@@ -16,6 +16,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
+    from ..klippy_connection import KlippyConnection
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_apis import KlippyAPI as APIComp
@@ -153,10 +154,11 @@ class OctoPrintCompat:
                 data.update(status[heater_name])
 
     def printer_state(self) -> str:
-        klippy_state = self.server.get_klippy_state()
-        if klippy_state in ["disconnected", "startup"]:
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
+        if not klippy_state.startup_complete():
             return 'Offline'
-        elif klippy_state != 'ready':
+        elif klippy_state != KlippyState.READY:
             return 'Error'
         return {
             'standby': 'Operational',
@@ -202,11 +204,11 @@ class OctoPrintCompat:
         """
         Server status
         """
-        klippy_state = self.server.get_klippy_state()
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
         return {
             'server': OCTO_VERSION,
-            'safemode': (
-                None if klippy_state == 'ready' else 'settings')
+            'safemode': None if klippy_state == KlippyState.READY else 'settings'
         }
 
     async def _post_login_user(self,

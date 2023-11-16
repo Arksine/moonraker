@@ -28,7 +28,8 @@ from .common import (
     APIDefinition,
     APITransport,
     TransportType,
-    RequestType
+    RequestType,
+    KlippyState
 )
 from .utils import json_wrapper as jsonw
 from .websockets import (
@@ -1133,11 +1134,10 @@ class WelcomeHandler(tornado.web.RequestHandler):
                 "The [authorization] section in moonraker.conf must be "
                 "configured to enable CORS."
             )
-        kstate = self.server.get_klippy_state()
-        if kstate != "disconnected":
-            kinfo = self.server.get_klippy_info()
-            kmsg = kinfo.get("state_message", kstate)
-            summary.append(f"Klipper reports {kmsg.lower()}")
+        kconn: Klippy = self.server.lookup_component("klippy_connection")
+        kstate = kconn.state
+        if kstate != KlippyState.DISCONNECTED:
+            summary.append(f"Klipper reports {kstate.message.lower()}")
         else:
             summary.append(
                 "Moonraker is not currently connected to Klipper.  Make sure "

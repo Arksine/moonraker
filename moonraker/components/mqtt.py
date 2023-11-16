@@ -18,7 +18,8 @@ from ..common import (
     Subscribable,
     WebRequest,
     APITransport,
-    JsonRPC
+    JsonRPC,
+    KlippyState
 )
 from ..utils import json_wrapper as jsonw
 
@@ -372,7 +373,7 @@ class MQTTClient(APITransport, Subscribable):
             self._do_reconnect(first=True)
         )
 
-    async def _handle_klippy_started(self, state: str) -> None:
+    async def _handle_klippy_started(self, state: KlippyState) -> None:
         if self.status_objs:
             args = {'objects': self.status_objs}
             try:
