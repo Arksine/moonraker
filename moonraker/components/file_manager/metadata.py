@@ -219,7 +219,8 @@ class BaseSlicer(object):
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         for data in [self.header_data, self.footer_data]:
             thumb_matches: List[str] = re.findall(
-                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
+                r"; (?:thumbnail|thumbnail_JPG) begin([;/\+=\w\s]+?)"
+                r"; (?:thumbnail|thumbnail_JPG) end", data)
             if thumb_matches:
                 break
         else:
@@ -235,7 +236,7 @@ class BaseSlicer(object):
         parsed_matches: List[Dict[str, Any]] = []
         has_miniature: bool = False
         for match in thumb_matches:
-            lines = re.split(r"\r?\n", match.replace('; ', ''))
+            lines = re.split(r"\r?\n", match[1].replace('; ', ''))
             info = _regex_find_ints(r".*", lines[0])
             data = "".join(lines[1:-1])
             if len(info) != 3:
@@ -248,7 +249,12 @@ class BaseSlicer(object):
                     f"MetadataError: Thumbnail Size Mismatch: "
                     f"detected {info[2]}, actual {len(data)}")
                 continue
-            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
+            # set default thumbnail extension
+            thumb_extension = "png"
+            # check if thumbnail is a jpg
+            if match[0] == "thumbnail_JPG":
+                thumb_extension = "jpg"
+            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.{thumb_extension}"
             thumb_path = os.path.join(thumb_dir, thumb_name)
             rel_thumb_path = os.path.join(".thumbs", thumb_name)
             with open(thumb_path, "wb") as f:
