@@ -915,7 +915,7 @@ class KiriMoto(BaseSlicer):
         )
 
 
-READ_SIZE = 512 * 1024
+READ_SIZE = 1024 * 1024  # 1 MiB
 SUPPORTED_SLICERS: List[Type[BaseSlicer]] = [
     PrusaSlicer, Slic3rPE, Slic3r, Cura, Simplify3D,
     KISSlicer, IdeaMaker, IceSL, KiriMoto
