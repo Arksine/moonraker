@@ -76,31 +76,21 @@ class WebsocketManager(APITransport):
         self.server.register_event_handler(event_name, notify_handler)
 
     def register_api_handler(self, api_def: APIDefinition) -> None:
-        klippy: Klippy = self.server.lookup_component("klippy_connection")
-        if api_def.callback is None:
-            # Remote API, uses RPC to reach out to Klippy
-            ws_method = api_def.jrpc_methods[0]
-            rpc_cb = self._generate_callback(
-                api_def.endpoint, RequestType(0), klippy.request
+        for req_type, rpc_method in api_def.rpc_methods.items():
+            rpc_cb = self._generate_rpc_callback(
+                api_def.endpoint, req_type, api_def.callback
             )
-            self.rpc.register_method(ws_method, rpc_cb)
-        else:
-            # Local API, uses local callback
-            for ws_method, req_type in zip(api_def.jrpc_methods, api_def.request_types):
-                rpc_cb = self._generate_callback(
-                    api_def.endpoint, req_type, api_def.callback
-                )
-                self.rpc.register_method(ws_method, rpc_cb)
+            self.rpc.register_method(rpc_method, rpc_cb)
         logging.info(
             "Registering Websocket JSON-RPC methods: "
-            f"{', '.join(api_def.jrpc_methods)}"
+            f"{', '.join(api_def.rpc_methods.values())}"
         )
 
     def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for jrpc_method in api_def.jrpc_methods:
-            self.rpc.remove_method(jrpc_method)
+        for rpc_method in api_def.rpc_methods.values():
+            self.rpc.remove_method(rpc_method)
 
-    def _generate_callback(
+    def _generate_rpc_callback(
         self,
         endpoint: str,
         request_type: RequestType,

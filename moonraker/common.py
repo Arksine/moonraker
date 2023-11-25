@@ -9,6 +9,7 @@ import sys
 import ipaddress
 import logging
 import copy
+import re
 from enum import Enum, Flag, auto
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
     AuthComp = Optional[Authorization]
+
+ENDPOINT_PREFIXES = ["printer", "server", "machine", "access", "api", "debug"]
 
 class ExtendedFlag(Flag):
     @classmethod
@@ -161,23 +164,87 @@ class Subscribable:
         raise NotImplementedError
 
 class APIDefinition:
+    _cache: Dict[str, APIDefinition] = {}
     def __init__(
         self,
         endpoint: str,
-        http_uri: str,
-        jrpc_methods: List[str],
+        http_path: str,
+        rpc_methods: Dict[RequestType, str],
         request_types: RequestType,
         transports: TransportType,
-        callback: Optional[Callable[[WebRequest], Coroutine]],
+        callback: Callable[[WebRequest], Coroutine],
         need_object_parser: bool
     ) -> None:
         self.endpoint = endpoint
-        self.uri = http_uri
-        self.jrpc_methods = jrpc_methods
+        self.http_path = http_path
+        self.rpc_methods = rpc_methods
         self.request_types = request_types
         self.supported_transports = transports
         self.callback = callback
         self.need_object_parser = need_object_parser
+
+    @classmethod
+    def create(
+        cls,
+        endpoint: str,
+        request_types: Union[List[str], RequestType],
+        callback: Callable[[WebRequest], Coroutine],
+        transports: Union[List[str], TransportType] = TransportType.all(),
+        is_remote: bool = False
+    ) -> APIDefinition:
+        if isinstance(request_types, list):
+            request_types = RequestType.from_string_list(request_types)
+        if isinstance(transports, list):
+            transports = TransportType.from_string_list(transports)
+        if endpoint in cls._cache:
+            return cls._cache[endpoint]
+        http_path = f"/printer/{endpoint.strip('/')}" if is_remote else endpoint
+        prf_match = re.match(r"/([^/]+)", http_path)
+        if TransportType.HTTP in transports:
+            # Validate the first path segment for definitions that support the
+            # HTTP transport.  We want to restrict components from registering
+            # using unknown paths.
+            if prf_match is None or prf_match.group(1) not in ENDPOINT_PREFIXES:
+                prefixes = [f"/{prefix} " for prefix in ENDPOINT_PREFIXES]
+                raise ServerError(
+                    f"Invalid endpoint name '{endpoint}', must start with one of "
+                    f"the following: {prefixes}"
+                )
+        jrpc_methods: Dict[RequestType, str] = {}
+        if is_remote:
+            # Request Types have no meaning for remote requests.  Therefore
+            # both GET and POST http requests are accepted.  JRPC requests do
+            # not need an associated RequestType, so the unknown value is used.
+            request_types = RequestType.GET | RequestType.POST
+            jrpc_methods[RequestType(0)] = http_path[1:].replace('/', '.')
+        else:
+            name_parts = http_path[1:].split('/')
+            if len(request_types) > 1:
+                for rtype in request_types:
+                    func_name = rtype.name.lower() + "_" + name_parts[-1]
+                    jrpc_methods[rtype] = ".".join(name_parts[:-1] + [func_name])
+            else:
+                jrpc_methods[request_types] = ".".join(name_parts)
+            if len(request_types) != len(jrpc_methods):
+                raise ServerError(
+                    "Invalid API definition.  Number of websocket methods must "
+                    "match the number of request methods"
+                )
+        need_object_parser = endpoint.startswith("objects/")
+        api_def = cls(
+            endpoint, http_path, jrpc_methods, request_types,
+            transports, callback, need_object_parser
+        )
+        cls._cache[endpoint] = api_def
+        return api_def
+
+    @classmethod
+    def pop_cached_def(cls, endpoint: str) -> Optional[APIDefinition]:
+        return cls._cache.pop(endpoint, None)
+
+    @classmethod
+    def get_cache(cls) -> Dict[str, APIDefinition]:
+        return cls._cache
 
 class APITransport:
     def register_api_handler(self, api_def: APIDefinition) -> None:

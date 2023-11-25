@@ -689,41 +689,28 @@ class MQTTClient(APITransport, Subscribable):
                                      self.api_qos)
 
     def register_api_handler(self, api_def: APIDefinition) -> None:
-        if api_def.callback is None:
-            # Remote API, uses RPC to reach out to Klippy
-            mqtt_method = api_def.jrpc_methods[0]
-            rpc_cb = self._generate_remote_callback(api_def.endpoint)
-            self.json_rpc.register_method(mqtt_method, rpc_cb)
-        else:
-            # Local API, uses local callback
-            req_types = api_def.request_types
-            for mqtt_method, req_type in zip(api_def.jrpc_methods, req_types):
-                rpc_cb = self._generate_local_callback(
-                    api_def.endpoint, req_type, api_def.callback)
-                self.json_rpc.register_method(mqtt_method, rpc_cb)
+        for req_type, rpc_method in api_def.rpc_methods.items():
+            rpc_cb = self._generate_rpc_callback(
+                api_def.endpoint, req_type, api_def.callback
+            )
+            self.json_rpc.register_method(rpc_method, rpc_cb)
         logging.info(
             "Registering MQTT JSON-RPC methods: "
-            f"{', '.join(api_def.jrpc_methods)}")
+            f"{', '.join(api_def.rpc_methods.values())}")
 
     def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for jrpc_method in api_def.jrpc_methods:
+        for jrpc_method in api_def.rpc_methods.values():
             self.json_rpc.remove_method(jrpc_method)
 
-    def _generate_local_callback(self,
-                                 endpoint: str,
-                                 request_type: RequestType,
-                                 callback: Callable[[WebRequest], Coroutine]
-                                 ) -> RPCCallback:
+    def _generate_rpc_callback(
+        self,
+        endpoint: str,
+        request_type: RequestType,
+        callback: Callable[[WebRequest], Coroutine]
+    ) -> RPCCallback:
         async def func(args: Dict[str, Any]) -> Any:
             self._check_timestamp(args)
             result = await callback(WebRequest(endpoint, args, request_type))
-            return result
-        return func
-
-    def _generate_remote_callback(self, endpoint: str) -> RPCCallback:
-        async def func(args: Dict[str, Any]) -> Any:
-            self._check_timestamp(args)
-            result = await self.klippy.request(WebRequest(endpoint, args))
             return result
         return func
 

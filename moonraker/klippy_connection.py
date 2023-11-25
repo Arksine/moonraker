@@ -14,7 +14,7 @@ import asyncio
 import pathlib
 from .utils import ServerError, get_unix_peer_credentials
 from .utils import json_wrapper as jsonw
-from .common import KlippyState
+from .common import KlippyState, RequestType
 
 # Annotation imports
 from typing import (
@@ -32,7 +32,6 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .server import Server
-    from .app import MoonrakerApp
     from .common import WebRequest, Subscribable, BaseRemoteConnection
     from .confighelper import ConfigHelper
     from .components.klippy_apis import KlippyAPI
@@ -352,10 +351,12 @@ class KlippyConnection:
         if result is None:
             return
         endpoints = result.get('endpoints', [])
-        app: MoonrakerApp = self.server.lookup_component("application")
         for ep in endpoints:
             if ep not in RESERVED_ENDPOINTS:
-                app.register_remote_handler(ep)
+                self.server.register_endpoint(
+                    ep, RequestType.GET | RequestType.POST, self.request,
+                    is_remote=True
+                )
 
     async def _request_initial_subscriptions(self) -> None:
         try:
