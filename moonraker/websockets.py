@@ -57,7 +57,7 @@ class WebsocketManager:
         )
         self.server.register_endpoint(
             "/server/connection/identify", RequestType.POST, self._handle_identify,
-            TransportType.WEBSOCKET
+            TransportType.WEBSOCKET, auth_required=False
         )
         self.server.register_component("websockets", self)
 
@@ -321,7 +321,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
             try:
-                self._user_info = auth.check_authorized(self.request)
+                self._user_info = auth.authenticate_request(self.request)
             except Exception as e:
                 logging.info(f"Websocket Failed Authentication: {e}")
                 self._user_info = None
@@ -461,7 +461,7 @@ class BridgeSocket(WebSocketHandler):
             )
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
-            self.current_user = auth.check_authorized(self.request)
+            self.current_user = auth.authenticate_request(self.request)
         kconn: Klippy = self.server.lookup_component("klippy_connection")
         try:
             reader, writer = await kconn.open_klippy_connection()

@@ -311,6 +311,7 @@ class MoonrakerApp:
         transports: Union[List[str], TransportType] = TransportType.all(),
         wrap_result: bool = True,
         content_type: Optional[str] = None,
+        auth_required: bool = True,
         is_remote: bool = False
     ) -> None:
         if isinstance(request_types, list):
@@ -318,7 +319,7 @@ class MoonrakerApp:
         if isinstance(transports, list):
             transports = TransportType.from_string_list(transports)
         api_def = APIDefinition.create(
-            endpoint, request_types, callback, transports, is_remote
+            endpoint, request_types, callback, transports, auth_required, is_remote
         )
         http_path = api_def.http_path
         if http_path in self.registered_base_handlers:
@@ -414,7 +415,7 @@ class MoonrakerApp:
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
-        self.endpoint: str = ""
+        self.auth_required: bool = True
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -427,12 +428,11 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
-        app: MoonrakerApp = self.server.lookup_component("application")
-        if not self.endpoint:
-            self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = auth.check_authorized(self.request, self.endpoint)
+            self.current_user = auth.authenticate_request(
+                self.request, self.auth_required
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -476,7 +476,6 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
                    ) -> None:
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
         self.server: Server = self.settings['server']
-        self.endpoint: str = ""
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -489,11 +488,11 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
-        app: MoonrakerApp = self.server.lookup_component("application")
-        self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
-        if auth is not None and self._check_need_auth():
-            self.current_user = auth.check_authorized(self.request, self.endpoint)
+        if auth is not None:
+            self.current_user = auth.authenticate_request(
+                self.request, self._check_need_auth()
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -531,7 +530,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         self.api_defintion = api_definition
         self.wrap_result = wrap_result
         self.content_type = content_type
-        self.endpoint = api_definition.endpoint
+        self.auth_required = api_definition.auth_required
 
     # Converts query string values with type hints
     def _convert_type(self, value: str, hint: str) -> Any:
@@ -601,10 +600,11 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
     def _log_debug(self, header: str, args: Any) -> None:
         if self.server.is_verbose_enabled():
             resp = args
+            endpoint = self.api_defintion.endpoint
             if isinstance(args, dict):
                 if (
-                    self.endpoint.startswith("/access") or
-                    self.endpoint.startswith("/machine/sudo/password")
+                    endpoint.startswith("/access") or
+                    endpoint.startswith("/machine/sudo/password")
                 ):
                     resp = {key: "<sanitized>" for key in args}
             elif isinstance(args, str):
@@ -663,7 +663,9 @@ class FileRequestHandler(AuthorizedFileHandler):
             f"filename*=UTF-8\'\'{utf8_basename}")
 
     async def delete(self, path: str) -> None:
-        path = self.endpoint.lstrip("/").split("/", 2)[-1]
+        app: MoonrakerApp = self.server.lookup_component("application")
+        endpoint = app.parse_endpoint(self.request.path or "")
+        path = endpoint.lstrip("/").split("/", 2)[-1]
         path = url_unescape(path, plus=False)
         file_manager: FileManager
         file_manager = self.server.lookup_component('file_manager')
@@ -944,6 +946,10 @@ class AuthorizedErrorHandler(AuthorizedRequestHandler):
         self.finish(jsonw.dumps({'error': err}))
 
 class RedirectHandler(AuthorizedRequestHandler):
+    def initialize(self) -> None:
+        super().initialize()
+        self.auth_required = False
+
     def get(self, *args, **kwargs) -> None:
         url: Optional[str] = self.get_argument('url', None)
         if url is None:
@@ -972,7 +978,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             try:
-                auth.check_authorized(self.request)
+                auth.authenticate_request(self.request)
             except tornado.web.HTTPError:
                 authorized = False
             else:

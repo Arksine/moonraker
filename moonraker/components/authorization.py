@@ -27,7 +27,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Tuple,
-    Set,
     Optional,
     Union,
     Dict,
@@ -152,7 +151,6 @@ class Authorization:
         self.user_db.sync(self.users)
         self.trusted_users: Dict[IPAddr, Any] = {}
         self.oneshot_tokens: Dict[str, OneshotToken] = {}
-        self.permitted_paths: Set[str] = set()
 
         # Get allowed cors domains
         self.cors_domains: List[str] = []
@@ -222,13 +220,10 @@ class Authorization:
             self._prune_conn_handler)
 
         # Register Authorization Endpoints
-        self.permitted_paths.add("/server/redirect")
-        self.permitted_paths.add("/access/login")
-        self.permitted_paths.add("/access/refresh_jwt")
-        self.permitted_paths.add("/access/info")
         self.server.register_endpoint(
             "/access/login", RequestType.POST, self._handle_login,
-            transports=TransportType.HTTP | TransportType.WEBSOCKET
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
         )
         self.server.register_endpoint(
             "/access/logout", RequestType.POST, self._handle_logout,
@@ -236,7 +231,8 @@ class Authorization:
         )
         self.server.register_endpoint(
             "/access/refresh_jwt", RequestType.POST, self._handle_refresh_jwt,
-            transports=TransportType.HTTP | TransportType.WEBSOCKET
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
         )
         self.server.register_endpoint(
             "/access/user", RequestType.all(), self._handle_user_request,
@@ -261,7 +257,8 @@ class Authorization:
         )
         self.server.register_endpoint(
             "/access/info", RequestType.GET, self._handle_info_request,
-            transports=TransportType.HTTP | TransportType.WEBSOCKET
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
         )
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         wsm.register_notification("authorization:user_created")
@@ -271,12 +268,6 @@ class Authorization:
         wsm.register_notification(
             "authorization:user_logged_out", event_type="logout"
         )
-
-    def register_permited_path(self, path: str) -> None:
-        self.permitted_paths.add(path)
-
-    def is_path_permitted(self, path: str) -> bool:
-        return path in self.permitted_paths
 
     def _sync_user(self, username: str) -> None:
         self.user_db[username] = self.users[username]
@@ -770,13 +761,10 @@ class Authorization:
             return False
         return self.failed_logins.get(ip_addr, 0) >= self.max_logins
 
-    def check_authorized(
-        self, request: HTTPServerRequest, endpoint: str = "",
+    def authenticate_request(
+        self, request: HTTPServerRequest, auth_required: bool = True
     ) -> Optional[Dict[str, Any]]:
-        if (
-            endpoint in self.permitted_paths
-            or request.method == "OPTIONS"
-        ):
+        if request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
@@ -804,14 +792,17 @@ class Authorization:
             if key and key == self.api_key:
                 return self.users[API_USER]
 
-        # If the force_logins option is enabled and at least one
-        # user is created this is an unauthorized request
+        # If the force_logins option is enabled and at least one user is created
+        # then trusted user authentication is disabled
         if self.force_logins and len(self.users) > 1:
+            if not auth_required:
+                return None
             raise HTTPError(401, "Unauthorized, Force Logins Enabled")
 
-        # Check if IP is trusted
+        # Check if IP is trusted.  If this endpoint doesn't require authentication
+        # then it is acceptable to return None
         trusted_user = self._check_trusted_connection(ip)
-        if trusted_user is not None:
+        if trusted_user is not None or not auth_required:
             return trusted_user
 
         raise HTTPError(401, "Unauthorized")

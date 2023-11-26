@@ -47,7 +47,6 @@ if TYPE_CHECKING:
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager
-    from .authorization import Authorization
     from .announcements import Announcements
     from .proc_stats import ProcStats
     from .dbus_manager import DbusManager
@@ -1933,11 +1932,6 @@ class InstallValidator:
         if self._sudo_requested:
             return
         self._sudo_requested = True
-        auth: Optional[Authorization]
-        auth = self.server.lookup_component("authorization", None)
-        if auth is not None:
-            # Bypass authentication requirements
-            auth.register_permited_path("/machine/sudo/password")
         machine: Machine = self.server.lookup_component("machine")
         machine.register_sudo_request(
             self._on_password_received,
