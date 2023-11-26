@@ -14,9 +14,7 @@ from .common import (
     RequestType,
     WebRequest,
     BaseRemoteConnection,
-    APITransport,
-    APIDefinition,
-    JsonRPC,
+    TransportType,
 )
 from .utils import ServerError
 
@@ -36,6 +34,7 @@ from typing import (
 if TYPE_CHECKING:
     from .server import Server
     from .klippy_connection import KlippyConnection as Klippy
+    from .confighelper import ConfigHelper
     from .components.extensions import ExtensionManager
     from .components.authorization import Authorization
     IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
@@ -46,17 +45,21 @@ if TYPE_CHECKING:
 
 CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 
-class WebsocketManager(APITransport):
-    def __init__(self, server: Server) -> None:
-        self.server = server
+class WebsocketManager:
+    def __init__(self, config: ConfigHelper) -> None:
+        self.server = config.get_server()
         self.clients: Dict[int, BaseRemoteConnection] = {}
         self.bridge_connections: Dict[int, BridgeSocket] = {}
-        self.rpc = JsonRPC(server)
         self.closed_event: Optional[asyncio.Event] = None
-
-        self.rpc.register_method("server.websocket.id", self._handle_id_request)
-        self.rpc.register_method(
-            "server.connection.identify", self._handle_identify)
+        self.server.register_endpoint(
+            "/server/websocket/id", RequestType.GET, self._handle_id_request,
+            TransportType.WEBSOCKET
+        )
+        self.server.register_endpoint(
+            "/server/connection/identify", RequestType.POST, self._handle_identify,
+            TransportType.WEBSOCKET
+        )
+        self.server.register_component("websockets", self)
 
     def register_notification(
         self,
@@ -75,64 +78,27 @@ class WebsocketManager(APITransport):
                 self.notify_clients(notify_name, args)
         self.server.register_event_handler(event_name, notify_handler)
 
-    def register_api_handler(self, api_def: APIDefinition) -> None:
-        for req_type, rpc_method in api_def.rpc_methods.items():
-            rpc_cb = self._generate_rpc_callback(
-                api_def.endpoint, req_type, api_def.callback
-            )
-            self.rpc.register_method(rpc_method, rpc_cb)
-        logging.info(
-            "Registering Websocket JSON-RPC methods: "
-            f"{', '.join(api_def.rpc_methods.values())}"
-        )
-
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for rpc_method in api_def.rpc_methods.values():
-            self.rpc.remove_method(rpc_method)
-
-    def _generate_rpc_callback(
-        self,
-        endpoint: str,
-        request_type: RequestType,
-        callback: Callable[[WebRequest], Coroutine]
-    ) -> RPCCallback:
-        async def func(args: Dict[str, Any]) -> Any:
-            sc: BaseRemoteConnection = args.pop("_socket_")
-            sc.check_authenticated(path=endpoint)
-            result = await callback(
-                WebRequest(
-                    endpoint, args, request_type, sc,
-                    ip_addr=sc.ip_addr, user=sc.user_info
-                )
-            )
-            return result
-        return func
-
-    async def _handle_id_request(self, args: Dict[str, Any]) -> Dict[str, int]:
-        sc: BaseRemoteConnection = args["_socket_"]
-        sc.check_authenticated()
+    async def _handle_id_request(self, web_request: WebRequest) -> Dict[str, int]:
+        sc = web_request.get_client_connection()
+        assert sc is not None
         return {'websocket_id': sc.uid}
 
-    async def _handle_identify(self, args: Dict[str, Any]) -> Dict[str, int]:
-        sc: BaseRemoteConnection = args["_socket_"]
-        sc.authenticate(
-            token=args.get("access_token", None),
-            api_key=args.get("api_key", None)
-        )
+    async def _handle_identify(self, web_request: WebRequest) -> Dict[str, int]:
+        sc = web_request.get_client_connection()
+        assert sc is not None
         if sc.identified:
             raise self.server.error(
                 f"Connection already identified: {sc.client_data}"
             )
-        try:
-            name = str(args["client_name"])
-            version = str(args["version"])
-            client_type: str = str(args["type"]).lower()
-            url = str(args["url"])
-        except KeyError as e:
-            missing_key = str(e).split(":")[-1].strip()
-            raise self.server.error(
-                f"No data for argument: {missing_key}"
-            ) from None
+        name = web_request.get_str("client_name")
+        version = web_request.get_str("version")
+        client_type: str = web_request.get_str("type").lower()
+        url = web_request.get_str("url")
+        sc.authenticate(
+            token=web_request.get_str("access_token", None),
+            api_key=web_request.get_str("api_key", None)
+        )
+
         if client_type not in CLIENT_TYPES:
             raise self.server.error(f"Invalid Client Type: {client_type}")
         sc.client_data = {

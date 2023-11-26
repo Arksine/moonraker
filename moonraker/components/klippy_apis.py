@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 from ..utils import Sentinel
-from ..common import WebRequest, Subscribable, RequestType
+from ..common import WebRequest, APITransport, RequestType
 
 # Annotation imports
 from typing import (
@@ -38,7 +38,7 @@ STATUS_ENDPOINT = "objects/query"
 OBJ_LIST_ENDPOINT = "objects/list"
 REG_METHOD_ENDPOINT = "register_remote_method"
 
-class KlippyAPI(Subscribable):
+class KlippyAPI(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.klippy: Klippy = self.server.lookup_component("klippy_connection")
@@ -103,7 +103,7 @@ class KlippyAPI(Subscribable):
         default: Any = Sentinel.MISSING
     ) -> Any:
         try:
-            req = WebRequest(method, params, conn=self)
+            req = WebRequest(method, params, transport=self)
             result = await self.klippy.request(req)
         except self.server.error:
             if default is Sentinel.MISSING:

@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import Subscribable, WebRequest, JobEvent, KlippyState
+from ..common import APITransport, WebRequest, JobEvent, KlippyState
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -58,7 +58,7 @@ PRE_SETUP_EVENTS = [
     "ping"
 ]
 
-class SimplyPrint(Subscribable):
+class SimplyPrint(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self._logger = ProtoLogger(config)
@@ -585,7 +585,8 @@ class SimplyPrint(Subscribable):
         klippy = self.server.lookup_component("klippy_connection")
         try:
             resp: Dict[str, Dict[str, Any]] = await klippy.request(
-                WebRequest("objects/subscribe", args, conn=self))
+                WebRequest("objects/subscribe", args, transport=self)
+            )
             status: Dict[str, Any] = resp.get("status", {})
         except self.server.error:
             status = {}

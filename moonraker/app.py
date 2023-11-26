@@ -24,6 +24,7 @@ from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
 from .utils import ServerError, source_info
 from .common import (
+    JsonRPC,
     WebRequest,
     APIDefinition,
     APITransport,
@@ -50,7 +51,6 @@ from typing import (
     Union,
     Dict,
     List,
-    Tuple,
     AsyncGenerator,
 )
 if TYPE_CHECKING:
@@ -121,34 +121,26 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
 class InternalTransport(APITransport):
     def __init__(self, server: Server) -> None:
         self.server = server
-        self.callbacks: Dict[str, Tuple[str, RequestType, APICallback]] = {}
-
-    def register_api_handler(self, api_def: APIDefinition) -> None:
-        ep = api_def.endpoint
-        cb = api_def.callback
-        for req_type, rpc_method in api_def.rpc_methods.items():
-            self.callbacks[rpc_method] = (ep, req_type, cb)
-
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for rpc_method in api_def.rpc_methods.values():
-            self.callbacks.pop(rpc_method, None)
 
     async def call_method(self,
                           method_name: str,
                           request_arguments: Dict[str, Any] = {},
                           **kwargs
                           ) -> Any:
-        if method_name not in self.callbacks:
+        rpc: JsonRPC = self.server.lookup_component("jsonrpc")
+        method_info = rpc.get_method(method_name)
+        if method_info is None:
             raise self.server.error(f"No method {method_name} available")
-        ep, req_type, func = self.callbacks[method_name]
-        # Request arguments can be suppplied either through a dict object
-        # or via keyword arugments
+        req_type, api_definition = method_info
+        if TransportType.INTERNAL not in api_definition.transports:
+            raise self.server.error(f"No method {method_name} available")
         args = request_arguments or kwargs
-        return await func(WebRequest(ep, dict(args), req_type))
+        return await api_definition.request(args, req_type, self)
 
 class MoonrakerApp:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.json_rpc = JsonRPC(self.server)
         self.http_server: Optional[HTTPServer] = None
         self.secure_server: Optional[HTTPServer] = None
         self.template_cache: Dict[str, JinjaTemplate] = {}
@@ -180,14 +172,7 @@ class MoonrakerApp:
                 )
             self._route_prefix = f"/{rp}"
             home_pattern = f"{self._route_prefix}/?"
-
-        # Set Up Websocket and Authorization Managers
-        self.wsm = WebsocketManager(self.server)
         self.internal_transport = InternalTransport(self.server)
-        self.api_transports: Dict[TransportType, APITransport] = {
-            TransportType.WEBSOCKET: self.wsm,
-            TransportType.INTERNAL: self.internal_transport
-        }
 
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
@@ -228,9 +213,8 @@ class MoonrakerApp:
 
         # Register Server Components
         self.server.register_component("application", self)
-        self.server.register_component("websockets", self.wsm)
-        self.server.register_component("internal_transport",
-                                       self.internal_transport)
+        self.server.register_component("jsonrpc", self.json_rpc)
+        self.server.register_component("internal_transport", self.internal_transport)
 
     def _get_path_option(
         self, config: ConfigHelper, option: str
@@ -318,13 +302,6 @@ class MoonrakerApp:
         if self.secure_server is not None:
             self.secure_server.stop()
             await self.secure_server.close_all_connections()
-        await self.wsm.close()
-
-    def register_api_transport(
-        self, trtype: TransportType, api_transport: APITransport
-    ) -> Dict[str, APIDefinition]:
-        self.api_transports[trtype] = api_transport
-        return APIDefinition.get_cache()
 
     def register_endpoint(
         self,
@@ -356,9 +333,10 @@ class MoonrakerApp:
                 f"{self._route_prefix}{http_path}", DynamicRequestHandler, params
             )
         self.registered_base_handlers.append(http_path)
-        for trtype, api_transport in self.api_transports.items():
-            if trtype in transports:
-                api_transport.register_api_handler(api_def)
+        for request_type, method_name in api_def.rpc_items():
+            transports = api_def.transports & ~TransportType.HTTP
+            logging.info(f"Registering RPC Method: ({transports}) {method_name}")
+            self.json_rpc.register_method(method_name, request_type, api_def)
 
     def register_static_file_handler(
         self, pattern: str, file_path: str, force: bool = False
@@ -416,8 +394,8 @@ class MoonrakerApp:
             if api_def.http_path in self.registered_base_handlers:
                 self.registered_base_handlers.remove(api_def.http_path)
             self.mutable_router.remove_handler(api_def.http_path)
-            for api_transport in self.api_transports.values():
-                api_transport.remove_api_handler(api_def)
+            for method_name in api_def.rpc_methods:
+                self.json_rpc.remove_method(method_name)
 
     async def load_template(self, asset_name: str) -> JinjaTemplate:
         if asset_name in self.template_cache:
@@ -475,8 +453,7 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             except Exception:
                 pass
             else:
-                wsm: WebsocketManager = self.server.lookup_component(
-                    "websockets")
+                wsm: WebsocketManager = self.server.lookup_component("websockets")
                 conn = wsm.get_client(conn_id)
         if not isinstance(conn, WebSocket):
             return None
@@ -644,25 +621,18 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
     async def delete(self, *args, **kwargs) -> None:
         await self._process_http_request(RequestType.DELETE)
 
-    async def _do_request(
-        self, args: Dict[str, Any], conn: Optional[WebSocket], req_type: RequestType
-    ) -> Any:
-        return await self.api_defintion.callback(
-            WebRequest(
-                self.endpoint, args, req_type, conn=conn,
-                ip_addr=self.request.remote_ip or "", user=self.current_user
-            )
-        )
-
     async def _process_http_request(self, req_type: RequestType) -> None:
         if req_type not in self.api_defintion.request_types:
             raise tornado.web.HTTPError(405)
-        conn = self.get_associated_websocket()
         args = self.parse_args()
+        transport = self.get_associated_websocket()
         req = f"{self.request.method} {self.request.path}"
         self._log_debug(f"HTTP Request::{req}", args)
         try:
-            result = await self._do_request(args, conn, req_type)
+            ip = self.request.remote_ip or ""
+            result = await self.api_defintion.request(
+                args, req_type, transport, ip, self.current_user
+            )
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, reason=str(e)) from e

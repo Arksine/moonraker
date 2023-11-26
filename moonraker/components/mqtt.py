@@ -15,10 +15,8 @@ import paho.mqtt.client as paho_mqtt
 from ..common import (
     TransportType,
     RequestType,
-    Subscribable,
     WebRequest,
     APITransport,
-    JsonRPC,
     KlippyState
 )
 from ..utils import json_wrapper as jsonw
@@ -38,9 +36,9 @@ from typing import (
     Deque,
 )
 if TYPE_CHECKING:
-    from ..app import APIDefinition
     from ..confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
+    from ..common import JsonRPC, APIDefinition
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 
@@ -249,7 +247,7 @@ class AIOHelper:
         logging.info("MQTT Misc Loop Complete")
 
 
-class MQTTClient(APITransport, Subscribable):
+class MQTTClient(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.eventloop = self.server.get_event_loop()
@@ -318,7 +316,6 @@ class MQTTClient(APITransport, Subscribable):
         )
 
         # Subscribe to API requests
-        self.json_rpc = JsonRPC(self.server, transport="MQTT")
         self.api_request_topic = f"{self.instance_name}/moonraker/api/request"
         self.api_resp_topic = f"{self.instance_name}/moonraker/api/response"
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
@@ -342,10 +339,6 @@ class MQTTClient(APITransport, Subscribable):
         self.timestamp_deque: Deque = deque(maxlen=20)
         self.api_qos = config.getint('api_qos', self.qos)
         if config.getboolean("enable_moonraker_api", True):
-            api_cache = self.server.register_api_transport(TransportType.MQTT, self)
-            for api_def in api_cache.values():
-                if TransportType.MQTT in api_def.supported_transports:
-                    self.register_api_handler(api_def)
             self.subscribe_topic(self.api_request_topic,
                                  self._process_api_request,
                                  self.api_qos)
@@ -378,7 +371,7 @@ class MQTTClient(APITransport, Subscribable):
             args = {'objects': self.status_objs}
             try:
                 await self.klippy.request(
-                    WebRequest("objects/subscribe", args, conn=self)
+                    WebRequest("objects/subscribe", args, transport=self)
                 )
             except self.server.error:
                 pass
@@ -683,38 +676,19 @@ class MQTTClient(APITransport, Subscribable):
         }
 
     async def _process_api_request(self, payload: bytes) -> None:
-        response = await self.json_rpc.dispatch(payload.decode())
+        rpc: JsonRPC = self.server.lookup_component("jsonrpc")
+        response = await rpc.dispatch(payload, self)
         if response is not None:
             await self.publish_topic(self.api_resp_topic, response,
                                      self.api_qos)
 
-    def register_api_handler(self, api_def: APIDefinition) -> None:
-        for req_type, rpc_method in api_def.rpc_methods.items():
-            rpc_cb = self._generate_rpc_callback(
-                api_def.endpoint, req_type, api_def.callback
-            )
-            self.json_rpc.register_method(rpc_method, rpc_cb)
-        logging.info(
-            "Registering MQTT JSON-RPC methods: "
-            f"{', '.join(api_def.rpc_methods.values())}")
+    @property
+    def transport_type(self) -> TransportType:
+        return TransportType.MQTT
 
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for jrpc_method in api_def.rpc_methods.values():
-            self.json_rpc.remove_method(jrpc_method)
-
-    def _generate_rpc_callback(
-        self,
-        endpoint: str,
-        request_type: RequestType,
-        callback: Callable[[WebRequest], Coroutine]
-    ) -> RPCCallback:
-        async def func(args: Dict[str, Any]) -> Any:
-            self._check_timestamp(args)
-            result = await callback(WebRequest(endpoint, args, request_type))
-            return result
-        return func
-
-    def _check_timestamp(self, args: Dict[str, Any]) -> None:
+    def screen_rpc_request(
+        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+    ) -> None:
         ts = args.pop("mqtt_timestamp", None)
         if ts is not None:
             if ts in self.timestamp_deque:

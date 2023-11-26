@@ -11,6 +11,7 @@ import logging
 import copy
 import re
 from enum import Enum, Flag, auto
+from dataclasses import dataclass
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
 
@@ -26,7 +27,9 @@ from typing import (
     Union,
     Dict,
     List,
-    Awaitable
+    Awaitable,
+    ClassVar,
+    Tuple
 )
 
 if TYPE_CHECKING:
@@ -157,31 +160,34 @@ class KlippyState(ExtendedEnum):
     def startup_complete(self) -> bool:
         return self.value > 2
 
-class Subscribable:
-    def send_status(
-        self, status: Dict[str, Any], eventtime: float
-    ) -> None:
-        raise NotImplementedError
-
+@dataclass(frozen=True)
 class APIDefinition:
-    _cache: Dict[str, APIDefinition] = {}
-    def __init__(
+    endpoint: str
+    http_path: str
+    rpc_methods: List[str]
+    request_types: RequestType
+    transports: TransportType
+    callback: Callable[[WebRequest], Coroutine]
+    _cache: ClassVar[Dict[str, APIDefinition]] = {}
+
+    def request(
         self,
-        endpoint: str,
-        http_path: str,
-        rpc_methods: Dict[RequestType, str],
-        request_types: RequestType,
-        transports: TransportType,
-        callback: Callable[[WebRequest], Coroutine],
-        need_object_parser: bool
-    ) -> None:
-        self.endpoint = endpoint
-        self.http_path = http_path
-        self.rpc_methods = rpc_methods
-        self.request_types = request_types
-        self.supported_transports = transports
-        self.callback = callback
-        self.need_object_parser = need_object_parser
+        args: Dict[str, Any],
+        request_type: RequestType,
+        transport: Optional[APITransport] = None,
+        ip_addr: str = "",
+        user: Optional[Dict[str, Any]] = None
+    ) -> Coroutine:
+        return self.callback(
+            WebRequest(self.endpoint, args, request_type, transport, ip_addr, user)
+        )
+
+    @property
+    def need_object_parser(self) -> bool:
+        return self.endpoint.startswith("objects/")
+
+    def rpc_items(self) -> zip[Tuple[RequestType, str]]:
+        return zip(self.request_types, self.rpc_methods)
 
     @classmethod
     def create(
@@ -210,30 +216,30 @@ class APIDefinition:
                     f"Invalid endpoint name '{endpoint}', must start with one of "
                     f"the following: {prefixes}"
                 )
-        jrpc_methods: Dict[RequestType, str] = {}
+        rpc_methods: List[str] = []
         if is_remote:
             # Request Types have no meaning for remote requests.  Therefore
             # both GET and POST http requests are accepted.  JRPC requests do
             # not need an associated RequestType, so the unknown value is used.
             request_types = RequestType.GET | RequestType.POST
-            jrpc_methods[RequestType(0)] = http_path[1:].replace('/', '.')
-        else:
+            rpc_methods.append(http_path[1:].replace('/', '.'))
+        elif transports != TransportType.HTTP:
             name_parts = http_path[1:].split('/')
             if len(request_types) > 1:
                 for rtype in request_types:
                     func_name = rtype.name.lower() + "_" + name_parts[-1]
-                    jrpc_methods[rtype] = ".".join(name_parts[:-1] + [func_name])
+                    rpc_methods.append(".".join(name_parts[:-1] + [func_name]))
             else:
-                jrpc_methods[request_types] = ".".join(name_parts)
-            if len(request_types) != len(jrpc_methods):
+                rpc_methods.append(".".join(name_parts))
+            if len(request_types) != len(rpc_methods):
                 raise ServerError(
                     "Invalid API definition.  Number of websocket methods must "
                     "match the number of request methods"
                 )
-        need_object_parser = endpoint.startswith("objects/")
+
         api_def = cls(
-            endpoint, http_path, jrpc_methods, request_types,
-            transports, callback, need_object_parser
+            endpoint, http_path, rpc_methods, request_types,
+            transports, callback
         )
         cls._cache[endpoint] = api_def
         return api_def
@@ -247,18 +253,26 @@ class APIDefinition:
         return cls._cache
 
 class APITransport:
-    def register_api_handler(self, api_def: APIDefinition) -> None:
+    @property
+    def transport_type(self) -> TransportType:
+        return TransportType.INTERNAL
+
+    def screen_rpc_request(
+        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+    ) -> None:
+        return None
+
+    def send_status(
+        self, status: Dict[str, Any], eventtime: float
+    ) -> None:
         raise NotImplementedError
 
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        raise NotImplementedError
-
-class BaseRemoteConnection(Subscribable):
+class BaseRemoteConnection(APITransport):
     def on_create(self, server: Server) -> None:
         self.server = server
         self.eventloop = server.get_event_loop()
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
-        self.rpc = self.wsm.rpc
+        self.rpc: JsonRPC = self.server.lookup_component("jsonrpc")
         self._uid = id(self)
         self.ip_addr = ""
         self.is_closed: bool = False
@@ -313,6 +327,15 @@ class BaseRemoteConnection(Subscribable):
     def client_data(self, data: Dict[str, str]) -> None:
         self._client_data = data
         self._identified = True
+
+    @property
+    def transport_type(self) -> TransportType:
+        return TransportType.WEBSOCKET
+
+    def screen_rpc_request(
+        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+    ) -> None:
+        self.check_authenticated(api_def.endpoint)
 
     async def _process_message(self, message: str) -> None:
         try:
@@ -442,14 +465,14 @@ class WebRequest:
         endpoint: str,
         args: Dict[str, Any],
         request_type: RequestType = RequestType(0),
-        conn: Optional[Subscribable] = None,
+        transport: Optional[APITransport] = None,
         ip_addr: str = "",
         user: Optional[Dict[str, Any]] = None
     ) -> None:
         self.endpoint = endpoint
-        self.request_type = request_type
         self.args = args
-        self.conn = conn
+        self.transport = transport
+        self.request_type = request_type
         self.ip_addr: Optional[IPUnion] = None
         try:
             self.ip_addr = ipaddress.ip_address(ip_addr)
@@ -469,12 +492,12 @@ class WebRequest:
     def get_args(self) -> Dict[str, Any]:
         return self.args
 
-    def get_subscribable(self) -> Optional[Subscribable]:
-        return self.conn
+    def get_subscribable(self) -> Optional[APITransport]:
+        return self.transport
 
     def get_client_connection(self) -> Optional[BaseRemoteConnection]:
-        if isinstance(self.conn, BaseRemoteConnection):
-            return self.conn
+        if isinstance(self.transport, BaseRemoteConnection):
+            return self.transport
         return None
 
     def get_ip_address(self) -> Optional[IPUnion]:
@@ -595,15 +618,12 @@ class WebRequest:
 
 
 class JsonRPC:
-    def __init__(
-        self, server: Server, transport: str = "Websocket"
-    ) -> None:
-        self.methods: Dict[str, RPCCallback] = {}
-        self.transport = transport
+    def __init__(self, server: Server) -> None:
+        self.methods: Dict[str, Tuple[RequestType, APIDefinition]] = {}
         self.sanitize_response = False
         self.verbose = server.is_verbose_enabled()
 
-    def _log_request(self, rpc_obj: Dict[str, Any], ) -> None:
+    def _log_request(self, rpc_obj: Dict[str, Any], trtype: TransportType) -> None:
         if not self.verbose:
             return
         self.sanitize_response = False
@@ -624,9 +644,11 @@ class JsonRPC:
                 for field in ["access_token", "api_key"]:
                     if field in params:
                         output["params"][field] = "<sanitized>"
-        logging.debug(f"{self.transport} Received::{jsonw.dumps(output).decode()}")
+        logging.debug(f"{trtype} Received::{jsonw.dumps(output).decode()}")
 
-    def _log_response(self, resp_obj: Optional[Dict[str, Any]]) -> None:
+    def _log_response(
+        self, resp_obj: Optional[Dict[str, Any]], trtype: TransportType
+    ) -> None:
         if not self.verbose:
             return
         if resp_obj is None:
@@ -636,66 +658,83 @@ class JsonRPC:
             output = copy.deepcopy(resp_obj)
             output["result"] = "<sanitized>"
         self.sanitize_response = False
-        logging.debug(f"{self.transport} Response::{jsonw.dumps(output).decode()}")
+        logging.debug(f"{trtype} Response::{jsonw.dumps(output).decode()}")
 
-    def register_method(self,
-                        name: str,
-                        method: RPCCallback
-                        ) -> None:
-        self.methods[name] = method
+    def register_method(
+        self,
+        name: str,
+        request_type: RequestType,
+        api_definition: APIDefinition
+    ) -> None:
+        self.methods[name] = (request_type, api_definition)
+
+    def get_method(self, name: str) -> Optional[Tuple[RequestType, APIDefinition]]:
+        return self.methods.get(name, None)
 
     def remove_method(self, name: str) -> None:
         self.methods.pop(name, None)
 
-    async def dispatch(self,
-                       data: str,
-                       conn: Optional[BaseRemoteConnection] = None
-                       ) -> Optional[bytes]:
+    async def dispatch(
+        self,
+        data: Union[str, bytes],
+        transport: APITransport
+    ) -> Optional[bytes]:
+        transport_type = transport.transport_type
         try:
             obj: Union[Dict[str, Any], List[dict]] = jsonw.loads(data)
         except Exception:
-            msg = f"{self.transport} data not json: {data}"
+            if isinstance(data, bytes):
+                data = data.decode()
+            msg = f"{transport_type} data not valid json: {data}"
             logging.exception(msg)
             err = self.build_error(-32700, "Parse error")
             return jsonw.dumps(err)
         if isinstance(obj, list):
             responses: List[Dict[str, Any]] = []
             for item in obj:
-                self._log_request(item)
-                resp = await self.process_object(item, conn)
+                self._log_request(item, transport_type)
+                resp = await self.process_object(item, transport)
                 if resp is not None:
-                    self._log_response(resp)
+                    self._log_response(resp, transport_type)
                     responses.append(resp)
             if responses:
                 return jsonw.dumps(responses)
         else:
-            self._log_request(obj)
-            response = await self.process_object(obj, conn)
+            self._log_request(obj, transport_type)
+            response = await self.process_object(obj, transport)
             if response is not None:
-                self._log_response(response)
+                self._log_response(response, transport_type)
                 return jsonw.dumps(response)
         return None
 
-    async def process_object(self,
-                             obj: Dict[str, Any],
-                             conn: Optional[BaseRemoteConnection]
-                             ) -> Optional[Dict[str, Any]]:
+    async def process_object(
+        self,
+        obj: Dict[str, Any],
+        transport: APITransport
+    ) -> Optional[Dict[str, Any]]:
         req_id: Optional[int] = obj.get('id', None)
         rpc_version: str = obj.get('jsonrpc', "")
         if rpc_version != "2.0":
             return self.build_error(-32600, "Invalid Request", req_id)
         method_name = obj.get('method', Sentinel.MISSING)
         if method_name is Sentinel.MISSING:
-            self.process_response(obj, conn)
+            self.process_response(obj, transport)
             return None
         if not isinstance(method_name, str):
             return self.build_error(
                 -32600, "Invalid Request", req_id, method_name=str(method_name)
             )
-        method = self.methods.get(method_name, None)
-        if method is None:
+        method_info = self.methods.get(method_name, None)
+        if method_info is None:
             return self.build_error(
                 -32601, "Method not found", req_id, method_name=method_name
+            )
+        request_type, api_definition = method_info
+        transport_type = transport.transport_type
+        if transport_type not in api_definition.transports:
+            return self.build_error(
+                -32601, f"Method not found for transport {transport_type.name}",
+                req_id, method_name=method_name
             )
         params: Dict[str, Any] = {}
         if 'params' in obj:
@@ -704,12 +743,14 @@ class JsonRPC:
                 return self.build_error(
                     -32602, "Invalid params:", req_id, method_name=method_name
                 )
-        return await self.execute_method(method_name, method, req_id, conn, params)
+        return await self.execute_method(
+            method_name, request_type, api_definition, req_id, transport, params
+        )
 
     def process_response(
-        self, obj: Dict[str, Any], conn: Optional[BaseRemoteConnection]
+        self, obj: Dict[str, Any], conn: APITransport
     ) -> None:
-        if conn is None:
+        if not isinstance(conn, BaseRemoteConnection):
             logging.debug(f"RPC Response to non-socket request: {obj}")
             return
         response_id = obj.get("id")
@@ -734,15 +775,21 @@ class JsonRPC:
     async def execute_method(
         self,
         method_name: str,
-        callback: RPCCallback,
+        request_type: RequestType,
+        api_definition: APIDefinition,
         req_id: Optional[int],
-        conn: Optional[BaseRemoteConnection],
+        transport: APITransport,
         params: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        if conn is not None:
-            params["_socket_"] = conn
         try:
-            result = await callback(params)
+            transport.screen_rpc_request(api_definition, request_type, params)
+            if isinstance(transport, BaseRemoteConnection):
+                result = await api_definition.request(
+                    params, request_type, transport, transport.ip_addr,
+                    transport.user_info
+                )
+            else:
+                result = await api_definition.request(params, request_type, transport)
         except TypeError as e:
             return self.build_error(
                 -32602, f"Invalid params:\n{e}", req_id, True, method_name

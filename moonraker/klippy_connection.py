@@ -32,7 +32,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .server import Server
-    from .common import WebRequest, Subscribable, BaseRemoteConnection
+    from .common import WebRequest, APITransport, BaseRemoteConnection
     from .confighelper import ConfigHelper
     from .components.klippy_apis import KlippyAPI
     from .components.file_manager.file_manager import FileManager
@@ -80,7 +80,7 @@ class KlippyConnection:
         self.init_attempts: int = 0
         self._state: KlippyState = KlippyState.DISCONNECTED
         self._state.set_message("Klippy Disconnected")
-        self.subscriptions: Dict[Subscribable, Subscription] = {}
+        self.subscriptions: Dict[APITransport, Subscription] = {}
         self.subscription_cache: Dict[str, Dict[str, Any]] = {}
         # Setup remote methods accessable to Klippy.  Note that all
         # registered remote methods should be of the notification type,
@@ -657,7 +657,7 @@ class KlippyConnection:
         finally:
             self.pending_requests.pop(base_request.id, None)
 
-    def remove_subscription(self, conn: Subscribable) -> None:
+    def remove_subscription(self, conn: APITransport) -> None:
         self.subscriptions.pop(conn, None)
 
     def is_connected(self) -> bool:

@@ -26,6 +26,7 @@ from .klippy_connection import KlippyConnection
 from .utils import ServerError, Sentinel, get_software_info, json_wrapper
 from .loghelper import LogManager
 from .common import RequestType
+from .websockets import WebsocketManager
 
 # Annotation imports
 from typing import (
@@ -42,7 +43,6 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .common import WebRequest
-    from .websockets import WebsocketManager
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
@@ -96,8 +96,8 @@ class Server:
         self.register_debug_endpoint = app.register_debug_endpoint
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
-        self.register_api_transport = app.register_api_transport
         self.log_manager.set_server(self)
+        self.websocket_manager = WebsocketManager(config)
 
         for warning in args.get("startup_warnings", []):
             self.add_warning(warning)
@@ -309,8 +309,7 @@ class Server:
     def register_notification(
         self, event_name: str, notify_name: Optional[str] = None
     ) -> None:
-        wsm: WebsocketManager = self.lookup_component("websockets")
-        wsm.register_notification(event_name, notify_name)
+        self.websocket_manager.register_notification(event_name, notify_name)
 
     def register_event_handler(
         self, event: str, callback: FlexCallback
@@ -391,6 +390,7 @@ class Server:
         await asyncio.sleep(.1)
         try:
             await self.moonraker_app.close()
+            await self.websocket_manager.close()
         except Exception:
             logging.exception("Error Closing App")
 
@@ -434,7 +434,6 @@ class Server:
         reg_dirs = []
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
-        wsm: WebsocketManager = self.lookup_component('websockets')
         mreqs = self.klippy_connection.missing_requirements
         if raw:
             warnings = list(self.warnings.values())
@@ -449,7 +448,7 @@ class Server:
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,
             'warnings': warnings,
-            'websocket_count': wsm.get_count(),
+            'websocket_count': self.websocket_manager.get_count(),
             'moonraker_version': self.app_args['software_version'],
             'missing_klippy_requirements': mreqs,
             'api_version': API_VERSION,
