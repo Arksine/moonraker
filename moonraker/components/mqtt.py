@@ -37,8 +37,8 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..klippy_connection import KlippyConnection as Klippy
     from ..common import JsonRPC, APIDefinition
+    from .klippy_apis import KlippyAPI
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 
@@ -251,7 +251,6 @@ class MQTTClient(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.eventloop = self.server.get_event_loop()
-        self.klippy: Klippy = self.server.lookup_component("klippy_connection")
         self.address: str = config.get('address')
         self.port: int = config.getint('port', 1883)
         user = config.gettemplate('username', None)
@@ -321,13 +320,13 @@ class MQTTClient(APITransport):
         self.klipper_status_topic = f"{self.instance_name}/klipper/status"
         self.klipper_state_prefix = f"{self.instance_name}/klipper/state"
         self.moonraker_status_topic = f"{self.instance_name}/moonraker/status"
-        status_cfg: Dict[str, Any] = config.getdict("status_objects", {},
-                                                    allow_empty_fields=True)
-        self.status_objs: Dict[str, Any] = {}
+        status_cfg: Dict[str, str] = config.getdict(
+            "status_objects", {}, allow_empty_fields=True
+        )
+        self.status_objs: Dict[str, Optional[List[str]]] = {}
         for key, val in status_cfg.items():
             if val is not None:
-                self.status_objs[key] = [v.strip() for v in val.split(',')
-                                         if v.strip()]
+                self.status_objs[key] = [v.strip() for v in val.split(',') if v.strip()]
             else:
                 self.status_objs[key] = None
         if status_cfg:
@@ -368,13 +367,10 @@ class MQTTClient(APITransport):
 
     async def _handle_klippy_started(self, state: KlippyState) -> None:
         if self.status_objs:
-            args = {'objects': self.status_objs}
-            try:
-                await self.klippy.request(
-                    WebRequest("objects/subscribe", args, transport=self)
-                )
-            except self.server.error:
-                pass
+            kapi: KlippyAPI = self.server.lookup_component("klippy_apis")
+            await kapi.subscribe_from_transport(
+                self.status_objs, self, default=None,
+            )
 
     def _on_message(self,
                     client: str,

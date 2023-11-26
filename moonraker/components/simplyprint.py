@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import APITransport, WebRequest, JobEvent, KlippyState
+from ..common import APITransport, JobEvent, KlippyState
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -580,16 +580,9 @@ class SimplyPrint(APITransport):
         if not sub_objs:
             return
         # Create our own subscription rather than use the host sub
-        args = {'objects': sub_objs}
-        klippy: KlippyConnection
-        klippy = self.server.lookup_component("klippy_connection")
-        try:
-            resp: Dict[str, Dict[str, Any]] = await klippy.request(
-                WebRequest("objects/subscribe", args, transport=self)
-            )
-            status: Dict[str, Any] = resp.get("status", {})
-        except self.server.error:
-            status = {}
+        status: Dict[str, Any] = await self.klippy_apis.subscribe_from_transport(
+            sub_objs, self, default={}
+        )
         if status:
             logging.debug(f"SimplyPrint: Got Initial Status: {status}")
             self.printer_status = status
