@@ -47,7 +47,7 @@ install_packages()
     if [apt-cache search grep | grep -q "python3-libgpiod"]; then
      system_deps="${SRCDIR}/scripts/system-dependencies.json"
     else
-      echo "can't install the libgpiod lib! the system might not support gpio, s                                                                                                                                                             kipping installation of gpio lib's."
+      echo "can't install the libgpiod lib! the system might not support gpio, skipping installation of gpio lib's."
       system_deps="${SRCDIR}/scripts/system-dependencies-without-gpio.json"
     fi
     if [ -f "${system_deps}" ]; then
@@ -58,9 +58,9 @@ install_packages()
         PKGS="$( cat ${system_deps} | python3 -c "${package_decode_script}" )"
 
     else
-        echo "Error: system-dependencies.json not found, falling back to legacy                                                                                                                                                              pacakge list"
-        PKGLIST="${PKGLIST} python3-virtualenv python3-dev python3-libgpiod libl                                                                                                                                                             mdb-dev"
-        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev pa                                                                                                                                                             ckagekit"
+        echo "Error: system-dependencies.json not found, falling back to legacy pacakge list"
+        PKGLIST="${PKGLIST} python3-virtualenv python3-dev python3-libgpiod liblmdb-dev"
+        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit"
         PKGLIST="${PKGLIST} wireless-tools curl"
         PKGS=${PKGLIST}
     fi
@@ -147,8 +147,8 @@ install_script()
     if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
         rm -f $ENV_FILE
         env_vars="MOONRAKER_DATA_PATH=\"${DATA_PATH}\""
-        [ -n "${CONFIG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_CONFIG_PATH=                                                                                                                                                             \"${CONFIG_PATH}\""
-        [ -n "${LOG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_LOG_PATH=\"${LO                                                                                                                                                             G_PATH}\""
+        [ -n "${CONFIG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_CONFIG_PATH=\"${CONFIG_PATH}\""
+        [ -n "${LOG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_LOG_PATH=\"${LOG_PATH}\""
         env_vars="${env_vars}\nMOONRAKER_ARGS=\"-m moonraker\""
         env_vars="${env_vars}\nPYTHONPATH=\"${SRCDIR}\"\n"
         echo -e $env_vars > $ENV_FILE
@@ -192,7 +192,7 @@ check_polkit_rules()
     POLKIT_VERSION="$( pkaction --version | grep -Po "(\d+\.?\d*)" )"
     NEED_POLKIT_INSTALL="n"
     if [ "$POLKIT_VERSION" = "0.105" ]; then
-        POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker                                                                                                                                                             .pkla"
+        POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker.pkla"
         # legacy policykit rules don't give users other than root read access
         if sudo [ ! -f $POLKIT_LEGACY_FILE ]; then
             NEED_POLKIT_INSTALL="y"
@@ -206,7 +206,7 @@ check_polkit_rules()
     fi
     if [ "${NEED_POLKIT_INSTALL}" = "y" ]; then
         if [ "${SKIP_POLKIT}" = "y" ]; then
-            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules                                                                                                                                                             .sh'"
+            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
             echo "*** if you wish to grant Moonraker authorization to manage"
             echo "*** system services, reboot/shutdown the system, and update"
             echo "*** packages."
@@ -263,7 +263,7 @@ if [ -z "${DATA_PATH}" ]; then
     if [ "${INSTANCE_ALIAS}" = "moonraker" ]; then
         DATA_PATH="${HOME}/printer_data"
     else
-        num="$( echo ${INSTANCE_ALIAS} | grep  -Po "moonraker[-_]?\K\d+" || true                                                                                                                                                              )"
+        num="$( echo ${INSTANCE_ALIAS} | grep  -Po "moonraker[-_]?\K\d+" || true )"
         if [ -n "${num}" ]; then
             DATA_PATH="${HOME}/printer_${num}_data"
         else
