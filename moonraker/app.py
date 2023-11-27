@@ -323,6 +323,10 @@ class MoonrakerApp:
         )
         http_path = api_def.http_path
         if http_path in self.registered_base_handlers:
+            if not is_remote:
+                raise self.server.error(
+                    f"Local endpoint '{endpoint}' already registered"
+                )
             return
         if TransportType.HTTP in transports:
             logging.info(f"Registering HTTP Endpoint: ({request_types}) {http_path}")
