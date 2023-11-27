@@ -328,8 +328,8 @@ class MoonrakerApp:
                     f"Local endpoint '{endpoint}' already registered"
                 )
             return
+        logging.debug(f"Registering API: {api_def}")
         if TransportType.HTTP in transports:
-            logging.info(f"Registering HTTP Endpoint: ({request_types}) {http_path}")
             params: dict[str, Any] = {}
             params["api_definition"] = api_def
             params["wrap_result"] = wrap_result
@@ -339,8 +339,6 @@ class MoonrakerApp:
             )
         self.registered_base_handlers.append(http_path)
         for request_type, method_name in api_def.rpc_items():
-            transports = api_def.transports & ~TransportType.HTTP
-            logging.info(f"Registering RPC Method: ({transports}) {method_name}")
             self.json_rpc.register_method(method_name, request_type, api_def)
 
     def register_static_file_handler(
@@ -396,6 +394,7 @@ class MoonrakerApp:
     def remove_endpoint(self, endpoint: str) -> None:
         api_def = APIDefinition.pop_cached_def(endpoint)
         if api_def is not None:
+            logging.debug(f"Removing Endpoint: {endpoint}")
             if api_def.http_path in self.registered_base_handlers:
                 self.registered_base_handlers.remove(api_def.http_path)
             self.mutable_router.remove_handler(api_def.http_path)

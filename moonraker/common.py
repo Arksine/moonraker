@@ -171,6 +171,18 @@ class APIDefinition:
     auth_required: bool
     _cache: ClassVar[Dict[str, APIDefinition]] = {}
 
+    def __str__(self) -> str:
+        tprt_str = "|".join([tprt.name for tprt in self.transports if tprt.name])
+        val: str = f"(Transports: {tprt_str})"
+        if TransportType.HTTP in self.transports:
+            req_types = "|".join([rt.name for rt in self.request_types if rt.name])
+            val += f" (HTTP Request: {req_types} {self.http_path})"
+        if self.rpc_methods:
+            methods = " ".join(self.rpc_methods)
+            val += f" (RPC Methods: {methods})"
+        val += f" (Auth Required: {self.auth_required})"
+        return val
+
     def request(
         self,
         args: Dict[str, Any],
