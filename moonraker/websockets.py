@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import logging
-import ipaddress
 import asyncio
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
@@ -16,7 +15,7 @@ from .common import (
     BaseRemoteConnection,
     TransportType,
 )
-from .utils import ServerError
+from .utils import ServerError, parse_ip_address
 
 # Annotation imports
 from typing import (
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
     from .confighelper import ConfigHelper
     from .components.extensions import ExtensionManager
     from .components.authorization import Authorization
-    IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+    from .utils import IPAddress
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
@@ -231,8 +230,12 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
 
     def initialize(self) -> None:
         self.on_create(self.settings['server'])
-        self.ip_addr: str = self.request.remote_ip or ""
+        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return self._ip_addr
 
     @property
     def hostname(self) -> str:
@@ -336,12 +339,16 @@ class BridgeSocket(WebSocketHandler):
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.eventloop = self.server.get_event_loop()
         self.uid = id(self)
-        self.ip_addr: str = self.request.remote_ip or ""
+        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.is_closed = False
         self.klippy_writer: Optional[asyncio.StreamWriter] = None
         self.klippy_write_buf: List[bytes] = []
         self.klippy_queue_busy: bool = False
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return self._ip_addr
 
     @property
     def hostname(self) -> str:

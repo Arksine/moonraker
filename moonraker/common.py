@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import sys
-import ipaddress
 import logging
 import copy
 import re
@@ -36,11 +35,11 @@ if TYPE_CHECKING:
     from .server import Server
     from .websockets import WebsocketManager
     from .components.authorization import Authorization
+    from .utils import IPAddress
     from asyncio import Future
     _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
     _F = TypeVar("_F", bound="ExtendedFlag")
-    IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
@@ -188,7 +187,7 @@ class APIDefinition:
         args: Dict[str, Any],
         request_type: RequestType,
         transport: Optional[APITransport] = None,
-        ip_addr: str = "",
+        ip_addr: Optional[IPAddress] = None,
         user: Optional[Dict[str, Any]] = None
     ) -> Coroutine:
         return self.callback(
@@ -271,6 +270,14 @@ class APITransport:
     def transport_type(self) -> TransportType:
         return TransportType.INTERNAL
 
+    @property
+    def user_info(self) -> Optional[Dict[str, Any]]:
+        return None
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return None
+
     def screen_rpc_request(
         self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
     ) -> None:
@@ -288,7 +295,6 @@ class BaseRemoteConnection(APITransport):
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.rpc: JsonRPC = self.server.lookup_component("jsonrpc")
         self._uid = id(self)
-        self.ip_addr = ""
         self.is_closed: bool = False
         self.queue_busy: bool = False
         self.pending_responses: Dict[int, Future] = {}
@@ -480,18 +486,14 @@ class WebRequest:
         args: Dict[str, Any],
         request_type: RequestType = RequestType(0),
         transport: Optional[APITransport] = None,
-        ip_addr: str = "",
+        ip_addr: Optional[IPAddress] = None,
         user: Optional[Dict[str, Any]] = None
     ) -> None:
         self.endpoint = endpoint
         self.args = args
         self.transport = transport
         self.request_type = request_type
-        self.ip_addr: Optional[IPUnion] = None
-        try:
-            self.ip_addr = ipaddress.ip_address(ip_addr)
-        except Exception:
-            self.ip_addr = None
+        self.ip_addr: Optional[IPAddress] = ip_addr
         self.current_user = user
 
     def get_endpoint(self) -> str:
@@ -514,7 +516,7 @@ class WebRequest:
             return self.transport
         return None
 
-    def get_ip_address(self) -> Optional[IPUnion]:
+    def get_ip_address(self) -> Optional[IPAddress]:
         return self.ip_addr
 
     def get_current_user(self) -> Optional[Dict[str, Any]]:
@@ -797,13 +799,9 @@ class JsonRPC:
     ) -> Optional[Dict[str, Any]]:
         try:
             transport.screen_rpc_request(api_definition, request_type, params)
-            if isinstance(transport, BaseRemoteConnection):
-                result = await api_definition.request(
-                    params, request_type, transport, transport.ip_addr,
-                    transport.user_info
-                )
-            else:
-                result = await api_definition.request(params, request_type, transport)
+            result = await api_definition.request(
+                params, request_type, transport, transport.ip_addr, transport.user_info
+            )
         except TypeError as e:
             return self.build_error(
                 -32602, f"Invalid params:\n{e}", req_id, True, method_name

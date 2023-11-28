@@ -22,7 +22,7 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from .utils import ServerError, source_info
+from .utils import ServerError, source_info, parse_ip_address
 from .common import (
     JsonRPC,
     WebRequest,
@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from .eventloop import EventLoop
     from .confighelper import ConfigHelper
     from .klippy_connection import KlippyConnection as Klippy
+    from .utils import IPAddress
     from .components.file_manager.file_manager import FileManager
     from .components.announcements import Announcements
     from .components.machine import Machine
@@ -144,7 +145,10 @@ class MoonrakerApp:
         self.http_server: Optional[HTTPServer] = None
         self.secure_server: Optional[HTTPServer] = None
         self.template_cache: Dict[str, JinjaTemplate] = {}
-        self.registered_base_handlers: List[str] = []
+        self.registered_base_handlers: List[str] = [
+            "/server/redirect",
+            "/server/jsonrpc"
+        ]
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
         max_ws_conns = config.getint(
@@ -197,7 +201,8 @@ class MoonrakerApp:
             (home_pattern, WelcomeHandler),
             (f"{self._route_prefix}/websocket", WebSocket),
             (f"{self._route_prefix}/klippysocket", BridgeSocket),
-            (f"{self._route_prefix}/server/redirect", RedirectHandler)
+            (f"{self._route_prefix}/server/redirect", RedirectHandler),
+            (f"{self._route_prefix}/server/jsonrpc", RPCHandler)
         ]
         self.app = tornado.web.Application(app_handlers, **app_args)
         self.get_handler_delegate = self.app.get_handler_delegate
@@ -632,7 +637,7 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
         req = f"{self.request.method} {self.request.path}"
         self._log_debug(f"HTTP Request::{req}", args)
         try:
-            ip = self.request.remote_ip or ""
+            ip = parse_ip_address(self.request.remote_ip or "")
             result = await self.api_defintion.request(
                 args, req_type, transport, ip, self.current_user
             )
@@ -649,6 +654,50 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             result = jsonw.dumps(result)
         elif self.content_type is not None:
             self.set_header("Content-Type", self.content_type)
+        self.finish(result)
+
+class RPCHandler(AuthorizedRequestHandler, APITransport):
+    def initialize(self) -> None:
+        super(RPCHandler, self).initialize()
+        self.auth_required = False
+
+    @property
+    def transport_type(self) -> TransportType:
+        return TransportType.HTTP
+
+    @property
+    def user_info(self) -> Optional[Dict[str, Any]]:
+        return self.current_user
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return parse_ip_address(self.request.remote_ip or "")
+
+    def screen_rpc_request(
+        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+    ) -> None:
+        if self.current_user is None and api_def.auth_required:
+            raise self.server.error("Unauthorized", 401)
+        if api_def.endpoint == "objects/subscribe":
+            raise self.server.error(
+                "Subscriptions not available for HTTP transport", 404
+            )
+
+    def send_status(self, status: Dict[str, Any], eventtime: float) -> None:
+        # Can't handle status updates.  This should not be called, but
+        # we don't want to raise an exception if it is
+        pass
+
+    async def post(self, *args, **kwargs) -> None:
+        content_type = self.request.headers.get('Content-Type', "").strip()
+        if not content_type.startswith("application/json"):
+            raise tornado.web.HTTPError(
+                400, "Invalid content type, application/json required"
+            )
+        rpc: JsonRPC = self.server.lookup_component("jsonrpc")
+        result = await rpc.dispatch(self.request.body, self)
+        if result is not None:
+            self.set_header("Content-Type", "application/json; charset=UTF-8")
         self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):
