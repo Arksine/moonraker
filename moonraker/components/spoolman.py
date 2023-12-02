@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from moonraker.websockets import WebRequest
     from moonraker.components.http_client import HttpClient
     from moonraker.components.database import MoonrakerDatabase
+    from moonraker.components.announcements import Announcements
     from .klippy_apis import KlippyAPI as APIComp
     from confighelper import ConfigHelper
 
@@ -43,7 +44,8 @@ class SpoolManager:
         self.database: MoonrakerDatabase = self.server.lookup_component(
             "database"
         )
-
+        announcements: Announcements = self.server.lookup_component("announcements")
+        announcements.register_feed("spoolman")
         self._register_notifications()
         self._register_listeners()
         self._register_endpoints()
