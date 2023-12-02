@@ -254,6 +254,15 @@ class Announcements:
     ) -> List[Dict[str, Any]]:
         return await self.entry_mgr.list_entries(include_dismissed)
 
+    def register_feed(self, name: str) -> None:
+        name = name.lower()
+        if name in self.subscriptions:
+            logging.info(f"Feed {name} already configured")
+            return
+        logging.info(f"Registering feed {name}")
+        self.configured_feeds.append(name)
+        self.subscriptions[name] = RssFeed(name, self.entry_mgr, self.dev_mode)
+
     def close(self):
         self.entry_mgr.close()
 
