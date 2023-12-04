@@ -355,7 +355,7 @@ enabled: True
 service: mjpegstreamer
 #   The name of the application or service hosting the webcam stream.  Front-
 #   ends may use this configuration to determine how to launch or start the
-#   program.  The default is "mjpegstreamer".
+#   program.  The default is "mjpegstreamer". Other valid values include: 'mjpegstreamer-adaptive', 'hlsstream', 'webrtc-camerastreamer', 'ipstream', 'iframe', and 'webrtc-go2rtc'.
 target_fps: 15
 #   An integer value specifying the target framerate.  The default is 15 fps.
 target_fps_idle: 5
