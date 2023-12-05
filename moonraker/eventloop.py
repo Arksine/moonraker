@@ -32,6 +32,7 @@ if _uvl_var in ["y", "yes", "true"]:
         _uvl_enabled = True
 
 if TYPE_CHECKING:
+    from asyncio import AbstractEventLoop
     _T = TypeVar("_T")
     FlexCallback = Callable[..., Optional[Awaitable]]
     TimerCallback = Callable[[float], Union[float, Awaitable[float]]]
@@ -41,6 +42,10 @@ class EventLoop:
     TimeoutError = asyncio.TimeoutError
     def __init__(self) -> None:
         self.reset()
+
+    @property
+    def asyncio_loop(self) -> AbstractEventLoop:
+        return self.aioloop
 
     def reset(self) -> None:
         self.aioloop = self._create_new_loop()
