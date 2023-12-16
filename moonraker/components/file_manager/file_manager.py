@@ -104,6 +104,7 @@ class FileManager:
         self.scheduled_notifications: Dict[str, asyncio.TimerHandle] = {}
         self.fixed_path_args: Dict[str, Any] = {}
         self.queue_gcodes: bool = config.getboolean('queue_gcode_uploads', False)
+        self.check_klipper_path = config.getboolean("check_klipper_config_path", True)
 
         # Register file management endpoints
         self.server.register_endpoint(
@@ -195,24 +196,25 @@ class FileManager:
                 "klippy.log", log_path, force=True)
 
         # Validate config file
-        cfg_file: Optional[str] = paths.get("config_file")
-        cfg_parent = self.file_paths.get("config")
-        if cfg_file is not None and cfg_parent is not None:
-            cfg_path = pathlib.Path(cfg_file).expanduser()
-            par_path = pathlib.Path(cfg_parent)
-            if (
-                par_path in cfg_path.parents or
-                par_path.resolve() in cfg_path.resolve().parents
-            ):
-                self.server.remove_warning("klipper_config")
-            else:
-                self.server.add_warning(
-                    "file_manager: Klipper configuration file not located in "
-                    "'config' folder.\n\n"
-                    f"Klipper Config Path: {cfg_path}\n\n"
-                    f"Config Folder: {par_path}",
-                    warn_id="klipper_config"
-                )
+        if self.check_klipper_path:
+            cfg_file: Optional[str] = paths.get("config_file")
+            cfg_parent = self.file_paths.get("config")
+            if cfg_file is not None and cfg_parent is not None:
+                cfg_path = pathlib.Path(cfg_file).expanduser()
+                par_path = pathlib.Path(cfg_parent)
+                if (
+                    par_path in cfg_path.parents or
+                    par_path.resolve() in cfg_path.resolve().parents
+                ):
+                    self.server.remove_warning("klipper_config")
+                else:
+                    self.server.add_warning(
+                        "file_manager: Klipper configuration file not located in "
+                        "'config' folder.\n\n"
+                        f"Klipper Config Path: {cfg_path}\n\n"
+                        f"Config Folder: {par_path}",
+                        warn_id="klipper_config"
+                    )
 
     def validate_gcode_path(self, gc_path: str) -> None:
         gc_dir = pathlib.Path(gc_path).expanduser()
