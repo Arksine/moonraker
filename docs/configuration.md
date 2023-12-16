@@ -124,6 +124,13 @@ management functionality.  If omitted defaults will be used.
 queue_gcode_uploads: False
 #   When set to True the file manager will add uploads to the job_queue when
 #   the `start_print` flag has been set.  The default if False.
+check_klipper_config_path: True
+#   By default Moonraker will validate that Klipper's configuration file exists
+#   within the data path's "config" folder, as this is a requirement for
+#   Moonraker to write to the configuration.  If this validation check fails
+#   Moonaker will warn the user. Installations that do not wish to use Moonraker
+#   to manage Klipper's configuration may set this option to False to bypass the
+#   location check.  The default is True.
 enable_object_processing: False
 #   When set to True gcode files will be run through a "preprocessor"
 #   during metadata extraction if object tags are detected.  This preprocessor

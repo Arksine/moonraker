@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog].
 - **webcam**: Webcam APIs can now specify cameras by `uid` or `name`
 - **deps**:  Added support for optional `msgspec` and `uvloop` packages
 - **extensions**: Agents may now register remote methods with Klipper
+- **file_manager**: Add `check_klipper_config_path` option
 
 ### Fixed
 
