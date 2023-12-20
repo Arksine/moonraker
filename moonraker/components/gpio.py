@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 import os
+import asyncio
 import platform
 import pathlib
 import logging
@@ -187,21 +188,21 @@ class GpioEvent(GpioBase):
         self.event_loop = event_loop
         self.callback = callback
         self.on_error: Optional[Callable[[str], None]] = None
-        self.min_evt_time = 0.
-        self.last_event_time = 0.
+        self.debounce_period: float = 0
+        self.last_event_time: float = 0.
         self.error_count = 0
         self.last_error_reset = 0.
         self.started = False
+        self.debounce_task: Optional[asyncio.Task] = None
         os.set_blocking(self.gpio.fd, False)
 
     def fileno(self) -> int:
         return self.gpio.fd
 
-    def setup_debounce(self,
-                       min_evt_time: float,
-                       err_callback: Optional[Callable[[str], None]]
-                       ) -> None:
-        self.min_evt_time = max(min_evt_time, 0.)
+    def setup_debounce(
+        self, debounce_period: float, err_callback: Optional[Callable[[str], None]]
+    ) -> None:
+        self.debounce_period = max(debounce_period, 0)
         self.on_error = err_callback
 
     def start(self) -> None:
@@ -214,6 +215,9 @@ class GpioEvent(GpioBase):
                           f"current state: {self.value}")
 
     def stop(self) -> None:
+        if self.debounce_task is not None:
+            self.debounce_task.cancel()
+            self.debounce_task = None
         if self.started:
             self.event_loop.remove_reader(self.gpio.fd)
             self.started = False
@@ -224,25 +228,39 @@ class GpioEvent(GpioBase):
 
     def _on_event_trigger(self) -> None:
         evt = self.gpio.read_event()
-        last_val = self.value
+        last_value = self.value
         if evt.edge == "rising":     # type: ignore
             self.value = 1
         elif evt.edge == "falling":  # type: ignore
             self.value = 0
         else:
             return
+        if self.debounce_period:
+            if self.debounce_task is None:
+                coro = self._debounce(last_value)
+                self.debounce_task = self.event_loop.create_task(coro)
+            else:
+                self._increment_error()
+        elif last_value != self.value:
+            # No debounce period and change detected
+            self._run_callback()
+
+    async def _debounce(self, last_value: int) -> None:
+        await asyncio.sleep(self.debounce_period)
+        self.debounce_task = None
+        if last_value != self.value:
+            self._run_callback()
+
+    def _run_callback(self) -> None:
         eventtime = self.event_loop.get_loop_time()
         evt_duration = eventtime - self.last_event_time
-        if last_val == self.value or evt_duration < self.min_evt_time:
-            self._increment_error(eventtime)
-            return
         self.last_event_time = eventtime
-        self.error_count = 0
         ret = self.callback(eventtime, evt_duration, self.value)
         if ret is not None:
             self.event_loop.create_task(ret)  # type: ignore
 
-    def _increment_error(self, eventtime: float) -> None:
+    def _increment_error(self) -> None:
+        eventtime = self.event_loop.get_loop_time()
         if eventtime - self.last_error_reset > ERROR_RESET_TIME:
             self.error_count = 0
             self.last_error_reset = eventtime
