@@ -2295,10 +2295,13 @@ pin: gpiochip0/gpio26
 #      ^!gpiochip0/gpio26
 #      ~!gpiochip0/gpio26
 #   This parameter must be provided
-minimum_event_time: .05
-#   The minimum time (in seconds) between events to trigger a response.  This is
-#   is used to debounce buttons.  This value must be at least .01 seconds.
-#   The default is .05 seconds (50 milliseconds).
+debounce_period: .05
+#   The time (in seconds) an event is delayed to debounce the response.
+#   The minimum debounce period is .01 seconds.  The default is .05 seconds.
+minimum_event_time: 0
+#   The minimum event duration (in seconds) required to trigger a response.
+#   This can be used as a secondary debounce procedure. The default is 0
+#   seconds (no minumum duration).
 on_press:
 on_release:
 #   Jinja2 templates to be executed when a button event is detected.  At least one
