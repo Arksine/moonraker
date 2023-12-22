@@ -1381,7 +1381,7 @@ class MQTTDevice(PowerDevice):
 class HueDevice(HTTPDevice):
 
     def __init__(self, config: ConfigHelper) -> None:
-        super().__init__(config)
+        super().__init__(config, default_port=80)
         self.device_id = config.get("device_id")
         self.device_type = config.get("device_type", "light")
         if self.device_type == "group":
@@ -1394,7 +1394,7 @@ class HueDevice(HTTPDevice):
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
-            f"{self.protocol}://{quote(self.addr)}/api/{quote(self.user)}"
+            f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
             f"/{quote(self.state_key)}"
         )
@@ -1410,7 +1410,7 @@ class HueDevice(HTTPDevice):
 
     async def _send_status_request(self) -> str:
         url = (
-            f"{self.protocol}://{quote(self.addr)}/api/{quote(self.user)}"
+            f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
         )
         ret = await self.client.request("GET", url)
