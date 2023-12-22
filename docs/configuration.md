@@ -2209,12 +2209,15 @@ gcode:
   {% set brightness = params.BRIGHTNESS|default(-1)|int %}
   {% set intensity = params.INTENSITY|default(-1)|int %}
   {% set speed = params.SPEED|default(-1)|int %}
+  {% set id = params.ID|default(-1)|int %}
+  # Optionally specify a WLED segment with the ID parameter, which starts at 0.
 
   {action_call_remote_method("set_wled_state",
                              strip=strip,
                              brightness=brightness,
                              intensity=intensity,
-                             speed=speed)}
+                             speed=speed,
+                             id=id)}
 
 [gcode_macro WLED_OFF]
 description: Turn WLED strip off

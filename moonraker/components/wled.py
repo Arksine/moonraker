@@ -141,7 +141,7 @@ class Strip():
             self.brightness = -1
             self.intensity = -1
             self.speed = -1
-            await self._send_wled_command({"on": True, "ps": preset})
+            await self._send_wled_command({"ps": preset})
 
     async def wled_off(self: Strip) -> None:
         logging.debug(f"WLED: {self.name} off")
@@ -152,10 +152,11 @@ class Strip():
         await self._send_wled_command({"on": False})
 
     async def wled_control(self: Strip, brightness: int, intensity: int,
-                           speed: int) -> None:
+                           speed: int, segment: int) -> None:
         logging.debug(
             f"WLED: {self.name} control {self.onoff} BRIGHTNESS={brightness} "
-            f"INTENSITY={intensity} SPEED={speed} CURRENTPRESET={self.preset}")
+            f"INTENSITY={intensity} SPEED={speed} "
+            f"SEGMENT={segment}CURRENTPRESET={self.preset}")
 
         if self.onoff == OnOff.off:
             logging.info("wled control only permitted when strip is on")
@@ -176,11 +177,17 @@ class Strip():
                 logging.info("BRIGHTNESS should be between 1 and 255")
             else:
                 shouldSend = True
+                self.segment = segment
                 self.brightness = brightness
-                control["bri"] = self.brightness
                 # Brightness in seg {} - only if a preset is on
                 if self.preset != -1:
-                    control["seg"]["bri"] = self.brightness
+                    if self.segment != -1:
+                        # Set specific segment (segment) brightness
+                        control["seg"]["segment"] = self.segment
+                        control["seg"]["bri"] = self.brightness
+                    else:
+                        # No segment segment specified, so set master brightness
+                        control["bri"] = self.brightness
 
         # Intensity - only if a preset is on
         if intensity > -1 and self.preset != -1:
@@ -188,8 +195,11 @@ class Strip():
                 logging.info("INTENSITY should be between 0 and 255")
             else:
                 shouldSend = True
+                self.segment = segment
                 self.intensity = intensity
                 control["seg"]["ix"] = self.intensity
+                if self.segment != -1:
+                    control["seg"]["segment"] = self.segment
 
         # Speed - only if a preset is on
         if speed > -1 and self.preset != -1:
@@ -197,8 +207,11 @@ class Strip():
                 logging.info("SPEED should be between 0 and 255")
             else:
                 shouldSend = True
+                self.segment = segment
                 self.speed = speed
                 control["seg"]["sx"] = self.speed
+                if self.segment != -1:
+                    control["seg"]["segment"] = self.segment
 
         # Control brightness, intensity, and speed for segment
         # This will allow full control for effects such as "Percent"
@@ -450,6 +463,7 @@ class WLED:
         strip: str,
         state: Optional[str] = None,
         preset: int = -1,
+        segment: int = -1,
         brightness: int = -1,
         intensity: int = -1,
         speed: int = -1
@@ -484,7 +498,8 @@ class WLED:
 
         # Control
         if brightness != -1 or intensity != -1 or speed != -1:
-            await self.strips[strip].wled_control(brightness, intensity, speed)
+            await self.strips[strip].wled_control(
+                brightness, intensity, speed, segment)
 
     # Individual pixel control, for compatibility with SET_LED
     async def set_wled(self: WLED,
@@ -520,6 +535,7 @@ class WLED:
         brightness: int = web_request.get_int('brightness', -1)
         intensity: int = web_request.get_int('intensity', -1)
         speed: int = web_request.get_int('speed', -1)
+        segment: int = web_request.get_int('segment', -1)
 
         req_action = web_request.get_action()
         if strip_name not in self.strips:
@@ -533,7 +549,8 @@ class WLED:
                 raise self.server.error(
                     f"Invalid requested action '{action}'")
             result = await self._process_request(strip, action, preset,
-                                                 brightness, intensity, speed)
+                                                 brightness, intensity,
+                                                 speed, segment)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self: WLED,
@@ -549,7 +566,7 @@ class WLED:
         for name, strip in requested_strips.items():
             if strip is not None:
                 result[name] = await self._process_request(strip, req, -1,
-                                                           -1, -1, -1)
+                                                           -1, -1, -1, -1)
             else:
                 result[name] = {"error": "strip_not_found"}
         return result
@@ -560,7 +577,8 @@ class WLED:
                                preset: int,
                                brightness: int,
                                intensity: int,
-                               speed: int
+                               speed: int,
+                               segment: int
                                ) -> Dict[str, Any]:
         strip_onoff = strip.onoff
 
@@ -578,7 +596,7 @@ class WLED:
                     await strip.wled_on(preset)
 
                 if brightness != -1 or intensity != -1 or speed != -1:
-                    await strip.wled_control(brightness, intensity, speed)
+                    await strip.wled_control(brightness, intensity, speed, segment)
             else:
                 strip_onoff = OnOff.off
                 await strip.wled_off()
