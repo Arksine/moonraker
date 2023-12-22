@@ -936,6 +936,9 @@ password: mypassword
 
 The following options are available for `shelly` device types:
 
+!!! Note
+    Currently only Gen 1 Shelly devices support Authentication
+
 ```ini
 # moonraker.conf
 
