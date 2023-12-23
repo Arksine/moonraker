@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 import os
+import re
 import asyncio
 import platform
 import pathlib
@@ -24,13 +25,26 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..eventloop import EventLoop
-    GPIO_CALLBACK = Callable[[float, float, int], Optional[Awaitable[None]]]
+
+GpioEventCallback = Callable[[float, float, int], Optional[Awaitable[None]]]
 
 try:
     KERNEL_VERSION = tuple([int(part) for part in platform.release().split(".")[:2]])
 except Exception:
     KERNEL_VERSION = (0, 0)
-GPIO_SUPPORTS_BIAS = KERNEL_VERSION >= (5, 5)
+
+GPIO_PATTERN = r"""
+    (?P<bias>[~^])?
+    (?P<inverted>!)?
+    (?:(?P<chip_id>gpiochip[0-9]+)/)?
+    (?P<pin_name>gpio(?P<pin_id>[0-9]+))
+"""
+
+BIAS_FLAG_TO_DESC: Dict[str, str] = {
+    "^": "pull_up",
+    "~": "pull_down",
+    "*": "disable" if KERNEL_VERSION >= (5, 5) else "default"
+}
 
 class GpioFactory:
     def __init__(self, config: ConfigHelper) -> None:
@@ -52,7 +66,7 @@ class GpioFactory:
         return gpio_out
 
     def register_gpio_event(
-        self, pin_name: str, callback: GPIO_CALLBACK
+        self, pin_name: str, callback: GpioEventCallback
     ) -> GpioEvent:
         pin_params = self._parse_pin(pin_name, req_type="event")
         gpio = self._request_gpio(pin_params)
@@ -92,50 +106,38 @@ class GpioFactory:
         return gpio
 
     def _parse_pin(
-        self, pin_name: str, initial_value: int = 0, req_type: str = "out"
+        self, pin_desc: str, initial_value: int = 0, req_type: str = "out"
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            "orig": pin_name,
+            "orig": pin_desc,
             "inverted": False,
             "request_type": req_type,
             "initial_value": initial_value
         }
-        pin = pin_name
+        pin_match = re.match(GPIO_PATTERN, pin_desc, re.VERBOSE)
+        if pin_match is None:
+            raise self.server.error(
+                f"Invalid pin format {pin_desc}. Refer to the configuration "
+                "documentation for details on the pin format."
+            )
+        bias_flag: Optional[str] = pin_match.group("bias")
         if req_type == "event":
             params["direction"] = "in"
             params["edge"] = "both"
-            bias: str = "disable" if GPIO_SUPPORTS_BIAS else "default"
-            if pin[0] == "^":
-                pin = pin[1:]
-                bias = "pull_up"
-            elif pin[0] == "~":
-                pin = pin[1:]
-                bias = "pull_down"
-            params["bias"] = bias
+            params["bias"] = BIAS_FLAG_TO_DESC[bias_flag or "*"]
         elif req_type == "out":
+            if bias_flag is not None:
+                raise self.server.error(
+                    f"Invalid pin format {pin_desc}.  Bias flag {bias_flag} "
+                    "not available for output pins."
+                )
             params["direction"] = "out" if not initial_value else "high"
-        if pin[0] == "!":
-            pin = pin[1:]
-            params["inverted"] = True
-        chip_id: str = "gpiochip0"
-        pin_parts = pin.split("/")
-        if len(pin_parts) == 2:
-            chip_id, pin = pin_parts
-        elif len(pin_parts) == 1:
-            pin = pin_parts[0]
-        # Verify pin
-        if (
-            not chip_id.startswith("gpiochip") or
-            not chip_id[-1].isdigit() or
-            not pin.startswith("gpio") or
-            not pin[4:].isdigit()
-        ):
-            raise self.server.error(
-                f"Invalid Gpio Pin: {pin_name}")
-        pin_id = int(pin[4:])
-        params["pin_id"] = pin_id
+        params["inverted"] = pin_match.group("inverted") is not None
+        chip_id: str = pin_match.group("chip_id") or "gpiochip0"
+        pin_name: str = pin_match.group("pin_name")
+        params["pin_id"] = int(pin_match.group("pin_id"))
         params["chip_id"] = chip_id
-        params["full_name"] = f"{chip_id}:{pin}"
+        params["full_name"] = f"{chip_id}:{pin_name}"
         return params
 
     def close(self) -> None:
@@ -182,7 +184,7 @@ class GpioEvent(GpioBase):
         event_loop: EventLoop,
         gpio: periphery.GPIO,
         pin_params: Dict[str, Any],
-        callback: GPIO_CALLBACK
+        callback: GpioEventCallback
     ) -> None:
         super().__init__(gpio, pin_params)
         self.event_loop = event_loop
