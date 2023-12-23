@@ -36,7 +36,12 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .server import Server
-    from .components.gpio import GpioFactory, GpioOutputPin
+    from .components.gpio import (
+        GpioFactory,
+        GpioOutputPin,
+        GpioEvent,
+        GpioEventCallback
+    )
     from .components.template import TemplateFactory
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
@@ -141,10 +146,10 @@ class ConfigHelper:
                 raise ConfigError(str(e)) from None
             val = default
             section = self.section
-        except Exception:
+        except Exception as e:
             raise ConfigError(
-                f"Error parsing option ({option}) from "
-                f"section [{self.section}]")
+                f"Error parsing option ({option}) from section [{self.section}]"
+            ) from e
         else:
             if deprecate:
                 self.server.add_warning(
@@ -360,7 +365,7 @@ class ConfigHelper:
                    deprecate: bool = False
                    ) -> Union[GpioOutputPin, _T]:
         try:
-            gpio: GpioFactory = self.server.load_component(self, 'gpio')
+            gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}', "
@@ -371,6 +376,28 @@ class ConfigHelper:
             return gpio.setup_gpio_out(val, initial_value)
         return self._get_option(getgpio_wrapper, option, default,
                                 deprecate=deprecate)
+
+    def getgpioevent(
+        self,
+        option: str,
+        event_callback: GpioEventCallback,
+        default: Union[Sentinel, _T] = Sentinel.MISSING,
+        deprecate: bool = False
+    ) -> Union[GpioEvent, _T]:
+        try:
+            gpio: GpioFactory = self.server.load_component(self, "gpio")
+        except Exception:
+            raise ConfigError(
+                f"Section [{self.section}], option '{option}', "
+                "GPIO Component not available"
+            )
+
+        def getgpioevent_wrapper(sec: str, opt: str) -> GpioEvent:
+            val = self.config.get(sec, opt)
+            return gpio.register_gpio_event(val, event_callback)
+        return self._get_option(
+            getgpioevent_wrapper, option, default, deprecate=deprecate
+        )
 
     def gettemplate(self,
                     option: str,

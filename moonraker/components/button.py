@@ -14,7 +14,6 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from .gpio import GpioFactory
     from ..app import InternalTransport as ITransport
 
 
@@ -48,10 +47,7 @@ class GpioButton:
         self.name = config.get_name().split()[-1]
         self.itransport: ITransport = self.server.lookup_component("internal_transport")
         self.mutex = asyncio.Lock()
-        gpio: GpioFactory = self.server.load_component(config, "gpio")
-        self.gpio_event = gpio.register_gpio_event(
-            config.get('pin'), self._on_gpio_event
-        )
+        self.gpio_event = config.getgpioevent("pin", self._on_gpio_event)
         self.min_event_time = config.getfloat("minimum_event_time", 0, minval=0.0)
         debounce_period = config.getfloat("debounce_period", .05, minval=0.01)
         self.gpio_event.setup_debounce(debounce_period, self._on_gpio_error)
