@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
 DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
+CFG_ERROR_KEY = "__CONFIG_ERROR__"
 
 class ConfigError(Exception):
     pass
@@ -143,12 +144,15 @@ class ConfigHelper:
             val = func(section, option)
         except (configparser.NoOptionError, configparser.NoSectionError) as e:
             if default is Sentinel.MISSING:
+                self.parsed[self.section][CFG_ERROR_KEY] = True
                 raise ConfigError(str(e)) from None
             val = default
             section = self.section
         except Exception as e:
+            self.parsed[self.section][CFG_ERROR_KEY] = True
             raise ConfigError(
-                f"Error parsing option ({option}) from section [{self.section}]"
+                f"[{self.section}]: Option '{option}' encountered the following "
+                f"error while parsing: {e}"
             ) from e
         else:
             if deprecate:
@@ -482,9 +486,14 @@ class ConfigHelper:
                     f"Unparsed config section [{sect}] detected.  This "
                     "may be the result of a component that failed to "
                     "load.  In the future this will result in a startup "
-                    "error.")
+                    "error."
+                )
                 continue
             parsed_opts = self.parsed[sect]
+            if CFG_ERROR_KEY in parsed_opts:
+                # Skip validation for sections that have encountered an error,
+                # as this will always result in unparsed options.
+                continue
             for opt, val in self.config.items(sect):
                 if opt not in parsed_opts:
                     self.server.add_warning(
@@ -492,7 +501,8 @@ class ConfigHelper:
                         f"section [{sect}].  This may be an option no longer "
                         "available or could be the result of a module that "
                         "failed to load.  In the future this will result "
-                        "in a startup error.")
+                        "in a startup error."
+                    )
 
     def create_backup(self) -> None:
         cfg_path = self.server.get_app_args()["config_file"]
