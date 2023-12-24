@@ -3,6 +3,28 @@ This file tracks configuration changes and deprecations.  Additionally
 changest to Moonraker that require user intervention will be tracked
 here.
 
+### December 24th 2023
+- The `gpio` component no longer depends on `libgpiod`.  Instead,
+  Moonraker now uses the [python-periphery](https://github.com/vsergeev/python-periphery)
+  library to manage GPIOs.  This comes with several benefits:
+  - Distributions that do no ship with `libgpiod` will not fail during
+    installation if the `python3-libgpiod` package isn't present.
+  - Distributions with a Kernel Version of 5.5 or higher support bias
+    flags (ie: pull up or pull down).  Previously this functionality
+    was tied to the `libgpiod` version.  Specifically, Debian Buster
+    ships with a Kernel that supports bias, however the `libgpiod`
+    version does not.
+  - Version 2.0+ of `libgpiod` includes dramatic API changes that are
+    wholly incompatible with prior versions.  Therefore maintaining
+    future versions would effectively require supporting two APIs.
+- The `[button]` component now includes a `debounce_period` option.
+  This addition is the result of a behavior change in how gpio state
+  changes are debounced. Debouncing will now delay the event by the
+  time specified in the `debounce_period`.  Additional state changes
+  received during this delay will not trigger a button event.  The
+  `[button]` module retains the `minimum_event_time` option which will
+  ignore events shorter than the specified time.
+
 ### July 18th 2023
 - The following changes have been made to `[update_manager <name>]`
   extensions of the `git_repo` type:
