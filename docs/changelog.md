@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog].
 - **extensions**: Agents may now register remote methods with Klipper
 - **file_manager**: Add `check_klipper_config_path` option
 - **button**: Added `debounce_period` option
+- **history**:  Added a check for previous jobs not finished (ie: when power is
+  lost during a print).  These jobs will report their status as `interrupted`.
 
 ### Fixed
 
