@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .file_manager.file_manager import FileManager
 
 HIST_NAMESPACE = "history"
+HIST_VERSION = 1
 MAX_JOBS = 10000
 
 class History:
@@ -78,6 +79,29 @@ class History:
         self.cached_job_ids = self.history_ns.keys().result()
         if self.cached_job_ids:
             self.next_job_id = int(self.cached_job_ids[-1], 16) + 1
+
+    async def component_init(self) -> None:
+        # Check for interupted jobs.  If this is the first time, check
+        # the entire database.  Otherwise only check the last 20 jobs.
+        interrupted_jobs: Dict[str, Any] = {}
+        database: DBComp = self.server.lookup_component("database")
+        version: int = await database.get_item("moonraker", "history.version", 0)
+        if version != HIST_VERSION:
+            await database.insert_item("moonraker", "history.version", HIST_VERSION)
+        job_ids = self.cached_job_ids if version < 1 else self.cached_job_ids[-20:]
+        jobs: Dict[str, Dict[str, Any]]
+        jobs = await self.history_ns.get_batch(job_ids)
+        for jid, job_data in jobs.items():
+            if job_data.get("status", "") == "in_progress":
+                job_data["status"] = "interrupted"
+                interrupted_jobs[jid] = job_data
+        if interrupted_jobs:
+            self.server.add_log_rollover_item(
+                "interrupted_history",
+                "The following jobs were detected as interrupted: "
+                f"{list(interrupted_jobs.keys())}"
+            )
+            await self.history_ns.insert_batch(interrupted_jobs)
 
     async def _handle_job_request(self,
                                   web_request: WebRequest
