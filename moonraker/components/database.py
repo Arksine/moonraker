@@ -98,8 +98,9 @@ class MoonrakerDatabase:
         if not db_path.is_dir():
             db_path.mkdir()
         self.database_path = str(db_path)
-        self.lmdb_env = lmdb.open(self.database_path, map_size=MAX_DB_SIZE,
-                                  max_dbs=MAX_NAMESPACES)
+        self.lmdb_env: lmdb.Environment = lmdb.open(
+            self.database_path, map_size=MAX_DB_SIZE, max_dbs=MAX_NAMESPACES
+        )
         with self.lmdb_env.begin(write=True, buffers=True) as txn:
             # lookup existing namespaces
             with txn.cursor() as cursor:
@@ -454,12 +455,20 @@ class MoonrakerDatabase:
                         ) -> Dict[str, Any]:
         db = self._get_db(namespace)
         result: Dict[str, Any] = {}
-        encoded_keys: List[bytes] = [k.encode() for k in keys]
         with self.lmdb_env.begin(buffers=True, db=db) as txn:
             with txn.cursor() as cursor:
-                vals = cursor.getmulti(encoded_keys)
-                result = {bytes(k).decode(): self._decode_value(v)
-                          for k, v in vals}
+                if hasattr(cursor, "getmulti"):
+                    encoded_keys: List[bytes] = [k.encode() for k in keys]
+                    vals = cursor.getmulti(encoded_keys)
+                    result = {
+                        bytes(k).decode(): self._decode_value(v) for k, v in vals
+                    }
+                else:
+                    for key in keys:
+                        value = txn.get(key.encode())
+                        if value is None:
+                            continue
+                        result[key] = self._decode_value(value)
         return result
 
     # *** Namespace level operations***
