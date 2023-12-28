@@ -87,6 +87,7 @@ create_virtualenv()
     fi
 
     # Install/update dependencies
+    export SKIP_CYTHON=1
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
 
     if [ ${SPEEDUPS} = "y" ]; then
