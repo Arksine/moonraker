@@ -9,6 +9,7 @@ import sys
 import logging
 import copy
 import re
+import inspect
 from enum import Enum, Flag, auto
 from dataclasses import dataclass
 from abc import ABCMeta, abstractmethod
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from .components.websockets import WebsocketManager
     from .components.authorization import Authorization
     from .components.history import History
+    from .components.database import DBProviderWrapper
     from .utils import IPAddress
     from asyncio import Future
     _C = TypeVar("_C", str, bool, float, int)
@@ -1234,3 +1236,49 @@ class HistoryFieldData:
             "maximum": maximum,
             "total": total
         }
+
+class SqlTableDefType(type):
+    def __new__(
+        metacls,
+        clsname: str,
+        bases: Tuple[type, ...],
+        cls_attrs: Dict[str, Any]
+    ):
+        if clsname != "SqlTableDefinition":
+            for item in ("name", "prototype"):
+                if not cls_attrs[item]:
+                    raise ValueError(
+                        f"Class attribute `{item}` must be set for class {clsname}"
+                    )
+            if cls_attrs["version"] < 1:
+                raise ValueError(
+                    f"The 'version' attribute of {clsname} must be greater than 0"
+                )
+            cls_attrs["prototype"] = inspect.cleandoc(cls_attrs["prototype"].strip())
+            prototype = cls_attrs["prototype"]
+            proto_match = re.match(
+                r"([a-zA-Z][0-9a-zA-Z_-]+)\s*\((.+)\)\s*;?$", prototype, re.DOTALL
+            )
+            if proto_match is None:
+                raise ValueError(f"Invalid SQL Table prototype:\n{prototype}")
+            table_name = cls_attrs["name"]
+            parsed_name = proto_match.group(1)
+            if table_name != parsed_name:
+                raise ValueError(
+                    f"Table name '{table_name}' does not match parsed name from "
+                    f"table prototype '{parsed_name}'"
+                )
+        return super().__new__(metacls, clsname, bases, cls_attrs)
+
+class SqlTableDefinition(metaclass=SqlTableDefType):
+    name: str = ""
+    version: int = 0
+    prototype: str = ""
+    def __init__(self) -> None:
+        if self.__class__ == SqlTableDefinition:
+            raise ServerError("Cannot directly instantiate SqlTableDefinition")
+
+    def migrate(
+        self, last_version: int, db_provider: DBProviderWrapper
+    ) -> None:
+        raise NotImplementedError("Children must implement migrate")
