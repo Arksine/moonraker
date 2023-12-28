@@ -169,6 +169,7 @@ class AppDeploy(BaseDeploy):
             else:
                 self.log_info("Unable to locate pip executable")
         self.venv_args = config.get('venv_args', None)
+        self.pip_env_vars = config.getdict("pip_environment_variables", None)
 
     def _configure_dependencies(
         self, config: ConfigHelper, node_only: bool = False
@@ -411,11 +412,18 @@ class AppDeploy(BaseDeploy):
         else:
             reqs = [req.replace("\"", "'") for req in requirements]
             args = " ".join([f"\"{req}\"" for req in reqs])
+        env: Optional[Dict[str, str]] = None
+        if self.pip_env_vars is not None:
+            self.log_info(
+                f"Running Pip with environment variables: {self.pip_env_vars}"
+            )
+            env = dict(os.environ)
+            env.update(self.pip_env_vars)
         self.notify_status("Updating python packages...")
         try:
             await self.cmd_helper.run_cmd(
                 f"{self.pip_cmd} install {args}", timeout=1200., notify=True,
-                retries=3
+                retries=3, env=env, log_stderr=True
             )
         except Exception:
             self.log_exc("Error updating python requirements")

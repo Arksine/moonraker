@@ -582,10 +582,14 @@ class CommandHelper:
         retries: int = 1,
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
-        sig_idx: int = 1
+        sig_idx: int = 1,
+        log_stderr: bool = False
     ) -> None:
         cb = self.notify_update_response if notify else None
-        scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
+        log_stderr |= self.server.is_verbose_enabled()
+        scmd = self.build_shell_command(
+            cmd, callback=cb, env=env, cwd=cwd, log_stderr=log_stderr
+        )
         for _ in range(retries):
             if await scmd.run(timeout=timeout, sig_idx=sig_idx):
                 break

@@ -32,6 +32,7 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
         "system_dependencies": "scripts/system-dependencies.json",
         "host_repo": "arksine/moonraker",
         "virtualenv": sys.exec_prefix,
+        "pip_environment_variables": "SKIP_CYTHON=Y",
         "path": str(source_info.source_path()),
         "managed_services": "moonraker"
     },
