@@ -167,7 +167,9 @@ class MoonrakerDatabase:
         # Track unsafe shutdowns
         unsafe_shutdowns: int = self.get_item(
             "moonraker", "database.unsafe_shutdowns", 0).result()
-        msg = f"Unsafe Shutdown Count: {unsafe_shutdowns}"
+        msg = f"\nDatabase Versions: pylmdb = {lmdb.__version__},"
+        msg += f" lmdb = {lmdb.version()}"
+        msg += f"\nUnsafe Shutdown Count: {unsafe_shutdowns}"
         self.server.add_log_rollover_item("database", msg)
 
         # Increment unsafe shutdown counter.  This will be reset if
