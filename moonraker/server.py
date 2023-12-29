@@ -641,6 +641,7 @@ def main(from_package: bool = True) -> None:
         # it is ok to use a blocking sleep here
         time.sleep(.5)
         logging.info("Attempting Server Restart...")
+        del server
         event_loop.reset()
     event_loop.close()
     logging.info("Server Shutdown")

@@ -265,6 +265,10 @@ class APIDefinition:
     def get_cache(cls) -> Dict[str, APIDefinition]:
         return cls._cache
 
+    @classmethod
+    def reset_cache(cls) -> None:
+        cls._cache.clear()
+
 class APITransport:
     @property
     def transport_type(self) -> TransportType:

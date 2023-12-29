@@ -307,6 +307,7 @@ class MoonrakerApp:
         if self.secure_server is not None:
             self.secure_server.stop()
             await self.secure_server.close_all_connections()
+        APIDefinition.reset_cache()
 
     def register_endpoint(
         self,
