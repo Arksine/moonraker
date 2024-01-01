@@ -74,4 +74,7 @@ def pdm_build_initialize(context: Context) -> None:
     for item in scripts_path.iterdir():
         if item.name == "__pycache__":
             continue
-        shutil.copy2(str(item), str(scripts_dest))
+        if item.is_dir():
+            shutil.copytree(str(item), str(scripts_dest.joinpath(item.name)))
+        else:
+            shutil.copy2(str(item), str(scripts_dest))
