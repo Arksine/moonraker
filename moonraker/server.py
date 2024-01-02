@@ -608,6 +608,9 @@ def main(from_package: bool = True) -> None:
         if not comms_dir.exists():
             comms_dir.mkdir()
         unix_sock = str(comms_dir.joinpath("moonraker.sock"))
+    misc_dir = data_path.joinpath("misc")
+    if not misc_dir.exists():
+        misc_dir.mkdir()
     app_args = {
         "data_path": str(data_path),
         "is_default_data_path": cmd_line_args.datapath is None,
