@@ -132,6 +132,12 @@ class Server:
     def get_app_args(self) -> Dict[str, Any]:
         return dict(self.app_args)
 
+    def get_app_arg(self, key: str, default=Sentinel.MISSING) -> Any:
+        val = self.app_args.get(key, default)
+        if val is Sentinel.MISSING:
+            raise KeyError(f"No key '{key}' in Application Arguments")
+        return val
+
     def get_event_loop(self) -> EventLoop:
         return self.event_loop
 
