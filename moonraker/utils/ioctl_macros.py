@@ -14,7 +14,7 @@ This module contains of Python port of the macros avaialble in
 """
 
 if TYPE_CHECKING:
-    IOCParamSize = Union[int, str, Type[ctypes._SimpleCData]]
+    IOCParamSize = Union[int, str, Type[ctypes._CData]]
 
 _IOC_NRBITS = 8
 _IOC_TYPEBITS = 8
