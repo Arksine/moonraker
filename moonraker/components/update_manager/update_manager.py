@@ -210,18 +210,18 @@ class UpdateManager:
         kcfg.set_option("path", kpath)
         kcfg.set_option("env", executable)
         kcfg.set_option("type", str(app_type))
-        need_notification = not isinstance(kupdater, AppDeploy)
+        notify = not isinstance(kupdater, AppDeploy)
         kclass = get_deploy_class(app_type, BaseDeploy)
-        self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
-        coro = self._update_klipper_repo(need_notification)
+        coro = self._update_klipper_repo(kclass(kcfg, self.cmd_helper), notify)
         self.event_loop.create_task(coro)
 
-    async def _update_klipper_repo(self, notify: bool) -> None:
+    async def _update_klipper_repo(self, updater: BaseDeploy, notify: bool) -> None:
         async with self.cmd_request_lock:
+            self.updaters['klipper'] = updater
             umdb = self.cmd_helper.get_umdb()
             await umdb.pop('klipper', None)
-            await self.updaters['klipper'].initialize()
-            await self.updaters['klipper'].refresh()
+            await updater.initialize()
+            await updater.refresh()
         if notify:
             self.cmd_helper.notify_update_refreshed()
 
