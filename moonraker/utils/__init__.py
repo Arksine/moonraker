@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
+SYS_MOD_PATHS += glob.glob("/usr/lib/*-linux-gnu/python3*/site-packages")
 IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
 
 class ServerError(Exception):
