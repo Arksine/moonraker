@@ -28,7 +28,7 @@ _uvl_enabled = False
 if _uvl_var in ["y", "yes", "true"]:
     with contextlib.suppress(ImportError):
         import uvloop
-        uvloop.install()
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         _uvl_enabled = True
 
 if TYPE_CHECKING:
