@@ -369,6 +369,42 @@ class ShellCommandFactory:
             self, cmd, callback, std_err_callback, env, log_stderr, cwd
         )
 
+    def run_cmd_async(
+        self,
+        cmd: str,
+        callback: OutputCallback = None,
+        std_err_callback: OutputCallback = None,
+        timeout: float = 2.,
+        retries: int = 1,
+        verbose: bool = True,
+        sig_idx: int = 1,
+        proc_input: Optional[str] = None,
+        log_complete: bool = True,
+        log_stderr: bool = False,
+        env: Optional[Dict[str, str]] = None,
+        cwd: Optional[str] = None,
+        success_codes: Optional[List[int]] = None
+    ) -> Awaitable[None]:
+        """
+        Runs a command and processes responses as they are received. Optional
+        callbacks may be provided to handle stdout and stderr.
+        """
+        scmd = ShellCommand(
+            self, cmd, callback, std_err_callback, env, log_stderr, cwd
+        )
+        retries = max(1, retries)
+        async def _wrapper() -> None:
+            for _ in range(retries):
+                if await scmd.run(
+                    timeout, verbose, log_complete, sig_idx,
+                    proc_input, success_codes
+                ):
+                    break
+            else:
+                ret_code = scmd.get_return_code()
+                raise ShellCommandError(f"Error running command {cmd}", ret_code)
+        return asyncio.create_task(_wrapper())
+
     def exec_cmd(
         self,
         cmd: str,
@@ -381,7 +417,10 @@ class ShellCommandFactory:
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
         success_codes: Optional[List[int]] = None
-    ) -> Awaitable:
+    ) -> Awaitable[str]:
+        """
+        Executes a command and returns UTF-8 decoded stdout upon completion.
+        """
         scmd = ShellCommand(self, cmd, None, None, env,
                             log_stderr, cwd)
         coro = scmd.run_with_response(
