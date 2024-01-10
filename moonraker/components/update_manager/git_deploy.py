@@ -217,7 +217,8 @@ class GitDeploy(AppDeploy):
                 try:
                     await self.cmd_helper.run_cmd(
                         "npm ci --only=prod", notify=True, timeout=600.,
-                        cwd=str(self.path))
+                        cwd=str(self.path)
+                    )
                 except Exception:
                     self.notify_status("Node Package Update failed")
 
@@ -442,17 +443,17 @@ class GitRepo:
                     " is not a valid git repo")
                 return False
             await self._wait_for_lock_release()
-            retries = 3
-            while retries:
+            attempts = 3
+            while attempts:
                 self.git_messages.clear()
                 try:
                     cmd = "status --porcelain -b"
-                    resp: Optional[str] = await self._run_git_cmd(cmd, retries=1)
+                    resp: Optional[str] = await self._run_git_cmd(cmd, attempts=1)
                 except Exception:
-                    retries -= 1
+                    attempts -= 1
                     resp = None
                     # Attempt to recover from "loose object" error
-                    if retries and self.repo_corrupt:
+                    if attempts and self.repo_corrupt:
                         if not await self._repair_loose_objects():
                             # Since we are unable to recover, immediately
                             # return
@@ -669,8 +670,8 @@ class GitRepo:
         async with self.git_operation_lock:
             for _ in range(3):
                 try:
-                    await self._run_git_cmd(cmd, retries=1, corrupt_msg="error: ")
-                except self.cmd_helper.scmd_error as err:
+                    await self._run_git_cmd(cmd, attempts=1, corrupt_msg="error: ")
+                except self.cmd_helper.get_shell_command().error as err:
                     if err.return_code == 1:
                         return False
                     if self.repo_corrupt:
@@ -788,7 +789,7 @@ class GitRepo:
                     if self.git_remote == "?" or self.git_branch == "?":
                         raise self.server.error("Cannot reset, unknown remote/branch")
                     ref = f"{self.git_remote}/{self.git_branch}"
-            await self._run_git_cmd(f"reset --hard {ref}", retries=2)
+            await self._run_git_cmd(f"reset --hard {ref}", attempts=2)
             self.repo_corrupt = False
 
     async def fetch(self) -> None:
@@ -800,7 +801,7 @@ class GitRepo:
     async def clean(self) -> None:
         self._verify_repo()
         async with self.git_operation_lock:
-            await self._run_git_cmd("clean -d -f", retries=2)
+            await self._run_git_cmd("clean -d -f", attempts=2)
 
     async def pull(self) -> None:
         self._verify_repo()
@@ -859,7 +860,7 @@ class GitRepo:
         args = f"{cmd} {key} '{pattern}'" if pattern else f"{cmd} {key}"
         try:
             return await self.config_cmd(args)
-        except self.cmd_helper.scmd_error as e:
+        except self.cmd_helper.get_shell_command().error as e:
             if e.return_code == 1:
                 return None
             raise
@@ -884,9 +885,9 @@ class GitRepo:
             for attempt in range(3):
                 try:
                     return await self._run_git_cmd(
-                        f"config {args}", retries=1, log_complete=verbose
+                        f"config {args}", attempts=1, log_complete=verbose
                     )
-                except self.cmd_helper.scmd_error as e:
+                except self.cmd_helper.get_shell_command().error as e:
                     if 1 <= (e.return_code or 10) <= 6 or attempt == 2:
                         raise
             raise self.server.error("Failed to run git-config")
@@ -907,7 +908,7 @@ class GitRepo:
 
     async def run_fsck(self) -> None:
         async with self.git_operation_lock:
-            await self._run_git_cmd("fsck --full", timeout=300., retries=1)
+            await self._run_git_cmd("fsck --full", timeout=300., attempts=1)
 
     async def clone(self) -> None:
         if self.is_submodule_or_worktree():
@@ -1194,12 +1195,13 @@ class GitRepo:
                 "Attempting to repair loose objects..."
             )
         try:
-            await self.cmd_helper.run_cmd_with_response(
+            shell_cmd = self.cmd_helper.get_shell_command()
+            await shell_cmd.exec_cmd(
                 "find .git/objects/ -type f -empty | xargs rm",
-                timeout=10., retries=1, cwd=str(self.src_path))
+                timeout=10., attempts=1, cwd=str(self.src_path))
             await self._run_git_cmd_async(
-                "fetch --all -p", retries=1, fix_loose=False)
-            await self._run_git_cmd("fsck --full", timeout=300., retries=1)
+                "fetch --all -p", attempts=1, fix_loose=False)
+            await self._run_git_cmd("fsck --full", timeout=300., attempts=1)
         except Exception:
             msg = (
                 "Attempt to repair loose objects failed, "
@@ -1216,7 +1218,7 @@ class GitRepo:
 
     async def _run_git_cmd_async(self,
                                  cmd: str,
-                                 retries: int = 5,
+                                 attempts: int = 5,
                                  need_git_path: bool = True,
                                  fix_loose: bool = True
                                  ) -> None:
@@ -1231,10 +1233,11 @@ class GitRepo:
             git_cmd = f"git -C {self.src_path} {cmd}"
         else:
             git_cmd = f"git {cmd}"
-        scmd = self.cmd_helper.build_shell_command(
+        shell_cmd = self.cmd_helper.get_shell_command()
+        scmd = shell_cmd.build_shell_command(
             git_cmd, callback=self._handle_process_output,
             env=env)
-        while retries:
+        while attempts:
             self.git_messages.clear()
             self.fetch_input_recd = False
             self.fetch_timeout_handle = event_loop.delay_callback(
@@ -1254,14 +1257,14 @@ class GitRepo:
                     # Only attempt to repair loose objects once. Re-run
                     # the command once.
                     fix_loose = False
-                    retries = 2
+                    attempts = 2
                 else:
-                    # since the attept to repair failed, bypass retries
+                    # since the attept to repair failed, bypass attempts
                     # and immediately raise an exception
                     raise self.server.error(
                         "Unable to repair loose objects, use hard recovery"
                     )
-            retries -= 1
+            attempts -= 1
             await asyncio.sleep(.5)
             await self._check_lock_file_exists(remove=True)
         raise self.server.error(f"Git Command '{cmd}' failed")
@@ -1303,21 +1306,22 @@ class GitRepo:
         self,
         git_args: str,
         timeout: float = 20.,
-        retries: int = 5,
+        attempts: int = 5,
         env: Optional[Dict[str, str]] = None,
         corrupt_msg: str = "fatal: ",
         log_complete: bool = True
     ) -> str:
+        shell_cmd = self.cmd_helper.get_shell_command()
         try:
-            return await self.cmd_helper.run_cmd_with_response(
+            return await shell_cmd.exec_cmd(
                 f"git -C {self.src_path} {git_args}",
                 timeout=timeout,
-                retries=retries,
+                attempts=attempts,
                 env=env,
                 sig_idx=2,
                 log_complete=log_complete
             )
-        except self.cmd_helper.scmd_error as e:
+        except shell_cmd.error as e:
             stdout = e.stdout.decode().strip()
             stderr = e.stderr.decode().strip()
             msg_lines: List[str] = []

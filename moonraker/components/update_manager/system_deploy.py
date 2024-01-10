@@ -183,8 +183,8 @@ class AptCliProvider(BasePackageProvider):
             f"{self.APT_CMD} update", timeout=600., notify=notify)
 
     async def get_packages(self) -> List[str]:
-        res = await self.cmd_helper.run_cmd_with_response(
-            "apt list --upgradable", timeout=60.)
+        shell_cmd = self.cmd_helper.get_shell_command()
+        res = await shell_cmd.exec_cmd("apt list --upgradable", timeout=60.)
         pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
         if pkg_list:
             pkg_list = pkg_list[2:]
@@ -195,7 +195,8 @@ class AptCliProvider(BasePackageProvider):
         self.cmd_helper.notify_update_response("Resolving packages...")
         search_regex = "|".join([f"^{pkg}$" for pkg in package_list])
         cmd = f"apt-cache search --names-only \"{search_regex}\""
-        ret = await self.cmd_helper.run_cmd_with_response(cmd, timeout=600.)
+        shell_cmd = self.cmd_helper.get_shell_command()
+        ret = await shell_cmd.exec_cmd(cmd, timeout=600.)
         resolved = [
             pkg.strip().split()[0] for pkg in ret.split("\n") if pkg.strip()
         ]
@@ -217,7 +218,7 @@ class AptCliProvider(BasePackageProvider):
         pkgs = " ".join(resolved)
         await self.cmd_helper.run_cmd(
             f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
-            retries=retries, notify=notify)
+            attempts=retries, notify=notify)
 
     async def upgrade_system(self) -> None:
         await self.cmd_helper.run_cmd(

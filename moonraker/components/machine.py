@@ -460,7 +460,7 @@ class Machine:
             full_cmd = f"sudo -S {command}"
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         return await shell_cmd.exec_cmd(
-            full_cmd, proc_input=proc_input, log_complete=False, retries=tries,
+            full_cmd, proc_input=proc_input, log_complete=False, attempts=tries,
             timeout=timeout
         )
 
@@ -959,7 +959,7 @@ class SystemdCliProvider(BaseProvider):
                 )
             prop_args = ",".join(properties)
             props: str = await self.shell_cmd.exec_cmd(
-                f"systemctl show -p {prop_args} {unit_name}", retries=5,
+                f"systemctl show -p {prop_args} {unit_name}", attempts=5,
                 timeout=10.
             )
             raw_props: Dict[str, Any] = {}
@@ -1301,7 +1301,7 @@ class SupervisordCliProvider(BaseProvider):
         else:
             cmd = f"supervisorctl {args}"
         return await self.shell_cmd.exec_cmd(
-            cmd, proc_input=None, log_complete=False, retries=tries,
+            cmd, proc_input=None, log_complete=False, attempts=tries,
             timeout=timeout, success_codes=success_codes
         )
 

@@ -228,7 +228,7 @@ class ShellCommand:
     async def run_with_response(
         self,
         timeout: float = 2.,
-        retries: int = 1,
+        attempts: int = 1,
         log_complete: bool = True,
         sig_idx: int = 1,
         proc_input: Optional[str] = None,
@@ -236,11 +236,11 @@ class ShellCommand:
     ) -> str:
         async with self.run_lock:
             self.factory.add_running_command(self)
-            retries = max(1, retries)
+            attempts = max(1, attempts)
             stdin: Optional[bytes] = None
             if proc_input is not None:
                 stdin = proc_input.encode()
-            while retries > 0:
+            while attempts > 0:
                 self._reset_command_data()
                 timed_out = False
                 stdout = stderr = b""
@@ -271,7 +271,7 @@ class ShellCommand:
                             f"\n{stdout.decode(errors='ignore')}")
                     if self.cancelled and not timed_out:
                         break
-                retries -= 1
+                attempts -= 1
                 await asyncio.sleep(.5)
             self.factory.remove_running_command(self)
             raise ShellCommandError(
@@ -375,7 +375,7 @@ class ShellCommandFactory:
         callback: OutputCallback = None,
         std_err_callback: OutputCallback = None,
         timeout: float = 2.,
-        retries: int = 1,
+        attempts: int = 1,
         verbose: bool = True,
         sig_idx: int = 1,
         proc_input: Optional[str] = None,
@@ -392,9 +392,9 @@ class ShellCommandFactory:
         scmd = ShellCommand(
             self, cmd, callback, std_err_callback, env, log_stderr, cwd
         )
-        retries = max(1, retries)
+        attempts = max(1, attempts)
         async def _wrapper() -> None:
-            for _ in range(retries):
+            for _ in range(attempts):
                 if await scmd.run(
                     timeout, verbose, log_complete, sig_idx,
                     proc_input, success_codes
@@ -409,7 +409,7 @@ class ShellCommandFactory:
         self,
         cmd: str,
         timeout: float = 2.,
-        retries: int = 1,
+        attempts: int = 1,
         sig_idx: int = 1,
         proc_input: Optional[str] = None,
         log_complete: bool = True,
@@ -424,7 +424,7 @@ class ShellCommandFactory:
         scmd = ShellCommand(self, cmd, None, None, env,
                             log_stderr, cwd)
         coro = scmd.run_with_response(
-            timeout, retries, log_complete, sig_idx,
+            timeout, attempts, log_complete, sig_idx,
             proc_input, success_codes
         )
         return asyncio.create_task(coro)

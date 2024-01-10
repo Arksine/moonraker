@@ -424,7 +424,7 @@ class AppDeploy(BaseDeploy):
         try:
             await self.cmd_helper.run_cmd(
                 f"{self.pip_cmd} install {args}", timeout=1200., notify=True,
-                retries=3, env=env, log_stderr=True
+                attempts=3, env=env, log_stderr=True
             )
         except Exception:
             self.log_exc("Error updating python requirements")
@@ -442,7 +442,7 @@ class AppDeploy(BaseDeploy):
         try:
             await self.cmd_helper.run_cmd(
                 f"{self.pip_cmd} install pip=={update_ver}",
-                timeout=1200., notify=True, retries=3
+                timeout=1200., notify=True, attempts=3
             )
         except Exception:
             self.log_exc("Error updating python pip")
@@ -452,8 +452,9 @@ class AppDeploy(BaseDeploy):
             return None
         self.notify_status("Checking pip version...")
         try:
-            data: str = await self.cmd_helper.run_cmd_with_response(
-                f"{self.pip_cmd} --version", timeout=30., retries=3
+            scmd = self.cmd_helper.get_shell_command()
+            data: str = await scmd.exec_cmd(
+                f"{self.pip_cmd} --version", timeout=30., attempts=3
             )
             match = re.match(
                 r"^pip ([0-9.]+) from .+? \(python ([0-9.]+)\)$", data.strip()

@@ -496,10 +496,6 @@ class CommandHelper:
         config.getboolean('enable_repo_debug', False, deprecate=True)
         if self.server.is_debug_enabled():
             logging.warning("UPDATE MANAGER: REPO DEBUG ENABLED")
-        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
-        self.scmd_error = shell_cmd.error
-        self.build_shell_command = shell_cmd.build_shell_command
-        self.run_cmd_with_response = shell_cmd.exec_cmd
         self.pkg_updater: Optional[PackageDeploy] = None
 
         # database management
@@ -526,6 +522,9 @@ class CommandHelper:
 
     def get_server(self) -> Server:
         return self.server
+
+    def get_shell_command(self) -> SCMDComp:
+        return self.server.lookup_component("shell_command")
 
     def get_http_client(self) -> HttpClient:
         return self.http_client
@@ -579,7 +578,7 @@ class CommandHelper:
         cmd: str,
         timeout: float = 20.,
         notify: bool = False,
-        retries: int = 1,
+        attempts: int = 1,
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
         sig_idx: int = 1,
@@ -587,14 +586,10 @@ class CommandHelper:
     ) -> None:
         cb = self.notify_update_response if notify else None
         log_stderr |= self.server.is_verbose_enabled()
-        scmd = self.build_shell_command(
-            cmd, callback=cb, env=env, cwd=cwd, log_stderr=log_stderr
+        await self.get_shell_command().run_cmd_async(
+            cmd, cb, timeout=timeout, attempts=attempts,
+            env=env, cwd=cwd, sig_idx=sig_idx, log_stderr=log_stderr
         )
-        for _ in range(retries):
-            if await scmd.run(timeout=timeout, sig_idx=sig_idx):
-                break
-        else:
-            raise self.server.error("Shell Command Error")
 
     def notify_update_refreshed(self) -> None:
         vinfo: Dict[str, Any] = {}
