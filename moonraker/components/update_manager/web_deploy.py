@@ -60,10 +60,12 @@ class WebClientDeploy(BaseDeploy):
         pfiles = config.getlist('persistent_files', None)
         if pfiles is not None:
             self.persistent_files = [pf.strip("/") for pf in pfiles]
-            if ".version" in self.persistent_files:
-                raise config.error(
-                    "Invalid value for option 'persistent_files': "
-                    "'.version' can not be persistent")
+            for fname in (".version", "release_info.json"):
+                if fname in self.persistent_files:
+                    raise config.error(
+                        "Invalid value for option 'persistent_files': "
+                        f"'{fname}' can not be persistent."
+                    )
         self._valid: bool = True
         self._is_prerelease: bool = False
         self._is_fallback: bool = False
@@ -361,22 +363,23 @@ class WebClientDeploy(BaseDeploy):
             os.mkdir(persist_dir)
         if self.path.is_dir():
             # find and move persistent files
-            for fname in os.listdir(self.path):
-                src_path = self.path.joinpath(fname)
+            for src_path in self.path.iterdir():
+                fname = src_path.name
                 if fname in self.persistent_files:
-                    dest_dir = persist_dir.joinpath(fname).parent
+                    dest_path = persist_dir.joinpath(fname)
+                    dest_dir = dest_path.parent
                     os.makedirs(dest_dir, exist_ok=True)
-                    shutil.move(str(src_path), str(dest_dir))
+                    shutil.move(str(src_path), str(dest_path))
             shutil.rmtree(self.path)
         os.mkdir(self.path)
         with zipfile.ZipFile(release_file) as zf:
             zf.extractall(self.path)
         # Move temporary files back into
-        for fname in os.listdir(persist_dir):
-            src_path = persist_dir.joinpath(fname)
-            dest_dir = self.path.joinpath(fname).parent
+        for src_path in persist_dir.iterdir():
+            dest_path = self.path.joinpath(src_path.name)
+            dest_dir = dest_path.parent
             os.makedirs(dest_dir, exist_ok=True)
-            shutil.move(str(src_path), str(dest_dir))
+            shutil.move(str(src_path), str(dest_path))
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
