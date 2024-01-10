@@ -121,6 +121,7 @@ class GpioFactory:
                 "documentation for details on the pin format."
             )
         bias_flag: Optional[str] = pin_match.group("bias")
+        params["inverted"] = pin_match.group("inverted") is not None
         if req_type == "event":
             params["direction"] = "in"
             params["edge"] = "both"
@@ -131,8 +132,8 @@ class GpioFactory:
                     f"Invalid pin format {pin_desc}.  Bias flag {bias_flag} "
                     "not available for output pins."
                 )
-            params["direction"] = "out" if not initial_value else "high"
-        params["inverted"] = pin_match.group("inverted") is not None
+            initial_state = bool(initial_value) ^ params["inverted"]
+            params["direction"] = "low" if not initial_state else "high"
         chip_id: str = pin_match.group("chip_id") or "gpiochip0"
         pin_name: str = pin_match.group("pin_name")
         params["pin_id"] = int(pin_match.group("pin_id"))
