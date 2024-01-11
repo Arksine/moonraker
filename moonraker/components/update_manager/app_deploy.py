@@ -7,14 +7,15 @@
 from __future__ import annotations
 import os
 import pathlib
-import shutil
 import hashlib
 import logging
 import re
 import distro
 import asyncio
+import importlib
 from .common import AppType, Channel
 from .base_deploy import BaseDeploy
+from ...utils import pip_utils
 from ...utils import json_wrapper as jsonw
 
 # Annotation imports
@@ -332,21 +333,9 @@ class AppDeploy(BaseDeploy):
             self.log_info(f"Failed to open python requirements file: {pyreqs}")
             return []
         eventloop = self.server.get_event_loop()
-        data = await eventloop.run_in_thread(pyreqs.read_text)
-        modules: List[str] = []
-        for line in data.split("\n"):
-            line = line.strip()
-            if not line or line[0] == "#":
-                continue
-            match = re.search(r"\s#", line)
-            if match is not None:
-                line = line[:match.start()].strip()
-            modules.append(line)
-        if not modules:
-            self.log_info(
-                f"No modules found in python requirements file: {pyreqs}"
-            )
-        return modules
+        return await eventloop.run_in_thread(
+            pip_utils.read_requirements_file, self.python_reqs
+        )
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
@@ -402,97 +391,32 @@ class AppDeploy(BaseDeploy):
     ) -> None:
         if self.pip_cmd is None:
             return
-        await self._update_pip()
-        # Update python dependencies
-        if isinstance(requirements, pathlib.Path):
-            if not requirements.is_file():
-                self.log_info(
-                    f"Invalid path to requirements_file '{requirements}'")
-                return
-            args = f"-r {requirements}"
-        else:
-            reqs = [req.replace("\"", "'") for req in requirements]
-            args = " ".join([f"\"{req}\"" for req in reqs])
-        env: Optional[Dict[str, str]] = None
-        if self.pip_env_vars is not None:
-            self.log_info(
-                f"Running Pip with environment variables: {self.pip_env_vars}"
-            )
-            env = dict(os.environ)
-            env.update(self.pip_env_vars)
-        self.notify_status("Updating python packages...")
-        try:
-            await self.cmd_helper.run_cmd(
-                f"{self.pip_cmd} install {args}", timeout=1200., notify=True,
-                attempts=3, env=env, log_stderr=True
-            )
-        except Exception:
-            self.log_exc("Error updating python requirements")
-
-    async def _update_pip(self) -> None:
-        if self.pip_cmd is None:
-            return
-        update_ver = await self._check_pip_version()
-        if update_ver is None:
-            return
-        cur_vstr = ".".join([str(part) for part in self.pip_version])
-        self.notify_status(
-            f"Updating pip from version {cur_vstr} to {update_ver}..."
+        if self.name == "moonraker":
+            importlib.reload(pip_utils)
+        pip_exec = pip_utils.AsyncPipExecutor(
+            self.pip_cmd, self.server, self.cmd_helper.notify_update_response
         )
-        try:
-            await self.cmd_helper.run_cmd(
-                f"{self.pip_cmd} install pip=={update_ver}",
-                timeout=1200., notify=True, attempts=3
-            )
-        except Exception:
-            self.log_exc("Error updating python pip")
-
-    async def _check_pip_version(self) -> Optional[str]:
-        if self.pip_cmd is None:
-            return None
+        # Check the current pip version
         self.notify_status("Checking pip version...")
         try:
-            scmd = self.cmd_helper.get_shell_command()
-            data: str = await scmd.exec_cmd(
-                f"{self.pip_cmd} --version", timeout=30., attempts=3
-            )
-            match = re.match(
-                r"^pip ([0-9.]+) from .+? \(python ([0-9.]+)\)$", data.strip()
-            )
-            if match is None:
-                return None
-            pipver_str: str = match.group(1)
-            pyver_str: str = match.group(2)
-            pipver = tuple([int(part) for part in pipver_str.split(".")])
-            pyver = tuple([int(part) for part in pyver_str.split(".")])
-        except Exception:
-            self.log_exc("Error Getting Pip Version")
-            return None
-        self.pip_version = pipver
-        if not self.pip_version:
-            return None
-        self.log_info(
-            f"Dectected pip version: {pipver_str}, Python {pyver_str}"
-        )
-        if pyver < (3, 7):
-            return None
-        if self.pip_version < MIN_PIP_VERSION:
-            return ".".join([str(ver) for ver in MIN_PIP_VERSION])
-        return None
-
-    async def _build_virtualenv(self) -> None:
-        if self.py_exec is None or self.venv_args is None:
-            return
-        bin_dir = self.py_exec.parent
-        env_path = bin_dir.parent.resolve()
-        self.notify_status(f"Creating virtualenv at: {env_path}...")
-        if env_path.exists():
-            shutil.rmtree(env_path)
+            pip_ver = await pip_exec.get_pip_version()
+            if pip_utils.check_pip_needs_update(pip_ver):
+                cur_ver = pip_ver.pip_version_string
+                update_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                self.notify_status(
+                    f"Updating pip from version {cur_ver} to {update_ver}..."
+                )
+                await pip_exec.update_pip()
+                self.pip_version = pip_utils.MIN_PIP_VERSION
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            self.notify_status(f"Pip Version Check Error: {e}")
+            self.log_exc("Pip Version Check Error")
+        self.notify_status("Updating python packages...")
         try:
-            await self.cmd_helper.run_cmd(
-                f"virtualenv {self.venv_args} {env_path}", timeout=300.)
+            await pip_exec.install_packages(requirements, self.pip_env_vars)
+        except asyncio.CancelledError:
+            raise
         except Exception:
-            self.log_exc("Error creating virtualenv")
-            return
-        if not self.py_exec.exists():
-            raise self.log_exc("Failed to create new virtualenv", False)
+            self.log_exc("Error updating python requirements")
