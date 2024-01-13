@@ -13,7 +13,7 @@ from ..common import RequestType
 
 if TYPE_CHECKING:
     from typing import Optional
-    from moonraker.websockets import WebRequest
+    from ..common import WebRequest
     from moonraker.components.http_client import HttpClient
     from moonraker.components.database import MoonrakerDatabase
     from moonraker.components.announcements import Announcements

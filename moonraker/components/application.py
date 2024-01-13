@@ -33,11 +33,7 @@ from ..common import (
     KlippyState
 )
 from ..utils import json_wrapper as jsonw
-from ..websockets import (
-    WebsocketManager,
-    WebSocket,
-    BridgeSocket
-)
+from .websockets import WebSocket, BridgeSocket
 from streaming_form_data import StreamingFormDataParser, ParseFailedException
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -60,6 +56,7 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
     from ..utils import IPAddress
+    from .websockets import WebsocketManager
     from .file_manager.file_manager import FileManager
     from .announcements import Announcements
     from .machine import Machine

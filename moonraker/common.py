@@ -33,7 +33,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from .server import Server
-    from .websockets import WebsocketManager
+    from .components.websockets import WebsocketManager
     from .components.authorization import Authorization
     from .utils import IPAddress
     from asyncio import Future

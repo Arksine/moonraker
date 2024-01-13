@@ -32,7 +32,6 @@ from .utils import (
 )
 from .loghelper import LogManager
 from .common import RequestType
-from .websockets import WebsocketManager
 
 # Annotation imports
 from typing import (
@@ -50,6 +49,7 @@ from typing import (
 if TYPE_CHECKING:
     from .common import WebRequest
     from .components.application import MoonrakerApp
+    from .components.websockets import WebsocketManager
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
@@ -106,7 +106,8 @@ class Server:
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
         self.log_manager.set_server(self)
-        self.websocket_manager = WebsocketManager(config)
+        self.websocket_manager: WebsocketManager
+        self.websocket_manager = self.load_component(config, "websockets")
 
         for warning in args.get("startup_warnings", []):
             self.add_warning(warning)

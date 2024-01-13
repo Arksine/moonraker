@@ -32,7 +32,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..websockets import WebsocketManager
+    from .websockets import WebsocketManager
     STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"

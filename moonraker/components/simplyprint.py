@@ -33,7 +33,7 @@ from typing import (
 if TYPE_CHECKING:
     from .application import InternalTransport
     from ..confighelper import ConfigHelper
-    from ..websockets import WebsocketManager
+    from .websockets import WebsocketManager
     from ..common import BaseRemoteConnection
     from tornado.websocket import WebSocketClientConnection
     from .database import MoonrakerDatabase

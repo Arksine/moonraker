@@ -9,13 +9,13 @@ import logging
 import asyncio
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
-from .common import (
+from ..common import (
     RequestType,
     WebRequest,
     BaseRemoteConnection,
     TransportType,
 )
-from .utils import ServerError, parse_ip_address
+from ..utils import ServerError, parse_ip_address
 
 # Annotation imports
 from typing import (
@@ -31,12 +31,12 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from .server import Server
-    from .klippy_connection import KlippyConnection as Klippy
-    from .confighelper import ConfigHelper
-    from .components.extensions import ExtensionManager
-    from .components.authorization import Authorization
-    from .utils import IPAddress
+    from ..server import Server
+    from ..klippy_connection import KlippyConnection as Klippy
+    from ..confighelper import ConfigHelper
+    from .extensions import ExtensionManager
+    from .authorization import Authorization
+    from ..utils import IPAddress
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
@@ -58,7 +58,6 @@ class WebsocketManager:
             "/server/connection/identify", RequestType.POST, self._handle_identify,
             TransportType.WEBSOCKET, auth_required=False
         )
-        self.server.register_component("websockets", self)
 
     def register_notification(
         self,
@@ -481,3 +480,6 @@ class BridgeSocket(WebSocketHandler):
 
     def close_socket(self, code: int, reason: str) -> None:
         self.close(code, reason)
+
+def load_component(config: ConfigHelper) -> WebsocketManager:
+    return WebsocketManager(config)
