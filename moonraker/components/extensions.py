@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..server import Server
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..klippy_connection import KlippyConnection as Klippy
+    from .klippy_connection import KlippyConnection as Klippy
 
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 

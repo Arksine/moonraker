@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from .power import PrinterPower
     from .announcements import Announcements
     from .webcam import WebcamManager, WebCam
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
 
 COMPONENT_VERSION = "0.0.1"
 SP_VERSION = "0.1"

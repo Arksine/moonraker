@@ -21,7 +21,6 @@ import uuid
 import traceback
 from . import confighelper
 from .eventloop import EventLoop
-from .klippy_connection import KlippyConnection
 from .utils import (
     ServerError,
     Sentinel,
@@ -50,6 +49,7 @@ if TYPE_CHECKING:
     from .common import WebRequest
     from .components.application import MoonrakerApp
     from .components.websockets import WebsocketManager
+    from .components.klippy_connection import KlippyConnection
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     _T = TypeVar("_T", Sentinel, Any)
 
 API_VERSION = (1, 4, 0)
+SERVER_COMPONENTS = ['application', 'websockets', 'klippy_connection']
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
@@ -96,7 +97,8 @@ class Server:
         log_level = logging.DEBUG if args["verbose"] else logging.INFO
         logging.getLogger().setLevel(log_level)
         self.event_loop.set_debug(args["asyncio_debug"])
-        self.klippy_connection = KlippyConnection(self)
+        self.klippy_connection: KlippyConnection
+        self.klippy_connection = self.load_component(config, "klippy_connection")
 
         # Tornado Application/Server
         self.moonraker_app: MoonrakerApp = self.load_component(config, "application")
@@ -258,7 +260,6 @@ class Server:
         for section in cfg_sections:
             self.load_component(config, section, None)
 
-        self.klippy_connection.configure(config)
         config.validate_config()
         self._is_configured = True
 
@@ -281,9 +282,11 @@ class Server:
         try:
             full_name = f"moonraker.components.{component_name}"
             module = importlib.import_module(full_name)
-            is_core = component_name in CORE_COMPONENTS
-            fallback: Optional[str] = "server" if is_core else None
-            config = config.getsection(component_name, fallback)
+            # Server components use the [server] section for configuration
+            if component_name not in SERVER_COMPONENTS:
+                is_core = component_name in CORE_COMPONENTS
+                fallback: Optional[str] = "server" if is_core else None
+                config = config.getsection(component_name, fallback)
             load_func = getattr(module, "load_component")
             component = load_func(config)
         except Exception as e:

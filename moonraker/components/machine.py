@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .application import MoonrakerApp
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager

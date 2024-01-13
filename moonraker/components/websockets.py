@@ -32,7 +32,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..server import Server
-    from ..klippy_connection import KlippyConnection as Klippy
+    from .klippy_connection import KlippyConnection as Klippy
     from ..confighelper import ConfigHelper
     from .extensions import ExtensionManager
     from .authorization import Authorization

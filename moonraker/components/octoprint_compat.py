@@ -16,7 +16,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_apis import KlippyAPI as APIComp

@@ -12,9 +12,9 @@ import logging
 import getpass
 import asyncio
 import pathlib
-from .utils import ServerError, get_unix_peer_credentials
-from .utils import json_wrapper as jsonw
-from .common import KlippyState, RequestType
+from ..utils import ServerError, get_unix_peer_credentials
+from ..utils import json_wrapper as jsonw
+from ..common import KlippyState, RequestType
 
 # Annotation imports
 from typing import (
@@ -31,14 +31,13 @@ from typing import (
     Union
 )
 if TYPE_CHECKING:
-    from .server import Server
-    from .common import WebRequest, APITransport, BaseRemoteConnection
-    from .confighelper import ConfigHelper
-    from .components.klippy_apis import KlippyAPI
-    from .components.file_manager.file_manager import FileManager
-    from .components.machine import Machine
-    from .components.job_state import JobState
-    from .components.database import MoonrakerDatabase as Database
+    from ..common import WebRequest, APITransport, BaseRemoteConnection
+    from ..confighelper import ConfigHelper
+    from .klippy_apis import KlippyAPI
+    from .file_manager.file_manager import FileManager
+    from .machine import Machine
+    from .job_state import JobState
+    from .database import MoonrakerDatabase as Database
     FlexCallback = Callable[..., Optional[Coroutine]]
     Subscription = Dict[str, Optional[List[str]]]
 
@@ -57,9 +56,11 @@ UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 SVC_INFO_KEY = "klippy_connection.service_info"
 
 class KlippyConnection:
-    def __init__(self, server: Server) -> None:
-        self.server = server
-        self.uds_address = pathlib.Path("/tmp/klippy_uds")
+    def __init__(self, config: ConfigHelper) -> None:
+        self.server = config.get_server()
+        self.uds_address = config.getpath(
+            "klippy_uds_address", pathlib.Path("/tmp/klippy_uds")
+        )
         self.writer: Optional[asyncio.StreamWriter] = None
         self.connection_mutex: asyncio.Lock = asyncio.Lock()
         self.event_loop = self.server.get_event_loop()
@@ -94,12 +95,6 @@ class KlippyConnection:
         self.register_remote_method(
             'process_status_update', self._process_status_update,
             need_klippy_reg=False)
-        self.server.register_component("klippy_connection", self)
-
-    def configure(self, config: ConfigHelper):
-        self.uds_address = config.getpath(
-            "klippy_uds_address", self.uds_address
-        )
 
     @property
     def klippy_apis(self) -> KlippyAPI:
@@ -789,3 +784,6 @@ class KlippyRequest:
             'method': self.rpc_method,
             'params': self.params
         }
+
+def load_component(config: ConfigHelper) -> KlippyConnection:
+    return KlippyConnection(config)

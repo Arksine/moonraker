@@ -23,7 +23,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..klippy_connection import KlippyConnection as Klippy
+    from .klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
     _T = TypeVar("_T")

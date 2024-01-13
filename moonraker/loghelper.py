@@ -27,7 +27,7 @@ from typing import (
 if TYPE_CHECKING:
     from .server import Server
     from .common import WebRequest
-    from .klippy_connection import KlippyConnection
+    from .components.klippy_connection import KlippyConnection
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:
 # https://www.zopatista.com/python/2019/05/11/asyncio-logging/

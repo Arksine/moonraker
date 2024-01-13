@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from ..server import Server
     from ..eventloop import EventLoop
     from ..confighelper import ConfigHelper
-    from ..klippy_connection import KlippyConnection as Klippy
+    from .klippy_connection import KlippyConnection as Klippy
     from ..utils import IPAddress
     from .websockets import WebsocketManager
     from .file_manager.file_manager import FileManager

@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .mqtt import MQTTClient
     from .template import JinjaTemplate
     from .http_client import HttpClient
-    from klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
 
 class PrinterPower:
     def __init__(self, config: ConfigHelper) -> None:

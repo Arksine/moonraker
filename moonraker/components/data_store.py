@@ -22,7 +22,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     GCQueue = Deque[Dict[str, Any]]
     TempStore = Dict[str, Dict[str, Deque[Optional[float]]]]

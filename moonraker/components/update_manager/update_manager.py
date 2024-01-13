@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from ...server import Server
     from ...confighelper import ConfigHelper
     from ...common import WebRequest
-    from ...klippy_connection import KlippyConnection
+    from ..klippy_connection import KlippyConnection
     from ..shell_command import ShellCommandFactory as SCMDComp
     from ..database import MoonrakerDatabase as DBComp
     from ..database import NamespaceWrapper

@@ -30,7 +30,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
-    from ...klippy_connection import KlippyConnection as Klippy
+    from ..klippy_connection import KlippyConnection as Klippy
     from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
