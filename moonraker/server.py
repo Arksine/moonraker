@@ -23,7 +23,14 @@ from . import confighelper
 from .eventloop import EventLoop
 from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
-from .utils import ServerError, Sentinel, get_software_info, json_wrapper
+from .utils import (
+    ServerError,
+    Sentinel,
+    get_software_info,
+    json_wrapper,
+    pip_utils,
+    source_info
+)
 from .loghelper import LogManager
 from .common import RequestType
 from .websockets import WebsocketManager
@@ -81,6 +88,7 @@ class Server:
         self.ssl_port: int = config.getint('ssl_port', 7130)
         self.exit_reason: str = ""
         self.server_running: bool = False
+        self.pip_recovery_attempted: bool = False
 
         # Configure Debug Logging
         config.getboolean('enable_debug_logging', False, deprecate=True)
@@ -276,7 +284,11 @@ class Server:
             config = config.getsection(component_name, fallback)
             load_func = getattr(module, "load_component")
             component = load_func(config)
-        except Exception:
+        except Exception as e:
+            ucomps: List[str] = self.app_args.get("unofficial_components", [])
+            if isinstance(e, ModuleNotFoundError) and component_name not in ucomps:
+                if self.try_pip_recovery(e.name or "unknown"):
+                    return self.load_component(config, component_name, default)
             msg = f"Unable to load component: ({component_name})"
             logging.exception(msg)
             if component_name not in self.failed_components:
@@ -287,6 +299,36 @@ class Server:
         self.components[component_name] = component
         logging.info(f"Component ({component_name}) loaded")
         return component
+
+    def try_pip_recovery(self, missing_module: str) -> bool:
+        if self.pip_recovery_attempted:
+            return False
+        self.pip_recovery_attempted = True
+        src_dir = source_info.source_path()
+        req_file = src_dir.joinpath("scripts/moonraker-requirements.txt")
+        if not req_file.is_file():
+            return False
+        pip_cmd = f"{sys.executable} -m pip"
+        pip_exec = pip_utils.PipExecutor(pip_cmd, logging.info)
+        logging.info(f"Module '{missing_module}' not found. Attempting Pip Update...")
+        logging.info("Checking Pip Version...")
+        try:
+            pipver = pip_exec.get_pip_version()
+            if pip_utils.check_pip_needs_update(pipver):
+                cur_ver = pipver.pip_version_string
+                new_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                logging.info(f"Updating Pip from {cur_ver} to {new_ver}...")
+                pip_exec.update_pip()
+        except Exception:
+            logging.exception("Pip version check failed")
+            return False
+        logging.info("Installing Moonraker python dependencies...")
+        try:
+            pip_exec.install_packages(req_file, {"SKIP_CYTHON": "Y"})
+        except Exception:
+            logging.exception("Failed to install python packages")
+            return False
+        return True
 
     def lookup_component(
         self, component_name: str, default: _T = Sentinel.MISSING
