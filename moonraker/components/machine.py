@@ -42,7 +42,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..app import MoonrakerApp
+    from .application import MoonrakerApp
     from ..klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase

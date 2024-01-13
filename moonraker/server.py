@@ -21,7 +21,6 @@ import uuid
 import traceback
 from . import confighelper
 from .eventloop import EventLoop
-from .app import MoonrakerApp
 from .klippy_connection import KlippyConnection
 from .utils import (
     ServerError,
@@ -50,6 +49,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .common import WebRequest
+    from .components.application import MoonrakerApp
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
@@ -99,7 +99,8 @@ class Server:
         self.klippy_connection = KlippyConnection(self)
 
         # Tornado Application/Server
-        self.moonraker_app = app = MoonrakerApp(config)
+        self.moonraker_app: MoonrakerApp = self.load_component(config, "application")
+        app = self.moonraker_app
         self.register_endpoint = app.register_endpoint
         self.register_debug_endpoint = app.register_debug_endpoint
         self.register_static_file_handler = app.register_static_file_handler

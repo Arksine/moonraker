@@ -22,8 +22,8 @@ from tornado.escape import url_unescape, url_escape
 from tornado.routing import Rule, PathMatches, AnyMatches
 from tornado.http1connection import HTTP1Connection
 from tornado.log import access_log
-from .utils import ServerError, source_info, parse_ip_address
-from .common import (
+from ..utils import ServerError, source_info, parse_ip_address
+from ..common import (
     JsonRPC,
     WebRequest,
     APIDefinition,
@@ -32,8 +32,8 @@ from .common import (
     RequestType,
     KlippyState
 )
-from .utils import json_wrapper as jsonw
-from .websockets import (
+from ..utils import json_wrapper as jsonw
+from ..websockets import (
     WebsocketManager,
     WebSocket,
     BridgeSocket
@@ -55,17 +55,17 @@ from typing import (
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
-    from .server import Server
-    from .eventloop import EventLoop
-    from .confighelper import ConfigHelper
-    from .klippy_connection import KlippyConnection as Klippy
-    from .utils import IPAddress
-    from .components.file_manager.file_manager import FileManager
-    from .components.announcements import Announcements
-    from .components.machine import Machine
+    from ..server import Server
+    from ..eventloop import EventLoop
+    from ..confighelper import ConfigHelper
+    from ..klippy_connection import KlippyConnection as Klippy
+    from ..utils import IPAddress
+    from .file_manager.file_manager import FileManager
+    from .announcements import Announcements
+    from .machine import Machine
     from io import BufferedReader
-    from .components.authorization import Authorization
-    from .components.template import TemplateFactory, JinjaTemplate
+    from .authorization import Authorization
+    from .template import TemplateFactory, JinjaTemplate
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
     AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
@@ -217,7 +217,6 @@ class MoonrakerApp:
         self.register_upload_handler("/server/files/upload")
 
         # Register Server Components
-        self.server.register_component("application", self)
         self.server.register_component("jsonrpc", self.json_rpc)
         self.server.register_component("internal_transport", self.internal_transport)
 
@@ -1111,3 +1110,6 @@ class WelcomeHandler(tornado.web.RequestHandler):
         welcome_template = await app.load_template("welcome.html")
         ret = await welcome_template.render_async(context)
         self.finish(ret)
+
+def load_component(config: ConfigHelper) -> MoonrakerApp:
+    return MoonrakerApp(config)

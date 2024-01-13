@@ -29,7 +29,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..app import MoonrakerApp
+    from .application import MoonrakerApp
     from .machine import Machine
 
 ZC_SERVICE_TYPE = "_moonraker._tcp.local."

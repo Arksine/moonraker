@@ -31,7 +31,7 @@ from typing import (
     Callable,
 )
 if TYPE_CHECKING:
-    from ..app import InternalTransport
+    from .application import InternalTransport
     from ..confighelper import ConfigHelper
     from ..websockets import WebsocketManager
     from ..common import BaseRemoteConnection

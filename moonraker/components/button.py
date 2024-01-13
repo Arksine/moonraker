@@ -14,7 +14,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..app import InternalTransport as ITransport
+    from .application import InternalTransport as ITransport
 
 
 class ButtonManager:
