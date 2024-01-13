@@ -11,6 +11,7 @@ import copy
 import re
 from enum import Enum, Flag, auto
 from dataclasses import dataclass
+from abc import ABCMeta, abstractmethod
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
 
@@ -158,6 +159,19 @@ class KlippyState(ExtendedEnum):
 
     def startup_complete(self) -> bool:
         return self.value > 2
+
+class RenderableTemplate(metaclass=ABCMeta):
+    @abstractmethod
+    def __str__(self) -> str:
+        ...
+
+    @abstractmethod
+    def render(self, context: Dict[str, Any] = {}) -> str:
+        ...
+
+    @abstractmethod
+    async def render_async(self, context: Dict[str, Any] = {}) -> str:
+        ...
 
 @dataclass(frozen=True)
 class APIDefinition:

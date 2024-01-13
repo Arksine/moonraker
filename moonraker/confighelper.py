@@ -15,7 +15,7 @@ import copy
 import logging
 from io import StringIO
 from .utils import Sentinel
-from .components.template import JinjaTemplate
+from .common import RenderableTemplate
 
 # Annotation imports
 from typing import (
@@ -408,19 +408,18 @@ class ConfigHelper:
                     default: Union[Sentinel, _T] = Sentinel.MISSING,
                     is_async: bool = False,
                     deprecate: bool = False
-                    ) -> Union[JinjaTemplate, _T]:
+                    ) -> Union[RenderableTemplate, _T]:
         try:
-            template: TemplateFactory
-            template = self.server.load_component(self, 'template')
+            template: TemplateFactory = self.server.load_component(self, 'template')
         except Exception:
             raise ConfigError(
-                f"Section [{self.section}], option '{option}', "
-                "Template Component not available")
+                f"Section [{self.section}], option '{option}': "
+                "Failed to load 'template' component."
+            )
 
-        def gettemplate_wrapper(sec: str, opt: str) -> JinjaTemplate:
+        def gettemplate_wrapper(sec: str, opt: str) -> RenderableTemplate:
             val = self.config.get(sec, opt)
             return template.create_template(val.strip(), is_async)
-
         return self._get_option(gettemplate_wrapper, option, default,
                                 deprecate=deprecate)
 
@@ -429,7 +428,7 @@ class ConfigHelper:
                       default: Union[Sentinel, str] = Sentinel.MISSING,
                       is_async: bool = False,
                       deprecate: bool = False
-                      ) -> JinjaTemplate:
+                      ) -> RenderableTemplate:
         val = self.gettemplate(option, default, is_async, deprecate)
         if isinstance(val, str):
             template: TemplateFactory
@@ -443,7 +442,7 @@ class ConfigHelper:
                 deprecate: bool = False
                 ) -> Union[pathlib.Path, _T]:
         val = self.gettemplate(option, default, deprecate=deprecate)
-        if isinstance(val, JinjaTemplate):
+        if isinstance(val, RenderableTemplate):
             ctx = {"data_path": self.server.get_app_args()["data_path"]}
             strpath = val.render(ctx)
             return pathlib.Path(strpath).expanduser().resolve()
