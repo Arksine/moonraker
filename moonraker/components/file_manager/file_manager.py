@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from .. import shell_command
     from ..job_queue import JobQueue
     from ..job_state import JobState
+    from ..secrets import Secrets
     StrOrPath = Union[str, pathlib.Path]
     DBComp = database.MoonrakerDatabase
     APIComp = klippy_apis.KlippyAPI
@@ -147,6 +148,9 @@ class FileManager:
             "server:klippy_identified", self._update_fixed_paths)
 
         # Register Data Folders
+        secrets: Secrets = self.server.load_component(config, "secrets")
+        self.add_reserved_path("secrets", secrets.get_secrets_file(), False)
+
         config.get('config_path', None, deprecate=True)
         self.register_data_folder("config", full_access=True)
 
