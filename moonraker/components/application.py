@@ -288,6 +288,13 @@ class MoonrakerApp:
             host = ""
         self.http_server = self._create_http_server(port, host)
         if self.https_enabled():
+            if port == ssl_port:
+                self.server.add_warning(
+                    "Failed to start HTTPS server.  Server options 'port' and "
+                    f"'ssl_port' match, both set to {port}.  Modify the "
+                    "configuration to use different ports."
+                )
+                return
             logging.info(f"Starting secure server on port {ssl_port}")
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(self.cert_path, self.key_path)
@@ -295,14 +302,26 @@ class MoonrakerApp:
                 ssl_port, host, ssl_options=ssl_ctx
             )
         else:
-            logging.info("SSL Certificate/Key not configured, "
-                         "aborting HTTPS Server startup")
+            logging.info(
+                "SSL Certificate/Key not configured, aborting HTTPS Server startup"
+            )
 
-    def _create_http_server(self, port: int, address: str, **kwargs) -> HTTPServer:
+    def _create_http_server(
+        self, port: int, address: str, **kwargs
+    ) -> Optional[HTTPServer]:
         args: Dict[str, Any] = dict(max_body_size=MAX_BODY_SIZE, xheaders=True)
         args.update(kwargs)
         svr = HTTPServer(self.mutable_router, **args)
-        svr.listen(port, address)
+        try:
+            svr.listen(port, address)
+        except Exception as e:
+            svr_type = "HTTPS" if "ssl_options" in args else "HTTP"
+            logging.exception(f"{svr_type} Server Start Failed")
+            self.server.add_warning(
+                f"Failed to start {svr_type} server: {e}.  See moonraker.log "
+                "for more details."
+            )
+            return None
         return svr
 
     def get_server(self) -> Server:
