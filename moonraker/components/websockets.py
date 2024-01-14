@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from ..server import Server
     from .klippy_connection import KlippyConnection as Klippy
     from ..confighelper import ConfigHelper
+    from .application import MoonrakerApp
     from .extensions import ExtensionManager
     from .authorization import Authorization
     from ..utils import IPAddress
@@ -50,6 +51,9 @@ class WebsocketManager:
         self.clients: Dict[int, BaseRemoteConnection] = {}
         self.bridge_connections: Dict[int, BridgeSocket] = {}
         self.closed_event: Optional[asyncio.Event] = None
+        app: MoonrakerApp = self.server.lookup_component("application")
+        app.register_websocket_handler("/websocket", WebSocket)
+        app.register_websocket_handler("/klippysocket", BridgeSocket)
         self.server.register_endpoint(
             "/server/websocket/id", RequestType.GET, self._handle_id_request,
             TransportType.WEBSOCKET
@@ -130,7 +134,10 @@ class WebsocketManager:
     def has_socket(self, ws_id: int) -> bool:
         return ws_id in self.clients
 
-    def get_client(self, ws_id: int) -> Optional[BaseRemoteConnection]:
+    def get_client(self, uid: int) -> Optional[BaseRemoteConnection]:
+        return self.clients.get(uid, None)
+
+    def get_client_ws(self, ws_id: int) -> Optional[WebSocket]:
         sc = self.clients.get(ws_id, None)
         if sc is None or not isinstance(sc, WebSocket):
             return None

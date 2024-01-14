@@ -33,7 +33,6 @@ from ..common import (
     KlippyState
 )
 from ..utils import json_wrapper as jsonw
-from .websockets import WebSocket, BridgeSocket
 from streaming_form_data import StreamingFormDataParser, ParseFailedException
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -48,15 +47,17 @@ from typing import (
     Dict,
     List,
     AsyncGenerator,
+    Type
 )
 if TYPE_CHECKING:
     from tornado.httpserver import HTTPServer
+    from tornado.websocket import WebSocketHandler
     from ..server import Server
     from ..eventloop import EventLoop
     from ..confighelper import ConfigHelper
     from .klippy_connection import KlippyConnection as Klippy
     from ..utils import IPAddress
-    from .websockets import WebsocketManager
+    from .websockets import WebsocketManager, WebSocket
     from .file_manager.file_manager import FileManager
     from .announcements import Announcements
     from .machine import Machine
@@ -196,8 +197,6 @@ class MoonrakerApp:
         app_handlers: List[Any] = [
             (AnyMatches(), self.mutable_router),
             (home_pattern, WelcomeHandler),
-            (f"{self._route_prefix}/websocket", WebSocket),
-            (f"{self._route_prefix}/klippysocket", BridgeSocket),
             (f"{self._route_prefix}/server/redirect", RedirectHandler),
             (f"{self._route_prefix}/server/jsonrpc", RPCHandler)
         ]
@@ -375,6 +374,13 @@ class MoonrakerApp:
             f"{self._route_prefix}{pattern}", FileUploadHandler, params
         )
 
+    def register_websocket_handler(
+        self, pattern: str, handler: Type[WebSocketHandler]
+    ) -> None:
+        self.mutable_router.add_handler(
+            f"{self._route_prefix}{pattern}", handler, None
+        )
+
     def register_debug_endpoint(
         self,
         endpoint: str,
@@ -459,9 +465,7 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
                 pass
             else:
                 wsm: WebsocketManager = self.server.lookup_component("websockets")
-                conn = wsm.get_client(conn_id)
-        if not isinstance(conn, WebSocket):
-            return None
+                conn = wsm.get_client_ws(conn_id)
         return conn
 
     def write_error(self, status_code: int, **kwargs) -> None:
