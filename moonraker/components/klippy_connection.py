@@ -289,16 +289,7 @@ class KlippyConnection:
                 logging.info("Klippy Connection Established")
                 self.writer = writer
                 if self._get_peer_credentials(writer):
-                    machine: Machine = self.server.lookup_component("machine")
-                    provider = machine.get_system_provider()
-                    svc_info = await provider.extract_service_info(
-                        "klipper", self._peer_cred["process_id"]
-                    )
-                    if svc_info != self._service_info:
-                        db: Database = self.server.lookup_component('database')
-                        db.insert_item("moonraker", SVC_INFO_KEY, svc_info)
-                        self._service_info = svc_info
-                        machine.log_service_info(svc_info)
+                    await self._get_service_info(self._peer_cred["process_id"])
             self.event_loop.create_task(self._read_stream(reader))
             return await self._init_klippy_connection()
 
@@ -311,13 +302,27 @@ class KlippyConnection:
             str(self.uds_address), limit=UNIX_BUFFER_LIMIT)
 
     def _get_peer_credentials(self, writer: asyncio.StreamWriter) -> bool:
-        self._peer_cred = get_unix_peer_credentials(writer, "Klippy")
-        if not self._peer_cred:
+        peer_cred = get_unix_peer_credentials(writer, "Klippy")
+        if not peer_cred:
             return False
+        if peer_cred.get("process_id") == 1:
+            logging.debug("Klipper Unix Socket created via Systemd Socket Activation")
+            return False
+        self._peer_cred = peer_cred
         logging.debug(
             f"Klippy Connection: Received Peer Credentials: {self._peer_cred}"
         )
         return True
+
+    async def _get_service_info(self, process_id: int) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        provider = machine.get_system_provider()
+        svc_info = await provider.extract_service_info("klipper", process_id)
+        if svc_info != self._service_info:
+            db: Database = self.server.lookup_component('database')
+            db.insert_item("moonraker", SVC_INFO_KEY, svc_info)
+            self._service_info = svc_info
+            machine.log_service_info(svc_info)
 
     async def _init_klippy_connection(self) -> bool:
         self._klippy_identified = False
@@ -387,6 +392,16 @@ class KlippyConnection:
             self._klipper_version = version
             msg = f"Klipper Version: {version}"
             self.server.add_log_rollover_item("klipper_version", msg)
+        klipper_pid: Optional[int] = result.get("process_id")
+        if klipper_pid is not None:
+            cur_pid: Optional[int] = self._peer_cred.get("process_id")
+            if cur_pid is None or klipper_pid != cur_pid:
+                self._peer_cred = dict(
+                    process_id=klipper_pid,
+                    group_id=result.get("group_id", -1),
+                    user_id=result.get("user_id", -1)
+                )
+                await self._get_service_info(klipper_pid)
         self._klippy_info = dict(result)
         state_message: str = self._state.message
         if "state_message" in self._klippy_info:
