@@ -195,7 +195,14 @@ class SpoolManager:
             url=full_url,
             body=body,
         )
-        response.raise_for_status()
+
+        if (response._code == 404
+                and self.spool_id is not None
+                and dict(response.json()).get("message")
+                == ("No spool with ID %d found." % self.spool_id)):
+            await self.set_active_spool(None)
+        else:
+            response.raise_for_status()
 
         return response.json()
 
