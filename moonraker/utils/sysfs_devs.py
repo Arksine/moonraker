@@ -185,18 +185,18 @@ def find_usb_devices() -> List[Dict[str, Any]]:
 
 def find_serial_devices() -> List[Dict[str, Any]]:
     serial_devs: List[Dict[str, Any]] = []
-    usb_devs_by_path: Dict[str, str] = {}
-    usb_devs_by_id: Dict[str, str] = {}
-    usb_by_path_dir = pathlib.Path(SER_BYPTH_PATH)
-    usb_by_id_dir = pathlib.Path(SER_BYID_PATH)
+    devs_by_path: Dict[str, str] = {}
+    devs_by_id: Dict[str, str] = {}
+    by_path_dir = pathlib.Path(SER_BYPTH_PATH)
+    by_id_dir = pathlib.Path(SER_BYID_PATH)
     dev_root_folder = pathlib.Path("/dev")
-    if usb_by_path_dir.is_dir():
-        usb_devs_by_path = {
-            dev.resolve().name: str(dev) for dev in usb_by_path_dir.iterdir()
+    if by_path_dir.is_dir():
+        devs_by_path = {
+            dev.resolve().name: str(dev) for dev in by_path_dir.iterdir()
         }
-    if usb_by_id_dir.is_dir():
-        usb_devs_by_id = {
-            dev.resolve().name: str(dev) for dev in usb_by_id_dir.iterdir()
+    if by_id_dir.is_dir():
+        devs_by_id = {
+            dev.resolve().name: str(dev) for dev in by_id_dir.iterdir()
         }
     tty_dir = pathlib.Path(TTY_PATH)
     for tty_path in tty_dir.iterdir():
@@ -211,7 +211,10 @@ def find_serial_devices() -> List[Dict[str, Any]]:
             "device_type": "unknown",
             "device_path": str(dev_root_folder.joinpath(device_name)),
             "device_name": device_name,
-            "driver_name": driver_name
+            "driver_name": driver_name,
+            "path_by_hardware": devs_by_path.get(device_name),
+            "path_by_id": devs_by_id.get(device_name),
+            "usb_location": None
         }
         if uartclk_file.is_file() and port_file.is_file():
             # This is a potential hardware uart.  Need to
@@ -226,13 +229,9 @@ def find_serial_devices() -> List[Dict[str, Any]]:
         else:
             usb_path = device_folder.resolve()
             usb_location: Optional[str] = find_usb_folder(usb_path)
-            device_info["path_by_hardware"] = usb_devs_by_path.get(device_name)
-            device_info["path_by_id"] = usb_devs_by_id.get(device_name)
-            device_info["usb_location"] = None
             if usb_location is not None:
                 device_info["device_type"] = "usb"
                 device_info["usb_location"] = usb_location
-
         serial_devs.append(device_info)
     return serial_devs
 
