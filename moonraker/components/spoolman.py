@@ -25,26 +25,19 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
 
 class SpoolManager:
-    spool_id: Optional[int] = None
-    highest_e_pos: float = 0.0
-    extruded: float = 0.0
-    has_printed_error_since_last_down: bool = False
-
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
-
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
         self.last_sync_time = datetime.datetime.now()
         self.extruded_lock = asyncio.Lock()
         self.spoolman_url = f"{config.get('server').rstrip('/')}/api"
-
+        self.spool_id: Optional[int] = None
+        self.extruded: float = 0
+        self._error_logged: bool = False
+        self._highest_epos: float = 0
         self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
-        self.http_client: HttpClient = self.server.lookup_component(
-            "http_client"
-        )
-        self.database: MoonrakerDatabase = self.server.lookup_component(
-            "database"
-        )
+        self.http_client: HttpClient = self.server.lookup_component("http_client")
+        self.database: MoonrakerDatabase = self.server.lookup_component("database")
         announcements: Announcements = self.server.lookup_component("announcements")
         announcements.register_feed("spoolman")
         self._register_notifications()
@@ -59,7 +52,7 @@ class SpoolManager:
 
     def _register_listeners(self):
         self.server.register_event_handler(
-            "server:klippy_ready", self._handle_server_ready
+            "server:klippy_ready", self._handle_klippy_ready
         )
 
     def _register_endpoints(self):
@@ -79,14 +72,14 @@ class SpoolManager:
             DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
         )
 
-    async def _handle_server_ready(self):
+    async def _handle_klippy_ready(self):
         result = await self.klippy_apis.subscribe_objects(
             {"toolhead": ["position"]}, self._handle_status_update, {}
         )
         initial_e_pos = self._eposition_from_status(result)
         logging.debug(f"Initial epos: {initial_e_pos}")
         if initial_e_pos is not None:
-            self.highest_e_pos = initial_e_pos
+            self._highest_epos = initial_e_pos
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
@@ -97,10 +90,10 @@ class SpoolManager:
 
     async def _handle_status_update(self, status: Dict[str, Any], _: float) -> None:
         epos = self._eposition_from_status(status)
-        if epos and epos > self.highest_e_pos:
+        if epos and epos > self._highest_epos:
             async with self.extruded_lock:
-                self.extruded += epos - self.highest_e_pos
-                self.highest_e_pos = epos
+                self.extruded += epos - self._highest_epos
+                self._highest_epos = epos
 
             now = datetime.datetime.now()
             difference = now - self.last_sync_time
@@ -149,12 +142,15 @@ class SpoolManager:
                     },
                 )
                 if response.has_error():
-                    if not self.has_printed_error_since_last_down:
-                        response.raise_for_status()
-                        self.has_printed_error_since_last_down = True
+                    if not self._error_logged:
+                        self._error_logged = True
+                        logging.info(
+                            f"Failed to update extrusion for spool id {spool_id}, "
+                            f"received error: {response.error}"
+                        )
                     return
 
-                self.has_printed_error_since_last_down = False
+                self._error_logged = False
                 self.extruded = 0
 
     async def _handle_spool_id_request(self, web_request: WebRequest):
