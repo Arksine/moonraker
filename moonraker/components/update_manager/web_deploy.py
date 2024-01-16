@@ -371,9 +371,11 @@ class WebClientDeploy(BaseDeploy):
                     os.makedirs(dest_dir, exist_ok=True)
                     shutil.move(str(src_path), str(dest_path))
             shutil.rmtree(self.path)
-        os.mkdir(self.path)
+        self.path.mkdir()
         with zipfile.ZipFile(release_file) as zf:
-            zf.extractall(self.path)
+            for zip_entry in zf.filelist:
+                dest = pathlib.Path(zf.extract(zip_entry, str(self.path)))
+                dest.chmod((zip_entry.external_attr >> 16) & 0o777)
         # Move temporary files back into
         for src_path in persist_dir.iterdir():
             dest_path = self.path.joinpath(src_path.name)

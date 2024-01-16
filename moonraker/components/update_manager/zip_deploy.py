@@ -347,7 +347,9 @@ class ZipDeploy(AppDeploy):
             shutil.rmtree(self.path)
         os.mkdir(self.path)
         with zipfile.ZipFile(release_zip) as zf:
-            zf.extractall(self.path)
+            for zip_entry in zf.filelist:
+                dest = pathlib.Path(zf.extract(zip_entry, str(self.path)))
+                dest.chmod((zip_entry.external_attr >> 16) & 0o777)
 
     async def update(self, force_dep_update: bool = False) -> bool:
         if not self._is_valid:
