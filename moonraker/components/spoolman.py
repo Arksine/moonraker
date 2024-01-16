@@ -14,9 +14,9 @@ from ..common import RequestType
 if TYPE_CHECKING:
     from typing import Optional
     from ..common import WebRequest
-    from moonraker.components.http_client import HttpClient
-    from moonraker.components.database import MoonrakerDatabase
-    from moonraker.components.announcements import Announcements
+    from .http_client import HttpClient, HttpResponse
+    from .database import MoonrakerDatabase
+    from .announcements import Announcements
     from .klippy_apis import KlippyAPI as APIComp
     from confighelper import ConfigHelper
 
@@ -71,6 +71,22 @@ class SpoolManager:
         self.spool_id = await self.database.get_item(
             DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
         )
+        if self.spool_id is not None:
+            response = await self.http_client.get(
+                f"{self.spoolman_url}/v1/spool/{self.spool_id}",
+                connect_timeout=1., request_timeout=2.,
+            )
+            if response.status_code == 404:
+                logging.info(f"Spool ID {self.spool_id} not found, setting to None")
+                self._set_spool(None)
+            elif response.has_error():
+                err_msg = self._get_response_error(response)
+                logging.info(
+                    "Attempt to initialize Spoolman connection failed with the "
+                    f"following: {err_msg}"
+                )
+            else:
+                logging.info(f"Found Spool ID {self.spool_id} on spoolman instance")
 
     async def _handle_klippy_ready(self):
         result = await self.klippy_apis.subscribe_objects(
@@ -83,6 +99,16 @@ class SpoolManager:
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
+
+    def _get_response_error(self, response: HttpResponse) -> str:
+        err_msg = f"HTTP error: {response.status_code} {response.error}"
+        try:
+            json_msg = response.json()["message"]
+        except Exception:
+            pass
+        else:
+            err_msg += f", Spoolman message: {json_msg}"
+        return err_msg
 
     def _eposition_from_status(self, status: Dict[str, Any]) -> Optional[float]:
         position = status.get("toolhead", {}).get("position", [])
@@ -112,12 +138,17 @@ class SpoolManager:
         elif spool_id is not None:
             async with self.extruded_lock:
                 self.extruded = 0
+        self._set_spool(spool_id)
+        logging.info(f"Setting active spool to: {spool_id}")
+
+    def _set_spool(self, spool_id: Optional[int]) -> None:
+        if spool_id == self.spool_id:
+            return
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.server.send_event(
             "spoolman:active_spool_set", {"spool_id": spool_id}
         )
-        logging.info(f"Setting active spool to: {spool_id}")
 
     async def track_filament_usage(self):
         spool_id = self.spool_id
@@ -142,14 +173,20 @@ class SpoolManager:
                     },
                 )
                 if response.has_error():
-                    if not self._error_logged:
-                        self._error_logged = True
+                    if response.status_code == 404:
                         logging.info(
-                            f"Failed to update extrusion for spool id {spool_id}, "
-                            f"received error: {response.error}"
+                            f"Spool ID {self.spool_id} not found, setting to None"
                         )
-                    return
-
+                        self._set_spool(None)
+                    else:
+                        if not self._error_logged:
+                            error_msg = self._get_response_error(response)
+                            self._error_logged = True
+                            logging.info(
+                                f"Failed to update extrusion for spool id {spool_id}, "
+                                f"received {error_msg}"
+                            )
+                        return
                 self._error_logged = False
                 self.extruded = 0
 
