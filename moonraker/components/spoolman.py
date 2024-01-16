@@ -103,7 +103,8 @@ class SpoolManager:
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
         try:
-            resp: Dict[str, Any] = response.json()
+            resp = response.json()
+            assert isinstance(resp, dict)
             json_msg: str = resp["message"]
         except Exception:
             pass
