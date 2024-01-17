@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import contextlib
 import tornado.websocket as tornado_ws
 from ..common import RequestType, Sentinel
 from ..utils import json_wrapper as jsonw
@@ -16,7 +17,8 @@ from typing import (
     Dict,
     Any,
     Optional,
-    Union
+    Union,
+    cast
 )
 
 if TYPE_CHECKING:
@@ -210,14 +212,9 @@ class SpoolManager:
 
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
-        try:
-            resp = response.json()
-            assert isinstance(resp, dict)
-            json_msg: str = resp["message"]
-        except Exception:
-            pass
-        else:
-            err_msg += f", Spoolman message: {json_msg}"
+        with contextlib.suppress(Exception):
+            msg: Optional[str] = cast(dict, response.json())["message"]
+            err_msg += f", Spoolman message: {msg}"
         return err_msg
 
     def _eposition_from_status(self, status: Dict[str, Any]) -> Optional[float]:
@@ -315,6 +312,7 @@ class SpoolManager:
         path = web_request.get_str("path")
         query = web_request.get_str("query", None)
         body = web_request.get("body", None)
+        use_v2_response = web_request.get_boolean("use_v2_response", False)
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             raise self.server.error(f"Invalid HTTP method: {method}")
         if body is not None and method == "GET":
@@ -326,15 +324,41 @@ class SpoolManager:
         query = f"?{query}" if query is not None else ""
         full_url = f"{self.spoolman_url}{path}{query}"
         if not self.ws_connected:
-            raise self.server.error("Spoolman server not available", 503)
+            if not use_v2_response:
+                raise self.server.error("Spoolman server not available", 503)
+            return {
+                "response": None,
+                "error": {
+                    "status_code": 503,
+                    "message": "Spoolman server not available"
+                }
+            }
         logging.debug(f"Proxying {method} request to {full_url}")
         response = await self.http_client.request(
             method=method,
             url=full_url,
             body=body,
         )
-        response.raise_for_status()
-        return response.json()
+        if not use_v2_response:
+            response.raise_for_status()
+            return response.json()
+        if response.has_error():
+            msg: str = str(response.error or "")
+            with contextlib.suppress(Exception):
+                spoolman_msg = cast(dict, response.json()).get("message", msg)
+                msg = spoolman_msg
+            return {
+                "response": None,
+                "error": {
+                    "status_code": response.status_code,
+                    "message": msg
+                }
+            }
+        else:
+            return {
+                "response": response.json(),
+                "error": None
+            }
 
     async def close(self):
         self.is_closing = True
