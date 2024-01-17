@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 import asyncio
-import datetime
 import logging
 import re
 import tornado.websocket as tornado_ws
@@ -39,7 +38,7 @@ class SpoolManager:
         self.eventloop = self.server.get_event_loop()
         self._get_spoolman_urls(config)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
-        self.last_sync_time = datetime.datetime.now()
+        self.last_sync_time = 0.
         self.extruded_lock = asyncio.Lock()
         self.spoolman_ws: Optional[WebSocketClientConnection] = None
         self.connection_task: Optional[asyncio.Task] = None
@@ -232,9 +231,9 @@ class SpoolManager:
                 self.extruded += epos - self._highest_epos
                 self._highest_epos = epos
 
-            now = datetime.datetime.now()
+            now = self.eventloop.get_loop_time()
             difference = now - self.last_sync_time
-            if difference.total_seconds() > self.sync_rate_seconds:
+            if difference > self.sync_rate_seconds:
                 self.last_sync_time = now
                 logging.debug("Sync period elapsed, tracking usage")
                 await self.track_filament_usage()
