@@ -5431,6 +5431,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.spoolman.proxy",
     "params": {
+        "use_v2_response": true,
         "request_method": "POST",
         "path": "/v1/spool",
         "query": "a=1&b=4",
@@ -5444,14 +5445,83 @@ JSON-RPC request:
 
 The following parameters are available. `request_method` and `path` are required, the rest are optional.
 
-- `request_method`: The HTTP request method, e.g. `GET`, `POST`, `DELETE`, etc.
+- `request_method`: The HTTP request method, e.g. `GET`, `POST`, `DELETE`, etc..
 - `path`: The endpoint, including API version, e.g. `/v1/filament`.
 - `query`: The query part of the URL, e.g. `filament_material=PLA&vendor_name=Prima`.
 - `body`: The request body for the request.
+- `use_v2_response`: Returns the spoolman response in version 2 format.
+  Default is false.
+
+!!! Note
+    The version 2 response has been added to eliminate ambiguity between
+    Spoolman errors and Moonraker errors.  With version 1 a frontend
+    is not able to reliably to determine if the error is sourced from
+    Spoolman or Moonraker.  Version 2 responses will return success
+    unless Moonraker is the source of the error.
+
+    The version 2 response is currently opt-in to avoid breaking
+    existing implementations, however in the future it will be
+    required, at which point the version 1 response will be removed.
+    The version 1 response is now deprecated.
 
 Returns:
 
-The json response from the Spoolman server.
+- Version 1
+
+> The json response from the Spoolman server.  Errors are proxied directly.
+For example, if a request returns 404, Moonraker will return a 404 error
+or the JSON-RPC equivalent of -32601, Method Not Found.
+
+- Version 2
+
+> Returns the spoolman response wrapped in an object.  The object contains
+two fields, `error` and `response`.  A successful request will place the
+returned value in the `response` field and `error` will be `null.`  When
+Spoolman returns an error the `response` field will be `null` and the
+`error` field will contain details about the error.
+```json
+{
+    "response": {
+        "id": 2,
+        "registered": "2023-11-23T12:18:31Z",
+        "first_used": "2023-11-22T12:17:56.123000Z",
+        "last_used": "2023-11-23T10:17:59.900000Z",
+        "filament": {
+            "id": 2,
+            "registered": "2023-11-23T12:17:44Z",
+            "name": "Reactor Red",
+            "vendor": {
+                "id": 2,
+                "registered": "2023-06-26T21:00:42Z",
+                "name": "Fusion"
+            },
+            "material": "PLA",
+            "price": 25,
+            "density": 1.24,
+            "diameter": 1.75,
+            "weight": 1000,
+            "color_hex": "BD0B0B"
+        },
+        "remaining_weight": 950,
+        "used_weight": 50,
+        "remaining_length": 318519.4384459262,
+        "used_length": 16764.18097083822,
+        "archived": false
+    },
+    "error": null
+}
+```
+> On Spoolman error:
+```json
+{
+    "response": null,
+    "error": {
+        "status_code": 404,
+        "message": "No spool with ID 3 found."
+    }
+}
+```
+
 
 ### OctoPrint API emulation
 Partial support of OctoPrint API is implemented with the purpose of
