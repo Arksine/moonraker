@@ -79,6 +79,7 @@ class SpoolManager:
 
     def _register_notifications(self):
         self.server.register_notification("spoolman:active_spool_set")
+        self.server.register_notification("spoolman:spoolman_status_changed")
 
     def _register_listeners(self):
         self.server.register_event_handler(
@@ -140,6 +141,7 @@ class SpoolManager:
                     self._cancel_spool_check_task()
                     coro = self._check_spool_deleted()
                     self.spool_check_task = self.eventloop.create_task(coro)
+                self._send_status_notification()
                 await self._read_messages()
                 log_connect = True
                 last_err = Exception()
@@ -166,6 +168,8 @@ class SpoolManager:
                     f"Server Ping Time Elapsed: {ping_time}"
                 )
                 self.spoolman_ws = None
+                if not self.is_closing:
+                    self._send_status_notification()
                 break
 
     def _decode_message(self, message: str) -> None:
@@ -369,6 +373,12 @@ class SpoolManager:
             "pending_reports": pending,
             "spool_id": self.spool_id
         }
+
+    def _send_status_notification(self) -> None:
+        self.server.send_event(
+            "spoolman:spoolman_status_changed",
+            {"spoolman_connected": self.ws_connected}
+        )
 
     async def close(self):
         self.is_closing = True
