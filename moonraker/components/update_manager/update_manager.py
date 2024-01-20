@@ -16,7 +16,6 @@ from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
 from .zip_deploy import ZipDeploy
 from .system_deploy import PackageDeploy
-from .web_deploy import WebClientDeploy
 from ...common import RequestType
 
 # Annotation imports
@@ -57,7 +56,7 @@ def get_deploy_class(
 ) -> Union[Type[BaseDeploy], _T]:
     key = AppType.from_string(app_type) if isinstance(app_type, str) else app_type
     _deployers = {
-        AppType.WEB: WebClientDeploy,
+        AppType.WEB: ZipDeploy,
         AppType.GIT_REPO: GitDeploy,
         AppType.ZIP: ZipDeploy
     }
