@@ -5335,6 +5335,45 @@ An object containing all measurements for every configured sensor:
 ### Spoolman APIs
 The following APIs are available to interact with the Spoolman integration:
 
+### Get Spoolman Status
+Returns the current status of the spoolman module.
+
+HTTP request:
+```http
+GET /server/spoolman/status
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.spoolman.status",
+    "id": 4654
+}
+```
+
+Returns:
+
+An object containing details about the current status:
+
+```json
+{
+    "spoolman_connected": false,
+    "pending_reports": [
+        {
+            "spool_id": 1,
+            "filament_used": 10
+        }
+    ],
+    "spool_id": 2
+}
+```
+
+- `spoolman_connected`: A boolean indicating if Moonraker is connected to
+  Spoolman.  When `false` Spoolman is unavailable.
+- `pending_reports`: A list of objects containing spool data that has
+  yet to be reported to Spoolman.
+- `spool_id`:  The current Spool ID.  Can be an integer value or `null`.
+
 #### Set active spool
 Set the ID of the spool that Moonraker should report usage to Spoolman of.
 
@@ -7040,6 +7079,23 @@ See the [Spoolman API](#spoolman-apis) for more information.
     "params": [
         {
             "spool_id": 1
+        }
+    ]
+}
+```
+
+#### Spoolman Status Changed
+
+Moonraker will emit the `notify_spoolman_status_changed` event when the
+connection state to the Spoolman service has changed:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_spoolman_status_changed",
+    "params": [
+        {
+            "spoolman_connected": false
         }
     ]
 }
