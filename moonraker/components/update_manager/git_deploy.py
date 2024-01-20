@@ -36,6 +36,7 @@ class GitDeploy(AppDeploy):
         self._configure_path(config)
         self._configure_virtualenv(config)
         self._configure_dependencies(config)
+        self._configure_managed_services(config)
         self.origin: str = config.get('origin')
         self.moved_origin: Optional[str] = config.get('moved_origin', None)
         self.primary_branch = config.get("primary_branch", "master")

@@ -41,6 +41,7 @@ class ZipDeploy(AppDeploy):
         if self.type == AppType.ZIP:
             self._configure_virtualenv(config)
             self._configure_dependencies(config)
+            self._configure_managed_services(config)
         elif self.type == AppType.WEB:
             self.prefix = f"Web Client {self.name}: "
         self.repo = config.get('repo').strip().strip("/")
