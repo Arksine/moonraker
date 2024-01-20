@@ -14,6 +14,7 @@ from ..common import RequestType
 from ..utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
+    List,
     Dict,
     Any,
     Optional,
@@ -94,6 +95,11 @@ class SpoolManager:
             "/server/spoolman/proxy",
             RequestType.POST,
             self._proxy_spoolman_request,
+        )
+        self.server.register_endpoint(
+            "/server/spoolman/status",
+            RequestType.GET,
+            self._handle_status_request,
         )
 
     async def component_init(self) -> None:
@@ -352,6 +358,17 @@ class SpoolManager:
                 "response": response.json(),
                 "error": None
             }
+
+    async def _handle_status_request(self, web_request: WebRequest) -> Dict[str, Any]:
+        pending: List[Dict[str, Any]] = [
+            {"spool_id": sid, "filament_used": used} for sid, used in
+            self.pending_reports.items()
+        ]
+        return {
+            "spoolman_connected": self.ws_connected,
+            "pending_reports": pending,
+            "spool_id": self.spool_id
+        }
 
     async def close(self):
         self.is_closing = True
