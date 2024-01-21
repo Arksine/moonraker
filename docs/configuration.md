@@ -243,6 +243,9 @@ following services:
 - `sonar`
 - `crowsnest`
 
+Note that systemd units are case sensitive, so the case must match
+when adding a value to `moonraker.asvc`.
+
 #### Reboot / Shutdown from Klipper
 
 It is possible to call the `shutdown_machine` and `reboot_machine`
@@ -1730,9 +1733,6 @@ disk or cloned from unofficial sources are not supported.
 # moonraker.conf
 
 [update_manager]
-enable_repo_debug: False
-#  ***DEPRECATED***
-#   Debug features are now enabled by the '-g' command line option
 enable_auto_refresh: False
 #   When set to True Moonraker will attempt to fetch status about
 #   available updates roughly every 24 hours, between 12am-4am.
@@ -1787,11 +1787,11 @@ down into 3 basic types:
     To benefit the community Moonraker facilitates updates for 3rd party
     "Klippy Extras" and "Moonraker Components".  While many of these
     extensions are well developed and tested, users should always be
-    careful when using such extensions.  Moonraker and Klipper provide
+    careful when using such code extensions.  Moonraker and Klipper provide
     no official support for such extensions, thus users experiencing an
     issue should not create bug reports on the Klipper or Moonraker issue
-    trackers without first reproducing the issue with all unofficial
-    extensions disabled.
+    trackers without first reproducing the issue using pristine versions
+    of Moonraker and/or Klipper.
 
 ####  Web type (front-end) configuration
 
@@ -1843,13 +1843,13 @@ refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
 info_tags:
-#   Optional information tags about this extensions that are reported via
+#   Optional information tags about this extension that are reported via
 #   Moonraker's API as a list of strings. Each tag should be separated by
 #   a new line. For example:
 #       info_tags:
 #           desc=My Client App
 #           action=webcam_restart
-#   Front-ends may use these tags to perform additional actions or display
+#   Frontends may use these tags to perform additional actions or display
 #   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
 ```
@@ -1974,14 +1974,14 @@ refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
 info_tags:
-#   Optional information tags about this application that will be reported
-#   front-ends as a list of strings. Each tag should be separated by a new line.
+#   Optional information tags about this application that will be reported to
+#   frontends as a list of strings. Each tag should be separated by a new line.
 #   For example:
 #       info_tags:
 #           desc=Special Application
-#   Front-ends my use these tags to perform additional actions or display
+#   Frontends my use these tags to perform additional actions or display
 #   information, see your extension documentation for details on configuration.
-#   The default is an empty list.
+#   The default is an empty list (no info tags).
 ```
 
 !!! Note
@@ -1989,6 +1989,57 @@ info_tags:
     to grant Moonraker permission to manage its service. See the
     [allowed services](#allowed-services) section for details on which
     services Moonraker is allowed to manage and how to add additional services.
+
+    Also not that systemd services are case sensitive.  The `extension_name`
+    in the section header and the value provided in the `managed_servies`
+    option must match the case of the systemd unit file.
+
+#### Zip Application Configuration
+
+The `zip` type can be used to deploy zipped application updates through GitHub
+releases.  They can be thought of as a combination of the `web` and `git_repo`
+types.  Like `web` types, zipped applications must include a `release_info.json`
+file (see the [web type](#web-type-front-end-configuration) not for details).
+In addition, `zip` types can be configured to update dependencies and manage
+services.
+
+The `zip` type is ideal for applications that need to be built before deployment.
+The thing to keep in mind is that any application updated through Moonraker needs
+either be cross-platform, or it needs to deploy binaries for multiple platforms
+and be able to choose the correct one based on the system.
+
+```ini
+channel: stable
+#   May be stable or beta.  When beta is specified "pre-release"
+#   updates are available.  The default is stable.
+repo:
+#   This is the GitHub repo of the application, in the format of owner/repo_name.
+#   For example, this could be set to Donkie/Spoolman to update Spoolman.
+#   This parameter must be provided.
+path:
+#   The path to the Application files on disk.  This folder must contain a
+#   a previously installed application and a valid release_info.json file.
+#   The folder must not be located within a git repo and it must not be located
+#   within a path that Moonraker has reserved, ie: it cannot share a path with
+#   another extension. This parameter must be provided.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
+persistent_files:
+#   A list of newline separated file names that should persist between
+#   updates.  This is useful for virtualenv's and other files/folders that
+#   should not be deleted when Moonraker overwrites the folder.  The default
+#   is no persistent files.
+virtualenv:
+requirements:
+system_dependencies:
+enable_node_updates:
+is_system_service: True
+managed_services:
+info_tags:
+#   See the git_repo type documentation for detailed descriptions of the above
+#   options.
+```
 
 #### The System Dependencies File Format
 
