@@ -111,7 +111,7 @@ class SpoolManager:
 
     async def _connect_websocket(self) -> None:
         log_connect: bool = True
-        last_err: Exception = Exception()
+        err_list: List[Exception] = []
         while not self.is_closing:
             if log_connect:
                 logging.info(f"Connecting To Spoolman: {self.ws_url}")
@@ -129,14 +129,29 @@ class SpoolManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                if type(last_err) is not type(e) or last_err.args != e.args:
-                    logging.exception("Failed to connect to Spoolman")
-                    last_err = e
+                if len(err_list) > 10:
+                    # Allow up to 10 unique errors.
+                    continue
+                for err in err_list:
+                    if type(err) is type(e) and err.args == e.args:
+                        break
+                else:
+                    err_list.append(e)
+                    verbose = self.server.is_verbose_enabled()
+                    if verbose:
+                        logging.exception("Failed to connect to Spoolman")
+                    self.server.add_log_rollover_item(
+                        "spoolman_connect", f"Failed to Connect to spoolman: {e}",
+                        not verbose
+                    )
             else:
+                err_list = []
                 self.ws_connected = True
                 self._error_logged = False
                 self.report_timer.start()
-                logging.info("Connected to Spoolman Spool Manager")
+                self.server.add_log_rollover_item(
+                    "spoolman_connect", "Connected to Spoolman Spool Manager"
+                )
                 if self.spool_id is not None:
                     self._cancel_spool_check_task()
                     coro = self._check_spool_deleted()
@@ -144,7 +159,6 @@ class SpoolManager:
                 self._send_status_notification()
                 await self._read_messages()
                 log_connect = True
-                last_err = Exception()
             if not self.is_closing:
                 await asyncio.sleep(self.reconnect_delay)
 
