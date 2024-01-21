@@ -10,6 +10,7 @@ import ipaddress
 import socket
 import uuid
 import logging
+from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
     Optional,
@@ -50,14 +51,14 @@ class WebcamManager:
             self.webcams[webcam.name] = webcam
 
         self.server.register_endpoint(
-            "/server/webcams/list", ["GET"], self._handle_webcam_list
+            "/server/webcams/list", RequestType.GET, self._handle_webcam_list
         )
         self.server.register_endpoint(
-            "/server/webcams/item", ["GET", "POST", "DELETE"],
+            "/server/webcams/item", RequestType.all(),
             self._handle_webcam_request
         )
         self.server.register_endpoint(
-            "/server/webcams/test", ["POST"], self._handle_webcam_test
+            "/server/webcams/test", RequestType.POST, self._handle_webcam_test
         )
         self.server.register_notification("webcam:webcams_changed")
         self.server.register_event_handler(
@@ -163,13 +164,13 @@ class WebcamManager:
         return webcam
 
     async def _handle_webcam_request(self, web_request: WebRequest) -> Dict[str, Any]:
-        action = web_request.get_action()
-        webcam = self._lookup_camera(web_request, action != "POST")
+        req_type = web_request.get_request_type()
+        webcam = self._lookup_camera(web_request, req_type != RequestType.POST)
         webcam_data: Dict[str, Any] = {}
-        if action == "GET":
+        if req_type == RequestType.GET:
             assert webcam is not None
             webcam_data = webcam.as_dict()
-        elif action == "POST":
+        elif req_type == RequestType.POST:
             if webcam is not None:
                 if webcam.source == "config":
                     raise self.server.error(
@@ -191,7 +192,7 @@ class WebcamManager:
                 webcam = WebCam.from_web_request(self.server, web_request, uid)
             await self._save_cam(webcam)
             webcam_data = webcam.as_dict()
-        elif action == "DELETE":
+        elif req_type == RequestType.DELETE:
             assert webcam is not None
             if webcam.source == "config":
                 raise self.server.error(
@@ -200,7 +201,7 @@ class WebcamManager:
                 )
             webcam_data = webcam.as_dict()
             self._delete_cam(webcam)
-        if action != "GET":
+        if req_type != RequestType.GET:
             self.server.send_event(
                 "webcam:webcams_changed", {"webcams": self._list_webcams()}
             )

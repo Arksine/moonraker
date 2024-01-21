@@ -20,13 +20,13 @@ import logging
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType, TransportType
 
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
     Any,
     Tuple,
-    Set,
     Optional,
     Union,
     Dict,
@@ -36,7 +36,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..websockets import WebsocketManager
+    from .websockets import WebsocketManager
     from tornado.httputil import HTTPServerRequest
     from tornado.web import RequestHandler
     from .database import MoonrakerDatabase as DBComp
@@ -151,7 +151,6 @@ class Authorization:
         self.user_db.sync(self.users)
         self.trusted_users: Dict[IPAddr, Any] = {}
         self.oneshot_tokens: Dict[str, OneshotToken] = {}
-        self.permitted_paths: Set[str] = set()
 
         # Get allowed cors domains
         self.cors_domains: List[str] = []
@@ -221,37 +220,46 @@ class Authorization:
             self._prune_conn_handler)
 
         # Register Authorization Endpoints
-        self.permitted_paths.add("/server/redirect")
-        self.permitted_paths.add("/access/login")
-        self.permitted_paths.add("/access/refresh_jwt")
-        self.permitted_paths.add("/access/info")
         self.server.register_endpoint(
-            "/access/login", ['POST'], self._handle_login,
-            transports=['http', 'websocket'])
+            "/access/login", RequestType.POST, self._handle_login,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
         self.server.register_endpoint(
-            "/access/logout", ['POST'], self._handle_logout,
-            transports=['http', 'websocket'])
+            "/access/logout", RequestType.POST, self._handle_logout,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/refresh_jwt", ['POST'], self._handle_refresh_jwt,
-            transports=['http', 'websocket'])
+            "/access/refresh_jwt", RequestType.POST, self._handle_refresh_jwt,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
         self.server.register_endpoint(
-            "/access/user", ['GET', 'POST', 'DELETE'],
-            self._handle_user_request, transports=['http', 'websocket'])
+            "/access/user", RequestType.all(), self._handle_user_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/users/list", ['GET'], self._handle_list_request,
-            transports=['http', 'websocket'])
+            "/access/users/list", RequestType.GET, self._handle_list_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/user/password", ['POST'], self._handle_password_reset,
-            transports=['http', 'websocket'])
+            "/access/user/password", RequestType.POST, self._handle_password_reset,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/api_key", ['GET', 'POST'],
-            self._handle_apikey_request, transports=['http', 'websocket'])
+            "/access/api_key", RequestType.GET | RequestType.POST,
+            self._handle_apikey_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/oneshot_token", ['GET'],
-            self._handle_oneshot_request, transports=['http', 'websocket'])
+            "/access/oneshot_token", RequestType.GET, self._handle_oneshot_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
-            "/access/info", ['GET'],
-            self._handle_info_request, transports=['http', 'websocket'])
+            "/access/info", RequestType.GET, self._handle_info_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         wsm.register_notification("authorization:user_created")
         wsm.register_notification(
@@ -261,12 +269,6 @@ class Authorization:
             "authorization:user_logged_out", event_type="logout"
         )
 
-    def register_permited_path(self, path: str) -> None:
-        self.permitted_paths.add(path)
-
-    def is_path_permitted(self, path: str) -> bool:
-        return path in self.permitted_paths
-
     def _sync_user(self, username: str) -> None:
         self.user_db[username] = self.users[username]
 
@@ -274,8 +276,7 @@ class Authorization:
         self.prune_timer.start(delay=PRUNE_CHECK_TIME)
 
     async def _handle_apikey_request(self, web_request: WebRequest) -> str:
-        action = web_request.get_action()
-        if action.upper() == 'POST':
+        if web_request.get_request_type() == RequestType.POST:
             self.api_key = uuid.uuid4().hex
             self.users[API_USER]['api_key'] = self.api_key
             self._sync_user(API_USER)
@@ -360,11 +361,11 @@ class Authorization:
             'action': 'user_jwt_refresh'
         }
 
-    async def _handle_user_request(self,
-                                   web_request: WebRequest
-                                   ) -> Dict[str, Any]:
-        action = web_request.get_action()
-        if action == "GET":
+    async def _handle_user_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        req_type = web_request.get_request_type()
+        if req_type == RequestType.GET:
             user = web_request.get_current_user()
             if user is None:
                 return {
@@ -378,10 +379,10 @@ class Authorization:
                     'source': user.get("source", "moonraker"),
                     'created_on': user.get('created_on')
                 }
-        elif action == "POST":
+        elif req_type == RequestType.POST:
             # Create User
             return await self._login_jwt_user(web_request, create=True)
-        elif action == "DELETE":
+        elif req_type == RequestType.DELETE:
             # Delete User
             return self._delete_jwt_user(web_request)
         raise self.server.error("Invalid Request Method")
@@ -578,7 +579,7 @@ class Authorization:
         return b".".join([jwt_msg, jwt_sig]).decode()
 
     def decode_jwt(
-        self, token: str, token_type: str = "access"
+        self, token: str, token_type: str = "access", check_exp: bool = True
     ) -> Dict[str, Any]:
         message, sig = token.rsplit('.', maxsplit=1)
         enc_header, enc_payload = message.split('.')
@@ -606,7 +607,7 @@ class Authorization:
             raise self.server.error("Invalid JWT Issuer", 401)
         if payload['aud'] != "Moonraker":
             raise self.server.error("Invalid JWT Audience", 401)
-        if payload['exp'] < int(time.time()):
+        if check_exp and payload['exp'] < int(time.time()):
             raise self.server.error("JWT Expired", 401)
 
         # get user
@@ -686,23 +687,23 @@ class Authorization:
         self.oneshot_tokens[token] = (ip_addr, user, hdl)
         return token
 
-    def _check_json_web_token(self,
-                              request: HTTPServerRequest
-                              ) -> Optional[Dict[str, Any]]:
+    def _check_json_web_token(
+        self, request: HTTPServerRequest, required: bool = True
+    ) -> Optional[Dict[str, Any]]:
         auth_token: Optional[str] = request.headers.get("Authorization")
         if auth_token is None:
             auth_token = request.headers.get("X-Access-Token")
             if auth_token is None:
                 qtoken = request.query_arguments.get('access_token', None)
                 if qtoken is not None:
-                    auth_token = qtoken[-1].decode()
+                    auth_token = qtoken[-1].decode(errors="ignore")
         elif auth_token.startswith("Bearer "):
             auth_token = auth_token[7:]
         else:
             return None
         if auth_token:
             try:
-                return self.decode_jwt(auth_token)
+                return self.decode_jwt(auth_token, check_exp=required)
             except Exception:
                 logging.exception(f"JWT Decode Error {auth_token}")
                 raise HTTPError(401, "JWT Decode Error")
@@ -760,17 +761,14 @@ class Authorization:
             return False
         return self.failed_logins.get(ip_addr, 0) >= self.max_logins
 
-    def check_authorized(
-        self, request: HTTPServerRequest, endpoint: str = "",
+    def authenticate_request(
+        self, request: HTTPServerRequest, auth_required: bool = True
     ) -> Optional[Dict[str, Any]]:
-        if (
-            endpoint in self.permitted_paths
-            or request.method == "OPTIONS"
-        ):
+        if request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
-        jwt_user = self._check_json_web_token(request)
+        jwt_user = self._check_json_web_token(request, auth_required)
         if jwt_user is not None:
             return jwt_user
 
@@ -794,14 +792,17 @@ class Authorization:
             if key and key == self.api_key:
                 return self.users[API_USER]
 
-        # If the force_logins option is enabled and at least one
-        # user is created this is an unauthorized request
+        # If the force_logins option is enabled and at least one user is created
+        # then trusted user authentication is disabled
         if self.force_logins and len(self.users) > 1:
+            if not auth_required:
+                return None
             raise HTTPError(401, "Unauthorized, Force Logins Enabled")
 
-        # Check if IP is trusted
+        # Check if IP is trusted.  If this endpoint doesn't require authentication
+        # then it is acceptable to return None
         trusted_user = self._check_trusted_connection(ip)
-        if trusted_user is not None:
+        if trusted_user is not None or not auth_required:
             return trusted_user
 
         raise HTTPError(401, "Unauthorized")

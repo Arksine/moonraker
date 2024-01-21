@@ -15,7 +15,7 @@ import copy
 import logging
 from io import StringIO
 from .utils import Sentinel
-from .components.template import JinjaTemplate
+from .common import RenderableTemplate
 
 # Annotation imports
 from typing import (
@@ -36,12 +36,18 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .server import Server
-    from .components.gpio import GpioFactory, GpioOutputPin
+    from .components.gpio import (
+        GpioFactory,
+        GpioOutputPin,
+        GpioEvent,
+        GpioEventCallback
+    )
     from .components.template import TemplateFactory
     _T = TypeVar("_T")
     ConfigVal = Union[None, int, float, bool, str, dict, list]
 
 DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
+CFG_ERROR_KEY = "__CONFIG_ERROR__"
 
 class ConfigError(Exception):
     pass
@@ -138,13 +144,16 @@ class ConfigHelper:
             val = func(section, option)
         except (configparser.NoOptionError, configparser.NoSectionError) as e:
             if default is Sentinel.MISSING:
+                self.parsed[self.section][CFG_ERROR_KEY] = True
                 raise ConfigError(str(e)) from None
             val = default
             section = self.section
-        except Exception:
+        except Exception as e:
+            self.parsed[self.section][CFG_ERROR_KEY] = True
             raise ConfigError(
-                f"Error parsing option ({option}) from "
-                f"section [{self.section}]")
+                f"[{self.section}]: Option '{option}' encountered the following "
+                f"error while parsing: {e}"
+            ) from e
         else:
             if deprecate:
                 self.server.add_warning(
@@ -360,7 +369,7 @@ class ConfigHelper:
                    deprecate: bool = False
                    ) -> Union[GpioOutputPin, _T]:
         try:
-            gpio: GpioFactory = self.server.load_component(self, 'gpio')
+            gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}', "
@@ -372,24 +381,45 @@ class ConfigHelper:
         return self._get_option(getgpio_wrapper, option, default,
                                 deprecate=deprecate)
 
+    def getgpioevent(
+        self,
+        option: str,
+        event_callback: GpioEventCallback,
+        default: Union[Sentinel, _T] = Sentinel.MISSING,
+        deprecate: bool = False
+    ) -> Union[GpioEvent, _T]:
+        try:
+            gpio: GpioFactory = self.server.load_component(self, "gpio")
+        except Exception:
+            raise ConfigError(
+                f"Section [{self.section}], option '{option}', "
+                "GPIO Component not available"
+            )
+
+        def getgpioevent_wrapper(sec: str, opt: str) -> GpioEvent:
+            val = self.config.get(sec, opt)
+            return gpio.register_gpio_event(val, event_callback)
+        return self._get_option(
+            getgpioevent_wrapper, option, default, deprecate=deprecate
+        )
+
     def gettemplate(self,
                     option: str,
                     default: Union[Sentinel, _T] = Sentinel.MISSING,
                     is_async: bool = False,
                     deprecate: bool = False
-                    ) -> Union[JinjaTemplate, _T]:
+                    ) -> Union[RenderableTemplate, _T]:
         try:
-            template: TemplateFactory
-            template = self.server.load_component(self, 'template')
+            template: TemplateFactory = self.server.load_component(self, 'template')
         except Exception:
             raise ConfigError(
-                f"Section [{self.section}], option '{option}', "
-                "Template Component not available")
+                f"Section [{self.section}], option '{option}': "
+                "Failed to load 'template' component."
+            )
 
-        def gettemplate_wrapper(sec: str, opt: str) -> JinjaTemplate:
+        def gettemplate_wrapper(sec: str, opt: str) -> RenderableTemplate:
             val = self.config.get(sec, opt)
             return template.create_template(val.strip(), is_async)
-
         return self._get_option(gettemplate_wrapper, option, default,
                                 deprecate=deprecate)
 
@@ -398,7 +428,7 @@ class ConfigHelper:
                       default: Union[Sentinel, str] = Sentinel.MISSING,
                       is_async: bool = False,
                       deprecate: bool = False
-                      ) -> JinjaTemplate:
+                      ) -> RenderableTemplate:
         val = self.gettemplate(option, default, is_async, deprecate)
         if isinstance(val, str):
             template: TemplateFactory
@@ -412,7 +442,7 @@ class ConfigHelper:
                 deprecate: bool = False
                 ) -> Union[pathlib.Path, _T]:
         val = self.gettemplate(option, default, deprecate=deprecate)
-        if isinstance(val, JinjaTemplate):
+        if isinstance(val, RenderableTemplate):
             ctx = {"data_path": self.server.get_app_args()["data_path"]}
             strpath = val.render(ctx)
             return pathlib.Path(strpath).expanduser().resolve()
@@ -455,9 +485,14 @@ class ConfigHelper:
                     f"Unparsed config section [{sect}] detected.  This "
                     "may be the result of a component that failed to "
                     "load.  In the future this will result in a startup "
-                    "error.")
+                    "error."
+                )
                 continue
             parsed_opts = self.parsed[sect]
+            if CFG_ERROR_KEY in parsed_opts:
+                # Skip validation for sections that have encountered an error,
+                # as this will always result in unparsed options.
+                continue
             for opt, val in self.config.items(sect):
                 if opt not in parsed_opts:
                     self.server.add_warning(
@@ -465,7 +500,8 @@ class ConfigHelper:
                         f"section [{sect}].  This may be an option no longer "
                         "available or could be the result of a module that "
                         "failed to load.  In the future this will result "
-                        "in a startup error.")
+                        "in a startup error."
+                    )
 
     def create_backup(self) -> None:
         cfg_path = self.server.get_app_args()["config_file"]

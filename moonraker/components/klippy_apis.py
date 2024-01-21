@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 from ..utils import Sentinel
-from ..common import WebRequest, Subscribable
+from ..common import WebRequest, APITransport, RequestType
 
 # Annotation imports
 from typing import (
@@ -23,7 +23,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..klippy_connection import KlippyConnection as Klippy
+    from .klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
     _T = TypeVar("_T")
@@ -38,7 +38,7 @@ STATUS_ENDPOINT = "objects/query"
 OBJ_LIST_ENDPOINT = "objects/list"
 REG_METHOD_ENDPOINT = "register_remote_method"
 
-class KlippyAPI(Subscribable):
+class KlippyAPI(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.klippy: Klippy = self.server.lookup_component("klippy_connection")
@@ -52,17 +52,23 @@ class KlippyAPI(Subscribable):
 
         # Register GCode Aliases
         self.server.register_endpoint(
-            "/printer/print/pause", ['POST'], self._gcode_pause)
+            "/printer/print/pause", RequestType.POST, self._gcode_pause
+        )
         self.server.register_endpoint(
-            "/printer/print/resume", ['POST'], self._gcode_resume)
+            "/printer/print/resume", RequestType.POST, self._gcode_resume
+        )
         self.server.register_endpoint(
-            "/printer/print/cancel", ['POST'], self._gcode_cancel)
+            "/printer/print/cancel", RequestType.POST, self._gcode_cancel
+        )
         self.server.register_endpoint(
-            "/printer/print/start", ['POST'], self._gcode_start_print)
+            "/printer/print/start", RequestType.POST, self._gcode_start_print
+        )
         self.server.register_endpoint(
-            "/printer/restart", ['POST'], self._gcode_restart)
+            "/printer/restart", RequestType.POST, self._gcode_restart
+        )
         self.server.register_endpoint(
-            "/printer/firmware_restart", ['POST'], self._gcode_firmware_restart)
+            "/printer/firmware_restart", RequestType.POST, self._gcode_firmware_restart
+        )
         self.server.register_event_handler(
             "server:klippy_disconnect", self._on_klippy_disconnect
         )
@@ -94,10 +100,11 @@ class KlippyAPI(Subscribable):
         self,
         method: str,
         params: Dict[str, Any],
-        default: Any = Sentinel.MISSING
+        default: Any = Sentinel.MISSING,
+        transport: Optional[APITransport] = None
     ) -> Any:
         try:
-            req = WebRequest(method, params, conn=self)
+            req = WebRequest(method, params, transport=transport or self)
             result = await self.klippy.request(req)
         except self.server.error:
             if default is Sentinel.MISSING:
@@ -221,6 +228,7 @@ class KlippyAPI(Subscribable):
         callback: Optional[SubCallback] = None,
         default: Union[Sentinel, _T] = Sentinel.MISSING
     ) -> Union[_T, Dict[str, Any]]:
+        # The host transport shares subscriptions amongst all components
         for obj, items in objects.items():
             if obj in self.host_subscription:
                 prev = self.host_subscription[obj]
@@ -231,12 +239,27 @@ class KlippyAPI(Subscribable):
                     self.host_subscription[obj] = uitems
             else:
                 self.host_subscription[obj] = items
-        params = {'objects': dict(self.host_subscription)}
-        result = await self._send_klippy_request(
-            SUBSCRIPTION_ENDPOINT, params, default)
+        params = {"objects": dict(self.host_subscription)}
+        result = await self._send_klippy_request(SUBSCRIPTION_ENDPOINT, params, default)
         if isinstance(result, dict) and "status" in result:
             if callback is not None:
                 self.subscription_callbacks.append(callback)
+            return result["status"]
+        if default is not Sentinel.MISSING:
+            return default
+        raise self.server.error("Invalid response received from Klippy", 500)
+
+    async def subscribe_from_transport(
+        self,
+        objects: Mapping[str, Optional[List[str]]],
+        transport: APITransport,
+        default: Union[Sentinel, _T] = Sentinel.MISSING,
+    ) -> Union[_T, Dict[str, Any]]:
+        params = {"objects": dict(objects)}
+        result = await self._send_klippy_request(
+            SUBSCRIPTION_ENDPOINT, params, default, transport
+        )
+        if isinstance(result, dict) and "status" in result:
             return result["status"]
         if default is not Sentinel.MISSING:
             return default

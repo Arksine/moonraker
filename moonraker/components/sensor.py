@@ -12,6 +12,7 @@ import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass, replace
 from functools import partial
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -180,17 +181,17 @@ class Sensors:
         # Register endpoints
         self.server.register_endpoint(
             "/server/sensors/list",
-            ["GET"],
+            RequestType.GET,
             self._handle_sensor_list_request,
         )
         self.server.register_endpoint(
             "/server/sensors/info",
-            ["GET"],
+            RequestType.GET,
             self._handle_sensor_info_request,
         )
         self.server.register_endpoint(
             "/server/sensors/measurements",
-            ["GET"],
+            RequestType.GET,
             self._handle_sensor_measurements_request,
         )
 

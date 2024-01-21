@@ -55,9 +55,9 @@ install_packages()
 
     else
         echo "Error: system-dependencies.json not found, falling back to legacy pacakge list"
-        PKGLIST="${PKGLIST} python3-virtualenv python3-dev python3-libgpiod liblmdb-dev"
-        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev packagekit"
-        PKGLIST="${PKGLIST} wireless-tools curl"
+        PKGLIST="${PKGLIST} python3-virtualenv python3-dev liblmdb-dev"
+        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev"
+        PKGLIST="${PKGLIST} packagekit wireless-tools curl"
         PKGS=${PKGLIST}
     fi
 
@@ -87,6 +87,7 @@ create_virtualenv()
     fi
 
     # Install/update dependencies
+    export SKIP_CYTHON=1
     ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
 
     if [ ${SPEEDUPS} = "y" ]; then

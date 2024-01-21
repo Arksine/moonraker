@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -21,7 +22,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     GCQueue = Deque[Dict[str, Any]]
     TempStore = Dict[str, Dict[str, Deque[Optional[float]]]]
@@ -59,11 +60,13 @@ class DataStore:
 
         # Register endpoints
         self.server.register_endpoint(
-            "/server/temperature_store", ['GET'],
-            self._handle_temp_store_request)
+            "/server/temperature_store", RequestType.GET,
+            self._handle_temp_store_request
+        )
         self.server.register_endpoint(
-            "/server/gcode_store", ['GET'],
-            self._handle_gcode_store_request)
+            "/server/gcode_store", RequestType.GET,
+            self._handle_gcode_store_request
+        )
 
     async def _init_sensors(self) -> None:
         klippy_apis: APIComp = self.server.lookup_component('klippy_apis')

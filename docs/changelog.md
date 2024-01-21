@@ -25,6 +25,12 @@ The format is based on [Keep a Changelog].
 - **webcam**: Webcam APIs can now specify cameras by `uid` or `name`
 - **deps**:  Added support for optional `msgspec` and `uvloop` packages
 - **extensions**: Agents may now register remote methods with Klipper
+- **file_manager**: Add `check_klipper_config_path` option
+- **button**: Added `debounce_period` option
+- **history**:  Added a check for previous jobs not finished (ie: when power is
+  lost during a print).  These jobs will report their status as `interrupted`.
+- **build**: Added support for optional speedup dependencies `uvloop` and `msgspec`
+- **update_manager**: Add support for "zipped" application updates
 
 ### Fixed
 
@@ -43,8 +49,15 @@ The format is based on [Keep a Changelog].
 
 ### Changed
 
-- **build**: Bumped apprise to version `1.3.0`.
-- **build**:  Bumped lmdb to version `1.4.1`
+- **build**: Bumped apprise to version `1.7.0`.
+- **build**: Bumped lmdb to version `1.4.1`
+- **build**: Bumped tornado to version `6.4.0`
+- **build**: Bumped jinja2 to version `3.1.3`
+- **build**: Bumped zeroconf to version `0.131.0`
+- **build**: Bumped libnacl to version `2.1.0`
+- **build**: Bumped distro to version `1.9.0`
+- **build**: Bumped pillow to version `10.2.0`
+- **build**: Bumped streaming-form-data to version `1.13.0`
 - **machine**: Added `ratos-configurator` to list of default allowed services
 - **update_manager**:  It is now required that an application be "allowed"
   for Moonraker to restart it after an update.
@@ -63,6 +76,7 @@ The format is based on [Keep a Changelog].
 - **proc_stats**: Improved performance of Raspberry Pi CPU throttle detection.
 - **power**:  Bound services are now processed during initialization when
   `initial_state` is configured.
+- **gpio**:  Migrate from libgpiod to python-periphery
 
 ## [0.8.0] - 2023-02-23
 

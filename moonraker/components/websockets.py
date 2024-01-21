@@ -6,18 +6,16 @@
 
 from __future__ import annotations
 import logging
-import ipaddress
 import asyncio
 from tornado.websocket import WebSocketHandler, WebSocketClosedError
 from tornado.web import HTTPError
-from .common import (
+from ..common import (
+    RequestType,
     WebRequest,
     BaseRemoteConnection,
-    APITransport,
-    APIDefinition,
-    JsonRPC
+    TransportType,
 )
-from .utils import ServerError
+from ..utils import ServerError, parse_ip_address
 
 # Annotation imports
 from typing import (
@@ -33,11 +31,13 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from .server import Server
+    from ..server import Server
     from .klippy_connection import KlippyConnection as Klippy
-    from .components.extensions import ExtensionManager
-    from .components.authorization import Authorization
-    IPUnion = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+    from ..confighelper import ConfigHelper
+    from .application import MoonrakerApp
+    from .extensions import ExtensionManager
+    from .authorization import Authorization
+    from ..utils import IPAddress
     ConvType = Union[str, bool, float, int]
     ArgVal = Union[None, int, float, bool, str]
     RPCCallback = Callable[..., Coroutine]
@@ -45,17 +45,23 @@ if TYPE_CHECKING:
 
 CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 
-class WebsocketManager(APITransport):
-    def __init__(self, server: Server) -> None:
-        self.server = server
+class WebsocketManager:
+    def __init__(self, config: ConfigHelper) -> None:
+        self.server = config.get_server()
         self.clients: Dict[int, BaseRemoteConnection] = {}
         self.bridge_connections: Dict[int, BridgeSocket] = {}
-        self.rpc = JsonRPC(server)
         self.closed_event: Optional[asyncio.Event] = None
-
-        self.rpc.register_method("server.websocket.id", self._handle_id_request)
-        self.rpc.register_method(
-            "server.connection.identify", self._handle_identify)
+        app: MoonrakerApp = self.server.lookup_component("application")
+        app.register_websocket_handler("/websocket", WebSocket)
+        app.register_websocket_handler("/klippysocket", BridgeSocket)
+        self.server.register_endpoint(
+            "/server/websocket/id", RequestType.GET, self._handle_id_request,
+            TransportType.WEBSOCKET
+        )
+        self.server.register_endpoint(
+            "/server/connection/identify", RequestType.POST, self._handle_identify,
+            TransportType.WEBSOCKET, auth_required=False
+        )
 
     def register_notification(
         self,
@@ -74,72 +80,27 @@ class WebsocketManager(APITransport):
                 self.notify_clients(notify_name, args)
         self.server.register_event_handler(event_name, notify_handler)
 
-    def register_api_handler(self, api_def: APIDefinition) -> None:
-        klippy: Klippy = self.server.lookup_component("klippy_connection")
-        if api_def.callback is None:
-            # Remote API, uses RPC to reach out to Klippy
-            ws_method = api_def.jrpc_methods[0]
-            rpc_cb = self._generate_callback(
-                api_def.endpoint, "", klippy.request
-            )
-            self.rpc.register_method(ws_method, rpc_cb)
-        else:
-            # Local API, uses local callback
-            for ws_method, req_method in \
-                    zip(api_def.jrpc_methods, api_def.request_methods):
-                rpc_cb = self._generate_callback(
-                    api_def.endpoint, req_method, api_def.callback
-                )
-                self.rpc.register_method(ws_method, rpc_cb)
-        logging.info(
-            "Registering Websocket JSON-RPC methods: "
-            f"{', '.join(api_def.jrpc_methods)}"
-        )
-
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for jrpc_method in api_def.jrpc_methods:
-            self.rpc.remove_method(jrpc_method)
-
-    def _generate_callback(
-        self,
-        endpoint: str,
-        request_method: str,
-        callback: Callable[[WebRequest], Coroutine]
-    ) -> RPCCallback:
-        async def func(args: Dict[str, Any]) -> Any:
-            sc: BaseRemoteConnection = args.pop("_socket_")
-            sc.check_authenticated(path=endpoint)
-            result = await callback(
-                WebRequest(endpoint, args, request_method, sc,
-                           ip_addr=sc.ip_addr, user=sc.user_info))
-            return result
-        return func
-
-    async def _handle_id_request(self, args: Dict[str, Any]) -> Dict[str, int]:
-        sc: BaseRemoteConnection = args["_socket_"]
-        sc.check_authenticated()
+    async def _handle_id_request(self, web_request: WebRequest) -> Dict[str, int]:
+        sc = web_request.get_client_connection()
+        assert sc is not None
         return {'websocket_id': sc.uid}
 
-    async def _handle_identify(self, args: Dict[str, Any]) -> Dict[str, int]:
-        sc: BaseRemoteConnection = args["_socket_"]
-        sc.authenticate(
-            token=args.get("access_token", None),
-            api_key=args.get("api_key", None)
-        )
+    async def _handle_identify(self, web_request: WebRequest) -> Dict[str, int]:
+        sc = web_request.get_client_connection()
+        assert sc is not None
         if sc.identified:
             raise self.server.error(
                 f"Connection already identified: {sc.client_data}"
             )
-        try:
-            name = str(args["client_name"])
-            version = str(args["version"])
-            client_type: str = str(args["type"]).lower()
-            url = str(args["url"])
-        except KeyError as e:
-            missing_key = str(e).split(":")[-1].strip()
-            raise self.server.error(
-                f"No data for argument: {missing_key}"
-            ) from None
+        name = web_request.get_str("client_name")
+        version = web_request.get_str("version")
+        client_type: str = web_request.get_str("type").lower()
+        url = web_request.get_str("url")
+        sc.authenticate(
+            token=web_request.get_str("access_token", None),
+            api_key=web_request.get_str("api_key", None)
+        )
+
         if client_type not in CLIENT_TYPES:
             raise self.server.error(f"Invalid Client Type: {client_type}")
         sc.client_data = {
@@ -173,7 +134,10 @@ class WebsocketManager(APITransport):
     def has_socket(self, ws_id: int) -> bool:
         return ws_id in self.clients
 
-    def get_client(self, ws_id: int) -> Optional[BaseRemoteConnection]:
+    def get_client(self, uid: int) -> Optional[BaseRemoteConnection]:
+        return self.clients.get(uid, None)
+
+    def get_client_ws(self, ws_id: int) -> Optional[WebSocket]:
         sc = self.clients.get(ws_id, None)
         if sc is None or not isinstance(sc, WebSocket):
             return None
@@ -272,8 +236,12 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
 
     def initialize(self) -> None:
         self.on_create(self.settings['server'])
-        self.ip_addr: str = self.request.remote_ip or ""
+        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return self._ip_addr
 
     @property
     def hostname(self) -> str:
@@ -362,7 +330,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
             try:
-                self._user_info = auth.check_authorized(self.request)
+                self._user_info = auth.authenticate_request(self.request)
             except Exception as e:
                 logging.info(f"Websocket Failed Authentication: {e}")
                 self._user_info = None
@@ -377,12 +345,16 @@ class BridgeSocket(WebSocketHandler):
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.eventloop = self.server.get_event_loop()
         self.uid = id(self)
-        self.ip_addr: str = self.request.remote_ip or ""
+        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.is_closed = False
         self.klippy_writer: Optional[asyncio.StreamWriter] = None
         self.klippy_write_buf: List[bytes] = []
         self.klippy_queue_busy: bool = False
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return self._ip_addr
 
     @property
     def hostname(self) -> str:
@@ -502,7 +474,7 @@ class BridgeSocket(WebSocketHandler):
             )
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
-            self.current_user = auth.check_authorized(self.request)
+            self.current_user = auth.authenticate_request(self.request)
         kconn: Klippy = self.server.lookup_component("klippy_connection")
         try:
             reader, writer = await kconn.open_klippy_connection()
@@ -515,3 +487,6 @@ class BridgeSocket(WebSocketHandler):
 
     def close_socket(self, code: int, reason: str) -> None:
         self.close(code, reason)
+
+def load_component(config: ConfigHelper) -> WebsocketManager:
+    return WebsocketManager(config)

@@ -29,7 +29,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager as FMComp
     FlexCallback = Callable[..., Optional[Coroutine]]

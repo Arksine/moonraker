@@ -10,6 +10,7 @@ import apprise
 import logging
 import pathlib
 import re
+from ..common import JobEvent, RequestType
 
 # Annotation imports
 from typing import (
@@ -29,23 +30,20 @@ class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.notifiers: Dict[str, NotifierInstance] = {}
-        self.events: Dict[str, NotifierEvent] = {}
+        self.events: Dict[str, List[NotifierInstance]] = {}
         prefix_sections = config.get_prefix_sections("notifier")
-
-        self.register_events(config)
         self.register_remote_actions()
-
         for section in prefix_sections:
             cfg = config[section]
             try:
                 notifier = NotifierInstance(cfg)
-
-                for event in self.events:
-                    if event in notifier.events or "*" in notifier.events:
-                        self.events[event].register_notifier(notifier)
-
+                for job_event in list(JobEvent):
+                    if job_event == JobEvent.STANDBY:
+                        continue
+                    evt_name = str(job_event)
+                    if "*" in notifier.events or evt_name in notifier.events:
+                        self.events.setdefault(evt_name, []).append(notifier)
                 logging.info(f"Registered notifier: '{notifier.get_name()}'")
-
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
                 self.server.add_warning(msg)
@@ -53,6 +51,9 @@ class Notifier:
             self.notifiers[notifier.get_name()] = notifier
 
         self.register_endpoints(config)
+        self.server.register_event_handler(
+            "job_state:state_changed", self._on_job_state_changed
+        )
 
     def register_remote_actions(self):
         self.server.register_remote_method("notify", self.notify_action)
@@ -61,47 +62,24 @@ class Notifier:
         if name not in self.notifiers:
             raise self.server.error(f"Notifier '{name}' not found", 404)
         notifier = self.notifiers[name]
-
         await notifier.notify("remote_action", [], message)
 
-    def register_events(self, config: ConfigHelper):
-
-        self.events["started"] = NotifierEvent(
-            "started",
-            "job_state:started",
-            config)
-
-        self.events["complete"] = NotifierEvent(
-            "complete",
-            "job_state:complete",
-            config)
-
-        self.events["error"] = NotifierEvent(
-            "error",
-            "job_state:error",
-            config)
-
-        self.events["cancelled"] = NotifierEvent(
-            "cancelled",
-            "job_state:cancelled",
-            config)
-
-        self.events["paused"] = NotifierEvent(
-            "paused",
-            "job_state:paused",
-            config)
-
-        self.events["resumed"] = NotifierEvent(
-            "resumed",
-            "job_state:resumed",
-            config)
+    async def _on_job_state_changed(
+            self,
+            job_event: JobEvent,
+            prev_stats: Dict[str, Any],
+            new_stats: Dict[str, Any]
+    ) -> None:
+        evt_name = str(job_event)
+        for notifier in self.events.get(evt_name, []):
+            await notifier.notify(evt_name, [prev_stats, new_stats])
 
     def register_endpoints(self, config: ConfigHelper):
         self.server.register_endpoint(
-            "/server/notifiers/list", ["GET"], self._handle_notifier_list
+            "/server/notifiers/list", RequestType.GET, self._handle_notifier_list
         )
         self.server.register_debug_endpoint(
-            "/debug/notifiers/test", ["POST"], self._handle_notifier_test
+            "/debug/notifiers/test", RequestType.POST, self._handle_notifier_test
         )
 
     async def _handle_notifier_list(
@@ -133,34 +111,6 @@ class Notifier:
             "status": "success",
             "stats": print_stats
         }
-
-
-class NotifierEvent:
-    def __init__(self, identifier: str, event_name: str, config: ConfigHelper):
-        self.identifier = identifier
-        self.event_name = event_name
-        self.server = config.get_server()
-        self.notifiers: Dict[str, NotifierInstance] = {}
-        self.config = config
-
-        self.server.register_event_handler(self.event_name, self._handle)
-
-    def register_notifier(self, notifier: NotifierInstance):
-        self.notifiers[notifier.get_name()] = notifier
-
-    async def _handle(self, *args) -> None:
-        logging.info(f"'{self.identifier}' notifier event triggered'")
-        await self.invoke_notifiers(args)
-
-    async def invoke_notifiers(self, args):
-        for notifier_name in self.notifiers:
-            try:
-                notifier = self.notifiers[notifier_name]
-                await notifier.notify(self.identifier, args)
-            except Exception as e:
-                logging.info(f"Failed to notify [{notifier_name}]\n{e}")
-                continue
-
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:

@@ -19,17 +19,21 @@ import tornado.web
 from asyncio import Lock
 from inspect import isclass
 from tornado.escape import url_unescape, url_escape
-from tornado.routing import Rule, PathMatches, AnyMatches
+from tornado.routing import Rule, PathMatches, RuleRouter
 from tornado.http1connection import HTTP1Connection
+from tornado.httpserver import HTTPServer
 from tornado.log import access_log
-from .common import WebRequest, APIDefinition, APITransport
-from .utils import ServerError, source_info
-from .utils import json_wrapper as jsonw
-from .websockets import (
-    WebsocketManager,
-    WebSocket,
-    BridgeSocket
+from ..utils import ServerError, source_info, parse_ip_address
+from ..common import (
+    JsonRPC,
+    WebRequest,
+    APIDefinition,
+    APITransport,
+    TransportType,
+    RequestType,
+    KlippyState
 )
+from ..utils import json_wrapper as jsonw
 from streaming_form_data import StreamingFormDataParser, ParseFailedException
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
@@ -43,21 +47,24 @@ from typing import (
     Union,
     Dict,
     List,
-    Tuple,
     AsyncGenerator,
+    Type
 )
 if TYPE_CHECKING:
-    from tornado.httpserver import HTTPServer
-    from .server import Server
-    from .eventloop import EventLoop
-    from .confighelper import ConfigHelper
+    from tornado.websocket import WebSocketHandler
+    from tornado.httputil import HTTPMessageDelegate, HTTPServerRequest
+    from ..server import Server
+    from ..eventloop import EventLoop
+    from ..confighelper import ConfigHelper
     from .klippy_connection import KlippyConnection as Klippy
-    from .components.file_manager.file_manager import FileManager
-    from .components.announcements import Announcements
-    from .components.machine import Machine
+    from ..utils import IPAddress
+    from .websockets import WebsocketManager, WebSocket
+    from .file_manager.file_manager import FileManager
+    from .announcements import Announcements
+    from .machine import Machine
     from io import BufferedReader
-    from .components.authorization import Authorization
-    from .components.template import TemplateFactory, JinjaTemplate
+    from .authorization import Authorization
+    from .template import TemplateFactory, JinjaTemplate
     MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
     AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
@@ -69,10 +76,9 @@ MAX_WS_CONNS_DEFAULT = 50
 EXCLUDED_ARGS = ["_", "token", "access_token", "connection_id"]
 AUTHORIZED_EXTS = [".png", ".jpg"]
 DEFAULT_KLIPPY_LOG_PATH = "/tmp/klippy.log"
-ALL_TRANSPORTS = ["http", "websocket", "mqtt", "internal"]
 
-class MutableRouter(tornado.web.ReversibleRuleRouter):
-    def __init__(self, application: MoonrakerApp) -> None:
+class MutableRouter(RuleRouter):
+    def __init__(self, application: tornado.web.Application) -> None:
         self.application = application
         self.pattern_to_rule: Dict[str, Rule] = {}
         super(MutableRouter, self).__init__(None)
@@ -84,8 +90,8 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
                             ) -> MessageDelgate:
         if isclass(target) and issubclass(target, tornado.web.RequestHandler):
             return self.application.get_handler_delegate(
-                request, target, **target_params)
-
+                request, target, **target_params
+            )
         return super(MutableRouter, self).get_target_delegate(
             target, request, **target_params)
 
@@ -95,7 +101,7 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
     def add_handler(self,
                     pattern: str,
                     target: Any,
-                    target_params: Optional[Dict[str, Any]]
+                    target_params: Optional[Dict[str, Any]] = None
                     ) -> None:
         if pattern in self.pattern_to_rule:
             self.remove_handler(pattern)
@@ -111,57 +117,89 @@ class MutableRouter(tornado.web.ReversibleRuleRouter):
             except Exception:
                 logging.exception(f"Unable to remove rule: {pattern}")
 
+class PrimaryRouter(MutableRouter):
+    def __init__(self, config: ConfigHelper) -> None:
+        server = config.get_server()
+        max_ws_conns = config.getint('max_websocket_connections', MAX_WS_CONNS_DEFAULT)
+        self.verbose_logging = server.is_verbose_enabled()
+        app_args: Dict[str, Any] = {
+            'serve_traceback': self.verbose_logging,
+            'websocket_ping_interval': 10,
+            'websocket_ping_timeout': 30,
+            'server': server,
+            'max_websocket_connections': max_ws_conns,
+            'log_function': self.log_request
+        }
+        super().__init__(tornado.web.Application(**app_args))
+
+    @property
+    def tornado_app(self) -> tornado.web.Application:
+        return self.application
+
+    def find_handler(
+        self, request: HTTPServerRequest, **kwargs: Any
+    ) -> Optional[HTTPMessageDelegate]:
+        hdlr = super().find_handler(request, **kwargs)
+        if hdlr is not None:
+            return hdlr
+        return self.application.get_handler_delegate(request, AuthorizedErrorHandler)
+
+    def log_request(self, handler: tornado.web.RequestHandler) -> None:
+        status_code = handler.get_status()
+        if (
+            not self.verbose_logging and
+            status_code in [200, 204, 206, 304]
+        ):
+            # don't log successful requests in release mode
+            return
+        if status_code < 400:
+            log_method = access_log.info
+        elif status_code < 500:
+            log_method = access_log.warning
+        else:
+            log_method = access_log.error
+        request_time = 1000.0 * handler.request.request_time()
+        user = handler.current_user
+        username = "No User"
+        if user is not None and 'username' in user:
+            username = user['username']
+        log_method(
+            f"{status_code} {handler._request_summary()} "
+            f"[{username}] {request_time:.2f}ms"
+        )
 
 class InternalTransport(APITransport):
     def __init__(self, server: Server) -> None:
         self.server = server
-        self.callbacks: Dict[str, Tuple[str, str, APICallback]] = {}
-
-    def register_api_handler(self, api_def: APIDefinition) -> None:
-        ep = api_def.endpoint
-        cb = api_def.callback
-        if cb is None:
-            # Request to Klippy
-            method = api_def.jrpc_methods[0]
-            action = ""
-            klippy: Klippy = self.server.lookup_component("klippy_connection")
-            cb = klippy.request
-            self.callbacks[method] = (ep, action, cb)
-        else:
-            for method, action in \
-                    zip(api_def.jrpc_methods, api_def.request_methods):
-                self.callbacks[method] = (ep, action, cb)
-
-    def remove_api_handler(self, api_def: APIDefinition) -> None:
-        for method in api_def.jrpc_methods:
-            self.callbacks.pop(method, None)
 
     async def call_method(self,
                           method_name: str,
                           request_arguments: Dict[str, Any] = {},
                           **kwargs
                           ) -> Any:
-        if method_name not in self.callbacks:
+        rpc: JsonRPC = self.server.lookup_component("jsonrpc")
+        method_info = rpc.get_method(method_name)
+        if method_info is None:
             raise self.server.error(f"No method {method_name} available")
-        ep, action, func = self.callbacks[method_name]
-        # Request arguments can be suppplied either through a dict object
-        # or via keyword arugments
+        req_type, api_definition = method_info
+        if TransportType.INTERNAL not in api_definition.transports:
+            raise self.server.error(f"No method {method_name} available")
         args = request_arguments or kwargs
-        return await func(WebRequest(ep, dict(args), action))
+        return await api_definition.request(args, req_type, self)
 
 class MoonrakerApp:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
+        self.json_rpc = JsonRPC(self.server)
         self.http_server: Optional[HTTPServer] = None
         self.secure_server: Optional[HTTPServer] = None
-        self.api_cache: Dict[str, APIDefinition] = {}
         self.template_cache: Dict[str, JinjaTemplate] = {}
-        self.registered_base_handlers: List[str] = []
+        self.registered_base_handlers: List[str] = [
+            "/server/redirect",
+            "/server/jsonrpc"
+        ]
         self.max_upload_size = config.getint('max_upload_size', 1024)
         self.max_upload_size *= 1024 * 1024
-        max_ws_conns = config.getint(
-            'max_websocket_connections', MAX_WS_CONNS_DEFAULT
-        )
 
         # SSL config
         self.cert_path: pathlib.Path = self._get_path_option(
@@ -184,42 +222,20 @@ class MoonrakerApp:
                 )
             self._route_prefix = f"/{rp}"
             home_pattern = f"{self._route_prefix}/?"
-
-        # Set Up Websocket and Authorization Managers
-        self.wsm = WebsocketManager(self.server)
         self.internal_transport = InternalTransport(self.server)
-        self.api_transports: Dict[str, APITransport] = {
-            "websocket": self.wsm,
-            "internal": self.internal_transport
-        }
 
         mimetypes.add_type('text/plain', '.log')
         mimetypes.add_type('text/plain', '.gcode')
         mimetypes.add_type('text/plain', '.cfg')
 
-        app_args: Dict[str, Any] = {
-            'serve_traceback': self.server.is_verbose_enabled(),
-            'websocket_ping_interval': 10,
-            'websocket_ping_timeout': 30,
-            'server': self.server,
-            'max_websocket_connections': max_ws_conns,
-            'default_handler_class': AuthorizedErrorHandler,
-            'default_handler_args': {},
-            'log_function': self.log_request,
-            'compiled_template_cache': False,
-        }
-
-        # Set up HTTP only requests
-        self.mutable_router = MutableRouter(self)
-        app_handlers: List[Any] = [
-            (AnyMatches(), self.mutable_router),
+        # Set up HTTP routing.  Our "mutable_router" wraps a Tornado Application
+        self.mutable_router = PrimaryRouter(config)
+        for (ptrn, hdlr) in (
             (home_pattern, WelcomeHandler),
-            (f"{self._route_prefix}/websocket", WebSocket),
-            (f"{self._route_prefix}/klippysocket", BridgeSocket),
-            (f"{self._route_prefix}/server/redirect", RedirectHandler)
-        ]
-        self.app = tornado.web.Application(app_handlers, **app_args)
-        self.get_handler_delegate = self.app.get_handler_delegate
+            (f"{self._route_prefix}/server/redirect", RedirectHandler),
+            (f"{self._route_prefix}/server/jsonrpc", RPCHandler)
+        ):
+            self.mutable_router.add_handler(ptrn, hdlr, None)
 
         # Register handlers
         logfile = self.server.get_app_args().get('log_file')
@@ -231,10 +247,8 @@ class MoonrakerApp:
         self.register_upload_handler("/server/files/upload")
 
         # Register Server Components
-        self.server.register_component("application", self)
-        self.server.register_component("websockets", self.wsm)
-        self.server.register_component("internal_transport",
-                                       self.internal_transport)
+        self.server.register_component("jsonrpc", self.json_rpc)
+        self.server.register_component("internal_transport", self.internal_transport)
 
     def _get_path_option(
         self, config: ConfigHelper, option: str
@@ -272,42 +286,43 @@ class MoonrakerApp:
     def listen(self, host: str, port: int, ssl_port: int) -> None:
         if host.lower() == "all":
             host = ""
-        self.http_server = self.app.listen(
-            port, address=host, max_body_size=MAX_BODY_SIZE,
-            xheaders=True)
+        self.http_server = self._create_http_server(port, host)
         if self.https_enabled():
+            if port == ssl_port:
+                self.server.add_warning(
+                    "Failed to start HTTPS server.  Server options 'port' and "
+                    f"'ssl_port' match, both set to {port}.  Modify the "
+                    "configuration to use different ports."
+                )
+                return
             logging.info(f"Starting secure server on port {ssl_port}")
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(self.cert_path, self.key_path)
-            self.secure_server = self.app.listen(
-                ssl_port, address=host, max_body_size=MAX_BODY_SIZE,
-                xheaders=True, ssl_options=ssl_ctx)
+            self.secure_server = self._create_http_server(
+                ssl_port, host, ssl_options=ssl_ctx
+            )
         else:
-            logging.info("SSL Certificate/Key not configured, "
-                         "aborting HTTPS Server startup")
+            logging.info(
+                "SSL Certificate/Key not configured, aborting HTTPS Server startup"
+            )
 
-    def log_request(self, handler: tornado.web.RequestHandler) -> None:
-        status_code = handler.get_status()
-        if (
-            not self.server.is_verbose_enabled()
-            and status_code in [200, 204, 206, 304]
-        ):
-            # don't log successful requests in release mode
-            return
-        if status_code < 400:
-            log_method = access_log.info
-        elif status_code < 500:
-            log_method = access_log.warning
-        else:
-            log_method = access_log.error
-        request_time = 1000.0 * handler.request.request_time()
-        user = handler.current_user
-        username = "No User"
-        if user is not None and 'username' in user:
-            username = user['username']
-        log_method(
-            f"{status_code} {handler._request_summary()} "
-            f"[{username}] {request_time:.2f}ms")
+    def _create_http_server(
+        self, port: int, address: str, **kwargs
+    ) -> Optional[HTTPServer]:
+        args: Dict[str, Any] = dict(max_body_size=MAX_BODY_SIZE, xheaders=True)
+        args.update(kwargs)
+        svr = HTTPServer(self.mutable_router, **args)
+        try:
+            svr.listen(port, address)
+        except Exception as e:
+            svr_type = "HTTPS" if "ssl_options" in args else "HTTP"
+            logging.exception(f"{svr_type} Server Start Failed")
+            self.server.add_warning(
+                f"Failed to start {svr_type} server: {e}.  See moonraker.log "
+                "for more details."
+            )
+            return None
+        return svr
 
     def get_server(self) -> Server:
         return self.server
@@ -322,63 +337,45 @@ class MoonrakerApp:
         if self.secure_server is not None:
             self.secure_server.stop()
             await self.secure_server.close_all_connections()
-        await self.wsm.close()
+        APIDefinition.reset_cache()
 
-    def register_api_transport(
-        self, name: str, transport: APITransport
-    ) -> Dict[str, APIDefinition]:
-        self.api_transports[name] = transport
-        return self.api_cache
-
-    def register_remote_handler(self, endpoint: str) -> None:
-        api_def = self._create_api_definition(endpoint)
-        if api_def.uri in self.registered_base_handlers:
-            # reserved handler or already registered
-            return
-        logging.info(
-            f"Registering HTTP endpoint: "
-            f"({' '.join(api_def.request_methods)}) {api_def.uri}")
-        params: Dict[str, Any] = {}
-        params['methods'] = api_def.request_methods
-        params['callback'] = api_def.endpoint
-        params['need_object_parser'] = api_def.need_object_parser
-        self.mutable_router.add_handler(
-            f"{self._route_prefix}{api_def.uri}", DynamicRequestHandler, params
-        )
-        self.registered_base_handlers.append(api_def.uri)
-        for name, transport in self.api_transports.items():
-            transport.register_api_handler(api_def)
-
-    def register_local_handler(
+    def register_endpoint(
         self,
-        uri: str,
-        request_methods: List[str],
+        endpoint: str,
+        request_types: Union[List[str], RequestType],
         callback: APICallback,
-        transports: List[str] = ALL_TRANSPORTS,
+        transports: Union[List[str], TransportType] = TransportType.all(),
         wrap_result: bool = True,
-        content_type: Optional[str] = None
+        content_type: Optional[str] = None,
+        auth_required: bool = True,
+        is_remote: bool = False
     ) -> None:
-        if uri in self.registered_base_handlers:
+        if isinstance(request_types, list):
+            request_types = RequestType.from_string_list(request_types)
+        if isinstance(transports, list):
+            transports = TransportType.from_string_list(transports)
+        api_def = APIDefinition.create(
+            endpoint, request_types, callback, transports, auth_required, is_remote
+        )
+        http_path = api_def.http_path
+        if http_path in self.registered_base_handlers:
+            if not is_remote:
+                raise self.server.error(
+                    f"Local endpoint '{endpoint}' already registered"
+                )
             return
-        api_def = self._create_api_definition(
-            uri, request_methods, callback, transports=transports)
-        if "http" in transports:
-            logging.info(
-                f"Registering HTTP Endpoint: "
-                f"({' '.join(request_methods)}) {uri}")
+        logging.debug(f"Registering API: {api_def}")
+        if TransportType.HTTP in transports:
             params: dict[str, Any] = {}
-            params['methods'] = request_methods
-            params['callback'] = callback
-            params['wrap_result'] = wrap_result
-            params['is_remote'] = False
-            params['content_type'] = content_type
+            params["api_definition"] = api_def
+            params["wrap_result"] = wrap_result
+            params["content_type"] = content_type
             self.mutable_router.add_handler(
-                f"{self._route_prefix}{uri}", DynamicRequestHandler, params
+                f"{self._route_prefix}{http_path}", DynamicRequestHandler, params
             )
-        self.registered_base_handlers.append(uri)
-        for name, transport in self.api_transports.items():
-            if name in transports:
-                transport.register_api_handler(api_def)
+        self.registered_base_handlers.append(http_path)
+        for request_type, method_name in api_def.rpc_items():
+            self.json_rpc.register_method(method_name, request_type, api_def)
 
     def register_static_file_handler(
         self, pattern: str, file_path: str, force: bool = False
@@ -412,72 +409,40 @@ class MoonrakerApp:
             f"{self._route_prefix}{pattern}", FileUploadHandler, params
         )
 
-    def register_debug_handler(
+    def register_websocket_handler(
+        self, pattern: str, handler: Type[WebSocketHandler]
+    ) -> None:
+        self.mutable_router.add_handler(
+            f"{self._route_prefix}{pattern}", handler, None
+        )
+
+    def register_debug_endpoint(
         self,
-        uri: str,
-        request_methods: List[str],
+        endpoint: str,
+        request_types: Union[List[str], RequestType],
         callback: APICallback,
-        transports: List[str] = ALL_TRANSPORTS,
+        transports: Union[List[str], TransportType] = TransportType.all(),
         wrap_result: bool = True
     ) -> None:
         if not self.server.is_debug_enabled():
             return
-        if not uri.startswith("/debug"):
+        if not endpoint.startswith("/debug"):
             raise self.server.error(
-                "Debug Endpoints must be registerd in the '/debug' path"
+                "Debug Endpoints must be registered in the '/debug' path"
             )
-        self.register_local_handler(
-            uri, request_methods, callback, transports, wrap_result
+        self.register_endpoint(
+            endpoint, request_types, callback, transports, wrap_result
         )
 
-    def remove_handler(self, endpoint: str) -> None:
-        api_def = self.api_cache.pop(endpoint, None)
+    def remove_endpoint(self, endpoint: str) -> None:
+        api_def = APIDefinition.pop_cached_def(endpoint)
         if api_def is not None:
-            self.mutable_router.remove_handler(api_def.uri)
-            for name, transport in self.api_transports.items():
-                transport.remove_api_handler(api_def)
-
-    def _create_api_definition(
-        self,
-        endpoint: str,
-        request_methods: List[str] = [],
-        callback: Optional[APICallback] = None,
-        transports: List[str] = ALL_TRANSPORTS
-    ) -> APIDefinition:
-        is_remote = callback is None
-        if endpoint in self.api_cache:
-            return self.api_cache[endpoint]
-        if endpoint[0] == '/':
-            uri = endpoint
-        elif is_remote:
-            uri = "/printer/" + endpoint
-        else:
-            uri = "/server/" + endpoint
-        jrpc_methods = []
-        if is_remote:
-            # Remote requests accept both GET and POST requests.  These
-            # requests execute the same callback, thus they resolve to
-            # only a single websocket method.
-            jrpc_methods.append(uri[1:].replace('/', '.'))
-            request_methods = ['GET', 'POST']
-        else:
-            name_parts = uri[1:].split('/')
-            if len(request_methods) > 1:
-                for req_mthd in request_methods:
-                    func_name = req_mthd.lower() + "_" + name_parts[-1]
-                    jrpc_methods.append(".".join(
-                        name_parts[:-1] + [func_name]))
-            else:
-                jrpc_methods.append(".".join(name_parts))
-        if not is_remote and len(request_methods) != len(jrpc_methods):
-            raise self.server.error(
-                "Invalid API definition.  Number of websocket methods must "
-                "match the number of request methods")
-        need_object_parser = endpoint.startswith("objects/")
-        api_def = APIDefinition(endpoint, uri, jrpc_methods, request_methods,
-                                transports, callback, need_object_parser)
-        self.api_cache[endpoint] = api_def
-        return api_def
+            logging.debug(f"Removing Endpoint: {endpoint}")
+            if api_def.http_path in self.registered_base_handlers:
+                self.registered_base_handlers.remove(api_def.http_path)
+            self.mutable_router.remove_handler(api_def.http_path)
+            for method_name in api_def.rpc_methods:
+                self.json_rpc.remove_method(method_name)
 
     async def load_template(self, asset_name: str) -> JinjaTemplate:
         if asset_name in self.template_cache:
@@ -496,7 +461,7 @@ class MoonrakerApp:
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
-        self.endpoint: str = ""
+        self.auth_required: bool = True
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -509,11 +474,11 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
-        app: MoonrakerApp = self.server.lookup_component("application")
-        self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = auth.check_authorized(self.request, self.endpoint)
+            self.current_user = auth.authenticate_request(
+                self.request, self.auth_required
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -534,11 +499,8 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
             except Exception:
                 pass
             else:
-                wsm: WebsocketManager = self.server.lookup_component(
-                    "websockets")
-                conn = wsm.get_client(conn_id)
-        if not isinstance(conn, WebSocket):
-            return None
+                wsm: WebsocketManager = self.server.lookup_component("websockets")
+                conn = wsm.get_client_ws(conn_id)
         return conn
 
     def write_error(self, status_code: int, **kwargs) -> None:
@@ -558,7 +520,6 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
                    ) -> None:
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
         self.server: Server = self.settings['server']
-        self.endpoint: str = ""
 
     def set_default_headers(self) -> None:
         origin: Optional[str] = self.request.headers.get("Origin")
@@ -571,11 +532,11 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
             self.cors_enabled = auth.check_cors(origin, self)
 
     def prepare(self) -> None:
-        app: MoonrakerApp = self.server.lookup_component("application")
-        self.endpoint = app.parse_endpoint(self.request.path or "")
         auth: AuthComp = self.server.lookup_component('authorization', None)
-        if auth is not None and self._check_need_auth():
-            self.current_user = auth.check_authorized(self.request, self.endpoint)
+        if auth is not None:
+            self.current_user = auth.authenticate_request(
+                self.request, self._check_need_auth()
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -604,22 +565,16 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
 class DynamicRequestHandler(AuthorizedRequestHandler):
     def initialize(
         self,
-        callback: Union[str, Callable[[WebRequest], Coroutine]] = "",
-        methods: List[str] = [],
-        need_object_parser: bool = False,
-        is_remote: bool = True,
+        api_definition: Optional[APIDefinition] = None,
         wrap_result: bool = True,
         content_type: Optional[str] = None
     ) -> None:
         super(DynamicRequestHandler, self).initialize()
-        self.callback = callback
-        self.methods = methods
+        assert api_definition is not None
+        self.api_defintion = api_definition
         self.wrap_result = wrap_result
-        self._do_request = self._do_remote_request if is_remote \
-            else self._do_local_request
-        self._parse_query = self._object_parser if need_object_parser \
-            else self._default_parser
         self.content_type = content_type
+        self.auth_required = api_definition.auth_required
 
     # Converts query string values with type hints
     def _convert_type(self, value: str, hint: str) -> Any:
@@ -667,7 +622,10 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
 
     def parse_args(self) -> Dict[str, Any]:
         try:
-            args = self._parse_query()
+            if self.api_defintion.need_object_parser:
+                args: Dict[str, Any] = self._object_parser()
+            else:
+                args = self._default_parser()
         except Exception:
             raise ServerError(
                 "Error Parsing Request Arguments. "
@@ -686,10 +644,11 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
     def _log_debug(self, header: str, args: Any) -> None:
         if self.server.is_verbose_enabled():
             resp = args
+            endpoint = self.api_defintion.endpoint
             if isinstance(args, dict):
                 if (
-                    self.endpoint.startswith("/access") or
-                    self.endpoint.startswith("/machine/sudo/password")
+                    endpoint.startswith("/access") or
+                    endpoint.startswith("/machine/sudo/password")
                 ):
                     resp = {key: "<sanitized>" for key in args}
             elif isinstance(args, str):
@@ -698,44 +657,26 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             logging.debug(f"{header}::{resp}")
 
     async def get(self, *args, **kwargs) -> None:
-        await self._process_http_request()
+        await self._process_http_request(RequestType.GET)
 
     async def post(self, *args, **kwargs) -> None:
-        await self._process_http_request()
+        await self._process_http_request(RequestType.POST)
 
     async def delete(self, *args, **kwargs) -> None:
-        await self._process_http_request()
+        await self._process_http_request(RequestType.DELETE)
 
-    async def _do_local_request(self,
-                                args: Dict[str, Any],
-                                conn: Optional[WebSocket]
-                                ) -> Any:
-        assert callable(self.callback)
-        return await self.callback(
-            WebRequest(self.endpoint, args, self.request.method,
-                       conn=conn, ip_addr=self.request.remote_ip or "",
-                       user=self.current_user))
-
-    async def _do_remote_request(self,
-                                 args: Dict[str, Any],
-                                 conn: Optional[WebSocket]
-                                 ) -> Any:
-        assert isinstance(self.callback, str)
-        klippy: Klippy = self.server.lookup_component("klippy_connection")
-        return await klippy.request(
-            WebRequest(self.callback, args, conn=conn,
-                       ip_addr=self.request.remote_ip or "",
-                       user=self.current_user))
-
-    async def _process_http_request(self) -> None:
-        if self.request.method not in self.methods:
+    async def _process_http_request(self, req_type: RequestType) -> None:
+        if req_type not in self.api_defintion.request_types:
             raise tornado.web.HTTPError(405)
-        conn = self.get_associated_websocket()
         args = self.parse_args()
+        transport = self.get_associated_websocket()
         req = f"{self.request.method} {self.request.path}"
         self._log_debug(f"HTTP Request::{req}", args)
         try:
-            result = await self._do_request(args, conn)
+            ip = parse_ip_address(self.request.remote_ip or "")
+            result = await self.api_defintion.request(
+                args, req_type, transport, ip, self.current_user
+            )
         except ServerError as e:
             raise tornado.web.HTTPError(
                 e.status_code, reason=str(e)) from e
@@ -749,6 +690,50 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
             result = jsonw.dumps(result)
         elif self.content_type is not None:
             self.set_header("Content-Type", self.content_type)
+        self.finish(result)
+
+class RPCHandler(AuthorizedRequestHandler, APITransport):
+    def initialize(self) -> None:
+        super(RPCHandler, self).initialize()
+        self.auth_required = False
+
+    @property
+    def transport_type(self) -> TransportType:
+        return TransportType.HTTP
+
+    @property
+    def user_info(self) -> Optional[Dict[str, Any]]:
+        return self.current_user
+
+    @property
+    def ip_addr(self) -> Optional[IPAddress]:
+        return parse_ip_address(self.request.remote_ip or "")
+
+    def screen_rpc_request(
+        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+    ) -> None:
+        if self.current_user is None and api_def.auth_required:
+            raise self.server.error("Unauthorized", 401)
+        if api_def.endpoint == "objects/subscribe":
+            raise self.server.error(
+                "Subscriptions not available for HTTP transport", 404
+            )
+
+    def send_status(self, status: Dict[str, Any], eventtime: float) -> None:
+        # Can't handle status updates.  This should not be called, but
+        # we don't want to raise an exception if it is
+        pass
+
+    async def post(self, *args, **kwargs) -> None:
+        content_type = self.request.headers.get('Content-Type', "").strip()
+        if not content_type.startswith("application/json"):
+            raise tornado.web.HTTPError(
+                400, "Invalid content type, application/json required"
+            )
+        rpc: JsonRPC = self.server.lookup_component("jsonrpc")
+        result = await rpc.dispatch(self.request.body, self)
+        if result is not None:
+            self.set_header("Content-Type", "application/json; charset=UTF-8")
         self.finish(result)
 
 class FileRequestHandler(AuthorizedFileHandler):
@@ -766,7 +751,9 @@ class FileRequestHandler(AuthorizedFileHandler):
             f"filename*=UTF-8\'\'{utf8_basename}")
 
     async def delete(self, path: str) -> None:
-        path = self.endpoint.lstrip("/").split("/", 2)[-1]
+        app: MoonrakerApp = self.server.lookup_component("application")
+        endpoint = app.parse_endpoint(self.request.path or "")
+        path = endpoint.lstrip("/").split("/", 2)[-1]
         path = url_unescape(path, plus=False)
         file_manager: FileManager
         file_manager = self.server.lookup_component('file_manager')
@@ -1047,6 +1034,10 @@ class AuthorizedErrorHandler(AuthorizedRequestHandler):
         self.finish(jsonw.dumps({'error': err}))
 
 class RedirectHandler(AuthorizedRequestHandler):
+    def initialize(self) -> None:
+        super().initialize()
+        self.auth_required = False
+
     def get(self, *args, **kwargs) -> None:
         url: Optional[str] = self.get_argument('url', None)
         if url is None:
@@ -1075,7 +1066,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             try:
-                auth.check_authorized(self.request)
+                auth.authenticate_request(self.request)
             except tornado.web.HTTPError:
                 authorized = False
             else:
@@ -1118,11 +1109,10 @@ class WelcomeHandler(tornado.web.RequestHandler):
                 "The [authorization] section in moonraker.conf must be "
                 "configured to enable CORS."
             )
-        kstate = self.server.get_klippy_state()
-        if kstate != "disconnected":
-            kinfo = self.server.get_klippy_info()
-            kmsg = kinfo.get("state_message", kstate)
-            summary.append(f"Klipper reports {kmsg.lower()}")
+        kconn: Klippy = self.server.lookup_component("klippy_connection")
+        kstate = kconn.state
+        if kstate != KlippyState.DISCONNECTED:
+            summary.append(f"Klipper reports {kstate.message.lower()}")
         else:
             summary.append(
                 "Moonraker is not currently connected to Klipper.  Make sure "
@@ -1156,3 +1146,6 @@ class WelcomeHandler(tornado.web.RequestHandler):
         welcome_template = await app.load_template("welcome.html")
         ret = await welcome_template.render_async(context)
         self.finish(ret)
+
+def load_component(config: ConfigHelper) -> MoonrakerApp:
+    return MoonrakerApp(config)

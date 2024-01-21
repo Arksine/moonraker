@@ -8,6 +8,7 @@ import logging
 import asyncio
 import jinja2
 from ..utils import json_wrapper as jsonw
+from ..common import RenderableTemplate
 
 # Annotation imports
 from typing import (
@@ -70,7 +71,7 @@ class TemplateFactory:
         return JinjaTemplate(source, self.server, template, True)
 
 
-class JinjaTemplate:
+class JinjaTemplate(RenderableTemplate):
     def __init__(self,
                  source: str,
                  server: Server,

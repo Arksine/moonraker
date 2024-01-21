@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import Subscribable, WebRequest
+from ..common import APITransport, JobEvent, KlippyState
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -28,11 +28,12 @@ from typing import (
     List,
     Union,
     Any,
+    Callable,
 )
 if TYPE_CHECKING:
-    from ..app import InternalTransport
+    from .application import InternalTransport
     from ..confighelper import ConfigHelper
-    from ..websockets import WebsocketManager
+    from .websockets import WebsocketManager
     from ..common import BaseRemoteConnection
     from tornado.websocket import WebSocketClientConnection
     from .database import MoonrakerDatabase
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
     from .power import PrinterPower
     from .announcements import Announcements
     from .webcam import WebcamManager, WebCam
-    from ..klippy_connection import KlippyConnection
+    from .klippy_connection import KlippyConnection
 
 COMPONENT_VERSION = "0.0.1"
 SP_VERSION = "0.1"
@@ -57,7 +58,7 @@ PRE_SETUP_EVENTS = [
     "ping"
 ]
 
-class SimplyPrint(Subscribable):
+class SimplyPrint(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self._logger = ProtoLogger(config)
@@ -157,19 +158,7 @@ class SimplyPrint(Subscribable):
         self.server.register_event_handler(
             "server:klippy_disconnect", self._on_klippy_disconnected)
         self.server.register_event_handler(
-            "job_state:started", self._on_print_start)
-        self.server.register_event_handler(
-            "job_state:paused", self._on_print_paused)
-        self.server.register_event_handler(
-            "job_state:resumed", self._on_print_resumed)
-        self.server.register_event_handler(
-            "job_state:standby", self._on_print_standby)
-        self.server.register_event_handler(
-            "job_state:complete", self._on_print_complete)
-        self.server.register_event_handler(
-            "job_state:error", self._on_print_error)
-        self.server.register_event_handler(
-            "job_state:cancelled", self._on_print_cancelled)
+            "job_state:state_changed", self._on_job_state_changed)
         self.server.register_event_handler(
             "klippy_apis:pause_requested", self._on_pause_requested)
         self.server.register_event_handler(
@@ -542,7 +531,7 @@ class SimplyPrint(Subscribable):
     async def _on_klippy_ready(self) -> None:
         last_stats: Dict[str, Any] = self.job_state.get_last_stats()
         if last_stats["state"] == "printing":
-            self._on_print_start(last_stats, last_stats, False)
+            self._on_print_started(last_stats, last_stats, False)
         else:
             self._update_state("operational")
         query: Optional[Dict[str, Any]]
@@ -591,15 +580,9 @@ class SimplyPrint(Subscribable):
         if not sub_objs:
             return
         # Create our own subscription rather than use the host sub
-        args = {'objects': sub_objs}
-        klippy: KlippyConnection
-        klippy = self.server.lookup_component("klippy_connection")
-        try:
-            resp: Dict[str, Dict[str, Any]] = await klippy.request(
-                WebRequest("objects/subscribe", args, conn=self))
-            status: Dict[str, Any] = resp.get("status", {})
-        except self.server.error:
-            status = {}
+        status: Dict[str, Any] = await self.klippy_apis.subscribe_from_transport(
+            sub_objs, self, default={}
+        )
         if status:
             logging.debug(f"SimplyPrint: Got Initial Status: {status}")
             self.printer_status = status
@@ -651,12 +634,12 @@ class SimplyPrint(Subscribable):
             self.cache.firmware_info.update(ui_data)
             self.send_sp("machine_data", ui_data)
 
-    def _on_klippy_startup(self, state: str) -> None:
-        if state != "ready":
+    def _on_klippy_startup(self, state: KlippyState) -> None:
+        if state != KlippyState.READY:
             self._update_state("error")
             kconn: KlippyConnection
             kconn = self.server.lookup_component("klippy_connection")
-            self.send_sp("printer_error", {"error": kconn.state_message})
+            self.send_sp("printer_error", {"error": kconn.state.message})
         self.send_sp("connection", {"new": "connected"})
         self._send_firmware_data()
 
@@ -664,7 +647,7 @@ class SimplyPrint(Subscribable):
         self._update_state("error")
         kconn: KlippyConnection
         kconn = self.server.lookup_component("klippy_connection")
-        self.send_sp("printer_error", {"error": kconn.state_message})
+        self.send_sp("printer_error", {"error": kconn.state.message})
 
     def _on_klippy_disconnected(self) -> None:
         self._update_state("offline")
@@ -674,7 +657,14 @@ class SimplyPrint(Subscribable):
         self.cache.reset_print_state()
         self.printer_status = {}
 
-    def _on_print_start(
+    def _on_job_state_changed(self, job_event: JobEvent, *args) -> None:
+        callback: Optional[Callable] = getattr(self, f"_on_print_{job_event}", None)
+        if callback is not None:
+            callback(*args)
+        else:
+            logging.info(f"No defined callback for Job Event: {job_event}")
+
+    def _on_print_started(
         self,
         prev_stats: Dict[str, Any],
         new_stats: Dict[str, Any],
@@ -931,10 +921,11 @@ class SimplyPrint(Subscribable):
         self.send_sp("temps", temp_data)
 
     def _update_state_from_klippy(self) -> None:
-        kstate = self.server.get_klippy_state()
-        if kstate == "ready":
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
+        if klippy_state == KlippyState.READY:
             sp_state = "operational"
-        elif kstate in ["error", "shutdown"]:
+        elif klippy_state in [KlippyState.ERROR, KlippyState.SHUTDOWN]:
             sp_state = "error"
         else:
             sp_state = "offline"
@@ -1617,7 +1608,8 @@ class PrintHandler:
         self.simplyprint.send_sp("file_progress", data)
 
     async def _check_can_print(self) -> bool:
-        if self.server.get_klippy_state() != "ready":
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        if kconn.state != KlippyState.READY:
             return False
         kapi: KlippyAPI = self.server.lookup_component("klippy_apis")
         try:

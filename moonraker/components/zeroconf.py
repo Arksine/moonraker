@@ -14,6 +14,7 @@ from itertools import cycle
 from email.utils import formatdate
 from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
+from ..common import RequestType, TransportType
 
 from typing import (
     TYPE_CHECKING,
@@ -28,8 +29,7 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..app import MoonrakerApp
-    from .authorization import Authorization
+    from .application import MoonrakerApp
     from .machine import Machine
 
 ZC_SERVICE_TYPE = "_moonraker._tcp.local."
@@ -208,17 +208,14 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
         self.boot_id = int(eventloop.get_loop_time())
         self.config_id = 1
         self.ad_timer = eventloop.register_timer(self._advertise_presence)
-        auth: Optional[Authorization]
-        auth = self.server.load_component(config, "authorization", None)
-        if auth is not None:
-            auth.register_permited_path("/server/zeroconf/ssdp")
         self.server.register_endpoint(
             "/server/zeroconf/ssdp",
-            ["GET"],
+            RequestType.GET,
             self._handle_xml_request,
-            transports=["http"],
+            transports=TransportType.HTTP,
             wrap_result=False,
-            content_type="application/xml"
+            content_type="application/xml",
+            auth_required=False
         )
 
     def _create_ssdp_socket(

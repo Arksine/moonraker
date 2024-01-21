@@ -23,6 +23,7 @@ import configparser
 from ..confighelper import FileSourceWrapper
 from ..utils import source_info
 from ..utils import json_wrapper as jsonw
+from ..common import RequestType
 
 # Annotation imports
 from typing import (
@@ -41,12 +42,11 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
-    from ..app import MoonrakerApp
-    from ..klippy_connection import KlippyConnection
+    from .application import MoonrakerApp
+    from .klippy_connection import KlippyConnection
     from .shell_command import ShellCommandFactory as SCMDComp
     from .database import MoonrakerDatabase
     from .file_manager.file_manager import FileManager
-    from .authorization import Authorization
     from .announcements import Announcements
     from .proc_stats import ProcStats
     from .dbus_manager import DbusManager
@@ -132,26 +132,29 @@ class Machine:
         self.sudo_requests: List[Tuple[SudoCallback, str]] = []
 
         self.server.register_endpoint(
-            "/machine/reboot", ['POST'], self._handle_machine_request)
+            "/machine/reboot", RequestType.POST, self._handle_machine_request
+        )
         self.server.register_endpoint(
-            "/machine/shutdown", ['POST'], self._handle_machine_request)
+            "/machine/shutdown", RequestType.POST, self._handle_machine_request
+        )
         self.server.register_endpoint(
-            "/machine/services/restart", ['POST'],
-            self._handle_service_request)
+            "/machine/services/restart", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/services/stop", ['POST'],
-            self._handle_service_request)
+            "/machine/services/stop", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/services/start", ['POST'],
-            self._handle_service_request)
+            "/machine/services/start", RequestType.POST, self._handle_service_request
+        )
         self.server.register_endpoint(
-            "/machine/system_info", ['GET'],
-            self._handle_sysinfo_request)
+            "/machine/system_info", RequestType.GET, self._handle_sysinfo_request
+        )
         self.server.register_endpoint(
-            "/machine/sudo/info", ["GET"], self._handle_sudo_info)
+            "/machine/sudo/info", RequestType.GET, self._handle_sudo_info
+        )
         self.server.register_endpoint(
-            "/machine/sudo/password", ["POST"],
-            self._set_sudo_password)
+            "/machine/sudo/password", RequestType.POST, self._set_sudo_password
+        )
 
         self.server.register_notification("machine:service_state_changed")
         self.server.register_notification("machine:sudo_alert")
@@ -457,7 +460,7 @@ class Machine:
             full_cmd = f"sudo -S {command}"
         shell_cmd: SCMDComp = self.server.lookup_component("shell_command")
         return await shell_cmd.exec_cmd(
-            full_cmd, proc_input=proc_input, log_complete=False, retries=tries,
+            full_cmd, proc_input=proc_input, log_complete=False, attempts=tries,
             timeout=timeout
         )
 
@@ -956,7 +959,7 @@ class SystemdCliProvider(BaseProvider):
                 )
             prop_args = ",".join(properties)
             props: str = await self.shell_cmd.exec_cmd(
-                f"systemctl show -p {prop_args} {unit_name}", retries=5,
+                f"systemctl show -p {prop_args} {unit_name}", attempts=5,
                 timeout=10.
             )
             raw_props: Dict[str, Any] = {}
@@ -1298,7 +1301,7 @@ class SupervisordCliProvider(BaseProvider):
         else:
             cmd = f"supervisorctl {args}"
         return await self.shell_cmd.exec_cmd(
-            cmd, proc_input=None, log_complete=False, retries=tries,
+            cmd, proc_input=None, log_complete=False, attempts=tries,
             timeout=timeout, success_codes=success_codes
         )
 
@@ -1929,11 +1932,6 @@ class InstallValidator:
         if self._sudo_requested:
             return
         self._sudo_requested = True
-        auth: Optional[Authorization]
-        auth = self.server.lookup_component("authorization", None)
-        if auth is not None:
-            # Bypass authentication requirements
-            auth.register_permited_path("/machine/sudo/password")
         machine: Machine = self.server.lookup_component("machine")
         machine.register_sudo_request(
             self._on_password_received,

@@ -12,6 +12,7 @@ import os
 import sys
 import asyncio
 from queue import SimpleQueue as Queue
+from .common import RequestType
 
 # Annotation imports
 from typing import (
@@ -26,7 +27,7 @@ from typing import (
 if TYPE_CHECKING:
     from .server import Server
     from .common import WebRequest
-    from .klippy_connection import KlippyConnection
+    from .components.klippy_connection import KlippyConnection
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:
 # https://www.zopatista.com/python/2019/05/11/asyncio-logging/
@@ -112,7 +113,7 @@ class LogManager:
     def set_server(self, server: Server) -> None:
         self.server = server
         self.server.register_endpoint(
-            "/server/logs/rollover", ['POST'], self._handle_log_rollover
+            "/server/logs/rollover", RequestType.POST, self._handle_log_rollover
         )
 
     def set_rollover_info(self, name: str, item: str) -> None:

@@ -1,8 +1,8 @@
 #
 
 Most API methods are supported over the Websocket, HTTP, and MQTT
-(if configured) transports. File Transfer and `/access` requests are only
-available over HTTP. The Websocket is required to receive server generated
+(if configured) transports. File Transfer requests (upload and download)
+exclusive to HTTP. The Websocket is required to receive server generated
 events such as gcode responses.  For information on how to set up the
 Websocket, please see the Appendix at the end of this document.
 
@@ -74,7 +74,7 @@ of a request.
 ### JSON-RPC API Overview
 
 The Websocket and MQTT transports use the [JSON-RPC 2.0](https://jsonrpc.org)
-protocol.  The Websocket transmits objects in a text frame,  whereas MQTT
+protocol. The Websocket transmits JSON-RPC objects in a text frame,  whereas MQTT
 transmits them in the payload of a topic.  When MQTT is configured Moonraker
 subscribes to an api request topic. After an api request is processed Moonraker
 publishes the return value to a response topic. By default these topics are
@@ -82,6 +82,9 @@ publishes the return value to a response topic. By default these topics are
 `{instance_name}/moonraker/api/response`.  The `{instance_name}` should be a
 unique identifier for each instance of Moonraker and defaults to the machine's
 host name.
+
+In addition, most JSON-RPC methods are available via the
+[JSONRPC HTTP request](#json-rpc-over-http).
 
 An encoded request should look something like:
 ```json
@@ -192,12 +195,11 @@ be closed if Moonraker is restarted or shutdown.
 
 ### Unix Socket Connection
 
-All JSON-RPC APIs available over the websocket are also made available over a
-Unix Domain Socket.  Moonraker creates the socket file at
+All JSON-RPC APIs available over the Websocket transport are also available
+over the Unix Domain Socket connection.  Moonraker creates the socket file at
 `<datapath>/comms/moonraker.sock` (ie: `~/printer_data/comms/moonraker.sock`).
-The Unix Socket does not use the websocket transport protocol, instead
-it expects UTF-8 encoded JSON-RPC strings. Each JSON-RPC request must be
-terminated with an ETX character (`0x03`).
+The Unix Socket expects UTF-8 encoded JSON-RPC byte strings. Each JSON-RPC
+request must be terminated with an ETX character (`0x03`).
 
 The Unix Socket is desirable for front ends and extensions running on the
 local machine as authentication is not necessary.  There should be a small
@@ -484,6 +486,7 @@ included.
     }
 }
 ```
+
 #### Request Cached Temperature Data
 HTTP request:
 ```http
@@ -762,6 +765,53 @@ The connected websocket's unique identifier.
     "websocket_id": 1730367696
 }
 ```
+
+#### JSON-RPC over HTTP
+
+Exposes the JSON-RPC interface over HTTP.  All JSON-RPC methods with
+corresponding HTTP APIs are available.  Methods exclusive to other
+transports, such as [Identify Connection](#identify-connection), are
+not available.
+
+HTTP request:
+```http
+POST /server/jsonrpc
+Content-Type: application/json
+{
+    "jsonrpc": "2.0",
+    "method": "printer.info",
+    "id": 5153
+}
+```
+!!! Note
+    If authentication is required it must be part of the HTTP request,
+    either using the API Key Header (`X-Api-Key`) or JWT Bearer Token.
+
+Returns:
+
+The full JSON-RPC response.
+
+```json
+{
+    "jsonrpc": "2.0",
+    "id": 5153,
+    "result": {
+        "state": "ready",
+        "state_message": "Printer is ready",
+        "hostname": "my-pi-hostname",
+        "software_version": "v0.9.1-302-g900c7396",
+        "cpu_info": "4 core ARMv7 Processor rev 4 (v7l)",
+        "klipper_path": "/home/pi/klipper",
+        "python_path": "/home/pi/klippy-env/bin/python",
+        "log_file": "/tmp/klippy.log",
+        "config_file": "/home/pi/printer.cfg",
+    }
+}
+```
+
+!!! Note
+    This request will never return an HTTP error. When an error is
+    encountered a JSON-RPC error response will be returned.
 
 ### Printer Administration
 
@@ -4591,7 +4641,7 @@ Returns:
 
 `ok` when complete
 
-### Rollback to the previous version
+#### Rollback to the previous version
 
 HTTP request:
 
@@ -5285,6 +5335,45 @@ An object containing all measurements for every configured sensor:
 ### Spoolman APIs
 The following APIs are available to interact with the Spoolman integration:
 
+### Get Spoolman Status
+Returns the current status of the spoolman module.
+
+HTTP request:
+```http
+GET /server/spoolman/status
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.spoolman.status",
+    "id": 4654
+}
+```
+
+Returns:
+
+An object containing details about the current status:
+
+```json
+{
+    "spoolman_connected": false,
+    "pending_reports": [
+        {
+            "spool_id": 1,
+            "filament_used": 10
+        }
+    ],
+    "spool_id": 2
+}
+```
+
+- `spoolman_connected`: A boolean indicating if Moonraker is connected to
+  Spoolman.  When `false` Spoolman is unavailable.
+- `pending_reports`: A list of objects containing spool data that has
+  yet to be reported to Spoolman.
+- `spool_id`:  The current Spool ID.  Can be an integer value or `null`.
+
 #### Set active spool
 Set the ID of the spool that Moonraker should report usage to Spoolman of.
 
@@ -5381,6 +5470,7 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.spoolman.proxy",
     "params": {
+        "use_v2_response": true,
         "request_method": "POST",
         "path": "/v1/spool",
         "query": "a=1&b=4",
@@ -5394,14 +5484,83 @@ JSON-RPC request:
 
 The following parameters are available. `request_method` and `path` are required, the rest are optional.
 
-- `request_method`: The HTTP request method, e.g. `GET`, `POST`, `DELETE`, etc.
+- `request_method`: The HTTP request method, e.g. `GET`, `POST`, `DELETE`, etc..
 - `path`: The endpoint, including API version, e.g. `/v1/filament`.
 - `query`: The query part of the URL, e.g. `filament_material=PLA&vendor_name=Prima`.
 - `body`: The request body for the request.
+- `use_v2_response`: Returns the spoolman response in version 2 format.
+  Default is false.
+
+!!! Note
+    The version 2 response has been added to eliminate ambiguity between
+    Spoolman errors and Moonraker errors.  With version 1 a frontend
+    is not able to reliably to determine if the error is sourced from
+    Spoolman or Moonraker.  Version 2 responses will return success
+    unless Moonraker is the source of the error.
+
+    The version 2 response is currently opt-in to avoid breaking
+    existing implementations, however in the future it will be
+    required, at which point the version 1 response will be removed.
+    The version 1 response is now deprecated.
 
 Returns:
 
-The json response from the Spoolman server.
+- Version 1
+
+> The json response from the Spoolman server.  Errors are proxied directly.
+For example, if a request returns 404, Moonraker will return a 404 error
+or the JSON-RPC equivalent of -32601, Method Not Found.
+
+- Version 2
+
+> Returns the spoolman response wrapped in an object.  The object contains
+two fields, `error` and `response`.  A successful request will place the
+returned value in the `response` field and `error` will be `null.`  When
+Spoolman returns an error the `response` field will be `null` and the
+`error` field will contain details about the error.
+```json
+{
+    "response": {
+        "id": 2,
+        "registered": "2023-11-23T12:18:31Z",
+        "first_used": "2023-11-22T12:17:56.123000Z",
+        "last_used": "2023-11-23T10:17:59.900000Z",
+        "filament": {
+            "id": 2,
+            "registered": "2023-11-23T12:17:44Z",
+            "name": "Reactor Red",
+            "vendor": {
+                "id": 2,
+                "registered": "2023-06-26T21:00:42Z",
+                "name": "Fusion"
+            },
+            "material": "PLA",
+            "price": 25,
+            "density": 1.24,
+            "diameter": 1.75,
+            "weight": 1000,
+            "color_hex": "BD0B0B"
+        },
+        "remaining_weight": 950,
+        "used_weight": 50,
+        "remaining_length": 318519.4384459262,
+        "used_length": 16764.18097083822,
+        "archived": false
+    },
+    "error": null
+}
+```
+> On Spoolman error:
+```json
+{
+    "response": null,
+    "error": {
+        "status_code": 404,
+        "message": "No spool with ID 3 found."
+    }
+}
+```
+
 
 ### OctoPrint API emulation
 Partial support of OctoPrint API is implemented with the purpose of
@@ -6920,6 +7079,23 @@ See the [Spoolman API](#spoolman-apis) for more information.
     "params": [
         {
             "spool_id": 1
+        }
+    ]
+}
+```
+
+#### Spoolman Status Changed
+
+Moonraker will emit the `notify_spoolman_status_changed` event when the
+connection state to the Spoolman service has changed:
+
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "notify_spoolman_status_changed",
+    "params": [
+        {
+            "spoolman_connected": false
         }
     ]
 }

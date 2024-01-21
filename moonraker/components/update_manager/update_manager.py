@@ -16,7 +16,7 @@ from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
 from .zip_deploy import ZipDeploy
 from .system_deploy import PackageDeploy
-from .web_deploy import WebClientDeploy
+from ...common import RequestType
 
 # Annotation imports
 from typing import (
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from ...server import Server
     from ...confighelper import ConfigHelper
     from ...common import WebRequest
-    from ...klippy_connection import KlippyConnection
+    from ..klippy_connection import KlippyConnection
     from ..shell_command import ShellCommandFactory as SCMDComp
     from ..database import MoonrakerDatabase as DBComp
     from ..database import NamespaceWrapper
@@ -56,7 +56,7 @@ def get_deploy_class(
 ) -> Union[Type[BaseDeploy], _T]:
     key = AppType.from_string(app_type) if isinstance(app_type, str) else app_type
     _deployers = {
-        AppType.WEB: WebClientDeploy,
+        AppType.WEB: ZipDeploy,
         AppType.GIT_REPO: GitDeploy,
         AppType.ZIP: ZipDeploy
     }
@@ -130,32 +130,32 @@ class UpdateManager:
                 self._handle_auto_refresh)
 
         self.server.register_endpoint(
-            "/machine/update/moonraker", ["POST"],
-            self._handle_update_request)
+            "/machine/update/moonraker", RequestType.POST, self._handle_update_request
+        )
         self.server.register_endpoint(
-            "/machine/update/klipper", ["POST"],
-            self._handle_update_request)
+            "/machine/update/klipper", RequestType.POST, self._handle_update_request
+        )
         self.server.register_endpoint(
-            "/machine/update/system", ["POST"],
-            self._handle_update_request)
+            "/machine/update/system", RequestType.POST, self._handle_update_request
+        )
         self.server.register_endpoint(
-            "/machine/update/client", ["POST"],
-            self._handle_update_request)
+            "/machine/update/client", RequestType.POST, self._handle_update_request
+        )
         self.server.register_endpoint(
-            "/machine/update/full", ["POST"],
-            self._handle_full_update_request)
+            "/machine/update/full", RequestType.POST, self._handle_full_update_request
+        )
         self.server.register_endpoint(
-            "/machine/update/status", ["GET"],
-            self._handle_status_request)
+            "/machine/update/status", RequestType.GET, self._handle_status_request
+        )
         self.server.register_endpoint(
-            "/machine/update/refresh", ["POST"],
-            self._handle_refresh_request)
+            "/machine/update/refresh", RequestType.POST, self._handle_refresh_request
+        )
         self.server.register_endpoint(
-            "/machine/update/recover", ["POST"],
-            self._handle_repo_recovery)
+            "/machine/update/recover", RequestType.POST, self._handle_repo_recovery
+        )
         self.server.register_endpoint(
-            "/machine/update/rollback", ["POST"],
-            self._handle_rollback)
+            "/machine/update/rollback", RequestType.POST, self._handle_rollback
+        )
         self.server.register_notification("update_manager:update_response")
         self.server.register_notification("update_manager:update_refreshed")
 
@@ -209,18 +209,18 @@ class UpdateManager:
         kcfg.set_option("path", kpath)
         kcfg.set_option("env", executable)
         kcfg.set_option("type", str(app_type))
-        need_notification = not isinstance(kupdater, AppDeploy)
+        notify = not isinstance(kupdater, AppDeploy)
         kclass = get_deploy_class(app_type, BaseDeploy)
-        self.updaters['klipper'] = kclass(kcfg, self.cmd_helper)
-        coro = self._update_klipper_repo(need_notification)
+        coro = self._update_klipper_repo(kclass(kcfg, self.cmd_helper), notify)
         self.event_loop.create_task(coro)
 
-    async def _update_klipper_repo(self, notify: bool) -> None:
+    async def _update_klipper_repo(self, updater: BaseDeploy, notify: bool) -> None:
         async with self.cmd_request_lock:
+            self.updaters['klipper'] = updater
             umdb = self.cmd_helper.get_umdb()
             await umdb.pop('klipper', None)
-            await self.updaters['klipper'].initialize()
-            await self.updaters['klipper'].refresh()
+            await updater.initialize()
+            await updater.refresh()
         if notify:
             self.cmd_helper.notify_update_refreshed()
 
@@ -495,10 +495,6 @@ class CommandHelper:
         config.getboolean('enable_repo_debug', False, deprecate=True)
         if self.server.is_debug_enabled():
             logging.warning("UPDATE MANAGER: REPO DEBUG ENABLED")
-        shell_cmd: SCMDComp = self.server.lookup_component('shell_command')
-        self.scmd_error = shell_cmd.error
-        self.build_shell_command = shell_cmd.build_shell_command
-        self.run_cmd_with_response = shell_cmd.exec_cmd
         self.pkg_updater: Optional[PackageDeploy] = None
 
         # database management
@@ -525,6 +521,9 @@ class CommandHelper:
 
     def get_server(self) -> Server:
         return self.server
+
+    def get_shell_command(self) -> SCMDComp:
+        return self.server.lookup_component("shell_command")
 
     def get_http_client(self) -> HttpClient:
         return self.http_client
@@ -578,18 +577,18 @@ class CommandHelper:
         cmd: str,
         timeout: float = 20.,
         notify: bool = False,
-        retries: int = 1,
+        attempts: int = 1,
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
-        sig_idx: int = 1
+        sig_idx: int = 1,
+        log_stderr: bool = False
     ) -> None:
         cb = self.notify_update_response if notify else None
-        scmd = self.build_shell_command(cmd, callback=cb, env=env, cwd=cwd)
-        for _ in range(retries):
-            if await scmd.run(timeout=timeout, sig_idx=sig_idx):
-                break
-        else:
-            raise self.server.error("Shell Command Error")
+        log_stderr |= self.server.is_verbose_enabled()
+        await self.get_shell_command().run_cmd_async(
+            cmd, cb, timeout=timeout, attempts=attempts,
+            env=env, cwd=cwd, sig_idx=sig_idx, log_stderr=log_stderr
+        )
 
     def notify_update_refreshed(self) -> None:
         vinfo: Dict[str, Any] = {}

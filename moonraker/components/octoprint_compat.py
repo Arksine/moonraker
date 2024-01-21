@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import logging
+from ..common import RequestType, TransportType, KlippyState
 
 # Annotation imports
 from typing import (
@@ -15,6 +16,7 @@ from typing import (
     List,
 )
 if TYPE_CHECKING:
+    from .klippy_connection import KlippyConnection
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_apis import KlippyAPI as APIComp
@@ -65,22 +67,27 @@ class OctoPrintCompat:
 
         # Version & Server information
         self.server.register_endpoint(
-            '/api/version', ['GET'], self._get_version,
-            transports=['http'], wrap_result=False)
+            '/api/version', RequestType.GET, self._get_version,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/server', ['GET'], self._get_server,
-            transports=['http'], wrap_result=False)
+            '/api/server', RequestType.GET, self._get_server,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # Login, User & Settings
         self.server.register_endpoint(
-            '/api/login', ['POST'], self._post_login_user,
-            transports=['http'], wrap_result=False)
+            '/api/login', RequestType.POST, self._post_login_user,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/currentuser', ['GET'], self._post_login_user,
-            transports=['http'], wrap_result=False)
+            '/api/currentuser', RequestType.GET, self._post_login_user,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         self.server.register_endpoint(
-            '/api/settings', ['GET'], self._get_settings,
-            transports=['http'], wrap_result=False)
+            '/api/settings', RequestType.GET, self._get_settings,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # File operations
         # Note that file upload is handled in file_manager.py
@@ -88,30 +95,34 @@ class OctoPrintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', ['GET'], self._get_job,
-            transports=['http'], wrap_result=False)
+            '/api/job', RequestType.GET, self._get_job,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
-            '/api/printer', ['GET'], self._get_printer,
-            transports=['http'], wrap_result=False)
+            '/api/printer', RequestType.GET, self._get_printer,
+            transports=TransportType.HTTP, wrap_result=False)
         self.server.register_endpoint(
-            '/api/printer/command', ['POST'], self._post_command,
-            transports=['http'], wrap_result=False)
+            '/api/printer/command', RequestType.POST, self._post_command,
+            transports=TransportType.HTTP, wrap_result=False
+        )
         # TODO: head/tool/bed/chamber specific read/issue
 
         # Printer profiles
         self.server.register_endpoint(
-            '/api/printerprofiles', ['GET'], self._get_printerprofiles,
-            transports=['http'], wrap_result=False)
+            '/api/printerprofiles', RequestType.GET, self._get_printerprofiles,
+            transports=TransportType.HTTP, wrap_result=False
+        )
 
         # Upload Handlers
         self.server.register_upload_handler(
             "/api/files/local", location_prefix="api/files/moonraker")
         self.server.register_endpoint(
-            "/api/files/moonraker/(?P<relative_path>.+)", ['POST'],
-            self._select_file, transports=['http'], wrap_result=False)
+            "/api/files/moonraker/(?P<relative_path>.+)", RequestType.POST,
+            self._select_file, transports=TransportType.HTTP, wrap_result=False
+        )
 
         # System
         # TODO: shutdown/reboot/restart operations
@@ -143,10 +154,11 @@ class OctoPrintCompat:
                 data.update(status[heater_name])
 
     def printer_state(self) -> str:
-        klippy_state = self.server.get_klippy_state()
-        if klippy_state in ["disconnected", "startup"]:
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
+        if not klippy_state.startup_complete():
             return 'Offline'
-        elif klippy_state != 'ready':
+        elif klippy_state != KlippyState.READY:
             return 'Error'
         return {
             'standby': 'Operational',
@@ -192,11 +204,11 @@ class OctoPrintCompat:
         """
         Server status
         """
-        klippy_state = self.server.get_klippy_state()
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_state = kconn.state
         return {
             'server': OCTO_VERSION,
-            'safemode': (
-                None if klippy_state == 'ready' else 'settings')
+            'safemode': None if klippy_state == KlippyState.READY else 'settings'
         }
 
     async def _post_login_user(self,

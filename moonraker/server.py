@@ -21,10 +21,16 @@ import uuid
 import traceback
 from . import confighelper
 from .eventloop import EventLoop
-from .app import MoonrakerApp
-from .klippy_connection import KlippyConnection
-from .utils import ServerError, Sentinel, get_software_info, json_wrapper
+from .utils import (
+    ServerError,
+    Sentinel,
+    get_software_info,
+    json_wrapper,
+    pip_utils,
+    source_info
+)
 from .loghelper import LogManager
+from .common import RequestType
 
 # Annotation imports
 from typing import (
@@ -41,7 +47,9 @@ from typing import (
 )
 if TYPE_CHECKING:
     from .common import WebRequest
-    from .websockets import WebsocketManager
+    from .components.application import MoonrakerApp
+    from .components.websockets import WebsocketManager
+    from .components.klippy_connection import KlippyConnection
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
@@ -49,6 +57,7 @@ if TYPE_CHECKING:
     _T = TypeVar("_T", Sentinel, Any)
 
 API_VERSION = (1, 4, 0)
+SERVER_COMPONENTS = ['application', 'websockets', 'klippy_connection']
 CORE_COMPONENTS = [
     'dbus_manager', 'database', 'file_manager', 'klippy_apis',
     'machine', 'data_store', 'shell_command', 'proc_stats',
@@ -80,6 +89,7 @@ class Server:
         self.ssl_port: int = config.getint('ssl_port', 7130)
         self.exit_reason: str = ""
         self.server_running: bool = False
+        self.pip_recovery_attempted: bool = False
 
         # Configure Debug Logging
         config.getboolean('enable_debug_logging', False, deprecate=True)
@@ -87,26 +97,32 @@ class Server:
         log_level = logging.DEBUG if args["verbose"] else logging.INFO
         logging.getLogger().setLevel(log_level)
         self.event_loop.set_debug(args["asyncio_debug"])
-        self.klippy_connection = KlippyConnection(self)
+        self.klippy_connection: KlippyConnection
+        self.klippy_connection = self.load_component(config, "klippy_connection")
 
         # Tornado Application/Server
-        self.moonraker_app = app = MoonrakerApp(config)
-        self.register_endpoint = app.register_local_handler
-        self.register_debug_endpoint = app.register_debug_handler
+        self.moonraker_app: MoonrakerApp = self.load_component(config, "application")
+        app = self.moonraker_app
+        self.register_endpoint = app.register_endpoint
+        self.register_debug_endpoint = app.register_debug_endpoint
         self.register_static_file_handler = app.register_static_file_handler
         self.register_upload_handler = app.register_upload_handler
-        self.register_api_transport = app.register_api_transport
         self.log_manager.set_server(self)
+        self.websocket_manager: WebsocketManager
+        self.websocket_manager = self.load_component(config, "websockets")
 
         for warning in args.get("startup_warnings", []):
             self.add_warning(warning)
 
         self.register_endpoint(
-            "/server/info", ['GET'], self._handle_info_request)
+            "/server/info", RequestType.GET, self._handle_info_request
+        )
         self.register_endpoint(
-            "/server/config", ['GET'], self._handle_config_request)
+            "/server/config", RequestType.GET, self._handle_config_request
+        )
         self.register_endpoint(
-            "/server/restart", ['POST'], self._handle_server_restart)
+            "/server/restart", RequestType.POST, self._handle_server_restart
+        )
         self.register_notification("server:klippy_ready")
         self.register_notification("server:klippy_shutdown")
         self.register_notification("server:klippy_disconnect",
@@ -244,7 +260,6 @@ class Server:
         for section in cfg_sections:
             self.load_component(config, section, None)
 
-        self.klippy_connection.configure(config)
         config.validate_config()
         self._is_configured = True
 
@@ -267,12 +282,18 @@ class Server:
         try:
             full_name = f"moonraker.components.{component_name}"
             module = importlib.import_module(full_name)
-            is_core = component_name in CORE_COMPONENTS
-            fallback: Optional[str] = "server" if is_core else None
-            config = config.getsection(component_name, fallback)
+            # Server components use the [server] section for configuration
+            if component_name not in SERVER_COMPONENTS:
+                is_core = component_name in CORE_COMPONENTS
+                fallback: Optional[str] = "server" if is_core else None
+                config = config.getsection(component_name, fallback)
             load_func = getattr(module, "load_component")
             component = load_func(config)
-        except Exception:
+        except Exception as e:
+            ucomps: List[str] = self.app_args.get("unofficial_components", [])
+            if isinstance(e, ModuleNotFoundError) and component_name not in ucomps:
+                if self.try_pip_recovery(e.name or "unknown"):
+                    return self.load_component(config, component_name, default)
             msg = f"Unable to load component: ({component_name})"
             logging.exception(msg)
             if component_name not in self.failed_components:
@@ -283,6 +304,36 @@ class Server:
         self.components[component_name] = component
         logging.info(f"Component ({component_name}) loaded")
         return component
+
+    def try_pip_recovery(self, missing_module: str) -> bool:
+        if self.pip_recovery_attempted:
+            return False
+        self.pip_recovery_attempted = True
+        src_dir = source_info.source_path()
+        req_file = src_dir.joinpath("scripts/moonraker-requirements.txt")
+        if not req_file.is_file():
+            return False
+        pip_cmd = f"{sys.executable} -m pip"
+        pip_exec = pip_utils.PipExecutor(pip_cmd, logging.info)
+        logging.info(f"Module '{missing_module}' not found. Attempting Pip Update...")
+        logging.info("Checking Pip Version...")
+        try:
+            pipver = pip_exec.get_pip_version()
+            if pip_utils.check_pip_needs_update(pipver):
+                cur_ver = pipver.pip_version_string
+                new_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                logging.info(f"Updating Pip from {cur_ver} to {new_ver}...")
+                pip_exec.update_pip()
+        except Exception:
+            logging.exception("Pip version check failed")
+            return False
+        logging.info("Installing Moonraker python dependencies...")
+        try:
+            pip_exec.install_packages(req_file, {"SKIP_CYTHON": "Y"})
+        except Exception:
+            logging.exception("Failed to install python packages")
+            return False
+        return True
 
     def lookup_component(
         self, component_name: str, default: _T = Sentinel.MISSING
@@ -305,8 +356,7 @@ class Server:
     def register_notification(
         self, event_name: str, notify_name: Optional[str] = None
     ) -> None:
-        wsm: WebsocketManager = self.lookup_component("websockets")
-        wsm.register_notification(event_name, notify_name)
+        self.websocket_manager.register_notification(event_name, notify_name)
 
     def register_event_handler(
         self, event: str, callback: FlexCallback
@@ -364,9 +414,6 @@ class Server:
     def get_klippy_info(self) -> Dict[str, Any]:
         return self.klippy_connection.klippy_info
 
-    def get_klippy_state(self) -> str:
-        return self.klippy_connection.state
-
     def _handle_term_signal(self) -> None:
         logging.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
@@ -390,6 +437,7 @@ class Server:
         await asyncio.sleep(.1)
         try:
             await self.moonraker_app.close()
+            await self.websocket_manager.close()
         except Exception:
             logging.exception("Error Closing App")
 
@@ -433,7 +481,6 @@ class Server:
         reg_dirs = []
         if file_manager is not None:
             reg_dirs = file_manager.get_registered_dirs()
-        wsm: WebsocketManager = self.lookup_component('websockets')
         mreqs = self.klippy_connection.missing_requirements
         if raw:
             warnings = list(self.warnings.values())
@@ -443,12 +490,12 @@ class Server:
             ]
         return {
             'klippy_connected': self.klippy_connection.is_connected(),
-            'klippy_state': self.klippy_connection.state,
+            'klippy_state': str(self.klippy_connection.state),
             'components': list(self.components.keys()),
             'failed_components': self.failed_components,
             'registered_directories': reg_dirs,
             'warnings': warnings,
-            'websocket_count': wsm.get_count(),
+            'websocket_count': self.websocket_manager.get_count(),
             'moonraker_version': self.app_args['software_version'],
             'missing_klippy_requirements': mreqs,
             'api_version': API_VERSION,
@@ -585,6 +632,7 @@ def main(from_package: bool = True) -> None:
     else:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["python_version"] = sys.version.replace("\n", " ")
+    app_args["launch_args"] = " ".join([sys.executable] + sys.argv).strip()
     app_args["msgspec_enabled"] = json_wrapper.MSGSPEC_ENABLED
     app_args["uvloop_enabled"] = EventLoop.UVLOOP_ENABLED
     log_manager = LogManager(app_args, startup_warnings)
@@ -641,6 +689,7 @@ def main(from_package: bool = True) -> None:
         # it is ok to use a blocking sleep here
         time.sleep(.5)
         logging.info("Attempting Server Restart...")
+        del server
         event_loop.reset()
     event_loop.close()
     logging.info("Server Shutdown")

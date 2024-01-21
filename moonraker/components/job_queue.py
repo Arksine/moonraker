@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import time
 import logging
+from ..common import JobEvent, RequestType
 
 # Annotation imports
 from typing import (
@@ -46,11 +47,8 @@ class JobQueue:
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_shutdown)
         self.server.register_event_handler(
-            "job_state:complete", self._on_job_complete)
-        self.server.register_event_handler(
-            "job_state:error", self._on_job_abort)
-        self.server.register_event_handler(
-            "job_state:cancelled", self._on_job_abort)
+            "job_state:state_changed", self._on_job_state_changed
+        )
 
         self.server.register_notification("job_queue:job_queue_changed")
         self.server.register_remote_method("pause_job_queue", self.pause_queue)
@@ -58,16 +56,21 @@ class JobQueue:
                                            self.start_queue)
 
         self.server.register_endpoint(
-            "/server/job_queue/job", ['POST', 'DELETE'],
-            self._handle_job_request)
+            "/server/job_queue/job", RequestType.POST | RequestType.DELETE,
+            self._handle_job_request
+        )
         self.server.register_endpoint(
-            "/server/job_queue/pause", ['POST'], self._handle_pause_queue)
+            "/server/job_queue/pause", RequestType.POST, self._handle_pause_queue
+        )
         self.server.register_endpoint(
-            "/server/job_queue/start", ['POST'], self._handle_start_queue)
+            "/server/job_queue/start", RequestType.POST, self._handle_start_queue
+        )
         self.server.register_endpoint(
-            "/server/job_queue/status", ['GET'], self._handle_queue_status)
+            "/server/job_queue/status", RequestType.GET, self._handle_queue_status
+        )
         self.server.register_endpoint(
-            "/server/job_queue/jump", ['POST'], self._handle_jump)
+            "/server/job_queue/jump", RequestType.POST, self._handle_jump
+        )
 
     async def _handle_ready(self) -> None:
         async with self.lock:
@@ -85,10 +88,13 @@ class JobQueue:
         if not self.queued_jobs and self.automatic:
             self._set_queue_state("ready")
 
-    async def _on_job_complete(self,
-                               prev_stats: Dict[str, Any],
-                               new_stats: Dict[str, Any]
-                               ) -> None:
+    async def _on_job_state_changed(self, job_event: JobEvent, *args) -> None:
+        if job_event == JobEvent.COMPLETE:
+            await self._on_job_complete()
+        elif job_event.aborted:
+            await self._on_job_abort()
+
+    async def _on_job_complete(self) -> None:
         if not self.automatic:
             return
         async with self.lock:
@@ -99,10 +105,7 @@ class JobQueue:
                 self.pop_queue_handle = event_loop.delay_callback(
                     self.job_delay, self._pop_job)
 
-    async def _on_job_abort(self,
-                            prev_stats: Dict[str, Any],
-                            new_stats: Dict[str, Any]
-                            ) -> None:
+    async def _on_job_abort(self) -> None:
         async with self.lock:
             if self.queued_jobs:
                 self._set_queue_state("paused")
@@ -250,23 +253,23 @@ class JobQueue:
                 'queue_state': self.queue_state
             })
 
-    async def _handle_job_request(self,
-                                  web_request: WebRequest
-                                  ) -> Dict[str, Any]:
-        action = web_request.get_action()
-        if action == "POST":
+    async def _handle_job_request(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        req_type = web_request.get_request_type()
+        if req_type == RequestType.POST:
             files = web_request.get_list('filenames')
             reset = web_request.get_boolean("reset", False)
             # Validate that all files exist before queueing
             await self.queue_job(files, reset=reset)
-        elif action == "DELETE":
+        elif req_type == RequestType.DELETE:
             if web_request.get_boolean("all", False):
                 await self.delete_job([], all=True)
             else:
                 job_ids = web_request.get_list('job_ids')
                 await self.delete_job(job_ids)
         else:
-            raise self.server.error(f"Invalid action: {action}")
+            raise self.server.error(f"Invalid request type: {req_type}")
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state

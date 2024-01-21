@@ -15,6 +15,7 @@ from typing import (
     Dict,
     List,
 )
+from ..common import JobEvent, KlippyState
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .klippy_apis import KlippyAPI
@@ -26,8 +27,8 @@ class JobState:
         self.server.register_event_handler(
             "server:klippy_started", self._handle_started)
 
-    async def _handle_started(self, state: str) -> None:
-        if state != "ready":
+    async def _handle_started(self, state: KlippyState) -> None:
+        if state != KlippyState.READY:
             return
         kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
@@ -65,8 +66,16 @@ class JobState:
                     f"Job State Changed - Prev State: {old_state}, "
                     f"New State: {new_state}"
                 )
+                # NOTE: Individual job_state events are DEPRECATED.  New modules
+                # should register handlers for "job_state: status_changed" and
+                # match against the JobEvent object provided.
+                self.server.send_event(f"job_state:{new_state}", prev_ps, new_ps)
                 self.server.send_event(
-                    f"job_state:{new_state}", prev_ps, new_ps)
+                    "job_state:state_changed",
+                    JobEvent.from_string(new_state),
+                    prev_ps,
+                    new_ps
+                )
         if "info" in ps:
             cur_layer: Optional[int] = ps["info"].get("current_layer")
             if cur_layer is not None:
