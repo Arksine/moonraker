@@ -1903,7 +1903,7 @@ virtualenv:
 #   dependencies when it detects a change to the requirements file.  The
 #   default is no virtualenv.
 env:
-#   *** DEPRICATED FOR NEW CONFIGURATIONS - USE the 'virtualenv' OPTION ***
+#   *** DEPRECATED FOR NEW CONFIGURATIONS - USE the 'virtualenv' OPTION ***
 #
 #   The path to the extension's virtual environment executable on disk.  For
 #   example, Moonraker's venv is located at ~/moonraker-env/bin/python.
@@ -1919,7 +1919,7 @@ system_dependencies:
 #  "System Dependencies File Format" section of this document for details on how
 #  this file should be formatted. The default is no system dependencies.
 install_script:
-#  *** DEPRICATED FOR NEW CONFIGURATIONS - USE the 'system_dependencies' OPTION ***
+#  *** DEPRECATED FOR NEW CONFIGURATIONS - USE the 'system_dependencies' OPTION ***
 #
 #  The file location, relative to the repository, for the installation script
 #  associated with this application.  Moonraker will not run this script, instead
