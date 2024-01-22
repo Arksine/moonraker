@@ -469,8 +469,8 @@ trusted_clients:
 #   must be expressed in CIDR notation (see http://ip.sb/cidr for more info).
 #   For example, an entry of 192.168.1.0/24 will authorize IPs in the range of
 #   192.168.1.1 - 192.168.1.254.  Note that when specifying IPv4 ranges the
-#   last segment of the ip address must be 0. The default is no clients are
-#   trusted.
+#   last segment of the ip address must be 0. The default is no IPs or
+#   domains are trusted.
 cors_domains:
   http://klipper-printer.local
   http://second-printer.local:7125
@@ -497,6 +497,14 @@ default_source: moonraker
 #   The default source used to authenticate user logins. Can be "ldap" or
 #   "moonraker"  The default is "moonraker".
 ```
+
+!!! Tip
+    When configuring the `trusted_clients` option it is generally recommended
+    to stick with IP ranges and avoid including domain names.  When attempting to
+    authenticate a request against a domain name Moonraker must perform a DNS
+    lookup. If the DNS service is not available then authentication will fail
+    and an error will be returned.  In addition, DNS lookups will introduce delay
+    in the response.
 
 ### `[ldap]`
 

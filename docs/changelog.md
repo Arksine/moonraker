@@ -46,6 +46,7 @@ The format is based on [Keep a Changelog].
 - **klippy_connection**:  Fixed a race condition that can result in
   skipped subscription updates.
 - **configheler**: Fixed inline comment parsing.
+- **authorization**: Fixed blocking call to `socket.getfqdn()`
 
 ### Changed
 
