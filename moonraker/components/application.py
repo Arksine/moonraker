@@ -458,27 +458,50 @@ class MoonrakerApp:
         self.template_cache[asset_name] = asset_tmpl
         return asset_tmpl
 
+def _set_cors_headers(req_hdlr: tornado.web.RequestHandler) -> None:
+    request = req_hdlr.request
+    origin: Optional[str] = request.headers.get("Origin")
+    if origin is None:
+        return
+    req_hdlr.set_header("Access-Control-Allow-Origin", origin)
+    if req_hdlr.request.method == "OPTIONS":
+        req_hdlr.set_header(
+            "Access-Control-Allow-Methods",
+            "GET, POST, PUT, DELETE, OPTIONS"
+        )
+        req_hdlr.set_header(
+            "Access-Control-Allow-Headers",
+            "Origin, Accept, Content-Type, X-Requested-With, "
+            "X-CRSF-Token, Authorization, X-Access-Token, "
+            "X-Api-Key"
+        )
+        req_pvt_header = req_hdlr.request.headers.get(
+            "Access-Control-Request-Private-Network", None
+        )
+        if req_pvt_header == "true":
+            req_hdlr.set_header("Access-Control-Allow-Private-Network", "true")
+
+
 class AuthorizedRequestHandler(tornado.web.RequestHandler):
     def initialize(self) -> None:
         self.server: Server = self.settings['server']
         self.auth_required: bool = True
+        self.cors_enabled = False
 
     def set_default_headers(self) -> None:
-        origin: Optional[str] = self.request.headers.get("Origin")
-        # it is necessary to look up the parent app here,
-        # as initialize() may not yet be called
-        server: Server = self.settings['server']
-        auth: AuthComp = server.lookup_component('authorization', None)
-        self.cors_enabled = False
-        if auth is not None:
-            self.cors_enabled = auth.check_cors(origin, self)
+        if getattr(self, "cors_enabled", False):
+            _set_cors_headers(self)
 
-    def prepare(self) -> None:
+    async def prepare(self) -> None:
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = auth.authenticate_request(
+            self.current_user = await auth.authenticate_request(
                 self.request, self.auth_required
             )
+            origin: Optional[str] = self.request.headers.get("Origin")
+            self.cors_enabled = await auth.check_cors(origin)
+            if self.cors_enabled:
+                _set_cors_headers(self)
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -520,23 +543,22 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
                    ) -> None:
         super(AuthorizedFileHandler, self).initialize(path, default_filename)
         self.server: Server = self.settings['server']
+        self.cors_enabled = False
 
     def set_default_headers(self) -> None:
-        origin: Optional[str] = self.request.headers.get("Origin")
-        # it is necessary to look up the parent app here,
-        # as initialize() may not yet be called
-        server: Server = self.settings['server']
-        auth: AuthComp = server.lookup_component('authorization', None)
-        self.cors_enabled = False
-        if auth is not None:
-            self.cors_enabled = auth.check_cors(origin, self)
+        if getattr(self, "cors_enabled", False):
+            _set_cors_headers(self)
 
-    def prepare(self) -> None:
+    async def prepare(self) -> None:
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = auth.authenticate_request(
+            self.current_user = await auth.authenticate_request(
                 self.request, self._check_need_auth()
             )
+            origin: Optional[str] = self.request.headers.get("Origin")
+            self.cors_enabled = await auth.check_cors(origin)
+            if self.cors_enabled:
+                _set_cors_headers(self)
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -915,8 +937,10 @@ class FileUploadHandler(AuthorizedRequestHandler):
         self.parse_lock = Lock()
         self.parse_failed: bool = False
 
-    def prepare(self) -> None:
-        super(FileUploadHandler, self).prepare()
+    async def prepare(self) -> None:
+        ret = super(FileUploadHandler, self).prepare()
+        if ret is not None:
+            await ret
         content_type: str = self.request.headers.get("Content-Type", "")
         logging.info(
             f"Upload Request Received from {self.request.remote_ip}\n"
@@ -1017,8 +1041,10 @@ class FileUploadHandler(AuthorizedRequestHandler):
 
 # Default Handler for unregistered endpoints
 class AuthorizedErrorHandler(AuthorizedRequestHandler):
-    def prepare(self) -> None:
-        super(AuthorizedRequestHandler, self).prepare()
+    async def prepare(self) -> None:
+        ret = super(AuthorizedRequestHandler, self).prepare()
+        if ret is not None:
+            await ret
         self.set_status(404)
         raise tornado.web.HTTPError(404)
 
@@ -1038,7 +1064,7 @@ class RedirectHandler(AuthorizedRequestHandler):
         super().initialize()
         self.auth_required = False
 
-    def get(self, *args, **kwargs) -> None:
+    async def get(self, *args, **kwargs) -> None:
         url: Optional[str] = self.get_argument('url', None)
         if url is None:
             try:
@@ -1052,7 +1078,7 @@ class RedirectHandler(AuthorizedRequestHandler):
             assert url is not None
         # validate the url origin
         auth: AuthComp = self.server.lookup_component('authorization', None)
-        if auth is None or not auth.check_cors(url.rstrip("/")):
+        if auth is None or not await auth.check_cors(url.rstrip("/")):
             raise tornado.web.HTTPError(
                 400, f"Unauthorized URL redirect: {url}")
         self.redirect(url)
@@ -1066,7 +1092,7 @@ class WelcomeHandler(tornado.web.RequestHandler):
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             try:
-                auth.authenticate_request(self.request)
+                await auth.authenticate_request(self.request)
             except tornado.web.HTTPError:
                 authorized = False
             else:

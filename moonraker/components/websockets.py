@@ -238,6 +238,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         self.on_create(self.settings['server'])
         self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
+        self.cors_allowed: bool = False
 
     @property
     def ip_addr(self) -> Optional[IPAddress]:
@@ -308,10 +309,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
 
     def check_origin(self, origin: str) -> bool:
         if not super(WebSocket, self).check_origin(origin):
-            auth: AuthComp = self.server.lookup_component('authorization', None)
-            if auth is not None:
-                return auth.check_cors(origin)
-            return False
+            return self.cors_allowed
         return True
 
     def on_user_logout(self, user: str) -> bool:
@@ -321,7 +319,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         return False
 
     # Check Authorized User
-    def prepare(self) -> None:
+    async def prepare(self) -> None:
         max_conns = self.settings["max_websocket_connections"]
         if self.__class__.connection_count >= max_conns:
             raise self.server.error(
@@ -330,11 +328,16 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
             try:
-                self._user_info = auth.authenticate_request(self.request)
+                self._user_info = await auth.authenticate_request(self.request)
             except Exception as e:
                 logging.info(f"Websocket Failed Authentication: {e}")
                 self._user_info = None
                 self._need_auth = True
+            if "Origin" in self.request.headers:
+                origin = self.request.headers.get("Origin")
+            else:
+                origin = self.request.headers.get("Sec-Websocket-Origin", None)
+            self.cors_allowed = await auth.check_cors(origin)
 
     def close_socket(self, code: int, reason: str) -> None:
         self.close(code, reason)
@@ -351,6 +354,7 @@ class BridgeSocket(WebSocketHandler):
         self.klippy_writer: Optional[asyncio.StreamWriter] = None
         self.klippy_write_buf: List[bytes] = []
         self.klippy_queue_busy: bool = False
+        self.cors_allowed: bool = False
 
     @property
     def ip_addr(self) -> Optional[IPAddress]:
@@ -459,10 +463,7 @@ class BridgeSocket(WebSocketHandler):
 
     def check_origin(self, origin: str) -> bool:
         if not super().check_origin(origin):
-            auth: AuthComp = self.server.lookup_component('authorization', None)
-            if auth is not None:
-                return auth.check_cors(origin)
-            return False
+            return self.cors_allowed
         return True
 
     # Check Authorized User
@@ -474,7 +475,12 @@ class BridgeSocket(WebSocketHandler):
             )
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
-            self.current_user = auth.authenticate_request(self.request)
+            self.current_user = await auth.authenticate_request(self.request)
+            if "Origin" in self.request.headers:
+                origin = self.request.headers.get("Origin")
+            else:
+                origin = self.request.headers.get("Sec-Websocket-Origin", None)
+            self.cors_allowed = await auth.check_cors(origin)
         kconn: Klippy = self.server.lookup_component("klippy_connection")
         try:
             reader, writer = await kconn.open_klippy_connection()
