@@ -22,3 +22,6 @@ markdown_extensions:
     - pymdownx.highlight:
         use_pygments: false
     - pymdownx.inlinehilite
+    - tables
+    - compact_tables:
+        auto_insert_break: true

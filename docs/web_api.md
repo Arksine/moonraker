@@ -1219,7 +1219,7 @@ Returns:
 
 `ok`
 
-### Machine Commands
+### Machine Requests
 
 #### Get System Info
 HTTP request:
@@ -1692,6 +1692,537 @@ An object in the following format:
 
 This request will return an error if the supplied password is
 incorrect or if any pending sudo requests fail.
+
+#### List USB Devices
+
+Returns a list of all USB devices currently detected on the system.
+
+HTTP request:
+```http
+GET /machine/peripherals/usb
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.peripherals.usb",
+    "id": 7896
+}
+```
+
+Returns:
+
+An object containing a list of attached USB device info:
+
+```json
+{
+    "usb_devices": [
+        {
+            "device_num": 1,
+            "bus_num": 1,
+            "vendor_id": "1d6b",
+            "product_id": "0002",
+            "usb_location": "1:1",
+            "manufacturer": "Linux 6.1.0-rpi7-rpi-v8 dwc_otg_hcd",
+            "product": "DWC OTG Controller",
+            "serial": "3f980000.usb",
+            "class": "Hub",
+            "subclass": null,
+            "protocol": "Single TT",
+            "description": "Linux Foundation 2.0 root hub"
+        },
+        {
+            "device_num": 3,
+            "bus_num": 1,
+            "vendor_id": "046d",
+            "product_id": "0825",
+            "usb_location": "1:3",
+            "manufacturer": "Logitech, Inc.",
+            "product": "Webcam C270",
+            "serial": "<unique serial number>",
+            "class": "Miscellaneous Device",
+            "subclass": null,
+            "protocol": "Interface Association",
+            "description": "Logitech, Inc. Webcam C270"
+        },
+        {
+            "device_num": 2,
+            "bus_num": 1,
+            "vendor_id": "1a40",
+            "product_id": "0101",
+            "usb_location": "1:2",
+            "manufacturer": "Terminus Technology Inc.",
+            "product": "USB 2.0 Hub",
+            "serial": null,
+            "class": "Hub",
+            "subclass": null,
+            "protocol": "Single TT",
+            "description": "Terminus Technology Inc. Hub"
+        },
+        {
+            "device_num": 5,
+            "bus_num": 1,
+            "vendor_id": "0403",
+            "product_id": "6001",
+            "usb_location": "1:5",
+            "manufacturer": "FTDI",
+            "product": "FT232R USB UART",
+            "serial": "<unique serial number>",
+            "class": null,
+            "subclass": null,
+            "protocol": null,
+            "description": "Future Technology Devices International, Ltd FT232 Serial (UART) IC"
+        },
+        {
+            "device_num": 4,
+            "bus_num": 1,
+            "vendor_id": "1d50",
+            "product_id": "614e",
+            "usb_location": "1:4",
+            "manufacturer": "Klipper",
+            "product": "stm32f407xx",
+            "serial": "<unique serial number>",
+            "class": "Communications",
+            "subclass": null,
+            "protocol": null,
+            "description": "OpenMoko, Inc. Klipper 3d-Printer Firmware"
+        }
+    ]
+}
+```
+
+Response Schema:
+
+| Field         | Type  | Description                                            |
+| ------------- | :---: | ------------------------------------------------------ |
+| `usb_devices` | array | An array of objects containing USB device information. |
+
+USB Device Schema:
+
+| Field          |  Type   | Description                                         |
+| -------------- | :-----: | --------------------------------------------------- |
+| `bus_num`      |   int   | The USB bus number as reported by the host.         |
+| `device_num`   |   int   | The USB device number as reported by the host.      |
+| `usb_location` | string  | A combination of the bus number and device number,  |
+|                |         | yielding a unique location ID on the host system.   |^
+| `vendor_id`    | string  | The vendor ID as reported by the driver.            |
+| `product_id`   | string  | The product ID as reported by the driver.           |
+| `manufacturer` | string? | The manufacturer name as reported by the driver.    |
+|                |         | This will be `null` if no manufacturer is found.    |^
+| `product`      | string? | The product description as reported by the driver.  |
+|                |         | This will be `null` if no description is found.     |^
+| `class`        | string? | The class description as reported by the driver.    |
+|                |         | This will be `null` if no description is found.     |^
+| `subclass`     | string? | The subclass description as reported by the driver. |
+|                |         | This will be `null` if no description is found.     |^
+| `protocol`     | string? | The protocol description as reported by the driver. |
+|                |         | This will be `null` if no description is found.     |^
+| `description`  | string? | The full device description string as reported by   |
+|                |         | the usb.ids file. This will be `null` if no         |^
+|                |         | description is found.                               |^
+
+#### List Serial Devices
+
+Returns a list of all serial devices detected on the system.  These may be USB
+CDC-ACM devices or hardware UARTs.
+
+HTTP request:
+```http
+GET /machine/peripherals/serial
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.peripherals.serial",
+    "id": 7896
+}
+```
+
+Returns:
+
+```json
+{
+    "serial_devices": [
+        {
+            "device_type": "hardware_uart",
+            "device_path": "/dev/ttyS0",
+            "device_name": "ttyS0",
+            "driver_name": "serial8250",
+            "path_by_hardware": null,
+            "path_by_id": null,
+            "usb_location": null
+        },
+        {
+            "device_type": "usb",
+            "device_path": "/dev/ttyACM0",
+            "device_name": "ttyACM0",
+            "driver_name": "cdc_acm",
+            "path_by_hardware": "/dev/serial/by-path/platform-3f980000.usb-usb-0:1.2:1.0",
+            "path_by_id": "/dev/serial/by-id/usb-Klipper_stm32f407xx_unique_serial-if00",
+            "usb_location": "1:4"
+        },
+        {
+            "device_type": "usb",
+            "device_path": "/dev/ttyUSB0",
+            "device_name": "ttyUSB0",
+            "driver_name": "ftdi_sio",
+            "path_by_hardware": "/dev/serial/by-path/platform-3f980000.usb-usb-0:1.4:1.0-port0",
+            "path_by_id": "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_unique_serial-if00-port0",
+            "usb_location": "1:5"
+        },
+        {
+            "device_type": "hardware_uart",
+            "device_path": "/dev/ttyAMA0",
+            "device_name": "ttyAMA0",
+            "driver_name": "uart-pl011",
+            "path_by_hardware": null,
+            "path_by_id": null,
+            "usb_location": null
+        }
+    ]
+}
+```
+
+Response Schema:
+
+| Field            | Type  | Description                                               |
+| ---------------- | ----- | --------------------------------------------------------- |
+| `serial_devices` | array | An array of objects containing serial device information. |
+
+
+Serial Device Schema:
+
+| Field              |  Type   | Description                                                         |
+| ------------------ | :-----: | ------------------------------------------------------------------- |
+| `device_type`      | string  | The type of serial device. Can be `hardware_uart` or `usb`.         |
+| `device_path`      | string  | The absolute file path to the device.                               |
+| `device_name`      | string  | The device file name as reported by sysfs.                          |
+| `driver_name`      | string  | The name of the device driver.                                      |
+| `path_by_hardware` | string? | A symbolic link to the device based on its physical connection,     |
+|                    |         | ie: usb port.  Will be `null` if no matching link exists.           |^
+| `path_by_id`       | string? | A symbolic link the the device based on its reported IDs. Will be   |
+|                    |         | `null` if no matching link exists.                                  |^
+| `usb_location`     | string? | An identifier derived from the reported usb bus and device numbers. |
+|                    |         | Can be used to match results from `/machine/peripherals/usb`. Will  |^
+|                    |         | be `null` for non-usb devices.                                      |^
+
+
+#### List Video Capture Devices
+
+Retrieves a list of V4L2 video capture devices on the system.  If
+the python3-libcamera system package is installed this request will
+also return libcamera devices.
+
+```http
+GET /machine/peripherals/video
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.peripherals.video",
+    "id": 7896
+}
+```
+
+Returns:
+
+```json
+{
+    "v4l2_devices": [
+        {
+            "device_name": "video0",
+            "device_path": "/dev/video0",
+            "camera_name": "unicam",
+            "driver_name": "unicam",
+            "hardware_bus": "platform:3f801000.csi",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "READWRITE",
+                "STREAMING",
+                "IO_MC"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": "/dev/v4l/by-path/platform-3f801000.csi-video-index0",
+            "path_by_id": null,
+            "alt_name": "unicam-image",
+            "usb_location": null
+        },
+        {
+            "device_name": "video1",
+            "device_path": "/dev/video1",
+            "camera_name": "UVC Camera (046d:0825)",
+            "driver_name": "uvcvideo",
+            "hardware_bus": "usb-3f980000.usb-1.1",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "STREAMING"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": "/dev/v4l/by-path/platform-3f980000.usb-usb-0:1.1:1.0-video-index0",
+            "path_by_id": "/dev/v4l/by-id/usb-046d_0825_66EF0390-video-index0",
+            "alt_name": "UVC Camera (046d:0825)",
+            "usb_location": "1:3"
+        },
+        {
+            "device_name": "video14",
+            "device_path": "/dev/video14",
+            "camera_name": "bcm2835-isp",
+            "driver_name": "bcm2835-isp",
+            "hardware_bus": "platform:bcm2835-isp",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "STREAMING"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": null,
+            "path_by_id": null,
+            "alt_name": "bcm2835-isp-capture0",
+            "usb_location": null
+        },
+        {
+            "device_name": "video15",
+            "device_path": "/dev/video15",
+            "camera_name": "bcm2835-isp",
+            "driver_name": "bcm2835-isp",
+            "hardware_bus": "platform:bcm2835-isp",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "STREAMING"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": null,
+            "path_by_id": null,
+            "alt_name": "bcm2835-isp-capture1",
+            "usb_location": null
+        },
+        {
+            "device_name": "video21",
+            "device_path": "/dev/video21",
+            "camera_name": "bcm2835-isp",
+            "driver_name": "bcm2835-isp",
+            "hardware_bus": "platform:bcm2835-isp",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "STREAMING"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": "/dev/v4l/by-path/platform-bcm2835-isp-video-index1",
+            "path_by_id": null,
+            "alt_name": "bcm2835-isp-capture0",
+            "usb_location": null
+        },
+        {
+            "device_name": "video22",
+            "device_path": "/dev/video22",
+            "camera_name": "bcm2835-isp",
+            "driver_name": "bcm2835-isp",
+            "hardware_bus": "platform:bcm2835-isp",
+            "capabilities": [
+                "VIDEO_CAPTURE",
+                "EXT_PIX_FORMAT",
+                "STREAMING"
+            ],
+            "version": "6.1.63",
+            "path_by_hardware": "/dev/v4l/by-path/platform-bcm2835-isp-video-index2",
+            "path_by_id": null,
+            "alt_name": "bcm2835-isp-capture1",
+            "usb_location": null
+        }
+    ],
+    "libcamera_devices": [
+        {
+            "libcamera_id": "/base/soc/i2c0mux/i2c@1/ov5647@36",
+            "model": "ov5647",
+            "modes": [
+                {
+                    "format": "SGBRG10_CSI2P",
+                    "resolutions": [
+                        "640x480",
+                        "1296x972",
+                        "1920x1080",
+                        "2592x1944"
+                    ]
+                }
+            ]
+        },
+        {
+            "libcamera_id": "/base/soc/usb@7e980000/usb-port@1/usb-port@1-1.1:1.0-046d:0825",
+            "model": "UVC Camera (046d:0825)",
+            "modes": [
+                {
+                    "format": "MJPEG",
+                    "resolutions": [
+                        "160x120",
+                        "176x144",
+                        "320x176",
+                        "320x240",
+                        "352x288",
+                        "432x240",
+                        "544x288",
+                        "640x360",
+                        "640x480",
+                        "752x416",
+                        "800x448",
+                        "864x480",
+                        "800x600",
+                        "960x544",
+                        "1024x576",
+                        "960x720",
+                        "1184x656",
+                        "1280x720",
+                        "1280x960"
+                    ]
+                },
+                {
+                    "format": "YUYV",
+                    "resolutions": [
+                        "160x120",
+                        "176x144",
+                        "320x176",
+                        "320x240",
+                        "352x288",
+                        "432x240",
+                        "544x288",
+                        "640x360",
+                        "640x480",
+                        "752x416",
+                        "800x448",
+                        "864x480",
+                        "800x600",
+                        "960x544",
+                        "1024x576",
+                        "960x720",
+                        "1184x656",
+                        "1280x720",
+                        "1280x960"
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
+
+Response Schema:
+
+| Field               | Type  | Description                           |
+| ------------------- | :---: | ------------------------------------- |
+| `v4l2_devices`      | array | An array of V4L2 Device objects.      |
+| `libcamera_devices` | array | An array of Libcamera Device objects. |
+
+V4L2 Device Schema:
+
+| Field              |  Type   | Description                                              |
+| ------------------ | :-----: | -------------------------------------------------------- |
+| `device_name`      | string  | The V4L2 name assigned to the device.  This is typically |
+|                    |         | the name of the file associated with the device.         |^
+| `device_path`      | string  | The absolute system path to the device file.             |
+| `camera_name`      | string  | The camera name reported by the device driver.           |
+| `driver_name`      | string  | The name of the driver loaded for the device.            |
+| `alt_name`         | string? | An alternative device name optionally reported by        |
+|                    |         | sysfs.  Will be `null` if the name file does not exist.  |^
+| `hardware_bus`     | string  | A description of the hardware location of the device     |
+| `capabilities`     |  array  | An array of strings indicating the capabilities the      |
+|                    |         | device supports as reported by V4L2.                     |^
+| `version`          | string  | The device version as reported by V4L2.                  |
+| `path_by_hardware` | string? | A symbolic link to the device based on its physical      |
+|                    |         | connection, ie: usb port.. Will be  `null` if no         |^
+|                    |         | matching link exists.                                    |^
+| `path_by_id`       | string? | A symbolic link the the device based on its reported     |
+|                    |         | ID. Will be  `null` if no matching link exists.          |^
+| `usb_location`     | string? | An identifier derived from the reported usb bus and      |
+|                    |         | device numbers. Will be `null` for non-usb devices.      |^
+
+Libcamera Device Schema:
+
+| Field          |  Type  | Description                                             |
+| -------------- | :----: | ------------------------------------------------------- |
+| `libcamera_id` | string | The ID of the device as reported by libcamera.          |
+| `model`        | string | The model name of the device.                           |
+| `modes`        | array  | An array of `Libcamera Mode` objects, each describing a |
+|                |        | mode supported by the device.                           |^
+
+Libcamera Mode Schema:
+
+| Field         |  Type  | Description                                                 |
+| ------------- | :----: | ----------------------------------------------------------- |
+| `format`      | string | The pixel format of the mode.                               |
+| `resolutions` | array  | An array of strings describing the resolutions supported by |
+|               |        | the mode.  Each entry is reported as `<WIDTH>x<HEIGHT>`     |^
+
+#### Query Unassigned Canbus UUIDs
+
+Queries the provided canbus interface for unassigned Klipper or Katapult
+node IDs.
+
+!!! Warning
+    It is recommended that frontends provide users with an explanation
+    of how UUID queries work and the potential pitfalls when querying
+    a bus with multiple unassigned nodes.  An "unassigned" node is a
+    CAN node that has not been activated by Katapult or Klipper.  If
+    either Klipper or Katapult has connected to the node, it will be
+    assigned a Node ID and therefore will no longer respond to queries.
+    A device reset is required to remove the assignment.
+
+    When multiple unassigned nodes are on the network, each responds to
+    the query at roughly the same time.  This results in arbitration
+    errors.  Nodes will retry the send until the response reports success.
+    However, nodes track the count of arbitration errors, and once a
+    specific threshold is reached they will go into a "bus off" state. A
+    device reset is required to reset the counter and recover from "bus off".
+
+    For this reason, it is recommended that users only issue a query when
+    a single unassigned node is on the network.  If a user does wish to
+    query multiple unassigned nodes it is vital that they reset all nodes
+    on the network before running Klipper.
+
+HTTP Request:
+```http
+GET /machine/peripherals/canbus?interface=can0
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.peripherals.canbus",
+    "params": {
+        "interface": "can0"
+    },
+    "id": 7896
+}
+```
+
+Parameters:
+
+| Name        |  Type  | Description                                           |
+| ----------- | :----: | ----------------------------------------------------- |
+| `interface` | string | The cansocket interface to query.  Default is `can0`. |
+
+Returns:
+
+```json
+{
+    "can_uuids": ["11AABBCCDD"]
+}
+```
+
+Response Schema:
+
+| Field       | Type  | Description                                               |
+| ----------- | :---: | --------------------------------------------------------- |
+| `can_uuids` | array | An array of discovered UUIDs as strings.  If no UUIDS are |
+|             |       | found the result is an empty array.                       |^
 
 ### File Operations
 
@@ -5335,7 +5866,7 @@ An object containing all measurements for every configured sensor:
 ### Spoolman APIs
 The following APIs are available to interact with the Spoolman integration:
 
-### Get Spoolman Status
+#### Get Spoolman Status
 Returns the current status of the spoolman module.
 
 HTTP request:

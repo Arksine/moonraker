@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog].
 - **build**: Added support for optional speedup dependencies `uvloop` and `msgspec`
 - **update_manager**: Added support for "zipped" application updates
 - **file_manager**: Added `enable_config_write_access` option
+- **machine**: Add support for system peripheral queries
 
 ### Fixed
 
