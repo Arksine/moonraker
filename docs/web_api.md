@@ -1697,13 +1697,11 @@ incorrect or if any pending sudo requests fail.
 
 Returns a list of all USB devices currently detected on the system.
 
-HTTP request:
-```http
+```http title="HTTP Request"
 GET /machine/peripherals/usb
 ```
 
-JSON-RPC request:
-```json
+```json title="JSON-RPC Request"
 {
     "jsonrpc": "2.0",
     "method": "machine.peripherals.usb",
@@ -1711,10 +1709,7 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
-An object containing a list of attached USB device info:
-
+/// api-example-response
 ```json
 {
     "usb_devices": [
@@ -1791,14 +1786,18 @@ An object containing a list of attached USB device info:
     ]
 }
 ```
+///
 
-Response Schema:
+/// api-response-schema
+    open: True
+Response
 
 | Field         | Type  | Description                                            |
 | ------------- | :---: | ------------------------------------------------------ |
 | `usb_devices` | array | An array of objects containing USB device information. |
 
-USB Device Schema:
+
+ USB Device
 
 | Field          |  Type   | Description                                         |
 | -------------- | :-----: | --------------------------------------------------- |
@@ -1821,19 +1820,18 @@ USB Device Schema:
 | `description`  | string? | The full device description string as reported by   |
 |                |         | the usb.ids file. This will be `null` if no         |^
 |                |         | description is found.                               |^
+///
 
 #### List Serial Devices
 
 Returns a list of all serial devices detected on the system.  These may be USB
 CDC-ACM devices or hardware UARTs.
 
-HTTP request:
-```http
+```http title="HTTP Request"
 GET /machine/peripherals/serial
 ```
 
-JSON-RPC request:
-```json
+```json title="JSON-RPC Request"
 {
     "jsonrpc": "2.0",
     "method": "machine.peripherals.serial",
@@ -1841,8 +1839,7 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
+/// api-example-response
 ```json
 {
     "serial_devices": [
@@ -1885,30 +1882,35 @@ Returns:
     ]
 }
 ```
+///
 
-Response Schema:
+/// api-response-schema
+    open: True
+Response
 
 | Field            | Type  | Description                                               |
 | ---------------- | ----- | --------------------------------------------------------- |
 | `serial_devices` | array | An array of objects containing serial device information. |
 
 
-Serial Device Schema:
+Serial Device
 
-| Field              |  Type   | Description                                                         |
-| ------------------ | :-----: | ------------------------------------------------------------------- |
-| `device_type`      | string  | The type of serial device. Can be `hardware_uart` or `usb`.         |
-| `device_path`      | string  | The absolute file path to the device.                               |
-| `device_name`      | string  | The device file name as reported by sysfs.                          |
-| `driver_name`      | string  | The name of the device driver.                                      |
-| `path_by_hardware` | string? | A symbolic link to the device based on its physical connection,     |
-|                    |         | ie: usb port.  Will be `null` if no matching link exists.           |^
-| `path_by_id`       | string? | A symbolic link the the device based on its reported IDs. Will be   |
-|                    |         | `null` if no matching link exists.                                  |^
-| `usb_location`     | string? | An identifier derived from the reported usb bus and device numbers. |
-|                    |         | Can be used to match results from `/machine/peripherals/usb`. Will  |^
-|                    |         | be `null` for non-usb devices.                                      |^
-
+| Field              |  Type   | Description                                                 |
+| ------------------ | :-----: | ----------------------------------------------------------- |
+| `device_type`      | string  | The type of serial device. Can be `hardware_uart` or `usb`. |
+| `device_path`      | string  | The absolute file path to the device.                       |
+| `device_name`      | string  | The device file name as reported by sysfs.                  |
+| `driver_name`      | string  | The name of the device driver.                              |
+| `path_by_hardware` | string? | A symbolic link to the device based on its physical         |
+|                    |         | connection, ie: usb port.  Will be `null` if no             |^
+|                    |         | matching link exists.                                       |^
+| `path_by_id`       | string? | A symbolic link the the device based on its reported IDs.   |
+|                    |         | Will be `null` if no matching link exists.                  |^
+| `usb_location`     | string? | An identifier derived from the reported usb bus and .       |
+|                    |         | device numbers Can be used to match results from            |^
+|                    |         | `/machine/peripherals/usb`. Will be `null` for non-usb      |^
+|                    |         | devices.                                                    |^
+///
 
 #### List Video Capture Devices
 
@@ -1916,12 +1918,11 @@ Retrieves a list of V4L2 video capture devices on the system.  If
 the python3-libcamera system package is installed this request will
 also return libcamera devices.
 
-```http
+```http title="HTTP Request"
 GET /machine/peripherals/video
 ```
 
-JSON-RPC request:
-```json
+```json title="JSON-RPC Request"
 {
     "jsonrpc": "2.0",
     "method": "machine.peripherals.video",
@@ -1929,8 +1930,7 @@ JSON-RPC request:
 }
 ```
 
-Returns:
-
+/// api-example-response
 ```json
 {
     "v4l2_devices": [
@@ -2112,15 +2112,18 @@ Returns:
     ]
 }
 ```
+///
 
-Response Schema:
+/// api-response-schema
+    open: True
+Response
 
 | Field               | Type  | Description                           |
 | ------------------- | :---: | ------------------------------------- |
 | `v4l2_devices`      | array | An array of V4L2 Device objects.      |
 | `libcamera_devices` | array | An array of Libcamera Device objects. |
 
-V4L2 Device Schema:
+V4L2 Device
 
 | Field              |  Type   | Description                                              |
 | ------------------ | :-----: | -------------------------------------------------------- |
@@ -2143,7 +2146,7 @@ V4L2 Device Schema:
 | `usb_location`     | string? | An identifier derived from the reported usb bus and      |
 |                    |         | device numbers. Will be `null` for non-usb devices.      |^
 
-Libcamera Device Schema:
+Libcamera Device
 
 | Field          |  Type  | Description                                             |
 | -------------- | :----: | ------------------------------------------------------- |
@@ -2152,13 +2155,14 @@ Libcamera Device Schema:
 | `modes`        | array  | An array of `Libcamera Mode` objects, each describing a |
 |                |        | mode supported by the device.                           |^
 
-Libcamera Mode Schema:
+Libcamera Mode
 
 | Field         |  Type  | Description                                                 |
 | ------------- | :----: | ----------------------------------------------------------- |
 | `format`      | string | The pixel format of the mode.                               |
 | `resolutions` | array  | An array of strings describing the resolutions supported by |
 |               |        | the mode.  Each entry is reported as `<WIDTH>x<HEIGHT>`     |^
+///
 
 #### Query Unassigned Canbus UUIDs
 
@@ -2186,13 +2190,11 @@ node IDs.
     query multiple unassigned nodes it is vital that they reset all nodes
     on the network before running Klipper.
 
-HTTP Request:
-```http
+```http title="HTTP Request"
 GET /machine/peripherals/canbus?interface=can0
 ```
 
-JSON-RPC request:
-```json
+```json title="JSON-RPC Request"
 {
     "jsonrpc": "2.0",
     "method": "machine.peripherals.canbus",
@@ -2203,26 +2205,38 @@ JSON-RPC request:
 }
 ```
 
-Parameters:
-
+/// api-parameters
+    open: True
 | Name        |  Type  | Description                                           |
 | ----------- | :----: | ----------------------------------------------------- |
 | `interface` | string | The cansocket interface to query.  Default is `can0`. |
+///
 
-Returns:
-
+/// api-example-response
 ```json
 {
     "can_uuids": ["11AABBCCDD"]
 }
 ```
+///
 
-Response Schema:
+/// api-response-schema
+    open: True
+Response
 
-| Field       | Type  | Description                                               |
-| ----------- | :---: | --------------------------------------------------------- |
-| `can_uuids` | array | An array of discovered UUIDs as strings.  If no UUIDS are |
-|             |       | found the result is an empty array.                       |^
+| Field       | Type  | Description                                                      |
+| ----------- | :---: | ---------------------------------------------------------------- |
+| `can_uuids` | array | An array of discovered CAN UUID objects, or an empty array if no |
+|             |       | unassigned CAN nodes are found.                                  |^
+
+Can UUID
+
+| Field         |  Type  | Description                                                 |
+| ------------- | :----: | ----------------------------------------------------------- |
+| `uuid`        | string | The UUID of the unassigned node.                            |
+| `application` | string | The name of the application running on the unassigned Node. |
+|               |        | Should be "Klipper" or "Katapult".                          |^
+///
 
 ### File Operations
 

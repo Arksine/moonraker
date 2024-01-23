@@ -71,6 +71,45 @@ markdown_extensions:
     - pymdownx.tasklist:
         custom_checkbox: true
     - pymdownx.tilde
+    - pymdownx.blocks.details:
+        types:
+        - name: details-new
+          class: new
+        - name: details-settings
+          class: settings
+        - name: details-note
+          class: note
+        - name: details-abstract
+          class: abstract
+        - name: details-info
+          class: info
+        - name: details-tip
+          class: tip
+        - name: details-success
+          class: success
+        - name: details-question
+          class: question
+        - name: details-warning
+          class: warning
+        - name: details-failure
+          class: failure
+        - name: details-danger
+          class: danger
+        - name: details-bug
+          class: bug
+        - name: details-example
+          class: example
+        - name: details-quote
+          class: quote
+        - name: api-example-response
+          class: example
+          title: "Example Response"
+        - name: api-response-schema
+          class: info
+          title: "Response Schema"
+        - name: api-parameters
+          class: info
+          title: "Parameters"
     - tables
     - compact_tables:
         auto_insert_break: true
