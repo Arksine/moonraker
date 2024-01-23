@@ -1,0 +1,7 @@
+[data-md-color-scheme="slate"] {
+    --md-table-color: rgb(20, 20, 20);
+}
+
+thead th {
+    background-color: var(--md-table-color)
+}
