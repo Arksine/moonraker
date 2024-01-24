@@ -284,7 +284,8 @@ class Machine:
             pass
 
     async def component_init(self) -> None:
-        await self.update_usb_ids()
+        eventloop = self.server.get_event_loop()
+        eventloop.create_task(self.update_usb_ids())
         await self.validator.validation_init()
         await self.sys_provider.initialize()
         if not self.inside_container:
@@ -849,6 +850,7 @@ class Machine:
                 headers["If-None-Match"] = etag
             if last_modified is not None and usb_ids_path.is_file():
                 headers["If-Modified-Since"] = last_modified
+            logging.info("Fetching latest usb.ids file...")
             resp = await client.get(
                 USB_IDS_URL, headers, enable_cache=False
             )
