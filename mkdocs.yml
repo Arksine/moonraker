@@ -1,11 +1,28 @@
 site_name: Moonraker
 site_url: https://moonraker.readthedocs.io
 repo_url: https://github.com/Arksine/moonraker
+edit_uri: blob/master/docs/
 nav:
     - Installation: installation.md
     - Configuration : configuration.md
-    - 'Developer Documentation':
-        - Remote API: web_api.md
+    - Developer Documentation:
+        - External API:
+          - Introduction: external_api/introduction.md
+          - Server Administration: external_api/server.md
+          - Printer Administration: external_api/printer.md
+          - System Administration: external_api/machine.md
+          - File Management: external_api/file_manager.md
+          - Authorization and Authentication: external_api/authorization.md
+          - Database Management: external_api/database.md
+          - Job Queue Management: external_api/job_queue.md
+          - Job History Management: external_api/history.md
+          - Announcements: external_api/announcements.md
+          - Webcam Management: external_api/webcams.md
+          - Update Management: external_api/update_manager.md
+          - Switches, Sensors, and Devices: external_api/devices.md
+          - Third Party Integrations: external_api/integrations.md
+          - Extensions: external_api/extensions.md
+          - JSON-RPC Notifications: external_api/jsonrpc_notifications.md
         - Printer Objects: printer_objects.md
         - Components: components.md
         - Contribution Guidelines: contributing.md
@@ -58,8 +75,8 @@ markdown_extensions:
     - pymdownx.caret
     - pymdownx.details
     - pymdownx.emoji:
-        emoji_index: !!python/name:materialx.emoji.twemoji
-        emoji_generator: !!python/name:materialx.emoji.to_svg
+        emoji_index: !!python/name:material.extensions.emoji.twemoji
+        emoji_generator: !!python/name:material.extensions.emoji.to_svg
     - pymdownx.highlight
     - pymdownx.inlinehilite
     - pymdownx.keys
@@ -71,6 +88,8 @@ markdown_extensions:
     - pymdownx.tasklist:
         custom_checkbox: true
     - pymdownx.tilde
+    - pymdownx.saneheaders
+    - pymdownx.blocks.admonition
     - pymdownx.blocks.details:
         types:
         - name: details-new
@@ -103,13 +122,16 @@ markdown_extensions:
           class: quote
         - name: api-example-response
           class: example
-          title: "Example Response"
-        - name: api-response-schema
+          title: "Response Example"
+        - name: api-response-spec
           class: info
-          title: "Response Schema"
+          title: "Response Specification"
         - name: api-parameters
           class: info
           title: "Parameters"
+        - name: api-notification-spec
+          class: info
+          title: "Notification Parameter Specification"
     - tables
     - compact_tables:
         auto_insert_break: false
@@ -117,4 +139,6 @@ markdown_extensions:
         expand_text: ''
         collapse_text: ''
 extra_css:
-    - src/css/extras.css
+    - src/css/extra-950ac449d4.css
+extra_javascript:
+    - src/js/compact-tables-qqTQvuZ9.js

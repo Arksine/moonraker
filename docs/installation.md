@@ -1,4 +1,4 @@
-## Installation
+#
 
 This document provides a guide on how to install Moonraker on a Debian
 based Linux Distributions.  Other linux distributions may work, however
@@ -6,14 +6,14 @@ they may need a custom install script.  Moonraker requires Python 3.7 or
 greater, verify that your distribution's Python 3 packages meet this
 requirement.
 
-### Installing Klipper
+## Installing Klipper
 
 Klipper should be installed prior to installing Moonraker.  Please see
 [Klipper's Documentation](https://klipper3d.com/Overview.html) for details.
 After installing Klipper you should make sure to add Moonraker's
 [configuration requirements](#klipper-configuration-requirements).
 
-#### Klipper Configuration Requirements
+### Klipper Configuration Requirements
 
 Moonraker depends on the following Klippy extras for full functionality:
 
@@ -34,7 +34,7 @@ missing one or both, you can simply add the bare sections to `printer.cfg`:
 path: ~/printer_data/gcodes
 ```
 
-#### Enabling Klipper's Unix Domain Socket Server
+### Enabling Klipper's Unix Domain Socket Server
 
 After Klipper is installed it may be necessary to modify its `defaults` file in
 order to enable the Unix Domain Socket.  Begin by opening the file in your
@@ -92,7 +92,7 @@ mkdir ~/printer_data/config
 mv printer.cfg ~/printer_data/config
 ```
 
-### Installing Moonraker
+## Installing Moonraker
 
 Moonraker provides an install script that can be used to facilitate
 installation.  The type of installation depends on where the install
@@ -105,7 +105,7 @@ Prior to installation it is necessary to open a terminal on the host
 machine, or SSH into it.  It is recommended to read this entire
 section before proceeding with the installation.
 
-#### Installing the Moonraker Python package
+### Installing the Moonraker Python package
 
 The Python Package version of Moonraker will receive fewer updates, and
 should generally be more stable.   This is intended for users that do
@@ -123,7 +123,7 @@ wget https://raw.githubusercontent.com/Arksine/moonraker/master/scripts/install-
 ./install-moonraker.sh
 ```
 
-#### Installing Moonraker from source
+### Installing Moonraker from source
 
 Moonraker can be run directly from source.  This method of installation will
 clone Moonraker's git repository, and may receive frequent bleeding edge
@@ -138,7 +138,7 @@ git clone https://github.com/Arksine/moonraker.git
 ~/moonraker/scripts/install-moonraker.sh
 ```
 
-#### Customizing the installation
+### Customizing the installation
 
 The install script will attempt to create a basic configuration if
 `moonraker.conf` does not exist at the expected location, however if you
@@ -218,7 +218,7 @@ Now you may wish to install a frontend, such as
     debian/ubuntu distros).
 
 
-### Data Folder Structure
+## Data Folder Structure
 
 As mentioned previously, files and folders used by Moonraker are organized
 in a primary data folder.  The example below illustrates the folder
@@ -299,7 +299,7 @@ systemd service unit, ie:
     when a file change is detected.  The action taken depends on the
     "root" folder, thus it is important that they be distinct.
 
-### The systemd service file
+## The systemd service file
 
 The default installation will create `/etc/systemd/system/moonraker.service`.
 Below is a common example of service file, installed on a Raspberry Pi:
@@ -340,7 +340,7 @@ Following are some items to take note of:
   the environment file.
 
 
-### Command line usage
+## Command line usage
 
 This section is intended for users that need to write their own
 installation script.  Detailed are the command line arguments
@@ -418,7 +418,7 @@ be used to specify options in place of the command line.
 [The environment file](#the-environment-file) may be used to set Moonraker's
 command line arguments and/or environment variables.
 
-### The environment file
+## The environment file
 
 The environment file, `moonraker.env`. is created in the data path during
 installation. A default installation's environment file will contain the path
@@ -454,7 +454,7 @@ MOONRAKER_ARGS="-m moonraker"
 PYTHONPATH="/home/pi/moonraker"
 ```
 
-# Optional Speedups
+## Optional Speedups
 
 Moonraker supports two optional Python packages that can be used to reduce
 its CPU load:
@@ -480,7 +480,7 @@ environment variables in [moonraker.env](#the-environment-file):
 - `MOONRAKER_ENABLE_UVLOOP="n"`
 
 
-### PolicyKit Permissions
+## PolicyKit Permissions
 
 Some of Moonraker's components require elevated privileges to perform actions.
 Previously these actions could only be run via commandline programs launched
@@ -548,7 +548,7 @@ enable_system_updates: False
     Previously installed PolicyKit rules can be removed by running
     `set-policykit-rules.sh -c`
 
-### Completing Privileged Upgrades
+## Completing Privileged Upgrades
 
 At times an update to Moonraker may require a change to the systemd service
 file, which requires sudo permission to complete.  Moonraker will present
@@ -579,7 +579,7 @@ bound to another port the user may specify a custom address and port.
 The API Key (`-k`) option is only necessary if the localhost is not authorized
 to access Moonraker's API.
 
-### Retrieving the API Key
+## Retrieving the API Key
 
 Some clients may require an API Key to connect to Moonraker.  After the
 `[authorization]` component is first configured Moonraker will automatically
@@ -617,7 +617,7 @@ sudo systemctl restart moonraker
 
         {"result": "8ce6ae5d354a4365812b83140ed62e4b"}
 
-### Database Backup and Restore
+## Database Backup and Restore
 
 Moonraker stores persistent data using an Sqlite database.  By default
 the database file is located at `<data_folder>/database/moonraker-sql.db`.
@@ -632,7 +632,7 @@ existing database file when the Moonraker service has been stopped.
 Restoration can be performed by stopping the Moonraker service and
 overwriting the existing database with the backup.
 
-#### LDMB Database (deprecated)
+### LDMB Database (deprecated)
 
 Previous versions of Moonraker used a [LMDB Database](http://www.lmdb.tech/doc/)
 for persistent storage of procedurally generated data.  LMDB database files are
@@ -697,7 +697,7 @@ contain credentials and other sensitive information, so users should treat
 this file accordingly.  It is not recommended to keep backups in any folder
 served by Moonraker.
 
-### Recovering a broken repo
+## Recovering a broken repo
 
 Currently Moonraker is deployed using `git`.  Without going into the gritty
 details,`git` is effectively a file system, and as such is subject to
@@ -734,7 +734,7 @@ git clone https://github.com/Klipper3d/klipper.git
 sudo systemctl restart klipper
 ```
 
-### Debug options for developers
+## Debug options for developers
 
 Moonraker accepts several command line arguments that can be used to
 assist both front end developers and developers interested in extending

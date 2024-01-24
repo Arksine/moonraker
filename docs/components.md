@@ -47,7 +47,7 @@ class Example:
         return await klippy_apis.query_objects({'print_stats': None})
 
     async def _handle_example_request(self, web_request):
-        web_request.get_int("required_reqest_param")
+        web_request.get_int("required_request_param")
         web_request.get_float("optional_request_param", None)
         state = await self.request_some_klippy_state()
         return {"example_return_value": state}
@@ -126,7 +126,7 @@ object.
 #### *ConfigHelper.get_prefix_sections(prefix)*
 
 Returns a list section names in the configuration that start with `prefix`.
-These strings can be used to retreve ConfigHelpers via
+These strings can be used to retrieve ConfigHelpers via
 [get_section()](#confighelpergetsectionsection_name).
 
 ### The Server Object
@@ -219,15 +219,15 @@ callback.  Event names should be in the form of
 #### *Server.register_notification(event_name, notify_name=None)*
 
 Registers a websocket notification to be pushed when `event_name`
-is emitted.  By default JSON-RPC notifcation sent will be in the form of
+is emitted.  By default JSON-RPC notification sent will be in the form of
 `notify_{event_description}`.  For example, when the server sends the
 `server:klippy_connected` event, the JSON_RPC notification will be
 `notify_klippy_connected`.
 
 If a `notify_name` is provided it will override the `{event_description}`
-extracted from the `event_name`.  For example, if the `notify_name="kconnect`
-were specfied when registering the `server:klippy_connected` event, the
-websocket would emit a `notify_kconnect` notification.
+extracted from the `event_name`.  For example, if the `notify_name="k_connected"`
+were specified when registering the `server:klippy_connected` event, the
+websocket would emit a `notify_k_connected` notification.
 
 #### *Server.get_host_info()*
 
@@ -242,7 +242,7 @@ Klippy.  If Klippy has never connected this will be an empty dict.
 ### The WebRequest Object
 
 All callbacks registered with the
-[register_endpoint()](#serverregister_endpointuri-request_methods-callback-protocolhttp-websocket-wrap_resulttrue)
+[register_endpoint()](#serverregister_endpointuri-request_methods-callback-transportshttp-websocket-mqtt-wrap_resulttrue)
 method are passed a WebRequest object when they are executed.  This object
 contains information about the request including its endpoint name and arguments
 parsed from the request.
@@ -253,7 +253,7 @@ Returns the URI registered with this request, ie: `/server/example`.
 
 #### *WebRequest.get_action()*
 
-Returns the request action, which is synonomous with its HTTP request
+Returns the request action, which is synonymous with its HTTP request
 method.  Will be either `GET`, `POST`, or `DELETE`.  This is useful
 if your endpoint was registered with multiple request methods and
 needs to handle each differently.
@@ -326,7 +326,7 @@ established.
 
 Attempts to publish a topic to the Broker.  The `payload` may be a bool, int,
 float, string, or json encodable (Dict or List).  If omitted then an empty
-payload is sent.  The `qos` may be an integer from 0 to 2. If not specifed
+payload is sent.  The `qos` may be an integer from 0 to 2. If not specified
 then the QOS level will use the configured default.  If `retain` is set to
 `True` then the retain flag for the payload will be set.
 
@@ -340,7 +340,7 @@ Publishes the supplied `topic` with the arguments specified by `payload`,
 `qos`, and `retain`, then subscribes to the `response_topic`.  The payload
 delivered by the response topic is returned.  Note that this method is
 a coroutine, it must always be awaited.  The call will block until the
-entire process has completed unless a `timeout` (in seconds) is specifed.
+entire process has completed unless a `timeout` (in seconds) is specified.
 The `timeout` is applied to both the attempt to publish and the pending
 response, so the maximum waiting time would be approximately 2*timeout.
 
@@ -351,7 +351,7 @@ response, so the maximum waiting time would be approximately 2*timeout.
 
 #### *MQTTClient.subscribe_topic(topic, callback, qos=None)*
 
-Subscibes to the supplied `topic` with the specified `qos`.  If `qos` is not
+Subscribes to the supplied `topic` with the specified `qos`.  If `qos` is not
 supplied the configured default will be used.  The `callback` should be a
 callable that accepts a `payload` argument of a `bytes` type.  The callable
 may be a coroutine.  The callback will be run each time the subscribed topic
@@ -359,7 +359,7 @@ is published by another client.
 
 Returns a `SubscriptionHandle` that may be used to unsubscribe the topic.
 
-#### *MQTTClinet.unsubscribe(hdl)*
+#### *MQTTClient.unsubscribe(hdl)*
 
 Unsubscribes the callback associated with `hdl`.  If no outstanding callbacks
 exist for the topic then the topic is unsubscribed from the broker.

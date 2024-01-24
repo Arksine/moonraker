@@ -78,7 +78,7 @@ Signed-off-by: Eric Callahan <arksine.code@gmail.com>
 ```
 
 By signing off on commits, you acknowledge that you agree to the
-[developer certificate of origin](../developer-certificate-of-origin)
+[developer certificate of origin](https://developercertificate.org/)
 shown below.  As mentioned above, your signature must contain your
 real name and a current email address.
 

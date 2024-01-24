@@ -271,7 +271,7 @@ gcode:
 
 !!! Note
     This section no long has configuration options.  Previously the
-    `database_path` option was used to determine the locatation of
+    `database_path` option was used to determine the location of
     the database folder, it is now determined by the `data path`
     configured on the command line.
 
@@ -559,7 +559,7 @@ user_filter: (&(objectClass=user)(cn=USERNAME))
 ### `[octoprint_compat]`
 Enables partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
-Currently we support Slic3r derivatives and Cura with Cura-OctoPrint.
+Currently PrusaSlicer derivatives and Cura with Cura-OctoPrint.
 
 ```ini
 # moonraker.conf
@@ -718,7 +718,7 @@ bound_services:
 #   the Moonraker service can not be bound to a power device.  Note that
 #   service names are case sensitive.
 #
-#   When the "initial_state" option is explcitly configured bound services
+#   When the "initial_state" option is explicitly configured bound services
 #   will be synced with the current state.  For example, if the initial_state
 #   is "off", all bound services will be stopped after device initialization.
 #
@@ -1386,7 +1386,7 @@ port:
 ##### Example
 
 ```ini
-# moonraker.confg
+# moonraker.config
 
 # Example for controlling a device connected to a Raspberry Pi 3B+.
 # Location 1-1 Port 2 controls power for all 4 exposed ports.
@@ -1432,7 +1432,7 @@ a Jinja2 context with the following fields:
 - `async_sleep`:  An alias for the `asyncio.sleep` method.  This may be used
   to add delays if necessary.
 - `log_debug`: An alias for `logging.debug`.  This can be used to log messages
-  and data to `moonraker.log` to aid in debugging an implmentation.  Note that
+  and data to `moonraker.log` to aid in debugging an implementation.  Note that
   verbose logging must be
   [enabled](installation.md#debug-options-for-developers) for these messages
   to appear in the log.
@@ -1531,7 +1531,7 @@ __`http_response.final_url`__
 
 > A property that returns "effective" url of the request after all redirects.
 
-__`http_reponse.headers`__
+__`http_response.headers`__
 
 > A property that returns the response headers as a python `Dict`.
 
@@ -1688,7 +1688,7 @@ gcode:
 
 # Override SDCARD_PRINT_FILE
 [gcode_macro SDCARD_PRINT_FILE]
-rename_existing: SDCPF
+rename_existing: DO_PRINT
 gcode:
    # Step 1: Call the remote method to turn on the power device
    POWER_ON_HEATERS
@@ -1696,7 +1696,7 @@ gcode:
    # pauses for 4 seconds.  It may be necessary to tweak this value.
    G4 P4000
    # Step 3: Call the renamed command to start the print
-   SDCPF {rawparams}
+   DO_PRINT {rawparams}
 
 ```
 
@@ -1712,7 +1712,7 @@ gcode:
 Another exotic use case is the addition of a "conditional" peripheral,
 such as an MMU device.  The user may not wish to power on this device
 for every print, and instead power it on from within the "Start G-GCode"
-conditionally.  Additionaly we do not want this device to be turned on/off
+conditionally.  Additionally we do not want this device to be turned on/off
 unintentionally during a print.  The `set_device_power` remote method takes
 an optional `force` argument that can be used to accommodate this scenario.
 
@@ -2064,7 +2064,7 @@ info_tags:
 pinned_commit:
 #   A git commit hash to "pin" updates to.  When specified Moonraker will not
 #   update the repo beyond the pinned commit.  If the repo is already beyond
-#   the specified commit, or if the commit is not in the repo, futher updates
+#   the specified commit, or if the commit is not in the repo, further updates
 #   are disabled until the pinned_commit is changed.  It is recommended to
 #   specify the complete hash, however abbreviated hashes with a minimum of
 #   8 characters are accepted.  The "pinned_commit" overrides the update
@@ -2078,7 +2078,7 @@ pinned_commit:
     services Moonraker is allowed to manage and how to add additional services.
 
     Also not that systemd services are case sensitive.  The `extension_name`
-    in the section header and the value provided in the `managed_servies`
+    in the section header and the value provided in the `managed_services`
     option must match the case of the systemd unit file.
 
 #### Zip Application Configuration
@@ -2147,12 +2147,12 @@ refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
 virtualenv:
-#   Path to the virtual enviromnent containing the python application.
+#   Path to the virtual environment containing the python application.
 project_name:
 #   Name of the python project as listed in the python package index.  If
 #   the packaged is sourced from GitHub, this will be the name of the project
 #   specified in the build.  Optional "extras" may be added, see the tip
-#   follwing this example for details.  The default is the name specified by the
+#   following this example for details.  The default is the name specified by the
 #   configuration section.
 primary_branch:
 #   For packages sourced from GitHub, this option may be used to specify the
@@ -2242,7 +2242,7 @@ When a `zip` or `git_repo` application depends on OS packages it is possible
 to specify them in a file that Moonraker can refer to.  During an update
 Moonraker will use this file to install new dependencies if they are detected.
 
-Below is an example of Moonraker's system dependcies file, located at
+Below is an example of Moonraker's system dependencies file, located at
 in the repository at
 [scripts/system-dependencies.json](https://github.com/Arksine/moonraker/blob/master/scripts/system-dependencies.json):
 
@@ -2278,8 +2278,8 @@ Pi OS, Ubuntu, and likely other Debian derived distributions.
 Enables an MQTT Client.  When configured most of Moonraker's APIs are available
 by publishing JSON-RPC requests to `{instance_name}/moonraker/api/request`.
 Responses will be published to `{instance_name}/moonraker/api/response`. See
-the [API Documentation](web_api.md#json-rpc-api-overview) for details on
-on JSON-RPC.
+the [API Documentation](./external_api/introduction.md#json-rpc-api-overview)
+for details on on JSON-RPC.
 
 It is also possible for other components within Moonraker to use MQTT to
 publish and subscribe to topics.
@@ -2294,7 +2294,7 @@ address:
 port:
 #   Port the Broker is listening on.  Default is 1883.
 client_id:
-#   A string client identifer sent by the client to the broker after
+#   A string client identifier sent by the client to the broker after
 #   connecting.  The default is a randomly assigned client id.
 enable_tls: False
 #   Enables SSL/TLS connections when set to true.  Note that if a user intends
@@ -2450,7 +2450,7 @@ serial:
 #   0.13 Build 2108250 or later.
 #   Required when type: serial
 initial_preset:
-#   Initial preset ID (favourite) to use. If not specified initial_colors
+#   Initial preset ID (favorite) to use. If not specified initial_colors
 #   will be used instead.
 initial_red:
 initial_green:
@@ -2555,7 +2555,7 @@ detect and use Moonraker instances.
 
 [zeroconf]
 mdns_hostname:
-#   The hostname used when registering the multicast DNS serivce.
+#   The hostname used when registering the multicast DNS service.
 #   The instance will be available at:
 #       http://{mdns_hostname}.local:{port}/
 #   The default is the operating system's configured hostname.
@@ -2598,7 +2598,7 @@ debounce_period: .05
 minimum_event_time: 0
 #   The minimum event duration (in seconds) required to trigger a response.
 #   This can be used as a secondary debounce procedure. The default is 0
-#   seconds (no minumum duration).
+#   seconds (no minimum duration).
 on_press:
 on_release:
 #   Jinja2 templates to be executed when a button event is detected.  At least one
@@ -2613,7 +2613,8 @@ with two methods that may be called in addition to Jinja2's default filters
 adn methods:
 
 - `call_method`:  Calls an internal API method.  See the
-  [API documentation](web_api.md#jinja2-template-api-calls) for  details.
+  [API documentation](./external_api/introduction.md#jinja2-template-api-calls)
+  for  details.
 - `send_notification`:  Emits a websocket notification.  This is useful if you
    wish to use buttons to notify attached clients of some action.  This
    method takes an optional argument that may contain any JSON object.
@@ -2826,7 +2827,7 @@ body: "Your printer status has changed to {event_name}"
 #      event_message: An additional message passed to the notification when
 #                     triggered.  This is commonly used when the notification
 #                     is received from Klippy using a gcode_macro.
-#   The default is a body containining the "name" of the notification as entered
+#   The default is a body containing the "name" of the notification as entered
 #   in the section header.
 body_format:
 #   The formatting to use for the body, can be `text`, `html` and `markdown`.
@@ -2838,8 +2839,8 @@ title:
 attach:
 #   One or more items to attach to the notification. This may be a path to a
 #   local file or a url (such as a webcam snapshot).  Multiple attachments must be
-#   separated by a newline.  This option accepts Jinja2 templates, the tempalte
-#   will recieve the same context as the "body" and "title" options.  The default
+#   separated by a newline.  This option accepts Jinja2 templates, the template
+#   will receive the same context as the "body" and "title" options.  The default
 #   is no attachment will be sent with the notification.
 #
 #   Note: Attachments are not available for all notification services, you can
@@ -2948,7 +2949,7 @@ ambient_sensor:
 
     - Klipper's version, connection state, and date pulled
     - Moonraker's version
-    - Currenly connected front-end and version
+    - Currently connected front-end and version
     - Current python version
     - Linux distribution and version
     - Network connection type (wifi or ethernet)
@@ -3003,7 +3004,7 @@ parameter_{parameter_name}:
 #   be a valid measurement reported by the sensor. The value should be
 #   a newline separated list of key-value pairs describing the
 #   the measurement.  Currently the only key used is "units". For
-#   example, the configuration for a parameter may look like the follwing:
+#   example, the configuration for a parameter may look like the following:
 #
 #     parameter_energy:
 #       units=kWh
@@ -3061,7 +3062,7 @@ history_field_{field_name}:
 
     - `basic`: This strategy should be used if the value should be stored
       in history directly as it is received.  Simply put, the last value
-      received before a job completes wiill the the value stored in the job
+      received before a job completes will be the value stored in the job
       history.
     - `accumulate`:  When a job starts, the tracked value initialized to 0 or
       the last received measurement.  New measurements will be added to the
@@ -3181,7 +3182,7 @@ Tasmota Example:
 
 !!! Note
     It may be necessary to set Tasmota's Telemetry Period to a low value
-    to acheive a decent response.  This can be done in the with the
+    to achieve a decent response.  This can be done in the with the
     `TelePeriod` command via the console.  For example, the command
     to set the telemetry period to 10 seconds is:
 
@@ -3223,7 +3224,7 @@ history_field_average_current:
   units=A
   report_total=false
   report_maximum=true
-# Mulitple history fields may track the same sensor parameter:
+# Multiple history fields may track the same sensor parameter:
 history_field_max_current:
   parameter=current
   desc=Maximum current draw

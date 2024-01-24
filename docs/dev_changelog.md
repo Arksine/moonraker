@@ -70,7 +70,7 @@
 - Added thumbnail extraction from SuperSlicer and PrusaSlicer gcode files
 - For status requests, `virtual_sdcard.current_file` has been renamed to
   `virtual_sdcard.filename`
-- Clients should not send `M112` via gcode to execute an emegency shutdown.
+- Clients should not send `M112` via gcode to execute an emergency shutdown.
   They should instead use the new API which exposes this functionality.
 - New APIs:
   - `POST /printer/emergency_stop` - `post_printer_emergency_stop`
@@ -108,7 +108,7 @@
     remote_api.py module that handles server configuration.
   - webhooks.py has been changed to handle communications with the server
   - klippy.py has been changed to pass itself to webhooks
-  - file_manager.py has been changed to specifiy the correct status code
+  - file_manager.py has been changed to specify the correct status code
     when an error is generated attempting to upload or delete a file
 - The nginx configuration will need the following additional section:
   ```
@@ -149,8 +149,8 @@
   This allows the client limited access to Klippy in the event of a startup
   error, assuming the config file was successfully parsed and the
   `remote_api` configuration section is valid. Note that when the server is
-  initally launched not all endpoints will be available.  The following
-  endponts are guaranteed when the server is launched:
+  initially launched not all endpoints will be available.  The following
+  endpoints are guaranteed when the server is launched:
   - `/websocket`
   - `/printer/info`
   - `/printer/restart`
@@ -159,7 +159,7 @@
   - `/printer/gcode`
   - `/access/api_key`
   - `/access/oneshot_token`
-  The following startup sequence is recommened for clients which make use of
+  The following startup sequence is recommended for clients which make use of
   the websocket:
   - Attempt to connect to `/websocket` until successful
   - Once connected, query `/printer/info` for the ready status.  If not ready
@@ -199,7 +199,7 @@
 - Fix bug in CORS where DELETE requests raised an exception
 - Disable the server when running Klippy in batch mode
 - The the `/printer/cancel`, `/printer/pause` and `/printer/resume` gcodes
-  are now registed by the pause_resume module.  This results in the following
+  are now registered by the pause_resume module.  This results in the following
   changes:
   - The `cancel_gcode`, `pause_gcode`, and `resume_gcode` options have
     been removed from the [web_server] section.
@@ -275,17 +275,17 @@
   websocket data from a Blob into a String.
 - The endpoint for querying endstops has changed from `GET
   /printer/extras/endstops` to `GET /printer/endstops`
-- Serveral API changes have been made to accomodate the addition of webhooks:
+- Several API changes have been made to accommodate the addition of webhooks:
   - `GET /printer/klippy_info` is now `GET /printer/info`.  This endpoint no
     longer  returns host information, as that can be retrieved direct via the
     `location` object in javascript.  Instead it returns CPU information.
-  - `GET /printer/objects` is no longer used to accomodate multiple request
+  - `GET /printer/objects` is no longer used to accommodate multiple request
     types by modifying the "Accept" headers.  Each request has been broken
     down in their their own endpoints:
     - `GET /printer/objects` returns all available printer objects that may
       be queried
     - `GET /printer/status?gcode=gcode_position,speed&toolhead` returns the
-      status of the printer objects and attribtues
+      status of the printer objects and attributes
     - `GET /printer/subscriptions` returns all printer objects that are current
       being subscribed to along with their poll times
     - `POST /printer/subscriptions?gcode&toolhead` requests that the printer
@@ -297,7 +297,7 @@
     - `POST /printer/gcode/<gcode>` is now `POST /printer/gcode?script=<gcode>`
     - `POST printer/print/start/<filename>` is now
       `POST /printer/print/start?filename=<filename>`
-  - The websocket API also required changes to accomodate dynamically registered
+  - The websocket API also required changes to accommodate dynamically registered
     endpoints.  Each method name is now generated from its comparable HTTP
     request.  The new method names are listed below:
     | new method | old method |
@@ -317,7 +317,7 @@
     | post_printer_firmware_restart | firmware_restart |
     | get_printer_endstops | get_endstops |
   - As with the http API, a change was necessary to the way arguments are send
-    along with the request.  Webocket requests should now send "keyword
+    along with the request.  Websocket requests should now send "keyword
     arguments" rather than "variable arguments".  The test client has been
     updated to reflect these changes, see main.js and json-rpc.js, specifically
     the new method `call_method_with_kwargs`.  For status requests this simply

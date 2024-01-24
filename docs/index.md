@@ -10,7 +10,8 @@ Users should refer to the [Installation](installation.md) and
 [Configuration](configuration.md) sections for documentation on how
 to install and configure Moonraker.
 
-Client developers may refer to the [Client API](web_api.md)
+Front end and other client developers may refer to the
+[External API](./external_api/introduction.md)
 documentation.
 
 Backend developers should refer to the

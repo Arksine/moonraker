@@ -1,6 +1,6 @@
 ##
 This file tracks configuration changes and deprecations.  Additionally
-changest to Moonraker that require user intervention will be tracked
+changes to Moonraker that require user intervention will be tracked
 here.
 
 ### December 24th 2023
@@ -36,7 +36,7 @@ here.
 - Configuration options for `[spoolman]` have been added
 - Configuration options for `[sensor]` have been added
 
-### Februrary 8th 2023
+### February 8th 2023
 - The `provider` option in the `[machine]` section no longer accepts
   `supervisord` as an option.  It has been renamed to `supervisord_cli`.
 
@@ -72,7 +72,7 @@ here.
 ### July 27th 2022
 - The behavior of `[include]` directives has changed.  Included files
   are now parsed as they are encountered.  If sections are duplicated
-  options in the last section parsed take precendence.  If you are
+  options in the last section parsed take precedence.  If you are
   using include directives to override configuration in `moonraker.conf`
   the directives should be moved to the bottom of the file.
 - Configuration files now support inline comments.
@@ -83,7 +83,7 @@ here.
   warning will be generated.  It is crucially important to move configuration
   to the correct section as in the future it will be a hard requirement.
 
-### Feburary 22nd 2022
+### February 22nd 2022
 - The `on_when_upload_queued` option for [power] devices has been
   deprecated in favor of `on_when_job_queued`.  As the new option
   name implies, this option will power on the device when any new
@@ -141,7 +141,7 @@ here.
   to retrieve the API Key.
 
 ### March 10th 2021
-- The `cors_domain` option in the `[authoriztion]` section is now
+- The `cors_domain` option in the `[authorization]` section is now
   checked for dangerous entries.  If a domain entry contains a
   wildcard in the top level domain (ie: `http://www.*`) then it
   will be rejected, as malicious website can easily reproduce
@@ -192,10 +192,10 @@ here.
         ~/moonraker/scripts/install-moonraker.sh -r
 
 - The power plugin configuration has changed.  See the
-  [install guide](installation.md#power-control-plugin) for
+  [the configuration documentation](./configuration.md#power) for
   details on the new configuration.
 - Users transitioning from the previous version of the power plugin will need
-  to unexport any curently used pins.  For example, the following command
+  to unexport any currently used pins.  For example, the following command
   may be used to unexport pin 19:
 
         echo 19 > /sys/class/gpio/unexport

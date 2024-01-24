@@ -3,9 +3,9 @@ This document keeps a record of notable changes to Moonraker's Web API.
 
 ### July 18th 2023
 - Moonraker API Version 1.3.0
-- Added [Spoolman](web_api.md#spoolman-apis) APIs.
-- Added [Rollback](web_api.md#rollback-to-the-previous-version) API to
-  the `update_manager`
+- Added [Spoolman](./external_api/integrations.md#spoolman) APIs.
+- Added [Rollback](./external_api/update_manager.md#rollback-to-the-previous-version)
+  API to the `update_manager`
 - The `update_manager` status response has new fields for items of the
   `git_repo` and `web` types:
   - `recovery_url`: Url of the repo a "hard" recovery will fetch from
@@ -25,12 +25,13 @@ This document keeps a record of notable changes to Moonraker's Web API.
   - `GET /server/sensors/sensor`
   - `GET /server/sensors/measurements`
 
-  See [web_api.md](web_api.md) for details on these new endpoints.
+  See [the documentation](./external_api/devices.md#sensor-endpoints)
+  for details on these new endpoints.
 - A `sensors:sensor_update` notification has been added.  When at least one
   monitored sensor is reporting a changed value Moonraker will broadcast this
   notification.
-
-  See [web_api.md](web_api.md) for details on this new notification.
+  See [the documentation](./external_api/jsonrpc_notifications.md#sensor-events)
+  for details on this new notification.
 
 ### February 17 2023
 - Moonraker API Version 1.2.1
@@ -50,14 +51,14 @@ This document keeps a record of notable changes to Moonraker's Web API.
   recommended to use `server.connection.identify` method to identify
   your client.  This method returns a `connection_id` which is
   the websocket's unique id.  See
-  [the documentation](web_api.md#identify-connection) for details.
+  [the documentation](./external_api/server.md#identify-connection) for details.
 
 ### May 8th 2021
 - The `file_manager` has been refactored to support system file
   file events through `inotify`.  Only mutable `roots` are monitored,
-  (currently `gcodes` and `config`).  Subfolders within these
+  (currently `gcodes` and `config`).  Sub-folders within these
   these roots are also monitored, however hidden folders are not.
-  The following changes API changes have been made to acccommodate
+  The following changes API changes have been made to accommodate
   this functionality:
     - The `notify_filelist_changed` actions have changed.  The new
       actions are as follows:
@@ -78,7 +79,7 @@ This document keeps a record of notable changes to Moonraker's Web API.
       processed.  Notifications are synced with requests so that the
       request should always return before the notification is sent.
     - Thumbnails are now stored in the `.thumbs` directory to prevent
-      changes to thumbnails from emitting filelist notications. This
+      changes to thumbnails from emitting filelist notifications. This
       change will be reflected in the metadata's `relative_path` field,
       so clients that use this field should not need to take additional
       action.  Note that existing thumbnails will remain in the `thumbs`
@@ -103,7 +104,7 @@ This document keeps a record of notable changes to Moonraker's Web API.
 
 ### January 31st 2021
 - The `GET /server/temperature_store` endpoint now only returns fields
-  that each sensor reports.  For example, if a particuarly temperature
+  that each sensor reports.  For example, if a particularly temperature
   sensor does not report "target" or "power", then the corresponding
   fields will not be reported for that sensor in response to the
   `temperature_store` request.
@@ -153,7 +154,8 @@ This document keeps a record of notable changes to Moonraker's Web API.
   core API:
   - `POST /machine/services/restart`
 
-See [web_api.md](web_api.md) for details on these new endpoints.
+See [the documentation](./external_api/update_manager.md) for details
+on these new endpoints.
 
 ### November 23rd 2020
 - Moonraker now serves Klipper's "docs" directory.  This can be access
@@ -187,7 +189,7 @@ See [web_api.md](web_api.md) for details on these new endpoints.
     "params":{"dev_name":null}}`\
     Toggles device off.  Returns the current status of the device.
   - The `notify_power_changed` notification now includes an object
-    containing device info, matching that which would be recieved
+    containing device info, matching that which would be received
     from a single item in `/machine/power/devices`.
 
 ### November 12th 2020
@@ -207,13 +209,13 @@ See [web_api.md](web_api.md) for details on these new endpoints.
 - All HTTP API request may now include arguments in either the
   query string or in the request's body.
 - Subscriptions are now managed on a per connection basis.  Each
-  connection will only recieve updates for objects in which they
+  connection will only receive updates for objects in which they
   are currently subscribed.  If an "empty" request is sent, the
   subscription will be cancelled.
 - The `POST /printer/object/subscribe` now requires a
   `connection_id` argument.  This is used to identify which
   connection's associated subscription should be updated.
-  Currenlty subscriptions are only supported over the a
+  Currently subscriptions are only supported over the a
   websocket connection, one may use the id received from
   `server.websocket.id`.
 - The `notify_klippy_ready` websocket notification has been
@@ -298,8 +300,8 @@ See [web_api.md](web_api.md) for details on these new endpoints.
   - `POST /machine/gpio_power/off` : `machine.gpio_power.off`
 
 ### September 1st 2020
-- A new notification has been added: `notify_metdata_update`.  This
-  notification is sent when Moonraker parses metdata from a new upload.
+- A new notification has been added: `notify_metadata_update`.  This
+  notification is sent when Moonraker parses metadata from a new upload.
   Note that the upload must be made via the API, files manually (using
   SAMBA, SCP, etc) do not trigger a notification.  The notification is
   sent in the following format:
@@ -399,7 +401,7 @@ See [web_api.md](web_api.md) for details on these new endpoints.
   state for all currently subscribed objects (in the same format as a `query`).
   This data can be used to initialize all local state after the request
   completes.
-- Subscriptions are now pushed as "diffs".  Clients will only recieve updates
+- Subscriptions are now pushed as "diffs".  Clients will only receive updates
   for subscribed items when that data changes.  This requires that clients
   initialize their local state with the data returned from the subscription
   request.
