@@ -1080,6 +1080,10 @@ status_delay: 1.0
 #   on/off and requesting its current status.  This is a workaround used
 #   to validate that Home Assistant has successfully toggled the device,
 #   as the API is currently broken on their end.  Default is 1 second.
+ca_certs:
+#   The filepath to the certificate used by Home Assistant. This can be useful
+#   when Home Assistant is configured with a self-signed certificate.
+#   Don't forget to set protocol to https. This parameter is optional.
 #
 ```
 
