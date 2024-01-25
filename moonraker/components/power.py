@@ -1131,7 +1131,7 @@ class HomeAssistant(HTTPDevice):
         self.token: str = config.gettemplate("token").render()
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
-        self.ca_certs: str = config.get("ca_certs", None)
+        self.ca_certs: Optional[str] = config.get("ca_certs", None)
 
     async def _send_homeassistant_command(self, command: str) -> Dict[str, Any]:
         body: Optional[Dict[str, Any]] = None
