@@ -49,6 +49,12 @@ RESERVED_ENDPOINTS = [
     "register_remote_method",
 ]
 
+# Items to exclude from the subscription cache.  They never change and can be
+# quite large.
+CACHE_EXCLUSIONS = {
+    "configfile": ["config", "settings"]
+}
+
 INIT_TIME = .25
 LOG_ATTEMPT_INTERVAL = int(2. / INIT_TIME + .5)
 MAX_LOG_ATTEMPTS = 10 * LOG_ATTEMPT_INTERVAL
@@ -586,16 +592,6 @@ class KlippyConnection:
                     "No connection associated with subscription request"
                 )
             requested_sub: Subscription = args.get('objects', {})
-            if self.server.is_verbose_enabled() and "configfile" in requested_sub:
-                cfg_sub = requested_sub["configfile"]
-                if (
-                    cfg_sub is None or "config" in cfg_sub or "settings" in cfg_sub
-                ):
-                    logging.debug(
-                        f"Detected 'configfile: {cfg_sub}' subscription.  The "
-                        "'config' and 'status' fields in this object do not change "
-                        "and substantially increase cache size."
-                    )
             all_subs: Subscription = dict(requested_sub)
             # Build the subscription request from a superset of all client subscriptions
             for sub in self.subscriptions.values():
@@ -627,7 +623,23 @@ class KlippyConnection:
                             continue
                         if value != cached_status[field_name]:
                             status_diff.setdefault(obj, {})[field_name] = value
-                self.subscription_cache[obj] = fields
+                if obj in CACHE_EXCLUSIONS:
+                    # Make a shallow copy so we can pop off fields we want to
+                    # exclude from the cache without modifying the return value
+                    fields_to_cache = dict(fields)
+                    removed: List[str] = []
+                    for excluded_field in CACHE_EXCLUSIONS[obj]:
+                        if excluded_field in fields_to_cache:
+                            removed.append(excluded_field)
+                            del fields_to_cache[excluded_field]
+                    if removed:
+                        logging.debug(
+                            "Removed excluded fields from subscription cache: "
+                            f"{obj}: {removed}"
+                        )
+                    self.subscription_cache[obj] = fields_to_cache
+                else:
+                    self.subscription_cache[obj] = fields
                 # Prune Response
                 if obj in requested_sub:
                     valid_fields = requested_sub[obj]
