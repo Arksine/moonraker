@@ -1131,6 +1131,7 @@ class HomeAssistant(HTTPDevice):
         self.token: str = config.gettemplate("token").render()
         self.domain: str = config.get("domain", "switch")
         self.status_delay: float = config.getfloat("status_delay", 1.)
+        self.ca_certs: str = config.get("ca_certs", None)
 
     async def _send_homeassistant_command(self, command: str) -> Dict[str, Any]:
         body: Optional[Dict[str, Any]] = None
@@ -1151,7 +1152,7 @@ class HomeAssistant(HTTPDevice):
         data: Dict[str, Any] = {}
         response = await self.client.request(
             method, url, body=body, headers=headers,
-            attempts=3, enable_cache=False
+            attempts=3, enable_cache=False, ca_certs=self.ca_certs
         )
         msg = f"Error sending homeassistant command: {command}"
         response.raise_for_status(msg)
