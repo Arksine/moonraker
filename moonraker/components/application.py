@@ -495,13 +495,13 @@ class AuthorizedRequestHandler(tornado.web.RequestHandler):
     async def prepare(self) -> None:
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = await auth.authenticate_request(
-                self.request, self.auth_required
-            )
             origin: Optional[str] = self.request.headers.get("Origin")
             self.cors_enabled = await auth.check_cors(origin)
             if self.cors_enabled:
                 _set_cors_headers(self)
+            self.current_user = await auth.authenticate_request(
+                self.request, self.auth_required
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -552,13 +552,13 @@ class AuthorizedFileHandler(tornado.web.StaticFileHandler):
     async def prepare(self) -> None:
         auth: AuthComp = self.server.lookup_component('authorization', None)
         if auth is not None:
-            self.current_user = await auth.authenticate_request(
-                self.request, self._check_need_auth()
-            )
             origin: Optional[str] = self.request.headers.get("Origin")
             self.cors_enabled = await auth.check_cors(origin)
             if self.cors_enabled:
                 _set_cors_headers(self)
+            self.current_user = await auth.authenticate_request(
+                self.request, self._check_need_auth()
+            )
 
     def options(self, *args, **kwargs) -> None:
         # Enable CORS if configured
@@ -1042,7 +1042,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
 # Default Handler for unregistered endpoints
 class AuthorizedErrorHandler(AuthorizedRequestHandler):
     async def prepare(self) -> None:
-        ret = super(AuthorizedRequestHandler, self).prepare()
+        ret = super(AuthorizedErrorHandler, self).prepare()
         if ret is not None:
             await ret
         self.set_status(404)
