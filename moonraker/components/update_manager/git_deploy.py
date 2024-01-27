@@ -877,7 +877,10 @@ class GitRepo:
             if self.backup_path.exists():
                 await event_loop.run_in_thread(shutil.rmtree, self.backup_path)
             await self._check_lock_file_exists(remove=True)
-            cmd = f"clone --filter=blob:none {self.recovery_url} {self.backup_path}"
+            cmd = (
+                f"clone --branch {self.primary_branch} --filter=blob:none "
+                f"{self.recovery_url} {self.backup_path}"
+            )
             try:
                 await self._run_git_cmd_async(cmd, 1, False, False)
             except Exception as e:
