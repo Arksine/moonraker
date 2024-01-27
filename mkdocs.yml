@@ -112,6 +112,9 @@ markdown_extensions:
           title: "Parameters"
     - tables
     - compact_tables:
-        auto_insert_break: true
+        auto_insert_break: false
+    - collapse_code:
+        expand_text: ''
+        collapse_text: ''
 extra_css:
     - src/css/extras.css
