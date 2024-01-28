@@ -82,10 +82,12 @@ class Authorization:
         self.failed_logins: Dict[IPAddr, int] = {}
         self.fqdn_cache: Dict[IPAddr, Dict[str, Any]] = {}
         if self.default_source not in AUTH_SOURCES:
-            raise config.error(
+            self.server.add_warning(
                 "[authorization]: option 'default_source' - Invalid "
-                f"value '{self.default_source}'"
+                f"value '{self.default_source}', falling back to "
+                "'moonraker'."
             )
+            self.default_source = "moonraker"
         self.ldap: Optional[MoonrakerLDAP] = None
         if config.has_section("ldap"):
             self.ldap = self.server.load_component(config, "ldap", None)
@@ -158,14 +160,18 @@ class Authorization:
         for domain in config.getlist('cors_domains', []):
             bad_match = re.search(r"^.+\.[^:]*\*", domain)
             if bad_match is not None:
-                raise config.error(
-                    f"Unsafe CORS Domain '{domain}'.  Wildcards are not"
-                    " permitted in the top level domain.")
+                self.server.add_warning(
+                    f"[authorization]: Unsafe domain '{domain}' in option "
+                    f"'cors_domains'. Wildcards are not permitted in the"
+                    " top level domain."
+                )
+                continue
             if domain.endswith("/"):
                 self.server.add_warning(
                     f"[authorization]: Invalid domain '{domain}' in option "
                     "'cors_domains'.  Domain's cannot contain a trailing "
-                    "slash.")
+                    "slash."
+                )
             else:
                 self.cors_domains.append(
                     domain.replace(".", "\\.").replace("*", ".*"))
