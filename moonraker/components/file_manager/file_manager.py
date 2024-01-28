@@ -152,7 +152,8 @@ class FileManager:
         self.add_reserved_path("secrets", secrets.get_secrets_file(), False)
 
         config.get('config_path', None, deprecate=True)
-        self.register_data_folder("config", full_access=True)
+        cfg_writeble = config.getboolean("enable_config_write_access", True)
+        self.register_data_folder("config", full_access=cfg_writeble)
 
         config.get('log_path', None, deprecate=True)
         self.register_data_folder("logs")
