@@ -330,15 +330,23 @@ class Authorization:
             "action": "user_logged_out"
         }
 
-    async def _handle_info_request(
-        self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    async def _handle_info_request(self, web_request: WebRequest) -> Dict[str, Any]:
         sources = ["moonraker"]
         if self.ldap is not None:
             sources.append("ldap")
+        login_req = self.force_logins and len(self.users) > 1
+        request_trusted: Optional[bool] = None
+        user = web_request.current_user
+        req_ip = web_request.ip_addr
+        if user is not None and user.get("username") == TRUSTED_USER:
+            request_trusted = True
+        elif req_ip is not None:
+            request_trusted = await self._check_authorized_ip(req_ip)
         return {
             "default_source": self.default_source,
-            "available_sources": sources
+            "available_sources": sources,
+            "login_required": login_req,
+            "trusted": request_trusted
         }
 
     async def _handle_refresh_jwt(self,
