@@ -152,6 +152,10 @@ enable_inotify_warnings: True
 #   to add a duplicate watch or when inotify encounters an error.  On some
 #   file systems inotify may not work as expected, this gives users the
 #   option to suppress warnings when necessary.  The default is True.
+enable_config_write_access: True
+#   When enabled the configuration folder is writable over the API.  Some
+#   installations, such as those in public areas, may wish to lock out
+#   configuration changes.  The default is True.
 ```
 
 !!! Note
@@ -433,11 +437,6 @@ aspect_ratio: 4:3
     | jMuxer | `jmuxer-stream` | Mainsail |
     | HTTP Page | `iframe`| Fluidd |
 
-## Optional Components
-
-Optional Components are only loaded if present in `moonraker.conf`.  This
-includes components that may not have any configuration.
-
 ### `[authorization]`
 
 The `[authorization]` section provides configuration for Moonraker's
@@ -505,6 +504,11 @@ default_source: moonraker
     lookup. If the DNS service is not available then authentication will fail
     and an error will be returned.  In addition, DNS lookups will introduce delay
     in the response.
+
+## Optional Components
+
+Optional Components are only loaded if present in `moonraker.conf`.  This
+includes components that may not have any configuration.
 
 ### `[ldap]`
 
