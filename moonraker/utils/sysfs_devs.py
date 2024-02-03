@@ -8,6 +8,7 @@ import os
 import fcntl
 import ctypes
 import pathlib
+import enum
 from ..common import ExtendedFlag
 from . import ioctl_macros
 from typing import (
@@ -246,6 +247,49 @@ class struct_v4l2_capability(ctypes.Structure):
         ("reserved", ctypes.c_uint32 * 3),
     ]
 
+class struct_v4l2_fmtdesc(ctypes.Structure):
+    _fields_ = [
+        ("index", ctypes.c_uint32),
+        ("type", ctypes.c_uint32),
+        ("flags", ctypes.c_uint32),
+        ("description", ctypes.c_char * 32),
+        ("pixelformat", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32 * 4)
+    ]
+
+class struct_v4l2_frmsize_discrete(ctypes.Structure):
+    _fields_ = [
+        ("width", ctypes.c_uint32),
+        ("height", ctypes.c_uint32),
+    ]
+
+
+class struct_v4l2_frmsize_stepwise(ctypes.Structure):
+    _fields_ = [
+        ("min_width", ctypes.c_uint32),
+        ("max_width", ctypes.c_uint32),
+        ("step_width", ctypes.c_uint32),
+        ("min_height", ctypes.c_uint32),
+        ("max_height", ctypes.c_uint32),
+        ("step_height", ctypes.c_uint32),
+    ]
+
+class struct_v4l2_frmsize_union(ctypes.Union):
+    _fields_ = [
+        ("discrete", struct_v4l2_frmsize_discrete),
+        ("stepwise", struct_v4l2_frmsize_stepwise)
+    ]
+
+class struct_v4l2_frmsizeenum(ctypes.Structure):
+    _anonymous_ = ("size",)
+    _fields_ = [
+        ("index", ctypes.c_uint32),
+        ("pixel_format", ctypes.c_uint32),
+        ("type", ctypes.c_uint32),
+        ("size", struct_v4l2_frmsize_union),
+        ("reserved", ctypes.c_uint32 * 2)
+    ]
+
 class V4L2Capability(ExtendedFlag):
     VIDEO_CAPTURE        = 0x00000001  # noqa: E221
     VIDEO_OUTPUT         = 0x00000002  # noqa: E221
@@ -277,8 +321,74 @@ class V4L2Capability(ExtendedFlag):
     IO_MC                = 0x20000000  # noqa: E221
     SET_DEVICE_CAPS      = 0x80000000  # noqa: E221
 
+class V4L2FrameSizeTypes(enum.IntEnum):
+    DISCRETE = 1
+    CONTINUOUS = 2
+    STEPWISE = 3
 
+class V4L2FormatFlags(ExtendedFlag):
+    COMPRESSED = 0x0001
+    EMULATED = 0x0002
+
+
+V4L2_BUF_TYPE_VIDEO_CAPTURE = 1
 V4L2_QUERYCAP = ioctl_macros.IOR(ord("V"), 0, struct_v4l2_capability)
+V4L2_ENUM_FMT = ioctl_macros.IOWR(ord("V"), 2, struct_v4l2_fmtdesc)
+V4L2_ENUM_FRAMESIZES = ioctl_macros.IOWR(ord("V"), 74, struct_v4l2_frmsizeenum)
+
+def v4l2_fourcc_from_fmt(pixelformat: int) -> str:
+    fmt = bytes([((pixelformat >> (8 * i)) & 0xFF) for i in range(4)])
+    return fmt.decode(encoding="ascii", errors="ignore")
+
+def v4l2_fourcc(format: str) -> int:
+    assert len(format) == 4
+    result: int = 0
+    for idx, val in enumerate(format.encode()):
+        result |= (val << (8 * idx)) & 0xFF
+    return result
+
+def _get_resolutions(fd: int, pixel_format: int) -> List[str]:
+    res_info = struct_v4l2_frmsizeenum()
+    result: List[str] = []
+    for idx in range(128):
+        res_info.index = idx
+        res_info.pixel_format = pixel_format
+        try:
+            fcntl.ioctl(fd, V4L2_ENUM_FRAMESIZES, res_info)
+        except OSError:
+            break
+        if res_info.type != V4L2FrameSizeTypes.DISCRETE:
+            break
+        width = res_info.discrete.width
+        height = res_info.discrete.height
+        result.append(f"{width}x{height}")
+    return result
+
+def _get_modes(fd: int) -> List[Dict[str, Any]]:
+    pix_info = struct_v4l2_fmtdesc()
+    result: List[Dict[str, Any]] = []
+    for idx in range(128):
+        pix_info.index = idx
+        pix_info.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
+        try:
+            fcntl.ioctl(fd, V4L2_ENUM_FMT, pix_info)
+        except OSError:
+            break
+        desc: str = pix_info.description.decode()
+        pixel_format: int = pix_info.pixelformat
+        flags = V4L2FormatFlags(pix_info.flags)
+        resolutions = _get_resolutions(fd, pixel_format)
+        if not resolutions:
+            continue
+        result.append(
+            {
+                "format": v4l2_fourcc_from_fmt(pixel_format),
+                "description": desc,
+                "flags": [f.name for f in flags],
+                "resolutions": resolutions
+            }
+        )
+    return result
 
 def find_video_devices() -> List[Dict[str, Any]]:
     v4lpath = pathlib.Path(V4L_DEVICE_PATH)
@@ -309,15 +419,16 @@ def find_video_devices() -> List[Dict[str, Any]]:
             fd = os.open(str(devfs_path), os.O_RDONLY | os.O_NONBLOCK)
             cap_info = struct_v4l2_capability()
             fcntl.ioctl(fd, V4L2_QUERYCAP, cap_info)
+            capabilities = V4L2Capability(cap_info.device_caps)
+            if not capabilities & V4L2Capability.VIDEO_CAPTURE:
+                # Skip devices that do not capture video
+                continue
+            modes = _get_modes(fd)
         except Exception:
             continue
         finally:
             if fd != -1:
                 os.close(fd)
-        capabilities = V4L2Capability(cap_info.device_caps)
-        if not capabilities & V4L2Capability.VIDEO_CAPTURE:
-            # Skip devices that do not capture video
-            continue
         ver_tuple = tuple(
             [str((cap_info.version >> (i)) & 0xFF) for i in range(16, -1, -8)]
         )
@@ -333,6 +444,7 @@ def find_video_devices() -> List[Dict[str, Any]]:
             "path_by_id": v4l_devs_by_id.get(devfs_name),
             "alt_name": None,
             "usb_location": None,
+            "modes": modes
         }
         name_file = v4ldev_path.joinpath("name")
         if name_file.is_file():
