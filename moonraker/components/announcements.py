@@ -236,7 +236,14 @@ class Announcements:
             "feed": feed
         }
         self.entry_mgr.add_entry(entry)
+        self.eventloop.create_task(self._notify_internal())
         return entry
+
+    async def _notify_internal(self) -> None:
+        entries = await self.entry_mgr.list_entries()
+        self.server.send_event(
+            "announcements:entries_updated", {"entries": entries}
+        )
 
     async def remove_announcement(self, entry_id: str) -> None:
         ret = await self.entry_mgr.remove_entry(entry_id)
