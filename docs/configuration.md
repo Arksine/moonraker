@@ -1746,11 +1746,15 @@ disk or cloned from unofficial sources are not supported.
 
 [update_manager]
 enable_auto_refresh: False
-#   When set to True Moonraker will attempt to fetch status about
-#   available updates roughly every 24 hours, between 12am-4am.
+#   When set to True, Moonraker will check roughly every 1 hour (only within
+#   the update window) whether it's time to fetch status about available updates.
 #   When set to False Moonraker will only fetch update state on startup
 #   and clients will need to request that Moonraker updates state.  The
 #   default is False.
+refresh_window: 0-5
+#   The hours between which the periodic update check will be done.
+#   Default is 0-5, meaning the refresh can only occur from midnight until 5am.
+#   It can go over midnight, e.g. 22-6.
 refresh_interval: 672
 #   The interval (in hours) after which the update manager will check
 #   for new updates.  This interval is applies to updates for Moonraker,
