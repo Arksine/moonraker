@@ -48,8 +48,6 @@ if TYPE_CHECKING:
 
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL = 3600.
-# Perform auto refresh no later than 4am
-MAX_UPDATE_HOUR = 4
 
 def get_deploy_class(
     app_type: Union[AppType, str], default: _T
@@ -69,7 +67,20 @@ class UpdateManager:
         self.kconn: KlippyConnection
         self.kconn = self.server.lookup_component("klippy_connection")
         self.app_config = get_base_configuration(config)
+
         auto_refresh_enabled = config.getboolean('enable_auto_refresh', False)
+        self.refresh_window = config.getintlist('refresh_window', [0, 5],
+                                                separator='-', count=2)
+        if (
+            not (0 <= self.refresh_window[0] <= 23) or
+            not (0 <= self.refresh_window[1] <= 23)
+        ):
+            raise config.error("The hours specified in 'refresh_window'"
+                               " must be between 0 and 23.")
+        if self.refresh_window[0] == self.refresh_window[1]:
+            raise config.error("The start and end hours specified"
+                               " in 'refresh_window' cannot be the same.")
+
         self.cmd_helper = CommandHelper(config, self.get_updaters)
         self.updaters: Dict[str, BaseDeploy] = {}
         if config.getboolean('enable_system_updates', True):
@@ -224,13 +235,20 @@ class UpdateManager:
         if notify:
             self.cmd_helper.notify_update_refreshed()
 
-    async def _handle_auto_refresh(self, eventtime: float) -> float:
+    def _is_within_refresh_window(self) -> bool:
         cur_hour = time.localtime(time.time()).tm_hour
+        if self.refresh_window[0] < self.refresh_window[1]:
+            return self.refresh_window[0] <= cur_hour < self.refresh_window[1]
+        return cur_hour >= self.refresh_window[0] or cur_hour < self.refresh_window[1]
+
+    async def _handle_auto_refresh(self, eventtime: float) -> float:
         log_remaining_time = True
         if self.initial_refresh_complete:
             log_remaining_time = False
-            # Update when the local time is between 12AM and 5AM
-            if cur_hour >= MAX_UPDATE_HOUR:
+            # Update only if within the refresh window
+            if not self._is_within_refresh_window():
+                logging.debug("update_manager: current time is outside of"
+                              " the refresh window, auto refresh rescheduled")
                 return eventtime + UPDATE_REFRESH_INTERVAL
             if self.kconn.is_printing():
                 # Don't Refresh during a print
