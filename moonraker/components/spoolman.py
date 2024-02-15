@@ -129,21 +129,20 @@ class SpoolManager:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                if len(err_list) > 10:
+                if len(err_list) < 10:
                     # Allow up to 10 unique errors.
-                    continue
-                for err in err_list:
-                    if type(err) is type(e) and err.args == e.args:
-                        break
-                else:
-                    err_list.append(e)
-                    verbose = self.server.is_verbose_enabled()
-                    if verbose:
-                        logging.exception("Failed to connect to Spoolman")
-                    self.server.add_log_rollover_item(
-                        "spoolman_connect", f"Failed to Connect to spoolman: {e}",
-                        not verbose
-                    )
+                    for err in err_list:
+                        if type(err) is type(e) and err.args == e.args:
+                            break
+                    else:
+                        err_list.append(e)
+                        verbose = self.server.is_verbose_enabled()
+                        if verbose:
+                            logging.exception("Failed to connect to Spoolman")
+                        self.server.add_log_rollover_item(
+                            "spoolman_connect", f"Failed to Connect to spoolman: {e}",
+                            not verbose
+                        )
             else:
                 err_list = []
                 self.ws_connected = True
