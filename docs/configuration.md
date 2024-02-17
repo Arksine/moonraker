@@ -2094,6 +2094,24 @@ of `distro.id()`, the fall back on the values reported by `distro.like()`.
 Following this logic, the `debian` key will be applied to Debian, Raspberry
 Pi OS, Ubuntu, and likely other Debian derived distributions.
 
+### `[prometheus]`
+
+Enables Prometheus metrics endpoint at `/server/prometheus/metrics`.
+
+The endpoint returns the metrics in the "normal" format (not openmetrics)
+without gzip compression and without filtering metrics by name.
+Parameters or headers coming from the scraping client which would
+control the behavior above are ignored.
+
+Note that in the future they might be respected, but this would require
+a major refactoring of request handling code.
+
+```ini
+# moonraker.conf
+
+[prometheus]
+```
+
 ### `[mqtt]`
 
 Enables an MQTT Client.  When configured most of Moonraker's APIs are available
