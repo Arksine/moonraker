@@ -48,27 +48,32 @@ class GitDeploy(AppDeploy):
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
         await self.repo.restore_state(storage)
-        self._is_valid = self.repo.is_valid()
+        self._is_valid = storage["is_valid"]
         if not self.needs_refresh():
             self.repo.log_repo_info()
         return storage
 
     async def refresh(self) -> None:
-        try:
-            await self._update_repo_state()
-        except Exception:
-            logging.exception("Error Refreshing git state")
+        await self._update_repo_state(raise_exc=False)
 
-    async def _update_repo_state(self, need_fetch: bool = True) -> None:
+    async def _update_repo_state(
+        self, need_fetch: bool = True, raise_exc: bool = True
+    ) -> None:
         self._is_valid = False
-        await self.repo.refresh_repo_state(need_fetch=need_fetch)
-        self.log_info(f"Channel: {self.channel}")
-        self._is_valid = self.repo.is_valid()
-        if not self._is_valid:
-            self.log_info("Repo validation check failed, updates disabled")
+        try:
+            await self.repo.refresh_repo_state(need_fetch=need_fetch)
+        except Exception as e:
+            if raise_exc or isinstance(e, asyncio.CancelledError):
+                raise
         else:
-            self.log_info("Validity check for git repo passed")
-        self._save_state()
+            self._is_valid = self.repo.is_valid()
+        finally:
+            self.log_info(f"Channel: {self.channel}")
+            if not self._is_valid:
+                self.log_info("Repo validation check failed, updates disabled")
+            else:
+                self.log_info("Validity check for git repo passed")
+            self._save_state()
 
     async def update(self) -> bool:
         await self.repo.wait_for_init()
@@ -371,6 +376,7 @@ class GitRepo:
             self._check_warnings()
         except Exception:
             logging.exception(f"Git Repo {self.alias}: Initialization failure")
+            self._check_warnings()
             raise
         else:
             self.initialized = True
@@ -671,6 +677,12 @@ class GitRepo:
         self.repo_anomalies.clear()
         if self.repo_corrupt:
             self.repo_warnings.append("Repo is corrupt")
+        if self.git_branch == "?":
+            self.repo_warnings.append("Failed to detect git branch")
+        elif self.git_remote == "?":
+            self.repo_warnings.append(
+                f"Failed to detect tracking remote for branch {self.git_branch}"
+            )
         if self.upstream_url == "?":
             self.repo_warnings.append("Failed to detect repo url")
             return
