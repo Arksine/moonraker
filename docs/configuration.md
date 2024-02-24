@@ -2837,7 +2837,7 @@ state_response_template:
 #
 #  The above example assumes a json response with multiple fields in a struct
 #  is received. Individual measurements are extracted from that struct, coerced
-#  to a numeric format and passed to Moonraker. The default is the payload.
+#  to a numeric format and passed to Moonraker. This parameter must be provided.
 ```
 
 !!! Note

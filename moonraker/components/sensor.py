@@ -116,7 +116,7 @@ class MQTTSensor(BaseSensor):
         self.mqtt: MQTTClient = self.server.load_component(cfg, "mqtt")
 
         self.state_topic: str = cfg.get("state_topic")
-        self.state_response = cfg.load_template("state_response_template", "{payload}")
+        self.state_response = cfg.gettemplate("state_response_template")
         self.config = replace(self.config, source=self.state_topic)
         self.qos: Optional[int] = cfg.getint("qos", None, minval=0, maxval=2)
 
