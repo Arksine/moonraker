@@ -449,6 +449,8 @@ class HTTPDevice(PowerDevice):
         self.password = config.load_template(
             "password", default_password).render()
         self.protocol = config.get("protocol", default_protocol)
+        if self.port == -1:
+            self.port = 443 if self.protocol.lower() == "https" else 80
 
     async def init_state(self) -> None:
         async with self.request_lock:
@@ -1109,7 +1111,7 @@ class HomeSeer(HTTPDevice):
         query = urlencode(query_args)
         url = (
             f"{self.protocol}://{quote(self.user)}:{quote(self.password)}@"
-            f"{quote(self.addr)}/JSON?{query}"
+            f"{quote(self.addr)}:{self.port}/JSON?{query}"
         )
         return await self._send_http_command(url, request)
 
