@@ -185,8 +185,11 @@ class UpdateManager:
             if key not in self.updaters:
                 logging.info(f"Removing stale update_manager data: {key}")
                 await umdb.pop(key, None)
-        for updater in list(self.updaters.values()):
-            await updater.initialize()
+
+        # initialize all updaters in parallel
+        tasks = [updater.initialize() for updater in self.updaters.values()]
+        await asyncio.gather(*tasks)
+
         if self.refresh_timer is not None:
             self.refresh_timer.start()
         else:
