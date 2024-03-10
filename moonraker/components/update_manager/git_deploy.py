@@ -26,7 +26,6 @@ from typing import (
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ..shell_command import ShellCommand
-    from ..machine import Machine
     from .update_manager import CommandHelper
     from ..http_client import HttpClient
 
@@ -177,9 +176,6 @@ class GitDeploy(AppDeploy):
         else:
             self.repo.set_rollback_state(rb_state)
 
-    async def close(self) -> None:
-        await self.repo.unset_current_instance()
-
 
 GIT_ASYNC_TIMEOUT = 300.
 GIT_ENV_VARS = {
@@ -232,7 +228,6 @@ class GitRepo:
 
         self.repo_warnings: List[str] = []
         self.repo_anomalies: List[str] = []
-        self.managing_instances: List[str] = []
         self.init_evt: Optional[asyncio.Event] = None
         self.initialized: bool = False
         self.git_operation_lock = asyncio.Lock()
@@ -275,8 +270,6 @@ class GitRepo:
         self.rollback_version = GitVersion(str(rbv))
         if not await self._detect_git_dir():
             self.valid_git_repo = False
-        if self.valid_git_repo:
-            await self.set_current_instance()
         self._check_warnings()
 
     def get_persistent_data(self) -> Dict[str, Any]:
@@ -434,7 +427,6 @@ class GitRepo:
                     if ext in SRC_EXTS:
                         self.untracked_files.append(fname)
             self.valid_git_repo = True
-        await self.set_current_instance()
         return True
 
     async def _detect_git_dir(self) -> bool:
@@ -713,12 +705,6 @@ class GitRepo:
                 "Repo is dirty.  Detected the following modifed files: "
                 f"{self.modified_files}"
             )
-        if len(self.managing_instances) > 1:
-            instances = "\n".join([f"  {ins}" for ins in self.managing_instances])
-            self.repo_anomalies.append(
-                f"Multiple instances of Moonraker managing this repo:\n"
-                f"{instances}"
-            )
         self._generate_warn_msg()
 
     def _generate_warn_msg(self) -> str:
@@ -989,50 +975,6 @@ class GitRepo:
                 tagged_commits[sha] = tag
             # Return tagged commits as SHA keys mapped to tag values
             return tagged_commits
-
-    async def set_current_instance(self) -> None:
-        # Check to see if multiple instances of Moonraker are configured
-        # to manage this repo
-        full_id = self._get_instance_id()
-        self.managing_instances.clear()
-        try:
-            instances = await self.config_get(
-                "moonraker.instance", get_all=True, local_only=True
-            )
-            if instances is None:
-                await self.config_set("moonraker.instance", full_id)
-                self.managing_instances = [full_id]
-            else:
-                det_instances = [
-                    ins.strip() for ins in instances.split("\n") if ins.strip()
-                ]
-                if full_id not in det_instances:
-                    await self.config_add("moonraker.instance", full_id)
-                    det_instances.append(full_id)
-                self.managing_instances = det_instances
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logging.info(
-                f"Git Repo {self.alias}: Moonraker Instance Validation Error, {e}"
-            )
-
-    async def unset_current_instance(self) -> None:
-        full_id = self._get_instance_id()
-        if full_id not in self.managing_instances:
-            return
-        try:
-            await self.config_unset("moonraker.instance", pattern=full_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logging.info(f"Git repo {self.alias}: Error removing instance, {e}")
-
-    def _get_instance_id(self) -> str:
-        machine: Machine = self.server.lookup_component("machine")
-        cur_name = machine.unit_name
-        cur_uuid: str = self.server.get_app_args()["instance_uuid"]
-        return f"{cur_name}@{cur_uuid}"
 
     def get_repo_status(self) -> Dict[str, Any]:
         no_untrk_src = len(self.untracked_files) == 0
