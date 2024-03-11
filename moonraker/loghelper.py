@@ -11,6 +11,7 @@ import time
 import os
 import sys
 import asyncio
+import platform
 from queue import SimpleQueue as Queue
 from .common import RequestType
 
@@ -61,6 +62,7 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
         strtime = time.asctime(time.gmtime())
         header = f"{'-'*20} Log Start | {strtime} {'-'*20}\n"
         self.stream.write(header)
+        self.stream.write(f"platform: {platform.platform(terse=True)}\n")
         app_section = "\n".join([f"{k}: {v}" for k, v in self.app_args.items()])
         self.stream.write(app_section + "\n")
         if self.rollover_info:
@@ -82,7 +84,8 @@ class LogManager:
         stdout_fmt = logging.Formatter(
             '[%(filename)s:%(funcName)s()] - %(message)s')
         stdout_hdlr.setFormatter(stdout_fmt)
-        app_args_str = "\n".join([f"{k}: {v}" for k, v in app_args.items()])
+        app_args_str = f"platform: {platform.platform(terse=True)}\n"
+        app_args_str += "\n".join([f"{k}: {v}" for k, v in app_args.items()])
         sys.stdout.write(f"\nApplication Info:\n{app_args_str}\n")
         self.file_hdlr: Optional[MoonrakerLoggingHandler] = None
         self.listener: Optional[logging.handlers.QueueListener] = None

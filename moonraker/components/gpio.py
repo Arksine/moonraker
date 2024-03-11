@@ -7,10 +7,10 @@ from __future__ import annotations
 import os
 import re
 import asyncio
-import platform
 import pathlib
 import logging
 import periphery
+from ..utils import KERNEL_VERSION
 
 # Annotation imports
 from typing import (
@@ -27,11 +27,6 @@ if TYPE_CHECKING:
     from ..eventloop import EventLoop
 
 GpioEventCallback = Callable[[float, float, int], Optional[Awaitable[None]]]
-
-try:
-    KERNEL_VERSION = tuple([int(part) for part in platform.release().split(".")[:2]])
-except Exception:
-    KERNEL_VERSION = (0, 0)
 
 GPIO_PATTERN = r"""
     (?P<bias>[~^])?
