@@ -2215,7 +2215,12 @@ GET /machine/peripherals/canbus?interface=can0
 /// api-example-response
 ```json
 {
-    "can_uuids": ["11AABBCCDD"]
+    "can_uuids": [
+        {
+            "uuid": "11AABBCCDD",
+            "application": "Klipper"
+        }
+    ]
 }
 ```
 ///
