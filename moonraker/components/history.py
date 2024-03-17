@@ -23,10 +23,12 @@ if TYPE_CHECKING:
     from .database import MoonrakerDatabase as DBComp
     from .job_state import JobState
     from .file_manager.file_manager import FileManager
+    from .energy_meter import EnergyMeter, DeltaMeasurement
 
 HIST_NAMESPACE = "history"
 HIST_VERSION = 1
 MAX_JOBS = 10000
+
 
 class History:
     def __init__(self, config: ConfigHelper) -> None:
@@ -35,6 +37,10 @@ class History:
             'file_manager')
         self.request_lock = Lock()
         database: DBComp = self.server.lookup_component("database")
+        self.emeter: EnergyMeter = self.server.load_component(
+            config,
+            "energy_meter",
+            default=None)
         self.job_totals: Dict[str, float] = database.get_item(
             "moonraker", "history.job_totals",
             {
@@ -254,6 +260,8 @@ class History:
         self.history_ns[job_id] = job.get_stats()
         self.cached_job_ids.append(job_id)
         self.next_job_id += 1
+        if self.emeter is not None:
+            self.emeter.start_measurement()
         logging.debug(
             f"History Job Added - Id: {job_id}, File: {job.filename}"
         )
@@ -277,6 +285,11 @@ class History:
         ):
             # Print stats have been reset, do not update this job with them
             pstats = {}
+
+        if self.emeter is not None:
+            energy_msrmt: Optional[DeltaMeasurement] = self.emeter.stop_measurement()
+            if energy_msrmt:
+                pstats.update({'energy_used': energy_msrmt.delta()})
 
         self.current_job.finish(status, pstats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
@@ -378,6 +391,7 @@ class PrinterJob:
         self.status: str = "in_progress"
         self.start_time = time.time()
         self.total_duration: float = 0.
+        self.energy_used: Optional[Union[int, float]] = None
         self.update_from_ps(data)
 
     def finish(self,
