@@ -6154,7 +6154,7 @@ An object containing stubbed OctoPrint login/user verification
     "admin": true,
     "apikey": null,
     "permissions": [],
-    "groups": ["admins", "users"],
+    "groups": ["admins", "users"]
 }
 ```
 
@@ -6375,7 +6375,7 @@ An array of requested historical jobs:
             "status": "completed",
             "start_time": 1615764496.622146,
             "total_duration": 18.37201827496756
-        },
+        }
     ]
 }
 ```
@@ -6424,6 +6424,7 @@ JSON-RPC request:
     "method": "server.history.reset_totals",
     "id": 5534
 }
+```
 
 Returns:
 
