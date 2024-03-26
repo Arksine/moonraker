@@ -262,7 +262,7 @@ Returns:
 An object containing various fields that report server state.
 
 ```json
-  {
+{
     "klippy_connected": true,
     "klippy_state": "ready",
     "components": [
@@ -288,7 +288,7 @@ An object containing various fields that report server state.
     "moonraker_version": "v0.7.1-105-ge4f103c",
     "api_version": [1, 0, 0],
     "api_version_string": "1.0.0"
-  }
+}
 ```
 !!! warning
     This object also includes `plugins` and `failed_plugins` fields that
@@ -328,162 +328,160 @@ included.
 
 ```json
 {
-    {
-        "config": {
-            "server": {
-                "host": "0.0.0.0",
-                "port": 7125,
-                "ssl_port": 7130,
-                "enable_debug_logging": true,
-                "enable_asyncio_debug": false,
-                "klippy_uds_address": "/tmp/klippy_uds",
-                "max_upload_size": 210,
-                "ssl_certificate_path": null,
-                "ssl_key_path": null
-            },
-            "dbus_manager": {},
-            "database": {
-                "database_path": "~/.moonraker_database",
-                "enable_database_debug": false
-            },
-            "file_manager": {
-                "enable_object_processing": true,
-                "queue_gcode_uploads": true,
-                "config_path": "~/printer_config",
-                "log_path": "~/logs"
-            },
-            "klippy_apis": {},
-            "machine": {
-                "provider": "systemd_dbus"
-            },
-            "shell_command": {},
-            "data_store": {
-                "temperature_store_size": 1200,
-                "gcode_store_size": 1000
-            },
-            "proc_stats": {},
-            "job_state": {},
-            "job_queue": {
-                "load_on_startup": true,
-                "automatic_transition": false,
-                "job_transition_delay": 2,
-                "job_transition_gcode": "\nM118 Transitioning to next job..."
-            },
-            "http_client": {},
-            "announcements": {
-                "dev_mode": false,
-                "subscriptions": []
-            },
-            "authorization": {
-                "login_timeout": 90,
-                "force_logins": false,
-                "cors_domains": [
-                    "*.home",
-                    "http://my.mainsail.xyz",
-                    "http://app.fluidd.xyz",
-                    "*://localhost:*"
-                ],
-                "trusted_clients": [
-                    "192.168.1.0/24"
-                ]
-            },
-            "zeroconf": {},
-            "octoprint_compat": {
-                "enable_ufp": true,
-                "flip_h": false,
-                "flip_v": false,
-                "rotate_90": false,
-                "stream_url": "/webcam/?action=stream",
-                "webcam_enabled": true
-            },
-            "history": {},
-            "secrets": {
-                "secrets_path": "~/moonraker_secrets.ini"
-            },
-            "mqtt": {
-                "address": "eric-work.home",
-                "port": 1883,
-                "username": "{secrets.mqtt_credentials.username}",
-                "password_file": null,
-                "password": "{secrets.mqtt_credentials.password}",
-                "mqtt_protocol": "v3.1.1",
-                "instance_name": "pi-debugger",
-                "default_qos": 0,
-                "status_objects": {
-                    "webhooks": null,
-                    "toolhead": "position,print_time",
-                    "idle_timeout": "state",
-                    "gcode_macro M118": null
-                },
-                "api_qos": 0,
-                "enable_moonraker_api": true
-            },
-            "template": {}
+    "config": {
+        "server": {
+            "host": "0.0.0.0",
+            "port": 7125,
+            "ssl_port": 7130,
+            "enable_debug_logging": true,
+            "enable_asyncio_debug": false,
+            "klippy_uds_address": "/tmp/klippy_uds",
+            "max_upload_size": 210,
+            "ssl_certificate_path": null,
+            "ssl_key_path": null
         },
-        "orig": {
-            "DEFAULT": {},
-            "server": {
-                "enable_debug_logging": "True",
-                "max_upload_size": "210"
-            },
-            "file_manager": {
-                "config_path": "~/printer_config",
-                "log_path": "~/logs",
-                "queue_gcode_uploads": "True",
-                "enable_object_processing": "True"
-            },
-            "machine": {
-                "provider": "systemd_dbus"
-            },
-            "announcements": {},
-            "job_queue": {
-                "job_transition_delay": "2.",
-                "job_transition_gcode": "\nM118 Transitioning to next job...",
-                "load_on_startup": "True"
-            },
-            "authorization": {
-                "trusted_clients": "\n192.168.1.0/24",
-                "cors_domains": "\n*.home\nhttp://my.mainsail.xyz\nhttp://app.fluidd.xyz\n*://localhost:*"
-            },
-            "zeroconf": {},
-            "octoprint_compat": {},
-            "history": {},
-            "secrets": {
-                "secrets_path": "~/moonraker_secrets.ini"
-            },
-            "mqtt": {
-                "address": "eric-work.home",
-                "port": "1883",
-                "username": "{secrets.mqtt_credentials.username}",
-                "password": "{secrets.mqtt_credentials.password}",
-                "enable_moonraker_api": "True",
-                "status_objects": "\nwebhooks\ntoolhead=position,print_time\nidle_timeout=state\ngcode_macro M118"
-            }
+        "dbus_manager": {},
+        "database": {
+            "database_path": "~/.moonraker_database",
+            "enable_database_debug": false
         },
-        "files": [
-            {
-                "filename": "moonraker.conf",
-                "sections": [
-                    "server",
-                    "file_manager",
-                    "machine",
-                    "announcements",
-                    "job_queue",
-                    "authorization",
-                    "zeroconf",
-                    "octoprint_compat",
-                    "history",
-                    "secrets"
-                ]
+        "file_manager": {
+            "enable_object_processing": true,
+            "queue_gcode_uploads": true,
+            "config_path": "~/printer_config",
+            "log_path": "~/logs"
+        },
+        "klippy_apis": {},
+        "machine": {
+            "provider": "systemd_dbus"
+        },
+        "shell_command": {},
+        "data_store": {
+            "temperature_store_size": 1200,
+            "gcode_store_size": 1000
+        },
+        "proc_stats": {},
+        "job_state": {},
+        "job_queue": {
+            "load_on_startup": true,
+            "automatic_transition": false,
+            "job_transition_delay": 2,
+            "job_transition_gcode": "\nM118 Transitioning to next job..."
+        },
+        "http_client": {},
+        "announcements": {
+            "dev_mode": false,
+            "subscriptions": []
+        },
+        "authorization": {
+            "login_timeout": 90,
+            "force_logins": false,
+            "cors_domains": [
+                "*.home",
+                "http://my.mainsail.xyz",
+                "http://app.fluidd.xyz",
+                "*://localhost:*"
+            ],
+            "trusted_clients": [
+                "192.168.1.0/24"
+            ]
+        },
+        "zeroconf": {},
+        "octoprint_compat": {
+            "enable_ufp": true,
+            "flip_h": false,
+            "flip_v": false,
+            "rotate_90": false,
+            "stream_url": "/webcam/?action=stream",
+            "webcam_enabled": true
+        },
+        "history": {},
+        "secrets": {
+            "secrets_path": "~/moonraker_secrets.ini"
+        },
+        "mqtt": {
+            "address": "eric-work.home",
+            "port": 1883,
+            "username": "{secrets.mqtt_credentials.username}",
+            "password_file": null,
+            "password": "{secrets.mqtt_credentials.password}",
+            "mqtt_protocol": "v3.1.1",
+            "instance_name": "pi-debugger",
+            "default_qos": 0,
+            "status_objects": {
+                "webhooks": null,
+                "toolhead": "position,print_time",
+                "idle_timeout": "state",
+                "gcode_macro M118": null
             },
-            {
-                "filename": "include/extras.conf",
-                "sections": [
-                    "mqtt"
-                ]
-            }
-        ]
-    }
+            "api_qos": 0,
+            "enable_moonraker_api": true
+        },
+        "template": {}
+    },
+    "orig": {
+        "DEFAULT": {},
+        "server": {
+            "enable_debug_logging": "True",
+            "max_upload_size": "210"
+        },
+        "file_manager": {
+            "config_path": "~/printer_config",
+            "log_path": "~/logs",
+            "queue_gcode_uploads": "True",
+            "enable_object_processing": "True"
+        },
+        "machine": {
+            "provider": "systemd_dbus"
+        },
+        "announcements": {},
+        "job_queue": {
+            "job_transition_delay": "2.",
+            "job_transition_gcode": "\nM118 Transitioning to next job...",
+            "load_on_startup": "True"
+        },
+        "authorization": {
+            "trusted_clients": "\n192.168.1.0/24",
+            "cors_domains": "\n*.home\nhttp://my.mainsail.xyz\nhttp://app.fluidd.xyz\n*://localhost:*"
+        },
+        "zeroconf": {},
+        "octoprint_compat": {},
+        "history": {},
+        "secrets": {
+            "secrets_path": "~/moonraker_secrets.ini"
+        },
+        "mqtt": {
+            "address": "eric-work.home",
+            "port": "1883",
+            "username": "{secrets.mqtt_credentials.username}",
+            "password": "{secrets.mqtt_credentials.password}",
+            "enable_moonraker_api": "True",
+            "status_objects": "\nwebhooks\ntoolhead=position,print_time\nidle_timeout=state\ngcode_macro M118"
+        }
+    },
+    "files": [
+        {
+            "filename": "moonraker.conf",
+            "sections": [
+                "server",
+                "file_manager",
+                "machine",
+                "announcements",
+                "job_queue",
+                "authorization",
+                "zeroconf",
+                "octoprint_compat",
+                "history",
+                "secrets"
+            ]
+        },
+        {
+            "filename": "include/extras.conf",
+            "sections": [
+                "mqtt"
+            ]
+        }
+    ]
 }
 ```
 
@@ -529,7 +527,7 @@ Note that when the host starts each array is initialized to 0s.
     "temperature_fan my_fan": {
         "temperatures": [21.05, 21.12, 21.1, 21.1, 21.1],
         "targets": [0, 0, 0, 0, 0],
-        "speeds": [0, 0, 0, 0, 0],
+        "speeds": [0, 0, 0, 0, 0]
     },
     "temperature_sensor my_sensor": {
         "temperatures": [21.05, 21.12, 21.1, 21.1, 21.1]
@@ -550,7 +548,8 @@ JSON-RPC request:
     "params": {
         "count": 100
     },
-    "id": 7643}
+    "id": 7643
+}
 ```
 
 The `count` argument is optional, limiting number of returned items
@@ -804,7 +803,7 @@ The full JSON-RPC response.
         "klipper_path": "/home/pi/klipper",
         "python_path": "/home/pi/klippy-env/bin/python",
         "log_file": "/tmp/klippy.log",
-        "config_file": "/home/pi/printer.cfg",
+        "config_file": "/home/pi/printer.cfg"
     }
 }
 ```
@@ -976,7 +975,7 @@ An object where the top level items are "eventtime" and "status".  The
             "homing_origin": [0, 0, 0, 0],
             "position": [0, 0, 0, 0],
             "speed": 1500,
-            "speed_factor": 1,
+            "speed_factor": 1
         },
         "toolhead": {
             "position": [0, 0, 0, 0],
@@ -2323,7 +2322,7 @@ A list of objects, where each object contains file data.
         "modified": 1615768477.5133543,
         "size": 189713016,
         "permissions": "rw"
-    },
+    }
 ]
 ```
 
@@ -2620,7 +2619,7 @@ following format:
             "size": 2388774,
             "permissions": "rw",
             "filename": "CE2_calicat.gcode"
-        },
+        }
     ],
     "disk_usage": {
         "total": 7522213888,
@@ -2662,7 +2661,6 @@ Returns: Information about the created directory
         "modified": 1676983427.3732708,
         "size": 4096,
         "permissions": "rw"
-
     },
     "action": "create_dir"
 }
@@ -2746,20 +2744,18 @@ JSON-RPC request:
 Returns:  Information about the moved file or directory
 ```json
 {
-    "result": {
-        "item": {
-            "root": "gcodes",
-            "path": "subdir/my_file.gcode",
-            "modified": 1676940082.8595376,
-            "size": 384096,
-            "permissions": "rw"
-        },
-        "source_item": {
-            "path": "testdir/my_file.gcode",
-            "root": "gcodes"
-        },
-        "action": "move_file"
-    }
+    "item": {
+        "root": "gcodes",
+        "path": "subdir/my_file.gcode",
+        "modified": 1676940082.8595376,
+        "size": 384096,
+        "permissions": "rw"
+    },
+    "source_item": {
+        "path": "testdir/my_file.gcode",
+        "root": "gcodes"
+    },
+    "action": "move_file"
 }
 ```
 
@@ -3823,7 +3819,7 @@ JSON-RPC request:
     "method": "server.job_queue.delete_job",
     "params": {
         "job_ids": [
-            "0000000066D991F0".
+            "0000000066D991F0",
             "0000000066D99D80"
         ]
     },
@@ -3966,7 +3962,7 @@ JSON-RPC request:
 {
     "jsonrpc": "2.0",
     "method": "server.job_queue.jump",
-    "params" {
+    "params": {
         "job_id": "0000000066D991F0"
     },
     "id": 4654
@@ -4036,7 +4032,6 @@ sorted by `date` and a list of feeds Moonraker is currently subscribed to:
 
 ```json
 {
-    {
     "entries": [
         {
             "entry_id": "arksine/moonlight/issue/3",
@@ -4094,7 +4089,6 @@ sorted by `date` and a list of feeds Moonraker is currently subscribed to:
         "klipper",
         "moonlight"
     ]
-}
 }
 ```
 
@@ -4569,7 +4563,7 @@ The full configuration for the added/updated webcam:
 
 HTTP request:
 ```http
-DELETE /server/webcams/uid?name=341778f9-387f-455b-8b69-ff68442d41d9
+DELETE /server/webcams/item?uid=341778f9-387f-455b-8b69-ff68442d41d9
 ```
 JSON-RPC request:
 ```json
@@ -4870,7 +4864,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
                     "subject": "stm32: Wait for transmission to complete before returning from spi_transfer()",
                     "message": "It's possible for the SCLK pin to still be updating even after the\nlast byte of data has been read from the receive pin.  (In particular\nin spi mode 0 and 1.)  Exiting early from spi_transfer() in this case\ncould result in the CS pin being raised before the final updates to\nSCLK pin.\n\nAdd an additional wait at the end of spi_transfer() to avoid this\nissue.\n\nSigned-off-by: Kevin O'Connor <kevin@koconnor.net>",
                     "tag": null
-                },
+                }
             ],
             "git_messages": [],
             "full_version_string": "v0.10.0-1-g4c8d24ae-shallow",
@@ -4878,7 +4872,7 @@ and `fluidd` are present as clients configured in `moonraker.conf`
             "recovery_url": "https://github.com/Klipper3d/klipper.git",
             "remote_url": "https://github.com/Klipper3d/klipper.git",
             "warnings": [],
-            "anomalies": [],
+            "anomalies": []
         }
     }
 }
@@ -5228,7 +5222,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.device_power.devices",
+    "method": "machine.device_power.devices",
     "id": 5646
 }
 ```
@@ -5411,7 +5405,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.strips",
+    "method": "machine.wled.strips",
     "id": 7123
 }
 ```
@@ -5420,56 +5414,7 @@ Returns:
 Strip information for all wled strips.
 ```json
 {
-    "result": {
-        "strips": {
-            "lights": {
-                "strip": "lights",
-                "status": "on",
-                "chain_count": 79,
-                "preset": -1,
-                "brightness": 255,
-                "intensity": -1,
-                "speed": -1,
-                "error": null
-            },
-            "desk": {
-                "strip": "desk",
-                "status": "on",
-                "chain_count": 60,
-                "preset": 8,
-                "brightness": -1,
-                "intensity": -1,
-                "speed": -1,
-                "error": null
-            }
-        }
-    }
-}
-```
-
-#### Get strip status
-HTTP request:
-```http
-GET /machine/wled/status?strip1&strip2
-```
-JSON-RPC request:
-```json
-{
-    "jsonrpc": "2.0",
-    "method":"machine.wled.status",
-    "params": {
-        "lights": null,
-        "desk": null
-    },
-    "id": 7124
-}
-```
-Returns:
-
-Strip information for requested strips.
-```json
-{
-    "result": {
+    "strips": {
         "lights": {
             "strip": "lights",
             "status": "on",
@@ -5490,6 +5435,51 @@ Strip information for requested strips.
             "speed": -1,
             "error": null
         }
+    }
+}
+```
+
+#### Get strip status
+HTTP request:
+```http
+GET /machine/wled/status?strip1&strip2
+```
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "machine.wled.status",
+    "params": {
+        "lights": null,
+        "desk": null
+    },
+    "id": 7124
+}
+```
+Returns:
+
+Strip information for requested strips.
+```json
+{
+    "lights": {
+        "strip": "lights",
+        "status": "on",
+        "chain_count": 79,
+        "preset": -1,
+        "brightness": 255,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
+    },
+    "desk": {
+        "strip": "desk",
+        "status": "on",
+        "chain_count": 60,
+        "preset": 8,
+        "brightness": -1,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
     }
 }
 ```
@@ -5505,7 +5495,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.on",
+    "method": "machine.wled.on",
     "params": {
         "lights": null,
         "desk": null
@@ -5518,27 +5508,25 @@ Returns:
 Strip information for requested strips.
 ```json
 {
-    "result": {
-        "lights": {
-            "strip": "lights",
-            "status": "on",
-            "chain_count": 79,
-            "preset": -1,
-            "brightness": 255,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        },
-        "desk": {
-            "strip": "desk",
-            "status": "on",
-            "chain_count": 60,
-            "preset": 8,
-            "brightness": -1,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        }
+    "lights": {
+        "strip": "lights",
+        "status": "on",
+        "chain_count": 79,
+        "preset": -1,
+        "brightness": 255,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
+    },
+    "desk": {
+        "strip": "desk",
+        "status": "on",
+        "chain_count": 60,
+        "preset": 8,
+        "brightness": -1,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
     }
 }
 ```
@@ -5554,7 +5542,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.off",
+    "method": "machine.wled.off",
     "params": {
         "lights": null,
         "desk": null
@@ -5567,27 +5555,25 @@ Returns:
 The new state of the specified strips.
 ```json
 {
-    "result": {
-        "lights": {
-            "strip": "lights",
-            "status": "off",
-            "chain_count": 79,
-            "preset": -1,
-            "brightness": 255,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        },
-        "desk": {
-            "strip": "desk",
-            "status": "off",
-            "chain_count": 60,
-            "preset": 8,
-            "brightness": -1,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        }
+    "lights": {
+        "strip": "lights",
+        "status": "off",
+        "chain_count": 79,
+        "preset": -1,
+        "brightness": 255,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
+    },
+    "desk": {
+        "strip": "desk",
+        "status": "off",
+        "chain_count": 60,
+        "preset": 8,
+        "brightness": -1,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
     }
 }
 ```
@@ -5597,13 +5583,13 @@ Turns each strip off if it is on and on if it is off.
 
 HTTP request:
 ```http
-POST /machine/wled/off?strip1&strip2
+POST /machine/wled/toggle?strip1&strip2
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.toggle",
+    "method": "machine.wled.toggle",
     "params": {
         "lights": null,
         "desk": null
@@ -5616,27 +5602,25 @@ Returns:
 The new state of the specified strips.
 ```json
 {
-    "result": {
-        "lights": {
-            "strip": "lights",
-            "status": "on",
-            "chain_count": 79,
-            "preset": -1,
-            "brightness": 255,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        },
-        "desk": {
-            "strip": "desk",
-            "status": "off",
-            "chain_count": 60,
-            "preset": 8,
-            "brightness": -1,
-            "intensity": -1,
-            "speed": -1,
-            "error": null
-        }
+    "lights": {
+        "strip": "lights",
+        "status": "on",
+        "chain_count": 79,
+        "preset": -1,
+        "brightness": 255,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
+    },
+    "desk": {
+        "strip": "desk",
+        "status": "off",
+        "chain_count": 60,
+        "preset": 8,
+        "brightness": -1,
+        "intensity": -1,
+        "speed": -1,
+        "error": null
     }
 }
 ```
@@ -5680,9 +5664,9 @@ Returns information for the specified strip.
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.get_strip",
+    "method": "machine.wled.get_strip",
     "params": {
-        "strip": "lights",
+        "strip": "lights"
     },
     "id": 7128
 }
@@ -5692,7 +5676,7 @@ Calls the action with the arguments for the specified strip.
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"machine.wled.post_strip",
+    "method": "machine.wled.post_strip",
     "params": {
         "strip": "lights",
         "action": "on",
@@ -5719,17 +5703,15 @@ Returns:
 State of the strip.
 ```json
 {
-    "result": {
-        "lights": {
-            "strip": "lights",
-            "status": "on",
-            "chain_count": 79,
-            "preset": 1,
-            "brightness": 50,
-            "intensity": 255,
-            "speed": 255,
-            "error": null
-        }
+    "lights": {
+        "strip": "lights",
+        "status": "on",
+        "chain_count": 79,
+        "preset": 1,
+        "brightness": 50,
+        "intensity": 255,
+        "speed": 255,
+        "error": null
     }
 }
 ```
@@ -5746,7 +5728,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.sensors.list",
+    "method": "server.sensors.list",
     "id": 5646
 }
 ```
@@ -6172,7 +6154,7 @@ An object containing stubbed OctoPrint login/user verification
     "admin": true,
     "apikey": null,
     "permissions": [],
-    "groups": ["admins", "users"],
+    "groups": ["admins", "users"]
 }
 ```
 
@@ -6353,7 +6335,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.history.list",
+    "method": "server.history.list",
     "params":{
         "limit": 50,
         "start": 10,
@@ -6393,7 +6375,7 @@ An array of requested historical jobs:
             "status": "completed",
             "start_time": 1615764496.622146,
             "total_duration": 18.37201827496756
-        },
+        }
     ]
 }
 ```
@@ -6407,7 +6389,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.history.totals",
+    "method": "server.history.totals",
     "id": 5656
 }
 ```
@@ -6442,6 +6424,7 @@ JSON-RPC request:
     "method": "server.history.reset_totals",
     "id": 5534
 }
+```
 
 Returns:
 
@@ -6469,7 +6452,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.history.get_job",
+    "method": "server.history.get_job",
     "params":{"uid": "{uid}"},
     "id": 4564
 }
@@ -6554,7 +6537,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.mqtt.publish",
+    "method": "server.mqtt.publish",
     "params":{
         "topic": "home/test/pub",
         "payload": "hello",
@@ -6616,7 +6599,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.mqtt.subscribe",
+    "method": "server.mqtt.subscribe",
     "params":{
         "topic": "home/test/sub",
         "qos": 0,
@@ -6674,7 +6657,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.extensions.list",
+    "method": "server.extensions.list",
     "id": 4564
 }
 ```
@@ -6718,7 +6701,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"server.extensions.request",
+    "method": "server.extensions.request",
     "params":{
         "agent": "moonagent",
         "method": "moontest.hello_world",
@@ -6754,7 +6737,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"connection.send_event",
+    "method": "connection.send_event",
     "params":{
         "event": "my_event",
         "data": {"my_arg": "optional data"}
@@ -6795,7 +6778,7 @@ JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"connection.register_remote_method",
+    "method": "connection.register_remote_method",
     "params": {
         "method_name": "firemon_alert_heated"
     }
@@ -6849,7 +6832,7 @@ the agent will receive the following:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"firemon_alert_heated",
+    "method": "firemon_alert_heated",
     "params": {
         "heater": "extruder",
         "temp": 200
@@ -6863,7 +6846,7 @@ receive the following:
 ```json
 {
     "jsonrpc": "2.0",
-    "method":"monitor_alert_heated"
+    "method": "monitor_alert_heated"
 }
 ```
 
