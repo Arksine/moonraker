@@ -50,6 +50,7 @@ class PrinterPower:
             "shelly": Shelly,
             "homeseer": HomeSeer,
             "homeassistant": HomeAssistant,
+            "hubitat": Hubitat,
             "loxonev1": Loxonev1,
             "rf": RFDevice,
             "mqtt": MQTTDevice,
@@ -451,6 +452,7 @@ class HTTPDevice(PowerDevice):
         self.protocol = config.get("protocol", default_protocol)
         if self.port == -1:
             self.port = 443 if self.protocol.lower() == "https" else 80
+        self.validate_ssl_cert = config.getboolean("validate_ssl_cert", True)
 
     async def init_state(self) -> None:
         async with self.request_lock:
@@ -489,7 +491,9 @@ class HTTPDevice(PowerDevice):
     ) -> Dict[str, Any]:
         response = await self.client.get(
             url, request_timeout=20., attempts=retries,
-            retry_pause_time=1., enable_cache=False)
+            retry_pause_time=1., enable_cache=False,
+            validate_ssl_cert=self.validate_ssl_cert
+        )
         response.raise_for_status(
             f"Error sending '{self.type}' command: {command}")
         data = cast(dict, response.json())
@@ -1075,7 +1079,7 @@ class SmartThings(HTTPDevice):
         }
         response = await self.client.request(
             method, url, body=body, headers=headers,
-            attempts=3, enable_cache=False
+            attempts=3, enable_cache=False, validate_ssl_cert=self.validate_ssl_cert
         )
         msg = f"Error sending SmartThings command: {command}"
         response.raise_for_status(msg)
@@ -1153,7 +1157,7 @@ class HomeAssistant(HTTPDevice):
         data: Dict[str, Any] = {}
         response = await self.client.request(
             method, url, body=body, headers=headers,
-            attempts=3, enable_cache=False
+            attempts=3, enable_cache=False, validate_ssl_cert=self.validate_ssl_cert
         )
         msg = f"Error sending homeassistant command: {command}"
         response.raise_for_status(msg)
@@ -1167,6 +1171,45 @@ class HomeAssistant(HTTPDevice):
 
     async def _send_power_request(self, state: str) -> str:
         await self._send_homeassistant_command(state)
+        await asyncio.sleep(self.status_delay)
+        res = await self._send_status_request()
+        return res
+
+class Hubitat(HTTPDevice):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config)
+        self.device_id: str = config.get("device_id")
+        self.maker_id: str = config.get("maker_id")
+        self.token: str = config.gettemplate("token").render()
+        self.status_delay: float = config.getfloat("status_delay", 1.)
+
+    async def _send_hubitat_command(self, command: str) -> Dict[str, Any]:
+        if command in ["on", "off"]:
+            out_cmd = f"apps/api/{self.maker_id}/devices/{self.device_id}/{command}?access_token={self.token}"
+        elif command == "info":
+            out_cmd = f"apps/api/{self.maker_id}/devices/{self.device_id}?access_token={self.token}"
+        else:
+            raise self.server.error(f"Invalid hubitat command: {command}")
+        url = f"{self.protocol}://{quote(self.addr)}:{self.port}/{out_cmd}"
+        response = await self.client.request(
+            "GET", url, attempts=3, enable_cache=False, retry_pause_time=1.,
+            validate_ssl_cert=self.validate_ssl_cert
+        )
+        msg = f"Error sending hubitat command: {command}"
+        response.raise_for_status(msg)
+        data: Dict[str, Any] = cast(dict, response.json())
+        return data
+
+    async def _send_status_request(self) -> str:
+        res = await self._send_hubitat_command("info")
+        attributes = res["attributes"]
+        for attribute in attributes:
+            if attribute["name"] == "switch":
+                return attribute["currentValue"]
+        raise self.server.error("Switch attribute not found in result")
+
+    async def _send_power_request(self, state: str) -> str:
+        await self._send_hubitat_command(state)
         await asyncio.sleep(self.status_delay)
         res = await self._send_status_request()
         return res
@@ -1399,7 +1442,10 @@ class HueDevice(HTTPDevice):
             f"/{self.device_type}s/{quote(self.device_id)}"
             f"/{quote(self.state_key)}"
         )
-        ret = await self.client.request("PUT", url, body={"on": new_state})
+        ret = await self.client.request(
+            "PUT", url, body={"on": new_state},
+            validate_ssl_cert=self.validate_ssl_cert
+        )
         resp = cast(List[Dict[str, Dict[str, Any]]], ret.json())
         state_url = (
             f"/{self.device_type}s/{self.device_id}/{self.state_key}/on"
@@ -1414,7 +1460,7 @@ class HueDevice(HTTPDevice):
             f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
         )
-        ret = await self.client.request("GET", url)
+        ret = await self.client.request("GET", url, validate_ssl_cert=self.validate_ssl_cert)
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"][self.on_state] else "off"
 
@@ -1433,7 +1479,8 @@ class GenericHTTP(HTTPDevice):
 
     async def _send_generic_request(self, command: str) -> str:
         request = self.client.wrap_request(
-            self.urls[command], request_timeout=20., attempts=3, retry_pause_time=1.
+            self.urls[command], request_timeout=20., attempts=3, retry_pause_time=1.,
+            validate_ssl_cert=self.validate_ssl_cert
         )
         context: Dict[str, Any] = {
             "command": command,
