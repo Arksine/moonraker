@@ -1185,9 +1185,15 @@ class Hubitat(HTTPDevice):
 
     async def _send_hubitat_command(self, command: str) -> Dict[str, Any]:
         if command in ["on", "off"]:
-            out_cmd = f"apps/api/{self.maker_id}/devices/{self.device_id}/{command}?access_token={self.token}"
+            out_cmd = (
+                f"apps/api/{self.maker_id}/devices/"
+                f"{self.device_id}/{command}?access_token={self.token}"
+            )
         elif command == "info":
-            out_cmd = f"apps/api/{self.maker_id}/devices/{self.device_id}?access_token={self.token}"
+            out_cmd = (
+                f"apps/api/{self.maker_id}/devices/"
+                f"{self.device_id}?access_token={self.token}"
+            )
         else:
             raise self.server.error(f"Invalid hubitat command: {command}")
         url = f"{self.protocol}://{quote(self.addr)}:{self.port}/{out_cmd}"
@@ -1460,7 +1466,9 @@ class HueDevice(HTTPDevice):
             f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
         )
-        ret = await self.client.request("GET", url, validate_ssl_cert=self.validate_ssl_cert)
+        ret = await self.client.request(
+            "GET", url, validate_ssl_cert=self.validate_ssl_cert
+        )
         resp = cast(Dict[str, Dict[str, Any]], ret.json())
         return "on" if resp["state"][self.on_state] else "off"
 
