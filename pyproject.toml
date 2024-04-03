@@ -11,7 +11,7 @@ dependencies = [
     "pyserial==3.4",
     "pyserial-asyncio==0.6",
     "pillow==9.5.0 ; python_version=='3.7'",
-    "pillow==10.2.0 ; python_version>='3.8'",
+    "pillow==10.3.0 ; python_version>='3.8'",
     "lmdb==1.4.1",
     "streaming-form-data==1.11.0 ; python_version=='3.7'",
     "streaming-form-data==1.13.0 ; python_version>='3.8'",
