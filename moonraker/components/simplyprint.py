@@ -1289,9 +1289,9 @@ class LayerDetect:
 
     def start(self, metadata: Dict[str, Any]) -> None:
         self.reset()
-        lh: Optional[float] = metadata.get("layer_height")
-        flh: Optional[float] = metadata.get("first_layer_height", lh)
-        if lh is not None and flh is not None:
+        lh: float = metadata.get("layer_height", 0)
+        flh: float = metadata.get("first_layer_height", lh)
+        if lh > 0.000001 and flh > 0.000001:
             self._active = True
             self._layer_height = lh
             self._fl_height = flh
