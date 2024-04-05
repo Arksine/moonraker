@@ -25,7 +25,17 @@ class JobState:
         self.server = config.get_server()
         self.last_print_stats: Dict[str, Any] = {}
         self.server.register_event_handler(
-            "server:klippy_started", self._handle_started)
+            "server:klippy_started", self._handle_started
+        )
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._handle_disconnect
+        )
+
+    def _handle_disconnect(self):
+        state = self.last_print_stats.get("state", "")
+        if state in ("printing", "paused"):
+            # set error state
+            self.last_print_stats["state"] = "error"
 
     async def _handle_started(self, state: KlippyState) -> None:
         if state != KlippyState.READY:
