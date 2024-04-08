@@ -292,6 +292,10 @@ temperature_store_size: 1200
 #   store approximately 20 minutes of data at one value per second.
 gcode_store_size:  1000
 #   The maximum number "gcode lines" to store.  The default is 1000.
+fields:
+#   Case-sensitive newline separated list of sensor fields to store.
+#   The following fields are implicitly added: temperature, target, power, speed
+#   The default is no additional fields.
 ```
 
 ### `[job_queue]`
@@ -1324,9 +1328,9 @@ address:
 #   A valid ip address or hostname of the Philips Hue Bridge. This
 #   parameter must be provided.
 port:
-#   A port number if an alternative Zigbee bridge is used on a HTTP port 
+#   A port number if an alternative Zigbee bridge is used on a HTTP port
 #   different from the default 80/443
-#   
+#
 user:
 #   The api key used for request authorization.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details.
