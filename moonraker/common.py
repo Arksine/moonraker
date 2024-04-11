@@ -109,6 +109,7 @@ class ExtendedEnum(Enum):
         return self._name_.lower()  # type: ignore
 
 class JobEvent(ExtendedEnum):
+    LAYER_CHANGED = 0
     STANDBY = 1
     STARTED = 2
     PAUSED = 3

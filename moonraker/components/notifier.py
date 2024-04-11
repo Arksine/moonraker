@@ -10,6 +10,7 @@ import apprise
 import logging
 import pathlib
 import re
+from datetime import datetime  # To allow timestamp to be generated
 from ..common import JobEvent, RequestType
 
 # Annotation imports
@@ -41,7 +42,13 @@ class Notifier:
                     if job_event == JobEvent.STANDBY:
                         continue
                     evt_name = str(job_event)
-                    if "*" in notifier.events or evt_name in notifier.events:
+                    # add extra AND condition (and evt_name != 'layer_change')
+                    # to * to exclude layer_change from being automatically picked
+                    # up by the * otherwise it triggers on EVERY layer change
+                    if ("*" in notifier.events and evt_name != 'layer_changed') or \
+                            evt_name in notifier.events:
+
+                        logging.info(f"Job Event loading: {evt_name}")
                         self.events.setdefault(evt_name, []).append(notifier)
                 logging.info(f"Registered notifier: '{notifier.get_name()}'")
             except Exception as e:
@@ -53,6 +60,9 @@ class Notifier:
         self.register_endpoints(config)
         self.server.register_event_handler(
             "job_state:state_changed", self._on_job_state_changed
+        )
+        self.server.register_event_handler(
+            "job_state:layer_changed", self._on_job_layer_changed
         )
 
     def register_remote_actions(self):
@@ -73,6 +83,36 @@ class Notifier:
         evt_name = str(job_event)
         for notifier in self.events.get(evt_name, []):
             await notifier.notify(evt_name, [prev_stats, new_stats])
+
+    async def _on_job_layer_changed(
+            self,
+            job_event: JobEvent,
+            prev_stats: Dict[str, Any],
+            new_stats: Dict[str, Any]
+    ) -> None:
+        evt_name = str(job_event)
+        if "info" in new_stats:
+            for notifier in self.events.get(evt_name, []):
+                # get config value:
+                # percentage of layers to generate the layer change notification
+                layer_trigger = notifier.layer_trigger
+                # get config value:
+                # only send message if the layer number is greater than this value.
+                minimum_layers = notifier.minimum_layers
+                # total layers from the gcode
+                total = int(new_stats["info"]["total_layer"])
+                # current layer counter
+                current = int(new_stats["info"]["current_layer"])
+                # calculate if we've hit a % trigger point above the min height
+                # this isn't nice to read because of the 88 char line limit
+                if layer_trigger != 0 and total >= minimum_layers and current > 0 and \
+                    current != total and \
+                    round(current/total/layer_trigger, 5)//1 != \
+                        round(((current-1)/total)/layer_trigger, 5)//1:
+
+                    logging.info(f"Layer change notification at \
+                    {round(current/total/layer_trigger,5)//1*layer_trigger*100}%")
+                    await notifier.notify(evt_name, [{}, new_stats])
 
     def register_endpoints(self, config: ConfigHelper):
         self.server.register_endpoint(
@@ -123,6 +163,16 @@ class NotifierInstance:
         self.apprise = apprise.Apprise()
         self.attach = config.gettemplate("attach", None)
         url_template = config.gettemplate("url")
+        self.layer_trigger = float(config.get("layer_trigger", 0))
+        self.minimum_layers = int(config.get("minimum_layers", 0))
+        if self.layer_trigger < 0 or self.layer_trigger > 1:
+            # layer_trigger out of range. Default to 0 and send logging info
+            logging.info(
+                f"Layer change trigger out of range for Notifier {self.name}. "
+                + f"Expected decimal between 0 and 1, found {self.layer_trigger}. "
+                + "Ignoring layer change trigger."
+            )
+            self.layer_trigger = 0
         self.url = url_template.render()
 
         if re.match(r"\w+?://", self.url) is None:
@@ -145,7 +195,10 @@ class NotifierInstance:
             "body": self.config.get("body", None),
             "body_format": self.config.get("body_format", None),
             "events": self.events,
-            "attach": self.attach
+            "attach": self.attach,
+            # include the additional parameters in the return data
+            "layer_trigger": self.config.get("layer_trigger", 0),
+            "minimum_layers": self.config.get("minimum_layers", 0)
         }
 
     async def notify(
@@ -154,7 +207,9 @@ class NotifierInstance:
         context = {
             "event_name": event_name,
             "event_args": event_args,
-            "event_message": message
+            "event_message": message,
+            # Add linux timestamp to every notication payload
+            "timestamp": datetime.now()
         }
 
         rendered_title = (
