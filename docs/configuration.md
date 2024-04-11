@@ -2713,7 +2713,7 @@ attach: http://192.168.1.100/webcam/?action=snapshot
 #### Configuring layer change progress notifications
 The `layer_changed` notification event can be generated at configurable layer change
 percentages during the print. Additional configuration parameters can be created in a
-[notifier my_layer_change_message] block.
+`[notifier my_layer_change_message]` block.
 
 The layer_change event receives a reduced set of information from the print.
 `event_args[0]` is empty in the layer change event, with `event_args[1]` holding a
