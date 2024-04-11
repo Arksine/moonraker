@@ -79,9 +79,14 @@ class JobState:
         if "info" in ps:
             cur_layer: Optional[int] = ps["info"].get("current_layer")
             if cur_layer is not None:
-                total: int = ps["info"].get("total_layer", 0)
                 self.server.send_event(
-                    "job_state:layer_changed", cur_layer, total
+                    "job_state:layer_changed",
+                    "layer_changed",
+                    {},  # empty previous stats
+                    ps  # print stats
+                    # This layout keeps the event.args[1] consistent with other
+                    # notifier events as the current print stats in the
+                    # moonraker.conf notifier configurations
                 )
         self.last_print_stats.update(ps)
 
