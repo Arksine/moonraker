@@ -2675,10 +2675,11 @@ in the current job state (`event_args[1]`).
 The `job state` is a dict that contains the values reported by
 Klipper's [print_stats](printer_objects.md#print_stats) object.
 	
-A timestamp value, generated from Python's datetime.now() function, is also included
-in the event data. This can be presented in a notification message in your preferred
-date and time format in Jinja2 using the strftime function and [format
-patterns](https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior). 
+A `timestamp` value, generated from Python's `datetime.now()` function, is also
+included in the event data. This can be presented in a notification message in
+your preferred date and time format in Jinja2 using the `strftime` function and
+[format patterns](
+https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior).
 For example: `{timestamp.strftime('%d/%m/%Y %H:%M.%S')}`
 
 #### An example:
