@@ -45,16 +45,13 @@ if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ...common import WebRequest
     from ..klippy_connection import KlippyConnection
-    from .. import database
-    from .. import klippy_apis
-    from .. import shell_command
     from ..job_queue import JobQueue
     from ..job_state import JobState
     from ..secrets import Secrets
+    from ..klippy_apis import KlippyAPI as APIComp
+    from ..database import MoonrakerDatabase as DBComp
+    from ..shell_command import ShellCommandFactory as SCMDComp
     StrOrPath = Union[str, pathlib.Path]
-    DBComp = database.MoonrakerDatabase
-    APIComp = klippy_apis.KlippyAPI
-    SCMDComp = shell_command.ShellCommandFactory
     _T = TypeVar("_T")
 
 VALID_GCODE_EXTS = ['.gcode', '.g', '.gco', '.ufp', '.nc']
@@ -1181,6 +1178,7 @@ class NotifySyncLock(asyncio.Lock):
         timeout = 1200. if has_pending else 1.
         for _ in range(5):
             try:
+                assert mcfut is not None
                 await asyncio.wait_for(asyncio.shield(mcfut), timeout)
             except asyncio.TimeoutError:
                 if timeout > 2.:
