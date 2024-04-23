@@ -471,7 +471,7 @@ class Authorization:
         self._sync_user(username)
         if (self.enable_totp):
             self.totp_secrets[username] = {
-                'secret': pyotp.random_base32(), 
+                'secret': pyotp.random_base32(),
                 'is_activated': False
             }
             self.totp_secret_db.sync(self.totp_secrets)
