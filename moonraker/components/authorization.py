@@ -470,7 +470,10 @@ class Authorization:
         self.users[username]['password'] = new_hashed_pass
         self._sync_user(username)
         if (self.enable_totp):
-            self.totp_secrets[username] = {'secret': pyotp.random_base32(), 'is_activated': False}
+            self.totp_secrets[username] = {
+                'secret': pyotp.random_base32(), 
+                'is_activated': False
+            }
             self.totp_secret_db.sync(self.totp_secrets)
         return {
             'username': username,
@@ -524,7 +527,10 @@ class Authorization:
                 action = "user_logged_in"
                 create = False
             if (self.enable_totp):
-                self.totp_secrets[username] = {'secret': pyotp.random_base32(), 'is_activated': False}
+                self.totp_secrets[username] = {
+                    'secret': pyotp.random_base32(),
+                    'is_activated': False
+                }
                 self.totp_secret_db.sync(self.totp_secrets)
         else:
             if username not in self.users:
@@ -543,7 +549,10 @@ class Authorization:
             if hashed_pass != user_info['password']:
                 raise self.server.error("Invalid Password")
             if (self.enable_totp):
-                user_data_totp = self.totp_secrets.get(username, {'secret': '', 'is_activated': True})
+                user_data_totp = self.totp_secrets.get(username, {
+                    'secret': '',
+                    'is_activated': True
+                })
                 secret = user_data_totp['secret']
                 is_activated = user_data_totp['is_activated']
                 if secret == '':
@@ -551,7 +560,10 @@ class Authorization:
                 if pyotp.TOTP(secret).verify(totp_code) is False:
                     raise self.server.error("Invalid TOTP code")
                 if is_activated is False:
-                    self.totp_secrets[username] = {'secret': secret, 'is_activated': True}
+                    self.totp_secrets[username] = {
+                        'secret': secret,
+                        'is_activated': True
+                    }
                     self.totp_secret_db.sync(self.totp_secrets)
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
         if jwt_secret_hex is None:
