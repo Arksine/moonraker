@@ -113,9 +113,13 @@ class Authorization:
         else:
             self.api_key = api_user['api_key']
         if (self.enable_totp):
-            database.register_local_namespace('user_totp_secret_storage', forbidden=True)
+            database.register_local_namespace(
+                'user_totp_secret_storage',
+                forbidden=True)
             self.totp_secret_db = database.wrap_namespace('user_totp_secret_storage')
-            self.totp_secrets: Dict[str, Dict[str, Union[str, bool]]] = self.totp_secret_db.as_dict()
+            self.totp_secrets: Dict[str, Dict[str, Union[str, bool]]] = (
+                self.totp_secret_db.as_dict()
+            )
         hi = self.server.get_host_info()
         self.issuer = f"http://{hi['hostname']}:{hi['port']}"
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
@@ -367,14 +371,13 @@ class Authorization:
             "login_required": login_req,
             "trusted": request_trusted
         }
-    
+
     async def _handle_getTOTP_request(self, web_request: WebRequest) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
         (secret, is_activated) = self.totp_secrets.get(username, ('', True))
         if secret == '':
             raise ValueError("User does not have a TOTP key set up.")
         uri = pyotp.TOTP(secret).provisioning_uri(username, issuer_name="Moonraker")
- 
         return {
             "TOTP_URI": uri,
         }
@@ -499,7 +502,7 @@ class Authorization:
             if username not in self.users:
                 create = True
         if (self.enable_totp):
-            totp_code: str = web_request.get_str('totp_code')        
+            totp_code: str = web_request.get_str('totp_code')
         if create:
             if username in self.users:
                 raise self.server.error(f"User {username} already exists")
@@ -545,9 +548,9 @@ class Authorization:
                 is_activated = user_data_totp['is_activated']
                 if secret == '':
                     raise self.server.error("User does not have a secret key set up.")
-                if (pyotp.TOTP(secret).verify(totp_code) == False):
+                if pyotp.TOTP(secret).verify(totp_code) is False:
                     raise self.server.error("Invalid TOTP code")
-                if (is_activated == False):
+                if is_activated is False:
                     self.totp_secrets[username] = {'secret': secret, 'is_activated': True}
                     self.totp_secret_db.sync(self.totp_secrets)
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
