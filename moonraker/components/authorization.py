@@ -370,7 +370,7 @@ class Authorization:
     
     async def _handle_getTOTP_request(self, web_request: WebRequest) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
-        (secret, is_activated) = self.totp_secrets.get(username)
+        (secret, is_activated) = self.totp_secrets.get(username, (None, None))
         if not secret:
             raise ValueError("User does not have a TOTP key set up.")
         uri = pyotp.TOTP(secret).provisioning_uri(username, issuer_name="Moonraker")
@@ -468,7 +468,7 @@ class Authorization:
         self._sync_user(username)
         if (self.enable_totp):
             self.totp_secrets[username] =  (pyotp.random_base32(), False)
-            self.totp_secret_db.sync() 
+            self.totp_secret_db.sync(self.totp_secrets) 
         return {
             'username': username,
             'action': "user_password_reset"
@@ -522,7 +522,7 @@ class Authorization:
                 create = False
             if (self.enable_totp):
                 self.totp_secrets[username] =  (pyotp.random_base32(), False)
-                self.totp_secret_db.sync() 
+                self.totp_secret_db.sync(self.totp_secrets) 
         else:
             if username not in self.users:
                 raise self.server.error(f"Unregistered User: {username}")
@@ -540,14 +540,14 @@ class Authorization:
             if hashed_pass != user_info['password']:
                 raise self.server.error("Invalid Password")
             if (self.enable_totp):
-                (secret, is_activated) = self.totp_secrets.get(username)
+                (secret, is_activated) = self.totp_secrets.get(username, (None, None))
                 if not secret:
                     raise self.server.error("User does not have a secret key set up.")             
                 if (pyotp.TOTP(secret).verify(totp_code) == False):
                     raise self.server.error("Invalid TOTP code")    
                 if (is_activated == False):
                     self.totp_secrets[username]  = (secret, True) 
-                    self.totp_secret_db.sync()        
+                    self.totp_secret_db.sync(self.totp_secrets)        
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
         if jwt_secret_hex is None:
             private_key = Signer()
