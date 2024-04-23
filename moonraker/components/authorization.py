@@ -370,8 +370,8 @@ class Authorization:
     
     async def _handle_getTOTP_request(self, web_request: WebRequest) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
-        (secret, is_activated) = self.totp_secrets.get(username, (None, None))
-        if not secret:
+        (secret, is_activated) = self.totp_secrets.get(username, ('', True))
+        if secret == '':
             raise ValueError("User does not have a TOTP key set up.")
         uri = pyotp.TOTP(secret).provisioning_uri(username, issuer_name="Moonraker")
  
@@ -540,10 +540,10 @@ class Authorization:
             if hashed_pass != user_info['password']:
                 raise self.server.error("Invalid Password")
             if (self.enable_totp):
-                user_data_totp = self.totp_secrets.get(username, {'secret': None, 'is_activated': None})
+                user_data_totp = self.totp_secrets.get(username, {'secret': '', 'is_activated': True})
                 secret = user_data_totp['secret']
                 is_activated = user_data_totp['is_activated']
-                if not secret:
+                if secret == '':
                     raise self.server.error("User does not have a secret key set up.")
                 if (pyotp.TOTP(secret).verify(totp_code) == False):
                     raise self.server.error("Invalid TOTP code")
