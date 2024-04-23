@@ -11,6 +11,7 @@ import uuid
 import hashlib
 import secrets
 import os
+import pyotp
 import time
 import datetime
 import ipaddress
@@ -78,6 +79,7 @@ class Authorization:
         self.force_logins = config.getboolean('force_logins', False)
         self.default_source = config.get('default_source', "moonraker").lower()
         self.enable_api_key = config.getboolean('enable_api_key', True)
+        self.enable_totp = config.getboolean('enable_totp', False)
         self.max_logins = config.getint("max_login_attempts", None, above=0)
         self.failed_logins: Dict[IPAddr, int] = {}
         self.fqdn_cache: Dict[IPAddr, Dict[str, Any]] = {}
@@ -110,6 +112,10 @@ class Authorization:
             }
         else:
             self.api_key = api_user['api_key']
+        if (self.enable_totp):
+            database.register_local_namespace('user_totp_secret_storage', forbidden=True)
+            self.totp_secret_db = database.wrap_namespace('user_totp_secret_storage')
+            self.totp_secrets: Dict[str, Tuple[str, bool]] = self.totp_secret_db.as_dict()
         hi = self.server.get_host_info()
         self.issuer = f"http://{hi['hostname']}:{hi['port']}"
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
@@ -267,6 +273,13 @@ class Authorization:
             transports=TransportType.HTTP | TransportType.WEBSOCKET,
             auth_required=False
         )
+        # Generate TOTP record
+        if (self.enable_totp):
+            self.server.register_endpoint(
+                "/access/get_totp_uri", RequestType.GET, self._handle_getTOTP_request,
+                transports=TransportType.HTTP | TransportType.WEBSOCKET,
+                auth_required=False
+            )
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         wsm.register_notification("authorization:user_created")
         wsm.register_notification(
@@ -353,6 +366,17 @@ class Authorization:
             "available_sources": sources,
             "login_required": login_req,
             "trusted": request_trusted
+        }
+    
+    async def _handle_getTOTP_request(self, web_request: WebRequest) -> Dict[str, Any]:
+        username: str = web_request.get_str('username')
+        (secret, is_activated) = self.totp_secrets.get(username)
+        if not secret:
+            raise ValueError("User does not have a TOTP key set up.")
+        uri = pyotp.TOTP(secret).provisioning_uri(username, issuer_name="Moonraker")
+ 
+        return {
+            "TOTP_URI": uri,
         }
 
     async def _handle_refresh_jwt(self,
@@ -442,6 +466,9 @@ class Authorization:
             'sha256', new_pass.encode(), salt, HASH_ITER).hex()
         self.users[username]['password'] = new_hashed_pass
         self._sync_user(username)
+        if (self.enable_totp):
+            self.totp_secrets[username] =  (pyotp.random_base32(), False)
+            self.totp_secret_db.sync() 
         return {
             'username': username,
             'action': "user_password_reset"
@@ -471,6 +498,8 @@ class Authorization:
             await self.ldap.authenticate_ldap_user(username, password)
             if username not in self.users:
                 create = True
+        if (self.enable_totp):
+            totp_code: str = web_request.get_str('totp_code')        
         if create:
             if username in self.users:
                 raise self.server.error(f"User {username} already exists")
@@ -491,6 +520,9 @@ class Authorization:
                 # Dont notify user created
                 action = "user_logged_in"
                 create = False
+            if (self.enable_totp):
+                self.totp_secrets[username] =  (pyotp.random_base32(), False)
+                self.totp_secret_db.sync() 
         else:
             if username not in self.users:
                 raise self.server.error(f"Unregistered User: {username}")
@@ -507,6 +539,15 @@ class Authorization:
             action = "user_logged_in"
             if hashed_pass != user_info['password']:
                 raise self.server.error("Invalid Password")
+            if (self.enable_totp):
+                (secret, is_activated) = self.totp_secrets.get(username)
+                if not secret:
+                    raise self.server.error("User does not have a secret key set up.")             
+                if (pyotp.TOTP(secret).verify(totp_code) == False):
+                    raise self.server.error("Invalid TOTP code")    
+                if (is_activated == False):
+                    self.totp_secrets[username]  = (secret, True) 
+                    self.totp_secret_db.sync()        
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
         if jwt_secret_hex is None:
             private_key = Signer()
@@ -563,6 +604,9 @@ class Authorization:
             .005, self.server.send_event,
             "authorization:user_deleted",
             {'username': username})
+        if (self.enable_totp):
+            del self.totp_secrets[username]
+            self.totp_secret_db.sync()
         return {
             "username": username,
             "action": "user_deleted"
