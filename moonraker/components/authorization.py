@@ -115,7 +115,7 @@ class Authorization:
         if (self.enable_totp):
             database.register_local_namespace('user_totp_secret_storage', forbidden=True)
             self.totp_secret_db = database.wrap_namespace('user_totp_secret_storage')
-            self.totp_secrets: Dict[str, Tuple[str, bool]] = self.totp_secret_db.as_dict()
+            self.totp_secrets: Dict[str, Dict[str, Union[str, bool]]] = self.totp_secret_db.as_dict()
         hi = self.server.get_host_info()
         self.issuer = f"http://{hi['hostname']}:{hi['port']}"
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
@@ -467,8 +467,8 @@ class Authorization:
         self.users[username]['password'] = new_hashed_pass
         self._sync_user(username)
         if (self.enable_totp):
-            self.totp_secrets[username] =  (pyotp.random_base32(), False)
-            self.totp_secret_db.sync(self.totp_secrets) 
+            self.totp_secrets[username] = {'secret': pyotp.random_base32(), 'is_activated': False}
+            self.totp_secret_db.sync(self.totp_secrets)
         return {
             'username': username,
             'action': "user_password_reset"
@@ -521,8 +521,8 @@ class Authorization:
                 action = "user_logged_in"
                 create = False
             if (self.enable_totp):
-                self.totp_secrets[username] =  (pyotp.random_base32(), False)
-                self.totp_secret_db.sync(self.totp_secrets) 
+                self.totp_secrets[username] = {'secret': pyotp.random_base32(), 'is_activated': False}
+                self.totp_secret_db.sync(self.totp_secrets)
         else:
             if username not in self.users:
                 raise self.server.error(f"Unregistered User: {username}")
@@ -540,14 +540,16 @@ class Authorization:
             if hashed_pass != user_info['password']:
                 raise self.server.error("Invalid Password")
             if (self.enable_totp):
-                (secret, is_activated) = self.totp_secrets.get(username, (None, None))
+                user_data_totp = self.totp_secrets.get(username, {'secret': None, 'is_activated': None})
+                secret = user_data_totp['secret']
+                is_activated = user_data_totp['is_activated']
                 if not secret:
-                    raise self.server.error("User does not have a secret key set up.")             
+                    raise self.server.error("User does not have a secret key set up.")
                 if (pyotp.TOTP(secret).verify(totp_code) == False):
-                    raise self.server.error("Invalid TOTP code")    
+                    raise self.server.error("Invalid TOTP code")
                 if (is_activated == False):
-                    self.totp_secrets[username]  = (secret, True) 
-                    self.totp_secret_db.sync(self.totp_secrets)        
+                    self.totp_secrets[username] = {'secret': secret, 'is_activated': True}
+                    self.totp_secret_db.sync(self.totp_secrets)
         jwt_secret_hex: Optional[str] = user_info.get('jwt_secret', None)
         if jwt_secret_hex is None:
             private_key = Signer()
@@ -606,7 +608,7 @@ class Authorization:
             {'username': username})
         if (self.enable_totp):
             del self.totp_secrets[username]
-            self.totp_secret_db.sync()
+            self.totp_secret_db.sync(self.totp_secrets)
         return {
             "username": username,
             "action": "user_deleted"
