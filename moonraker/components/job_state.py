@@ -24,6 +24,7 @@ class JobState:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.last_print_stats: Dict[str, Any] = {}
+        self.last_event: JobEvent = JobEvent.STANDBY
         self.server.register_event_handler(
             "server:klippy_started", self._handle_started
         )
@@ -36,6 +37,7 @@ class JobState:
         if state in ("printing", "paused"):
             # set error state
             self.last_print_stats["state"] = "error"
+            self.last_event = JobEvent.ERROR
 
     async def _handle_started(self, state: KlippyState) -> None:
         if state != KlippyState.READY:
@@ -80,9 +82,10 @@ class JobState:
                 # should register handlers for "job_state: status_changed" and
                 # match against the JobEvent object provided.
                 self.server.send_event(f"job_state:{new_state}", prev_ps, new_ps)
+                self.last_event = JobEvent.from_string(new_state)
                 self.server.send_event(
                     "job_state:state_changed",
-                    JobEvent.from_string(new_state),
+                    self.last_event,
                     prev_ps,
                     new_ps
                 )
@@ -107,6 +110,9 @@ class JobState:
 
     def get_last_stats(self) -> Dict[str, Any]:
         return dict(self.last_print_stats)
+
+    def get_last_job_event(self) -> JobEvent:
+        return self.last_event
 
 def load_component(config: ConfigHelper) -> JobState:
     return JobState(config)
