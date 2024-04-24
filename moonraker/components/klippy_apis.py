@@ -5,6 +5,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+import logging
 from ..utils import Sentinel
 from ..common import WebRequest, APITransport, RequestType
 
@@ -137,12 +138,14 @@ class KlippyAPI(APITransport):
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         if wait_klippy_started:
             await self.klippy.wait_started()
+        logging.info(f"Requesting Job Start, filename = {filename}")
         return await self.run_gcode(script)
 
     async def pause_print(
         self, default: Union[Sentinel, _T] = Sentinel.MISSING
     ) -> Union[_T, str]:
         self.server.send_event("klippy_apis:pause_requested")
+        logging.info("Requesting job pause...")
         return await self._send_klippy_request(
             "pause_resume/pause", {}, default)
 
@@ -150,6 +153,7 @@ class KlippyAPI(APITransport):
         self, default: Union[Sentinel, _T] = Sentinel.MISSING
     ) -> Union[_T, str]:
         self.server.send_event("klippy_apis:resume_requested")
+        logging.info("Requesting job resume...")
         return await self._send_klippy_request(
             "pause_resume/resume", {}, default)
 
@@ -157,6 +161,7 @@ class KlippyAPI(APITransport):
         self, default: Union[Sentinel, _T] = Sentinel.MISSING
     ) -> Union[_T, str]:
         self.server.send_event("klippy_apis:cancel_requested")
+        logging.info("Requesting job cancel...")
         return await self._send_klippy_request(
             "pause_resume/cancel", {}, default)
 
