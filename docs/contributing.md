@@ -1,10 +1,28 @@
 # Contributing to Moonraker
 
-While Moonraker exists as a service independently from Klipper, it relies
-on Klipper to be useful.  Thus, the tentative plan is to eventually merge
-the Moonraker application into the Klipper repo after Moonraker matures,
-at which point this repo will be archived.  As such, contributing guidelines
-are near those of Klipper:
+Prior to submitting a pull request prospective contributors must read this
+entire document.  Care should be taken to [format git commits](#git-commit-format)
+correctly.  This eases the review process and provides the reviewer with
+confidence that the submission will be of sufficient quality.
+
+Prospective contributors should consider the following:
+
+- Does the contribution have significant impact?  Bug fixes to existing
+  functionality and new features requested by 100+ users qualify as
+  items of significant impact.
+- Has the submission been well tested?  Submissions with substantial code
+  change must include details about the testing procedure and results.
+- Does the submission include blocking code?  Moonraker is an asynchronous
+  application, thus blocking code must be avoided.
+- If any dependencies are included, are they pure python?  Many low-powered SBCs
+  running Armbian do not have prebuilt wheels and are not capable of building wheels
+  themselves, thus breaking updates on these systems.
+- Does the submission change the API?  If so, could the change potentially break
+  frontends using the API?
+- Does the submission include updates to the documentation?
+
+When performing reviews these are the questions that will be asked during the
+initial stages.
 
 #### New Module Contributions
 
