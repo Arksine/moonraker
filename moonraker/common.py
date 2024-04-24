@@ -29,16 +29,17 @@ from typing import (
     List,
     Awaitable,
     ClassVar,
-    Tuple
+    Tuple,
+    Generic
 )
 
 if TYPE_CHECKING:
     from .server import Server
     from .components.websockets import WebsocketManager
     from .components.authorization import Authorization
+    from .components.history import History
     from .utils import IPAddress
     from asyncio import Future
-    _T = TypeVar("_T")
     _C = TypeVar("_C", str, bool, float, int)
     _F = TypeVar("_F", bound="ExtendedFlag")
     ConvType = Union[str, bool, float, int]
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     RPCCallback = Callable[..., Coroutine]
     AuthComp = Optional[Authorization]
 
+_T = TypeVar("_T")
 ENDPOINT_PREFIXES = ["printer", "server", "machine", "access", "api", "debug"]
 
 class ExtendedFlag(Flag):
@@ -254,6 +256,8 @@ class APIDefinition:
             name_parts = http_path[1:].split('/')
             if len(request_types) > 1:
                 for rtype in request_types:
+                    if rtype.name is None:
+                        continue
                     func_name = rtype.name.lower() + "_" + name_parts[-1]
                     rpc_methods.append(".".join(name_parts[:-1] + [func_name]))
             else:
@@ -384,9 +388,9 @@ class BaseRemoteConnection(APITransport):
             logging.exception("Websocket Command Error")
 
     def queue_message(self, message: Union[bytes, str, Dict[str, Any]]):
-        if isinstance(message, dict):
-            message = jsonw.dumps(message)
-        self.message_buf.append(message)
+        self.message_buf.append(
+            jsonw.dumps(message) if isinstance(message, dict) else message
+        )
         if self.queue_busy:
             return
         self.queue_busy = True
@@ -865,4 +869,354 @@ class JsonRPC:
             'jsonrpc': "2.0",
             'error': {'code': code, 'message': msg},
             'id': req_id
+        }
+
+
+# *** Job History Common Clases ***
+
+class FieldTracker(Generic[_T]):
+    history: History = None  # type: ignore
+    def __init__(
+        self,
+        value: _T = None,  # type: ignore
+        reset_callback: Optional[Callable[[], _T]] = None,
+        exclude_paused: bool = False,
+    ) -> None:
+        self.tracked_value = value
+        self.exclude_paused = exclude_paused
+        self.reset_callback: Optional[Callable[[], _T]] = reset_callback
+
+    def set_reset_callback(self, cb: Optional[Callable[[], _T]]) -> None:
+        self.reset_callback = cb
+
+    def set_exclude_paused(self, exclude: bool) -> None:
+        self.exclude_paused = exclude
+
+    def reset(self) -> None:
+        raise NotImplementedError()
+
+    def update(self, value: _T) -> None:
+        raise NotImplementedError()
+
+    def get_tracked_value(self) -> _T:
+        return self.tracked_value
+
+    def has_totals(self) -> bool:
+        return False
+
+    @classmethod
+    def class_init(cls, history: History) -> None:
+        cls.history = history
+
+
+class BasicTracker(FieldTracker[Any]):
+    def __init__(
+        self,
+        value: Any = None,
+        reset_callback: Optional[Callable[[], Any]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+
+    def reset(self) -> None:
+        if self.reset_callback is not None:
+            self.tracked_value = self.reset_callback()
+
+    def update(self, value: Any) -> None:
+        if self.history.tracking_enabled(self.exclude_paused):
+            self.tracked_value = value
+
+    def has_totals(self) -> bool:
+        return isinstance(self.tracked_value, (int, float))
+
+
+class DeltaTracker(FieldTracker[Union[int, float]]):
+    def __init__(
+        self,
+        value: Union[int, float] = 0,
+        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+        self.last_value: Union[float, int, None] = None
+
+    def reset(self) -> None:
+        self.tracked_value = 0
+        self.last_value = None
+        if self.reset_callback is not None:
+            self.last_value = self.reset_callback()
+            if not isinstance(self.last_value, (float, int)):
+                logging.info("DeltaTracker reset to invalid type")
+                self.last_value = None
+
+    def update(self, value: Union[int, float]) -> None:
+        if not isinstance(value, (int, float)):
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            if self.last_value is not None:
+                self.tracked_value += value - self.last_value
+        self.last_value = value
+
+    def has_totals(self) -> bool:
+        return True
+
+
+class CumulativeTracker(FieldTracker[Union[int, float]]):
+    def __init__(
+        self,
+        value: Union[int, float] = 0,
+        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+
+    def reset(self) -> None:
+        if self.reset_callback is not None:
+            self.tracked_value = self.reset_callback()
+            if not isinstance(self.tracked_value, (float, int)):
+                logging.info(f"{self.__class__.__name__} reset to invalid type")
+                self.tracked_value = 0
+        else:
+            self.tracked_value = 0
+
+    def update(self, value: Union[int, float]) -> None:
+        if not isinstance(value, (int, float)):
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            self.tracked_value += value
+
+    def has_totals(self) -> bool:
+        return True
+
+class AveragingTracker(CumulativeTracker):
+    def __init__(
+        self,
+        value: Union[int, float] = 0,
+        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+        self.count = 0
+
+    def reset(self) -> None:
+        super().reset()
+        self.count = 0
+
+    def update(self, value: Union[int, float]) -> None:
+        if not isinstance(value, (int, float)):
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            lv = self.tracked_value
+            self.count += 1
+            self.tracked_value = (lv * (self.count - 1) + value) / self.count
+
+
+class MaximumTracker(CumulativeTracker):
+    def __init__(
+        self,
+        value: Union[int, float] = 0,
+        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+        self.initialized = False
+
+    def reset(self) -> None:
+        self.initialized = False
+        if self.reset_callback is not None:
+            self.tracked_value = self.reset_callback()
+            if not isinstance(self.tracked_value, (int, float)):
+                self.tracked_value = 0
+                logging.info("MaximumTracker reset to invalid type")
+            else:
+                self.initialized = True
+        else:
+            self.tracked_value = 0
+
+    def update(self, value: Union[float, int]) -> None:
+        if not isinstance(value, (int, float)):
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            if not self.initialized:
+                self.tracked_value = value
+                self.initialized = True
+            else:
+                self.tracked_value = max(self.tracked_value, value)
+
+class MinimumTracker(CumulativeTracker):
+    def __init__(
+        self,
+        value: Union[int, float] = 0,
+        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(value, reset_callback, exclude_paused)
+        self.initialized = False
+
+    def reset(self) -> None:
+        self.initialized = False
+        if self.reset_callback is not None:
+            self.tracked_value = self.reset_callback()
+            if not isinstance(self.tracked_value, (int, float)):
+                self.tracked_value = 0
+                logging.info("MinimumTracker reset to invalid type")
+            else:
+                self.initialized = True
+        else:
+            self.tracked_value = 0
+
+    def update(self, value: Union[float, int]) -> None:
+        if not isinstance(value, (int, float)):
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            if not self.initialized:
+                self.tracked_value = value
+                self.initialized = True
+            else:
+                self.tracked_value = min(self.tracked_value, value)
+
+class CollectionTracker(FieldTracker[List[Any]]):
+    MAX_SIZE = 100
+    def __init__(
+        self,
+        value: List[Any] = [],
+        reset_callback: Optional[Callable[[], List[Any]]] = None,
+        exclude_paused: bool = False
+    ) -> None:
+        super().__init__(list(value), reset_callback, exclude_paused)
+
+    def reset(self) -> None:
+        if self.reset_callback is not None:
+            self.tracked_value = self.reset_callback()
+            if not isinstance(self.tracked_value, list):
+                logging.info("CollectionTracker reset to invalid type")
+                self.tracked_value = []
+        else:
+            self.tracked_value.clear()
+
+    def update(self, value: Any) -> None:
+        if value in self.tracked_value:
+            return
+        if self.history.tracking_enabled(self.exclude_paused):
+            self.tracked_value.append(value)
+            if len(self.tracked_value) > self.MAX_SIZE:
+                self.tracked_value.pop(0)
+
+    def has_totals(self) -> bool:
+        return False
+
+
+class TrackingStrategy(ExtendedEnum):
+    BASIC = 1
+    DELTA = 2
+    ACCUMULATE = 3
+    AVERAGE = 4
+    MAXIMUM = 5
+    MINIMUM = 6
+    COLLECT = 7
+
+    def get_tracker(self, **kwargs) -> FieldTracker:
+        trackers: Dict[TrackingStrategy, Type[FieldTracker]] = {
+            TrackingStrategy.BASIC: BasicTracker,
+            TrackingStrategy.DELTA: DeltaTracker,
+            TrackingStrategy.ACCUMULATE: CumulativeTracker,
+            TrackingStrategy.AVERAGE: AveragingTracker,
+            TrackingStrategy.MAXIMUM: MaximumTracker,
+            TrackingStrategy.MINIMUM: MinimumTracker,
+            TrackingStrategy.COLLECT: CollectionTracker
+        }
+        return trackers[self](**kwargs)
+
+
+class HistoryFieldData:
+    def __init__(
+        self,
+        field_name: str,
+        provider: str,
+        desc: str,
+        strategy: str,
+        units: Optional[str] = None,
+        reset_callback: Optional[Callable[[], _T]] = None,
+        exclude_paused: bool = False,
+        report_total: bool = False,
+        report_maximum: bool = False,
+        precision: Optional[int] = None
+    ) -> None:
+        self._name = field_name
+        self._provider = provider
+        self._desc = desc
+        self._strategy = TrackingStrategy.from_string(strategy)
+        self._units = units
+        self._tracker = self._strategy.get_tracker(
+            reset_callback=reset_callback,
+            exclude_paused=exclude_paused
+        )
+        self._report_total = report_total
+        self._report_maximum = report_maximum
+        self._precision = precision
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def provider(self) -> str:
+        return self._provider
+
+    @property
+    def tracker(self) -> FieldTracker:
+        return self._tracker
+
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, HistoryFieldData):
+            return value._provider == self._provider and value._name == self._name
+        raise ValueError("Invalid type for comparison")
+
+    def as_dict(self) -> Dict[str, Any]:
+        val = self._tracker.get_tracked_value()
+        if self._precision is not None and isinstance(val, float):
+            val = round(val, self._precision)
+        return {
+            "provider": self._provider,
+            "name": self.name,
+            "value": val,
+            "description": self._desc,
+            "units": self._units
+        }
+
+    def has_totals(self) -> bool:
+        return (
+            self._tracker.has_totals() and
+            (self._report_total or self._report_maximum)
+        )
+
+    def get_totals(
+        self, last_totals: List[Dict[str, Any]], reset: bool = False
+    ) -> Dict[str, Any]:
+        if not self.has_totals():
+            return {}
+        if reset:
+            maximum: Optional[float] = 0 if self._report_maximum else None
+            total: Optional[float] = 0 if self._report_total else None
+        else:
+            cur_val: Union[float, int] = self._tracker.get_tracked_value()
+            maximum = cur_val if self._report_maximum else None
+            total = cur_val if self._report_total else None
+            for obj in last_totals:
+                if obj["provider"] == self._provider and obj["field"] == self._name:
+                    if maximum is not None:
+                        maximum = max(cur_val, obj["maximum"] or 0)
+                    if total is not None:
+                        total = cur_val + (obj["total"] or 0)
+                    break
+            if self._precision is not None:
+                if maximum is not None:
+                    maximum = round(maximum, self._precision)
+                if total is not None:
+                    total = round(total, self._precision)
+        return {
+            "provider": self._provider,
+            "field": self._name,
+            "maximum": maximum,
+            "total": total
         }
