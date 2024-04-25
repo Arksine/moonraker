@@ -10,7 +10,7 @@ import logging
 import re
 import contextlib
 import tornado.websocket as tornado_ws
-from ..common import RequestType
+from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .database import MoonrakerDatabase
     from .announcements import Announcements
     from .klippy_apis import KlippyAPI as APIComp
+    from .history import History
     from tornado.websocket import WebSocketClientConnection
 
 DB_NAMESPACE = "moonraker"
@@ -52,6 +53,12 @@ class SpoolManager:
         self._error_logged: bool = False
         self._highest_epos: float = 0
         self._current_extruder: str = "extruder"
+        self.spool_history = HistoryFieldData(
+            "spool_ids", "spoolman", "Spool IDs used", "collect",
+            reset_callback=self._on_history_reset
+        )
+        history: History = self.server.lookup_component("history")
+        history.register_auxiliary_field(self.spool_history)
         self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.http_client: HttpClient = self.server.lookup_component("http_client")
         self.database: MoonrakerDatabase = self.server.lookup_component("database")
@@ -102,6 +109,11 @@ class SpoolManager:
             RequestType.GET,
             self._handle_status_request,
         )
+
+    def _on_history_reset(self) -> List[int]:
+        if self.spool_id is None:
+            return []
+        return [self.spool_id]
 
     async def component_init(self) -> None:
         self.spool_id = await self.database.get_item(
@@ -270,6 +282,7 @@ class SpoolManager:
         if self.spool_id == spool_id:
             logging.info(f"Spool ID already set to: {spool_id}")
             return
+        self.spool_history.tracker.update(spool_id)
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.server.send_event(
