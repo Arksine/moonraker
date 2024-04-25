@@ -388,9 +388,10 @@ class OctoPrintCompat:
             except self.server.error:
                 pstate = "not_avail"
             started: bool = False
+            user = web_request.get_current_user()
             if pstate not in ["printing", "paused", "not_avail"]:
                 try:
-                    await self.klippy_apis.start_print(filename)
+                    await self.klippy_apis.start_print(filename, user=user)
                 except self.server.error:
                     started = False
                 else:
@@ -400,7 +401,7 @@ class OctoPrintCompat:
                 if fmgr.upload_queue_enabled():
                     job_queue: JobQueue = self.server.lookup_component(
                         'job_queue')
-                    await job_queue.queue_job(filename, check_exists=False)
+                    await job_queue.queue_job(filename, check_exists=False, user=user)
                     logging.debug(f"Job '{filename}' queued via OctoPrint API")
                 else:
                     raise self.server.error("Conflict", 409)

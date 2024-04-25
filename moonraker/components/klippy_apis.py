@@ -89,7 +89,8 @@ class KlippyAPI(APITransport):
 
     async def _gcode_start_print(self, web_request: WebRequest) -> str:
         filename: str = web_request.get_str('filename')
-        return await self.start_print(filename)
+        user = web_request.get_current_user()
+        return await self.start_print(filename, user=user)
 
     async def _gcode_restart(self, web_request: WebRequest) -> str:
         return await self.do_restart("RESTART")
@@ -123,7 +124,10 @@ class KlippyAPI(APITransport):
         return result
 
     async def start_print(
-        self, filename: str, wait_klippy_started: bool = False
+        self,
+        filename: str,
+        wait_klippy_started: bool = False,
+        user: Optional[Dict[str, Any]] = None
     ) -> str:
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:
@@ -139,7 +143,9 @@ class KlippyAPI(APITransport):
         if wait_klippy_started:
             await self.klippy.wait_started()
         logging.info(f"Requesting Job Start, filename = {filename}")
-        return await self.run_gcode(script)
+        ret = await self.run_gcode(script)
+        self.server.send_event("klippy_apis:job_start_complete", user)
+        return ret
 
     async def pause_print(
         self, default: Union[Sentinel, _T] = Sentinel.MISSING

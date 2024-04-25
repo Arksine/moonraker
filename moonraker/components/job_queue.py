@@ -135,7 +135,9 @@ class JobQueue:
                         raise self.server.error(
                             "Queue State Changed during Transition Gcode")
                 self._set_queue_state("starting")
-                await kapis.start_print(filename, wait_klippy_started=True)
+                await kapis.start_print(
+                    filename, wait_klippy_started=True, user=job.user
+                )
             except self.server.error:
                 logging.exception(f"Error Loading print: {filename}")
                 self._set_queue_state("paused")
@@ -165,7 +167,8 @@ class JobQueue:
     async def queue_job(self,
                         filenames: Union[str, List[str]],
                         check_exists: bool = True,
-                        reset: bool = False
+                        reset: bool = False,
+                        user: Optional[Dict[str, Any]] = None
                         ) -> None:
         async with self.lock:
             # Make sure that the file exists
@@ -178,7 +181,7 @@ class JobQueue:
             if reset:
                 self.queued_jobs.clear()
             for fname in filenames:
-                queued_job = QueuedJob(fname)
+                queued_job = QueuedJob(fname, user)
                 self.queued_jobs[queued_job.job_id] = queued_job
             self._send_queue_event(action="jobs_added")
 
@@ -224,6 +227,7 @@ class JobQueue:
                 else:
                     qs = "ready" if self.automatic else "paused"
                     self._set_queue_state(qs)
+
     def _job_map_to_list(self) -> List[Dict[str, Any]]:
         cur_time = time.time()
         return [job.as_dict(cur_time) for
@@ -261,7 +265,8 @@ class JobQueue:
             files = web_request.get_list('filenames')
             reset = web_request.get_boolean("reset", False)
             # Validate that all files exist before queueing
-            await self.queue_job(files, reset=reset)
+            user = web_request.get_current_user()
+            await self.queue_job(files, reset=reset, user=user)
         elif req_type == RequestType.DELETE:
             if web_request.get_boolean("all", False):
                 await self.delete_job([], all=True)
@@ -319,13 +324,18 @@ class JobQueue:
         await self.pause_queue()
 
 class QueuedJob:
-    def __init__(self, filename: str) -> None:
+    def __init__(self, filename: str, user: Optional[Dict[str, Any]] = None) -> None:
         self.filename = filename
         self.job_id = f"{id(self):016X}"
         self.time_added = time.time()
+        self._user = user
 
     def __str__(self) -> str:
         return self.filename
+
+    @property
+    def user(self) -> Optional[Dict[str, Any]]:
+        return self._user
 
     def as_dict(self, cur_time: float) -> Dict[str, Any]:
         return {

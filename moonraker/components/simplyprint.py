@@ -1598,7 +1598,7 @@ class PrintHandler:
         kapi: KlippyAPI = self.server.lookup_component("klippy_apis")
         data = {"state": "started"}
         try:
-            await kapi.start_print(pending)
+            await kapi.start_print(pending, user={"username": "SimplyPrint"})
         except Exception:
             logging.exception("Print Failed to start")
             data["state"] = "error"

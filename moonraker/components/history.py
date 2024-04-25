@@ -65,6 +65,8 @@ class History:
             "server:klippy_shutdown", self._handle_shutdown)
         self.server.register_event_handler(
             "job_state:state_changed", self._on_job_state_changed)
+        self.server.register_event_handler(
+            "klippy_apis:job_start_complete", self._on_job_requested)
         self.server.register_notification("history:history_changed")
 
         self.server.register_endpoint(
@@ -88,6 +90,7 @@ class History:
 
         self.current_job: Optional[PrinterJob] = None
         self.current_job_id: Optional[str] = None
+        self.job_user: str = "No User"
         self.job_paused: bool = False
         self.next_job_id: int = 0
         self.cached_job_ids = self.history_ns.keys().result()
@@ -249,6 +252,12 @@ class History:
             # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
             self.finish_job("cancelled", prev_stats)
 
+    def _on_job_requested(self, user: Optional[Dict[str, Any]]) -> None:
+        username = (user or {}).get("username", "No User")
+        self.job_user = username
+        if self.current_job is not None:
+            self.current_job.user = username
+
     def _handle_shutdown(self) -> None:
         jstate: JobState = self.server.lookup_component("job_state")
         last_ps = jstate.get_last_stats()
@@ -265,6 +274,7 @@ class History:
         job_id = f"{self.next_job_id:06X}"
         self.current_job = job
         self.current_job_id = job_id
+        self.current_job.user = self.job_user
         self.grab_job_metadata()
         for field in self.auxiliary_fields:
             field.tracker.reset()
@@ -296,6 +306,7 @@ class History:
             # Print stats have been reset, do not update this job with them
             pstats = {}
 
+        self.current_job.user = self.job_user
         self.current_job.finish(status, pstats)
         # Regrab metadata incase metadata wasn't parsed yet due to file upload
         self.grab_job_metadata()
@@ -310,6 +321,7 @@ class History:
         self.send_history_event("finished")
         self.current_job = None
         self.current_job_id = None
+        self.job_user = "No User"
 
     async def get_job(self,
                       job_id: Union[int, str]
@@ -425,6 +437,7 @@ class PrinterJob:
         self.start_time = time.time()
         self.total_duration: float = 0.
         self.auxiliary_data: List[Dict[str, Any]] = []
+        self.user: str = "No User"
         self.update_from_ps(data)
 
     def finish(self,

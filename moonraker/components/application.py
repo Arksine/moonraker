@@ -65,10 +65,11 @@ if TYPE_CHECKING:
     from io import BufferedReader
     from .authorization import Authorization
     from .template import TemplateFactory, JinjaTemplate
-    MessageDelgate = Optional[tornado.httputil.HTTPMessageDelegate]
+    MessageDelgate = Optional[HTTPMessageDelegate]
     AuthComp = Optional[Authorization]
     APICallback = Callable[[WebRequest], Coroutine]
 
+# mypy: disable-error-code="attr-defined,name-defined"
 
 # 50 MiB Max Standard Body Size
 MAX_BODY_SIZE = 50 * 1024 * 1024
@@ -1010,6 +1011,7 @@ class FileUploadHandler(AuthorizedRequestHandler):
         for name, value in form_args.items():
             debug_msg += f"\n{name}: {value}"
         debug_msg += f"\nChecksum: {calc_chksum}"
+        form_args["current_user"] = self.current_user
         logging.debug(debug_msg)
         logging.info(f"Processing Uploaded File: {self._file.multipart_filename}")
         try:
