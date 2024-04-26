@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict, deque
 from functools import partial
-from ..common import RequestType
+from ..common import RequestType, HistoryFieldData
 
 # Annotation imports
 from typing import (
@@ -24,12 +24,14 @@ from typing import (
     Type,
     TYPE_CHECKING,
     Union,
+    Callable
 )
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .mqtt import MQTTClient
+    from .history import History
 
 SENSOR_UPDATE_TIME = 1.0
 SENSOR_EVENT_NAME = "sensors:sensor_update"
@@ -56,6 +58,57 @@ class BaseSensor:
         self.values: DefaultDict[str, Deque[Union[int, float]]] = defaultdict(
             lambda: deque(maxlen=store_size)
         )
+        history: History = self.server.lookup_component("history")
+        self.field_info: Dict[str, List[HistoryFieldData]] = {}
+        all_opts = list(config.get_options().keys())
+        cfg_name = config.get_name()
+        hist_field_prefix = "history_field_"
+        for opt in all_opts:
+            if not opt.startswith(hist_field_prefix):
+                continue
+            name = opt[len(hist_field_prefix):]
+            field_cfg: Dict[str, str] = config.getdict(opt)
+            ident: Optional[str] = field_cfg.pop("parameter", None)
+            if ident is None:
+                raise config.error(
+                    f"[{cfg_name}]: option '{opt}', key 'parameter' must be"
+                    f"specified"
+                )
+            do_init: str = field_cfg.pop("init_tracker", "false").lower()
+            reset_cb = self._gen_reset_callback(ident) if do_init == "true" else None
+            excl_paused: str = field_cfg.pop("exclude_paused", "false").lower()
+            report_total: str = field_cfg.pop("report_total", "false").lower()
+            report_max: str = field_cfg.pop("report_maximum", "false").lower()
+            precision: Optional[str] = field_cfg.pop("precision", None)
+            try:
+                fdata = HistoryFieldData(
+                    name,
+                    cfg_name,
+                    field_cfg.pop("desc", f"{ident} tracker"),
+                    field_cfg.pop("strategy", "basic"),
+                    units=field_cfg.pop("units", None),
+                    reset_callback=reset_cb,
+                    exclude_paused=excl_paused == "true",
+                    report_total=report_total == "true",
+                    report_maximum=report_max == "true",
+                    precision=int(precision) if precision is not None else None,
+                )
+            except Exception as e:
+                raise config.error(
+                    f"[{cfg_name}]: option '{opt}', error encountered during "
+                    f"sensor field configuration: {e}"
+                ) from e
+            for key in field_cfg.keys():
+                self.server.add_warning(
+                    f"[{cfg_name}]: Option '{opt}' contains invalid key '{key}'"
+                )
+            self.field_info.setdefault(ident, []).append(fdata)
+            history.register_auxiliary_field(fdata)
+
+    def _gen_reset_callback(self, param_name: str) -> Callable[[], float]:
+        def on_reset() -> float:
+            return self.last_measurements.get(param_name, 0)
+        return on_reset
 
     def _update_sensor_value(self, eventtime: float) -> None:
         """
@@ -108,6 +161,7 @@ class MQTTSensor(BaseSensor):
         context = {
             "payload": payload.decode(),
             "set_result": partial(_set_result, store=measurements),
+            "log_debug": logging.debug
         }
 
         try:
@@ -118,11 +172,12 @@ class MQTTSensor(BaseSensor):
         else:
             self.error_state = None
             self.last_measurements = measurements
-            logging.debug(
-                "Received updated sensor value for %s: %s",
-                self.name,
-                self.last_measurements,
-            )
+            for name, value in measurements.items():
+                fdata_list = self.field_info.get(name)
+                if fdata_list is None:
+                    continue
+                for fdata in fdata_list:
+                    fdata.tracker.update(value)
 
     async def _on_mqtt_disconnected(self):
         self.error_state = "MQTT Disconnected"
