@@ -13,7 +13,7 @@ import pathlib
 import contextlib
 import asyncio
 from . import ServerError
-from typing import Optional, Type
+from typing import Optional, Type, Union
 from types import TracebackType
 
 class LockTimeout(ServerError):
@@ -21,7 +21,7 @@ class LockTimeout(ServerError):
 
 class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
     def __init__(
-        self, file_path: pathlib.Path, timeout: int = 0
+        self, file_path: pathlib.Path, timeout: Union[int, float] = 0
     ) -> None:
         self.lock_path = file_path.parent.joinpath(f".{file_path.name}.lock")
         self.timeout = timeout
