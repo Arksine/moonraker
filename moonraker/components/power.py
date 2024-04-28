@@ -347,7 +347,7 @@ class PowerDevice:
         power.set_device_power(self.name, "off")
 
     def should_turn_on_when_queued(self) -> bool:
-        return self.on_when_queued and self.state == "off"
+        return self.on_when_queued
 
     def _setup_bound_services(self) -> None:
         if not self.bound_services:
@@ -679,6 +679,7 @@ class KlipperDevice(PowerDevice):
             kapis: APIComp = self.server.lookup_component('klippy_apis')
             value = "1" if state == "on" else "0"
             await kapis.run_gcode(f"{self.gc_cmd} VALUE={value}")
+            assert self.update_fut is not None
             await asyncio.wait_for(self.update_fut, 1.)
         except TimeoutError:
             self.state = "error"
@@ -1273,6 +1274,7 @@ class MQTTDevice(PowerDevice):
             while self.mqtt.is_connected():
                 self.query_response = self.eventloop.create_future()
                 try:
+                    assert self.query_response is not None
                     await self._wait_for_update(self.query_response)
                 except asyncio.TimeoutError:
                     # Only wait once if no query topic is set.
@@ -1335,6 +1337,7 @@ class MQTTDevice(PowerDevice):
                     "MQTT Not Connected", 503)
             self.query_response = self.eventloop.create_future()
             try:
+                assert self.query_response is not None
                 await self._wait_for_update(self.query_response)
             except Exception:
                 logging.exception(f"MQTT Power Device {self.name}: "
@@ -1361,6 +1364,7 @@ class MQTTDevice(PowerDevice):
         self.query_response = self.eventloop.create_future()
         new_state = "error"
         try:
+            assert self.query_response is not None
             payload = self.cmd_payload.render({'command': state})
             await self.mqtt.publish_topic(
                 self.cmd_topic, payload, self.qos,
