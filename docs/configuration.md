@@ -2114,6 +2114,11 @@ address:
 #   parameter must be provided.
 port:
 #   Port the Broker is listening on.  Default is 1883.
+enable_tls: False
+#   Enables SSL/TLS connections when set to true.  Note that if a user intends
+#   to connect to a local MQTT service using a self signed certificate then
+#   it will be necessary to install the root CA certificate on the machine
+#   hosting Moonraker.  Default is False.
 username:
 #   An optional username used to log in to the Broker.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. The default is
@@ -2178,6 +2183,10 @@ status_objects:
 #
 #   If not configured then no objects will be tracked and published to
 #   the klipper/status topic.
+status_interval:
+#   The interval (in seconds) between published status updates.  This value
+#   can be used to limit the rate of updates published.  By default Moonraker
+#   will publish Klipper status updates as it receives them.
 publish_split_status: False
 #   Configures how to publish status updates to MQTT.
 #
