@@ -317,6 +317,7 @@ class MQTTClient(APITransport):
         self.eventloop = self.server.get_event_loop()
         self.address: str = config.get('address')
         self.port: int = config.getint('port', 1883)
+        self.tls_enabled: bool = config.getboolean("enable_tls", False)
         user = config.gettemplate('username', None)
         self.user_name: Optional[str] = None
         if user:
@@ -440,6 +441,8 @@ class MQTTClient(APITransport):
         self.client.will_set(self.moonraker_status_topic,
                              payload=jsonw.dumps({'server': 'offline'}),
                              qos=self.qos, retain=True)
+        if self.tls_enabled:
+            self.client.tls_set()
         self.client.connect_async(self.address, self.port)
         self.connect_task = self.eventloop.create_task(
             self._do_reconnect(first=True)
