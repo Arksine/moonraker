@@ -63,7 +63,7 @@ class ExtPahoClient(paho_mqtt.Client):
         if self._port <= 0:
             raise ValueError('Invalid port number.')
 
-        if PAHO_MQTT_VERSION >=(2, 0):
+        if PAHO_MQTT_VERSION >= (2, 0):
             return self._v2_reconnect(sock)
         if PAHO_MQTT_VERSION < (1, 6):
             # Paho Mqtt Version < 1.6.x
