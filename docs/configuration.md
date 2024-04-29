@@ -952,7 +952,7 @@ address: 192.168.1.123
 #### Tuya Smartplug Configuration
 
 You need to follow the steps described in [the tinytuya github repository](https://github.com/jasonacox/tinytuya)
-to set up a Tuya developer account and obtain the information required to configura a tuya smart plug
+to set up a Tuya developer account and obtain the information required to configure a Tuya Smartplug
 
 The following options are available for `tuya_smartplug` device types:
 
@@ -976,9 +976,9 @@ Example:
 
 [power printer_plug]
 type: tuya_smartplug
-device_id: asdasdads
+device_id: ebc8da4c25b28f8f09hsir
 address: 192.168.1.123
-local_key: 123456
+local_key: MxbJXvJ6$
 version: 3.3
 ```
 
