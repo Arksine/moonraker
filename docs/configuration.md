@@ -949,6 +949,39 @@ type: tplink_smartplug
 address: 192.168.1.123
 ```
 
+#### Tuya Smartplug Configuration
+
+You need to follow the steps described in [the tinytuya github repository](https://github.com/jasonacox/tinytuya)
+to set up a Tuya developer account and obtain the information required to configura a tuya smart plug
+
+The following options are available for `tuya_smartplug` device types:
+
+```ini
+# moonraker.conf
+
+device_id:
+# Unique identifier for the Tuya device
+address:
+# Network address (IPv4) of the device e.g. 10.0.1.100. Leave empty for "Auto" setting in tinytuya
+local_key:
+# Security key needed to access the Tuya device
+version:
+# Tuya protocol version used (3.1, 3.2, 3.3, 3.4 or 3.5)
+```
+
+Example:
+
+```ini
+# moonraker.conf
+
+[power printer_plug]
+type: tuya_smartplug
+device_id: asdasdads
+address: 192.168.1.123
+local_key: 123456
+version: 3.3
+```
+
 #### Tasmota Configuration
 
 The following options are available for `tasmota` device types:
