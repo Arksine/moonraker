@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     TempStore = Dict[str, Dict[str, Deque[Optional[float]]]]
 
 TEMP_UPDATE_TIME = 1.
+STANDARD_FIELDS = {"temperature", "target", "power", "speed"}
 
 def _round_null(val: Optional[float], ndigits: int) -> Optional[float]:
     if val is None:
@@ -39,6 +40,7 @@ class DataStore:
         self.server = config.get_server()
         self.temp_store_size = config.getint('temperature_store_size', 1200)
         self.gcode_store_size = config.getint('gcode_store_size', 1000)
+        self.fields = STANDARD_FIELDS.union(config.getlist("fields", []))
 
         # Temperature Store Tracking
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
@@ -93,10 +95,9 @@ class DataStore:
                 return
             logging.info(f"Configuring available sensors: {sensors}")
             new_store: TempStore = {}
-            valid_fields = ("temperature", "target", "power", "speed")
             for sensor in sensors:
                 reported_fields = [
-                    f for f in list(status.get(sensor, {}).keys()) if f in valid_fields
+                    f for f in list(status.get(sensor, {}).keys()) if f in self.fields
                 ]
                 if not reported_fields:
                     logging.info(f"No valid fields reported for sensor: {sensor}")
