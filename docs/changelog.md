@@ -35,6 +35,10 @@ The format is based on [Keep a Changelog].
 - **machine**: Add support for system peripheral queries
 - **mqtt**:  Added the `status_interval` option to support rate limiting
 - **mqtt**:  Added the `enable_tls` option to support ssl/tls connections
+- **history**: Added `user` field to job history data
+- **history**: Added support for auxiliary history fields
+- **spoolman**:  Report spool ids set during a print in history auxiliary data
+- **sensor**: Added support for history fields reported in auxiliary data
 
 ### Fixed
 

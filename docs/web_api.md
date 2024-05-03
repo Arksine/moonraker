@@ -1939,6 +1939,7 @@ GET /machine/peripherals/video
             "camera_name": "unicam",
             "driver_name": "unicam",
             "hardware_bus": "platform:3f801000.csi",
+            "modes": [],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -1958,6 +1959,62 @@ GET /machine/peripherals/video
             "camera_name": "UVC Camera (046d:0825)",
             "driver_name": "uvcvideo",
             "hardware_bus": "usb-3f980000.usb-1.1",
+            "modes": [
+                {
+                    "format": "YUYV",
+                    "description": "YUYV 4:2:2",
+                    "flags": [],
+                    "resolutions": [
+                        "640x480",
+                        "160x120",
+                        "176x144",
+                        "320x176",
+                        "320x240",
+                        "352x288",
+                        "432x240",
+                        "544x288",
+                        "640x360",
+                        "752x416",
+                        "800x448",
+                        "800x600",
+                        "864x480",
+                        "960x544",
+                        "960x720",
+                        "1024x576",
+                        "1184x656",
+                        "1280x720",
+                        "1280x960"
+                    ]
+                },
+                {
+                    "format": "MJPG",
+                    "description": "Motion-JPEG",
+                    "flags": [
+                        "COMPRESSED"
+                    ],
+                    "resolutions": [
+                        "640x480",
+                        "160x120",
+                        "176x144",
+                        "320x176",
+                        "320x240",
+                        "352x288",
+                        "432x240",
+                        "544x288",
+                        "640x360",
+                        "752x416",
+                        "800x448",
+                        "800x600",
+                        "864x480",
+                        "960x544",
+                        "960x720",
+                        "1024x576",
+                        "1184x656",
+                        "1280x720",
+                        "1280x960"
+                    ]
+                }
+            ],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -1975,6 +2032,7 @@ GET /machine/peripherals/video
             "camera_name": "bcm2835-isp",
             "driver_name": "bcm2835-isp",
             "hardware_bus": "platform:bcm2835-isp",
+            "modes": [],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -1992,6 +2050,7 @@ GET /machine/peripherals/video
             "camera_name": "bcm2835-isp",
             "driver_name": "bcm2835-isp",
             "hardware_bus": "platform:bcm2835-isp",
+            "modes": [],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -2009,6 +2068,7 @@ GET /machine/peripherals/video
             "camera_name": "bcm2835-isp",
             "driver_name": "bcm2835-isp",
             "hardware_bus": "platform:bcm2835-isp",
+            "modes": [],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -2026,6 +2086,7 @@ GET /machine/peripherals/video
             "camera_name": "bcm2835-isp",
             "driver_name": "bcm2835-isp",
             "hardware_bus": "platform:bcm2835-isp",
+            "modes": [],
             "capabilities": [
                 "VIDEO_CAPTURE",
                 "EXT_PIX_FORMAT",
@@ -2134,6 +2195,7 @@ V4L2 Device
 | `alt_name`         | string? | An alternative device name optionally reported by        |
 |                    |         | sysfs.  Will be `null` if the name file does not exist.  |^
 | `hardware_bus`     | string  | A description of the hardware location of the device     |
+| `modes`            |  array  | An array of V4L2 mode objects.                           |
 | `capabilities`     |  array  | An array of strings indicating the capabilities the      |
 |                    |         | device supports as reported by V4L2.                     |^
 | `version`          | string  | The device version as reported by V4L2.                  |
@@ -2144,6 +2206,16 @@ V4L2 Device
 |                    |         | ID. Will be  `null` if no matching link exists.          |^
 | `usb_location`     | string? | An identifier derived from the reported usb bus and      |
 |                    |         | device numbers. Will be `null` for non-usb devices.      |^
+
+V4L2 Mode
+
+| Field         |  Type  | Description                                                  |
+| ------------- | :----: | ------------------------------------------------------------ |
+| `description` | string | The description of the mode reported by the V4L2 driver.     |
+| `flags`       | array  | An array of strings describing flags reported by the driver. |
+| `format`      | string | The pixel format of the mode.                                |
+| `resolutions` | array  | An array of strings describing the resolutions supported by  |
+|               |        | the mode.  Each entry is reported as `<WIDTH>x<HEIGHT>`      |^
 
 Libcamera Device
 
@@ -6374,7 +6446,61 @@ An array of requested historical jobs:
             "print_duration": 18.37201827496756,
             "status": "completed",
             "start_time": 1615764496.622146,
-            "total_duration": 18.37201827496756
+            "total_duration": 18.37201827496756,
+            "user": "testuser",
+            "auxiliary_data": [
+                {
+                    "provider": "sensor hist_test",
+                    "name": "power_consumption",
+                    "value": 4.119977,
+                    "description": "Printer Power Consumption",
+                    "units": "kWh"
+                },
+                {
+                    "provider": "sensor hist_test",
+                    "name": "max_current",
+                    "value": 2.768851,
+                    "description": "Maximum current draw",
+                    "units": "A"
+                },
+                {
+                    "provider": "sensor hist_test",
+                    "name": "min_current",
+                    "value": 0.426725,
+                    "description": "Minmum current draw",
+                    "units": "A"
+                },
+                {
+                    "provider": "sensor hist_test",
+                    "name": "avg_current",
+                    "value": 1.706872,
+                    "description": "Average current draw",
+                    "units": "A"
+                },
+                {
+                    "provider": "sensor hist_test",
+                    "name": "status",
+                    "value": 2,
+                    "description": "Power Switch Status",
+                    "units": null
+                },
+                {
+                    "provider": "sensor hist_test",
+                    "name": "filament",
+                    "value": 19.08058495194607,
+                    "description": "filament usage tracker",
+                    "units": "mm"
+                },
+                {
+                    "provider": "spoolman",
+                    "name": "spool_ids",
+                    "value": [
+                        1
+                    ],
+                    "description": "Spool IDs used",
+                    "units": null
+                }
+            ]
         }
     ]
 }
@@ -6406,7 +6532,27 @@ An object containing the following total job statistics:
         "total_filament_used": 11615.718840001999,
         "longest_job": 11665.191012736992,
         "longest_print": 11348.794790096988
-    }
+    },
+    "auxiliary_totals": [
+        {
+            "provider": "sensor hist_test",
+            "field": "power_consumption",
+            "maximum": 4.119977,
+            "total": 4.119977
+        },
+        {
+            "provider": "sensor hist_test",
+            "field": "avg_current",
+            "maximum": 1.706872,
+            "total": null
+        },
+        {
+            "provider": "sensor hist_test",
+            "field": "filament",
+            "maximum": 19.08058495194607,
+            "total": 19.08058495194607
+        }
+    ]
 }
 ```
 
@@ -6439,7 +6585,27 @@ The totals prior to the reset:
         "total_filament_used": 11615.718840001999,
         "longest_job": 11665.191012736992,
         "longest_print": 11348.794790096988
-    }
+    },
+    "last_auxiliary_totals": [
+        {
+            "provider": "sensor hist_test",
+            "field": "power_consumption",
+            "maximum": 4.119977,
+            "total": 4.119977
+        },
+        {
+            "provider": "sensor hist_test",
+            "field": "avg_current",
+            "maximum": 1.706872,
+            "total": null
+        },
+        {
+            "provider": "sensor hist_test",
+            "field": "filament",
+            "maximum": 19.08058495194607,
+            "total": 19.08058495194607
+        }
+    ]
 }
 ```
 
