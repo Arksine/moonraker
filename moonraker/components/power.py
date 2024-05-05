@@ -10,6 +10,7 @@ import struct
 import socket
 import asyncio
 import time
+import tinytuya
 from urllib.parse import quote, urlencode
 from ..utils import json_wrapper as jsonw
 from ..common import RequestType, KlippyState
@@ -46,6 +47,7 @@ class PrinterPower:
             "gpio": GpioDevice,
             "klipper_device": KlipperDevice,
             "tplink_smartplug": TPLinkSmartPlug,
+            "tuya_smartplug": TuyaSmartPlug,
             "tasmota": Tasmota,
             "shelly": Shelly,
             "homeseer": HomeSeer,
@@ -1464,6 +1466,37 @@ class GenericHTTP(HTTPDevice):
 
     async def _send_status_request(self) -> str:
         return await self._send_generic_request("status")
+
+class TuyaSmartPlug(PowerDevice):
+    def __init__(self, config: ConfigHelper,) -> None:
+        super().__init__(config)
+
+        self.device = tinytuya.OutletDevice(
+            dev_id=config.get("device_id"),
+            address=config.get("address"),
+            local_key=config.get("local_key"),
+            version=config.get("version"))
+
+    async def refresh_status(self) -> None:
+        try:
+            self.state = self.device.status()
+        except Exception:
+            self.state = "error"
+            msg = f"Error Refeshing Device Status: {self.name}"
+            logging.exception(msg)
+
+    async def set_power(self, state):
+        try:
+            if (state == "off"):
+                self.device.turn_off()
+            else:
+                self.device.turn_on()
+        except Exception:
+            self.state = "error"
+            msg = f"Error Setting Device Status: {self.name} to {state}"
+            logging.exception(msg)
+            raise self.server.error(msg) from None
+        self.state = state
 
 # The power component has multiple configuration sections
 def load_component(config: ConfigHelper) -> PrinterPower:
