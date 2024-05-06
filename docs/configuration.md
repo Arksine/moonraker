@@ -675,11 +675,11 @@ The following configuration options are available for all power device types:
 type:
 #   The type of device.  Can be either gpio, klipper_device, rf,
 #   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
-#   smartthings, mqtt or hue.
+#   smartthings, mqtt, hue, http or uhubctl.
 #   This parameter must be provided.
 initial_state: off
 #    The state the power device should be initialized to.  May be on or
-#    off.  When this option is not specifed no initial state will be set.
+#    off.  When this option is not specified no initial state will be set.
 off_when_shutdown: False
 #   If set to True the device will be powered off when Klipper enters
 #   the "shutdown" state.  This option applies to all device types.
@@ -1341,6 +1341,59 @@ device_type: light
 #   and if the device_type is group, the device_id should be the group id.
 #   The default is "light".
 
+```
+
+#### USB (uhubctl) devices
+
+Support for toggling USB powered devices via [uhubctl](https://github.com/mvp/uhubctl).
+
+!!! Note
+    The host machine must have `uhubctl` installed as a prerequisite.  In addition,
+    the required [udev rules](https://github.com/mvp/uhubctl#linux-usb-permissions)
+    must be installed on the host to give Moonraker permission to toggle hub
+    power without sudo.
+
+```ini
+location:
+#  Device location of the USB Hub connected to the device to control.  The
+#  location corresponds to the "-l" option of "uhubctl". This parameter
+#  must be provided.
+port:
+#  Port of the USB device to control.  The port corresponds to the "-p"
+#  option of "ububctl". This parameter must be provided
+
+```
+
+!!! Tip
+    The `uhubctl` software can be used to list all compatible hubs on the
+    system by simply executing `uhubctl` with no arguments.  The following
+    is example output from a Raspberry Pi 3B+:
+
+    ```
+    Current status for hub 1-1.1 [0424:2514, USB 2.00, 3 ports, ppps]
+      Port 1: 0503 power highspeed enable connect [0424:7800]
+      Port 2: 0100 power
+      Port 3: 0100 power
+    Current status for hub 1-1 [0424:2514, USB 2.00, 4 ports, ppps]
+      Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 3 ports, ppps]
+      Port 2: 0100 power
+      Port 3: 0103 power enable connect [1d50:614e Klipper rp2040 45503571290B1068]
+      Port 4: 0100 power
+    Current status for hub 1 [1d6b:0002 Linux 6.6.28+rpt-rpi-v7 dwc_otg_hcd DWC OTG Controller 3f980000.usb, USB 2.00, 1 ports, ppps]
+      Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 4 ports, ppps]
+    ```
+
+##### Example
+
+```ini
+# moonraker.confg
+
+# Example for controlling a device connected to a Raspberry Pi 3B+.
+# Location 1-1 Port 2 controls power for all 4 exposed ports.
+[power my_usb_dev]
+type: uhubctl
+location: 1-1
+port: 2
 ```
 
 #### Generic HTTP Devices

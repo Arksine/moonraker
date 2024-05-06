@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog].
 - **history**: Added support for auxiliary history fields
 - **spoolman**:  Report spool ids set during a print in history auxiliary data
 - **sensor**: Added support for history fields reported in auxiliary data
+- **power**:  Added support for `uhubctl` devices
 
 ### Fixed
 
