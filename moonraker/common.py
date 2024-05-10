@@ -10,8 +10,9 @@ import logging
 import copy
 import re
 import inspect
+import dataclasses
+import time
 from enum import Enum, Flag, auto
-from dataclasses import dataclass
 from abc import ABCMeta, abstractmethod
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
@@ -177,7 +178,24 @@ class RenderableTemplate(metaclass=ABCMeta):
     async def render_async(self, context: Dict[str, Any] = {}) -> str:
         ...
 
-@dataclass(frozen=True)
+@dataclasses.dataclass
+class UserInfo:
+    username: str
+    password: str
+    created_on: float = dataclasses.field(default_factory=time.time)
+    salt: str = ""
+    source: str = "moonraker"
+    jwt_secret: Optional[str] = None
+    jwk_id: Optional[str] = None
+    groups: List[str] = dataclasses.field(default_factory=lambda: ["admin"])
+
+    def as_tuple(self) -> Tuple[Any, ...]:
+        return dataclasses.astuple(self)
+
+    def as_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+@dataclasses.dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
     http_path: str
