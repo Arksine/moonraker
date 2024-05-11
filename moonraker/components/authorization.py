@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .ldap import MoonrakerLDAP
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
-    OneshotToken = Tuple[IPAddr, Optional[Dict[str, Any]], asyncio.Handle]
+    OneshotToken = Tuple[IPAddr, Optional[UserInfo], asyncio.Handle]
 
 # Helpers for base64url encoding and decoding
 def base64url_encode(data: bytes) -> bytes:
@@ -363,7 +363,7 @@ class Authorization:
         user_info = web_request.get_current_user()
         if user_info is None:
             raise self.server.error("No user logged in")
-        username: str = user_info['username']
+        username: str = user_info.username
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid log out request for user {username}")
@@ -389,9 +389,9 @@ class Authorization:
             sources.append("ldap")
         login_req = self.force_logins and len(self.users) > 1
         request_trusted: Optional[bool] = None
-        user = web_request.current_user
+        user = web_request.get_current_user()
         req_ip = web_request.ip_addr
-        if user is not None and user.get("username") == TRUSTED_USER:
+        if user is not None and user.username == TRUSTED_USER:
             request_trusted = True
         elif req_ip is not None:
             request_trusted = await self._check_authorized_ip(req_ip)
@@ -431,15 +431,15 @@ class Authorization:
             user = web_request.get_current_user()
             if user is None:
                 return {
-                    'username': None,
-                    'source': None,
-                    'created_on': None,
+                    "username": None,
+                    "source": None,
+                    "created_on": None,
                 }
             else:
                 return {
-                    'username': user['username'],
-                    'source': user.get("source", "moonraker"),
-                    'created_on': user.get('created_on')
+                    "username": user.username,
+                    "source": user.source,
+                    "created_on": user.created_on
                 }
         elif req_type == RequestType.POST:
             # Create User
@@ -473,17 +473,17 @@ class Authorization:
         user_info = web_request.get_current_user()
         if user_info is None:
             raise self.server.error("No Current User")
-        username = user_info['username']
-        if user_info.get("source", "moonraker") == "ldap":
+        username = user_info.username
+        if user_info.source == "ldap":
             raise self.server.error(
                 f"Can´t Reset password for ldap user {username}")
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Reset Request for user {username}")
-        salt = bytes.fromhex(user_info['salt'])
+        salt = bytes.fromhex(user_info.salt)
         hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', password.encode(), salt, HASH_ITER).hex()
-        if hashed_pass != user_info['password']:
+        if hashed_pass != user_info.password:
             raise self.server.error("Invalid Password")
         new_hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', new_pass.encode(), salt, HASH_ITER).hex()
@@ -557,7 +557,7 @@ class Authorization:
         if jwt_secret_hex is None:
             private_key = Signer()
             jwk_id = base64url_encode(secrets.token_bytes()).decode()
-            user_info.jwt_secret = private_key.hex_seed().decode()
+            user_info.jwt_secret = private_key.hex_seed().decode()  # type: ignore
             user_info.jwk_id = jwk_id
             self.users[username] = user_info
             await self._sync_user(username)
@@ -579,7 +579,7 @@ class Authorization:
                 "authorization:user_created",
                 {'username': username})
         elif conn is not None:
-            conn.user_info = user_info.as_dict()
+            conn.user_info = user_info
         return {
             'username': username,
             'token': token,
@@ -592,10 +592,9 @@ class Authorization:
         username: str = web_request.get_str('username')
         current_user = web_request.get_current_user()
         if current_user is not None:
-            curname = current_user.get('username', None)
-            if curname is not None and curname == username:
-                raise self.server.error(
-                    f"Cannot delete logged in user {curname}")
+            curname = current_user.username
+            if curname == username:
+                raise self.server.error(f"Cannot delete logged in user {curname}")
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Request for reserved user {username}")
@@ -655,7 +654,7 @@ class Authorization:
         # verify header
         if header.get('typ') != "JWT" or header.get('alg') != "EdDSA":
             raise self.server.error("Invalid JWT header")
-        jwk_id = header.get('kid')
+        jwk_id: Optional[str] = header.get('kid')
         if jwk_id not in self.public_jwks:
             raise self.server.error("Invalid key ID")
 
@@ -683,7 +682,7 @@ class Authorization:
             raise self.server.error("Unknown user", 401)
         return user_info
 
-    def validate_jwt(self, token: str) -> Dict[str, Any]:
+    def validate_jwt(self, token: str) -> UserInfo:
         try:
             user_info = self.decode_jwt(token)
         except Exception as e:
@@ -692,13 +691,13 @@ class Authorization:
             raise self.server.error(
                 f"Failed to decode JWT: {e}", 401
             ) from e
-        return user_info.as_dict()
+        return user_info
 
-    def validate_api_key(self, api_key: str) -> Dict[str, Any]:
+    def validate_api_key(self, api_key: str) -> UserInfo:
         if not self.enable_api_key:
             raise self.server.error("API Key authentication is disabled", 401)
         if api_key and api_key == self.api_key:
-            return self.users[API_USER].as_dict()
+            return self.users[API_USER]
         raise self.server.error("Invalid API Key", 401)
 
     def _load_private_key(self, secret: str) -> Signer:
@@ -747,10 +746,7 @@ class Authorization:
     def _oneshot_token_expire_handler(self, token):
         self.oneshot_tokens.pop(token, None)
 
-    def get_oneshot_token(self,
-                          ip_addr: IPAddr,
-                          user: Optional[Dict[str, Any]]
-                          ) -> str:
+    def get_oneshot_token(self, ip_addr: IPAddr, user: Optional[UserInfo]) -> str:
         token = base64.b32encode(os.urandom(20)).decode()
         event_loop = self.server.get_event_loop()
         hdl = event_loop.delay_callback(
@@ -825,10 +821,9 @@ class Authorization:
                 return self.trusted_users[ip]["user"]
         return None
 
-    def _check_oneshot_token(self,
-                             token: str,
-                             cur_ip: Optional[IPAddr]
-                             ) -> Optional[Dict[str, Any]]:
+    def _check_oneshot_token(
+        self, token: str, cur_ip: Optional[IPAddr]
+    ) -> Optional[UserInfo]:
         if token in self.oneshot_tokens:
             ip_addr, user, hdl = self.oneshot_tokens.pop(token)
             hdl.cancel()
@@ -847,14 +842,14 @@ class Authorization:
 
     async def authenticate_request(
         self, request: HTTPServerRequest, auth_required: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[UserInfo]:
         if request.method == "OPTIONS":
             return None
 
         # Check JSON Web Token
         jwt_user = self._check_json_web_token(request, auth_required)
         if jwt_user is not None:
-            return jwt_user.as_dict()
+            return jwt_user
 
         try:
             ip = ipaddress.ip_address(request.remote_ip)  # type: ignore
@@ -874,7 +869,7 @@ class Authorization:
         if self.enable_api_key:
             key: Optional[str] = request.headers.get("X-Api-Key")
             if key and key == self.api_key:
-                return self.users[API_USER].as_dict()
+                return self.users[API_USER]
 
         # If the force_logins option is enabled and at least one user is created
         # then trusted user authentication is disabled
@@ -887,7 +882,7 @@ class Authorization:
         # then it is acceptable to return None
         trusted_user = await self._check_trusted_connection(ip)
         if trusted_user is not None:
-            return trusted_user.as_dict()
+            return trusted_user
         if not auth_required:
             return None
 

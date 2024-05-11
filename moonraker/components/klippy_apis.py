@@ -24,6 +24,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
+    from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
     Subscription = Dict[str, Optional[List[Any]]]
     SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
@@ -127,7 +128,7 @@ class KlippyAPI(APITransport):
         self,
         filename: str,
         wait_klippy_started: bool = False,
-        user: Optional[Dict[str, Any]] = None
+        user: Optional[UserInfo] = None
     ) -> str:
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:

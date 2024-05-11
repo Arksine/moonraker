@@ -224,7 +224,7 @@ class APIDefinition:
         request_type: RequestType,
         transport: Optional[APITransport] = None,
         ip_addr: Optional[IPAddress] = None,
-        user: Optional[Dict[str, Any]] = None
+        user: Optional[UserInfo] = None
     ) -> Coroutine:
         return self.callback(
             WebRequest(self.endpoint, args, request_type, transport, ip_addr, user)
@@ -313,7 +313,7 @@ class APITransport:
         return TransportType.INTERNAL
 
     @property
-    def user_info(self) -> Optional[Dict[str, Any]]:
+    def user_info(self) -> Optional[UserInfo]:
         return None
 
     @property
@@ -350,14 +350,14 @@ class BaseRemoteConnection(APITransport):
             "url": ""
         }
         self._need_auth: bool = False
-        self._user_info: Optional[Dict[str, Any]] = None
+        self._user_info: Optional[UserInfo] = None
 
     @property
-    def user_info(self) -> Optional[Dict[str, Any]]:
+    def user_info(self) -> Optional[UserInfo]:
         return self._user_info
 
     @user_info.setter
-    def user_info(self, uinfo: Dict[str, Any]) -> None:
+    def user_info(self, uinfo: UserInfo) -> None:
         self._user_info = uinfo
         self._need_auth = False
 
@@ -443,7 +443,7 @@ class BaseRemoteConnection(APITransport):
     def on_user_logout(self, user: str) -> bool:
         if self._user_info is None:
             return False
-        if user == self._user_info.get("username", ""):
+        if user == self._user_info.username:
             self._user_info = None
             return True
         return False
@@ -529,7 +529,7 @@ class WebRequest:
         request_type: RequestType = RequestType(0),
         transport: Optional[APITransport] = None,
         ip_addr: Optional[IPAddress] = None,
-        user: Optional[Dict[str, Any]] = None
+        user: Optional[UserInfo] = None
     ) -> None:
         self.endpoint = endpoint
         self.args = args
@@ -561,7 +561,7 @@ class WebRequest:
     def get_ip_address(self) -> Optional[IPAddress]:
         return self.ip_addr
 
-    def get_current_user(self) -> Optional[Dict[str, Any]]:
+    def get_current_user(self) -> Optional[UserInfo]:
         return self.current_user
 
     def _get_converted_arg(self,

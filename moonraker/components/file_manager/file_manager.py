@@ -43,7 +43,7 @@ from typing import (
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
     from ...confighelper import ConfigHelper
-    from ...common import WebRequest
+    from ...common import WebRequest, UserInfo
     from ..klippy_connection import KlippyConnection
     from ..job_queue import JobQueue
     from ..job_state import JobState
@@ -902,7 +902,7 @@ class FileManager:
         started: bool = False
         queued: bool = False
         if upload_info['start_print']:
-            user: Optional[Dict[str, Any]] = upload_info.get("user")
+            user: Optional[UserInfo] = upload_info.get("user")
             if can_start:
                 kapis: APIComp = self.server.lookup_component('klippy_apis')
                 try:

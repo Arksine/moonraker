@@ -21,7 +21,7 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..common import WebRequest
+    from ..common import WebRequest, UserInfo
     from .klippy_apis import KlippyAPI
     from .file_manager.file_manager import FileManager
 
@@ -168,7 +168,7 @@ class JobQueue:
                         filenames: Union[str, List[str]],
                         check_exists: bool = True,
                         reset: bool = False,
-                        user: Optional[Dict[str, Any]] = None
+                        user: Optional[UserInfo] = None
                         ) -> None:
         async with self.lock:
             # Make sure that the file exists
@@ -324,7 +324,7 @@ class JobQueue:
         await self.pause_queue()
 
 class QueuedJob:
-    def __init__(self, filename: str, user: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, filename: str, user: Optional[UserInfo] = None) -> None:
         self.filename = filename
         self.job_id = f"{id(self):016X}"
         self.time_added = time.time()
@@ -334,7 +334,7 @@ class QueuedJob:
         return self.filename
 
     @property
-    def user(self) -> Optional[Dict[str, Any]]:
+    def user(self) -> Optional[UserInfo]:
         return self._user
 
     def as_dict(self, cur_time: float) -> Dict[str, Any]:

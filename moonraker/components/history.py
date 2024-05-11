@@ -29,7 +29,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..common import WebRequest
+    from ..common import WebRequest, UserInfo
     from .database import MoonrakerDatabase as DBComp
     from .job_state import JobState
     from .file_manager.file_manager import FileManager
@@ -372,8 +372,8 @@ class History:
             # `CLEAR_PAUSE/SDCARD_RESET_FILE` workflow
             await self.finish_job("cancelled", prev_stats)
 
-    def _on_job_requested(self, user: Optional[Dict[str, Any]]) -> None:
-        username = (user or {}).get("username", "No User")
+    def _on_job_requested(self, user: Optional[UserInfo]) -> None:
+        username = user.username if user is not None else "No User"
         self.job_user = username
         if self.current_job is not None:
             self.current_job.user = username
