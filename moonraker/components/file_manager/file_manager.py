@@ -76,9 +76,8 @@ class FileManager:
         db_path = db.get_database_path()
         self.add_reserved_path("database", db_path, False)
         self.add_reserved_path("certs", self.datapath.joinpath("certs"), False)
-        self.add_reserved_path(
-            "systemd", self.datapath.joinpath("systemd"), False
-        )
+        self.add_reserved_path("systemd", self.datapath.joinpath("systemd"), False)
+        self.add_reserved_path("backup", self.datapath.joinpath("backup"), False)
         self.gcode_metadata = MetadataStorage(config, db)
         self.sync_lock = NotifySyncLock(config)
         avail_observers: Dict[str, Type[BaseFileSystemObserver]] = {

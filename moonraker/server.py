@@ -424,6 +424,12 @@ class Server:
         logging.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
 
+    def restart(self, delay: Optional[float] = None) -> None:
+        if delay is None:
+            self.event_loop.register_callback(self._stop_server)
+        else:
+            self.event_loop.delay_callback(delay, self._stop_server)
+
     async def _stop_server(self, exit_reason: str = "restart") -> None:
         self.server_running = False
         # Call each component's "on_exit" method
