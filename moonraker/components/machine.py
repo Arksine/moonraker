@@ -51,8 +51,8 @@ if TYPE_CHECKING:
     from .announcements import Announcements
     from .proc_stats import ProcStats
     from .dbus_manager import DbusManager
-    from dbus_next.aio import ProxyInterface
-    from dbus_next import Variant
+    from dbus_next.aio.proxy_object import ProxyInterface
+    from dbus_next.signature import Variant
     SudoReturn = Union[Awaitable[Tuple[str, bool]], Tuple[str, bool]]
     SudoCallback = Callable[[], SudoReturn]
 
@@ -977,7 +977,7 @@ class BaseProvider:
 
     async def extract_service_info(
         self,
-        service: str,
+        service_name: str,
         pid: int,
         properties: Optional[List[str]] = None,
         raw: bool = False
@@ -1564,15 +1564,15 @@ class SupervisordCliProvider(BaseProvider):
 
     async def extract_service_info(
         self,
-        service: str,
+        service_name: str,
         pid: int,
         properties: Optional[List[str]] = None,
         raw: bool = False
     ) -> Dict[str, Any]:
-        service_info = await self._find_service_by_pid(service, pid)
+        service_info = await self._find_service_by_pid(service_name, pid)
         if not service_info:
             logging.info(
-                f"Unable to locate service info for {service}, pid: {pid}"
+                f"Unable to locate service info for {service_name}, pid: {pid}"
             )
             return {}
         # locate supervisord.conf
@@ -1664,9 +1664,15 @@ class InstallValidator:
 
     async def validation_init(self) -> None:
         db: MoonrakerDatabase = self.server.lookup_component("database")
-        install_ver: int = await db.get_item(
-            "moonraker", "validate_install.install_version", 0
+        install_ver: Optional[int] = await db.get_item(
+            "moonraker", "validate_install.install_version", None
         )
+        if install_ver is None:
+            # skip validation for new installs
+            await db.insert_item(
+                "moonraker", "validate_install.install_version", INSTALL_VERSION
+            )
+            install_ver = INSTALL_VERSION
         if install_ver < INSTALL_VERSION:
             logging.info("Validation version in database out of date")
             self.validation_enabled = True
@@ -1692,8 +1698,8 @@ class InstallValidator:
         fm: FileManager = self.server.lookup_component("file_manager")
         need_restart: bool = False
         has_error: bool = False
+        name = "service"
         try:
-            name = "service"
             need_restart = await self._check_service_file()
             name = "config"
             need_restart |= await self._check_configuration()
@@ -2144,8 +2150,8 @@ class InstallValidator:
         self.announcement_id = ""
 
     async def _on_password_received(self) -> Tuple[str, bool]:
+        name = "Service"
         try:
-            name = "Service"
             await self._check_service_file()
             name = "Config"
             await self._check_configuration()
