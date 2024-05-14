@@ -123,7 +123,7 @@ class ConfigHelper:
         )
 
     def _get_option(self,
-                    func: Callable[..., Any],
+                    func: Callable[..., _T],
                     option: str,
                     default: Union[Sentinel, _T],
                     above: Optional[Union[int, float]] = None,
@@ -167,13 +167,14 @@ class ConfigHelper:
                     f"to section [{self.section}].  Please correct your "
                     f"configuration, see {help} for detailed documentation."
                 )
-            self._check_option(option, val, above, below, minval, maxval)
+            if isinstance(val, (int, float)):
+                self._check_option(option, val, above, below, minval, maxval)
         if option not in self.parsed[section]:
             if (
                 val is None or
                 isinstance(val, (int, float, bool, str, dict, list))
             ):
-                self.parsed[section][option] = val
+                self.parsed[section][option] = copy.deepcopy(val)
             else:
                 # If the item cannot be encoded to json serialize to a string
                 self.parsed[section][option] = str(val)
