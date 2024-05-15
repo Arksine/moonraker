@@ -2866,6 +2866,18 @@ type:
 name:
 #   The friendly display name of the sensor.
 #   The default is the sensor source name.
+parameter_{parameter_name}:
+#   Optional parameter descriptions.  Each sensor can report
+#   one or parameters. Frontends can use this data to accurately
+#   present sensor details to the user.  The {parameter_name} must
+#   be a valid measurement reported by the sensor. The value should be
+#   a newline separated list of key-value pairs describing the
+#   the measurement.  Currently the only key used is "units". For
+#   example, the configuration for a parameter may look like the follwing:
+#
+#     parameter_energy:
+#       units=kWh
+#
 history_field_{field_name}:
 #   Optional history field description.  When provided the named
 #   field will be tracked in Moonraker's Job History component.
@@ -3015,6 +3027,14 @@ Example:
 [sensor mqtt_powermeter]
 type: mqtt
 name: Powermeter
+parameter_power:
+  units=W
+parameter_voltage:
+  units=V
+parameter_current:
+  units=mA
+parameter_energy:
+  units=kWh
 # Use a different display name
 state_topic: shellypro1pm-8cb113caba09/status/switch:0
 # The response is a JSON object with a multiple fields that we convert to
@@ -3048,6 +3068,14 @@ state_response_template:
   {set_result("voltage", edata["Voltage"])}
   {set_result("power", edata["Power"])}
   {set_result("current", edata["Current"])}
+parameter_power:
+  units=W
+parameter_voltage:
+  units=V
+parameter_current:
+  units=mA
+parameter_energy:
+  units=kWh
 history_field_energy_consumption:
   parameter=energy
   desc=Printer energy consumption

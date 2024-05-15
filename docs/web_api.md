@@ -5794,19 +5794,32 @@ The APIs below are available when the `[sensor]` component has been configured.
 #### Get Sensor List
 HTTP request:
 ```http
-GET /server/sensors/list
+GET /server/sensors/list?extended=False
 ```
 JSON-RPC request:
 ```json
 {
     "jsonrpc": "2.0",
     "method": "server.sensors.list",
+    "params": {
+        "extended": false
+    }
     "id": 5646
 }
 ```
+
+Parameters:
+
+- `extended`:  When set to `true` then each sensor will also include
+  parameter info and history field configuration. The default is false.
+
+
 Returns:
 
-An array of objects containing info for each configured sensor.
+An array of objects containing info for each configured sensor.  The
+`parameter_info` and `history_fields` items will only be present when
+the `extended` parameter is set to true.
+
 ```json
 {
     "sensors": {
@@ -5817,7 +5830,45 @@ An array of objects containing info for each configured sensor.
             "values": {
                 "value1": 0,
                 "value2": 119.8
-            }
+            },
+            "parameter_info": [
+                {
+                    "units": "kWh",
+                    "name": "value1"
+                },
+                {
+                    "units": "V",
+                    "name": "value2"
+                }
+            ],
+            "history_fields": [
+                {
+                    "field": "power_consumption",
+                    "provider": "sensor sensor1",
+                    "description": "Printer Power Consumption",
+                    "strategy": "delta",
+                    "units": "kWh",
+                    "init_tracker": true,
+                    "exclude_paused": false,
+                    "report_total": true,
+                    "report_maximum": true,
+                    "precision": 6,
+                    "parameter": "value1"
+                },
+                {
+                    "field": "max_voltage",
+                    "provider": "sensor sensor1",
+                    "description": "Maximum voltage",
+                    "strategy": "maximum",
+                    "units": "V",
+                    "init_tracker": true,
+                    "exclude_paused": false,
+                    "report_total": false,
+                    "report_maximum": false,
+                    "precision": 6,
+                    "parameter": "value2"
+                }
+            ]
         }
     }
 }
@@ -5828,7 +5879,7 @@ Returns the status for a single configured sensor.
 
 HTTP request:
 ```http
-GET /server/sensors/info?sensor=sensor1
+GET /server/sensors/info?sensor=sensor1&extended=false
 ```
 JSON-RPC request:
 ```json
@@ -5836,14 +5887,25 @@ JSON-RPC request:
     "jsonrpc": "2.0",
     "method": "server.sensors.info",
     "params": {
-        "sensor": "sensor1"
+        "sensor": "sensor1",
+        "extended": false
     },
     "id": 4564
 }
 ```
+
+Parameters:
+
+- `extended`:  When set to `true` then the response will also include
+  parameter info and history field configuration.  The default is false.
+
+
 Returns:
 
-An object containing sensor information for the requested sensor:
+An object containing sensor information for the requested sensor. The
+`parameter_info` and `history_fields` items will only be present when
+the `extended` parameter is set to true.
+
 ```json
 {
     "id": "sensor1",
@@ -5852,7 +5914,45 @@ An object containing sensor information for the requested sensor:
     "values": {
         "value1": 0.0,
         "value2": 120.0
-    }
+    },
+    "parameter_info": [
+        {
+            "units": "kWh",
+            "name": "value1"
+        },
+        {
+            "units": "V",
+            "name": "value2"
+        }
+    ],
+    "history_fields": [
+        {
+            "field": "power_consumption",
+            "provider": "sensor sensor1",
+            "description": "Printer Power Consumption",
+            "strategy": "delta",
+            "units": "kWh",
+            "init_tracker": true,
+            "exclude_paused": false,
+            "report_total": true,
+            "report_maximum": true,
+            "precision": 6,
+            "parameter": "value1"
+        },
+        {
+            "field": "max_voltage",
+            "provider": "sensor sensor1",
+            "description": "Maximum voltage",
+            "strategy": "maximum",
+            "units": "V",
+            "init_tracker": true,
+            "exclude_paused": false,
+            "report_total": false,
+            "report_maximum": false,
+            "precision": 6,
+            "parameter": "value2"
+        }
+    ]
 }
 ```
 
