@@ -1172,6 +1172,20 @@ class HistoryFieldData:
             return value._provider == self._provider and value._name == self._name
         raise ValueError("Invalid type for comparison")
 
+    def get_configuration(self) -> Dict[str, Any]:
+        return {
+            "field": self._name,
+            "provider": self._provider,
+            "description": self._desc,
+            "strategy": self._strategy.name.lower(),
+            "units": self._units,
+            "init_tracker": self._tracker.reset_callback is not None,
+            "exclude_paused": self._tracker.exclude_paused,
+            "report_total": self._report_total,
+            "report_maximum": self._report_maximum,
+            "precision": self._precision
+        }
+
     def as_dict(self) -> Dict[str, Any]:
         val = self._tracker.get_tracked_value()
         if self._precision is not None and isinstance(val, float):

@@ -58,12 +58,20 @@ class BaseSensor:
         self.values: DefaultDict[str, Deque[Union[int, float]]] = defaultdict(
             lambda: deque(maxlen=store_size)
         )
+        self.param_info: List[Dict[str, str]] = []
         history: History = self.server.lookup_component("history")
         self.field_info: Dict[str, List[HistoryFieldData]] = {}
         all_opts = list(config.get_options().keys())
         cfg_name = config.get_name()
+        param_prefix = "parameter_"
         hist_field_prefix = "history_field_"
         for opt in all_opts:
+            if opt.startswith(param_prefix):
+                name = opt[len(param_prefix):]
+                data = config.getdict(opt)
+                data["name"] = opt[len(param_prefix):]
+                self.param_info.append(data)
+                continue
             if not opt.startswith(hist_field_prefix):
                 continue
             name = opt[len(hist_field_prefix):]
@@ -127,13 +135,23 @@ class BaseSensor:
         logging.info("Registered sensor '%s'", self.name)
         return True
 
-    def get_sensor_info(self) -> Dict[str, Any]:
-        return {
+    def get_sensor_info(self, extended: bool = False) -> Dict[str, Any]:
+        ret: Dict[str, Any] = {
             "id": self.id,
             "friendly_name": self.name,
             "type": self.type,
             "values": self.last_measurements,
         }
+        if extended:
+            ret["parameter_info"] = self.param_info
+            history_fields: List[Dict[str, Any]] = []
+            for parameter, field_list in self.field_info.items():
+                for field_data in field_list:
+                    field_config = field_data.get_configuration()
+                    field_config["parameter"] = parameter
+                    history_fields.append(field_config)
+            ret["history_fields"] = history_fields
+        return ret
 
     def get_sensor_measurements(self) -> Dict[str, List[Union[int, float]]]:
         return {key: list(values) for key, values in self.values.items()}
@@ -285,21 +303,23 @@ class Sensors:
     async def _handle_sensor_list_request(
         self, web_request: WebRequest
     ) -> Dict[str, Dict[str, Any]]:
-        output = {
+        extended = web_request.get_boolean("extended", False)
+        return {
             "sensors": {
-                key: sensor.get_sensor_info() for key, sensor in self.sensors.items()
+                key: sensor.get_sensor_info(extended)
+                for key, sensor in self.sensors.items()
             }
         }
-        return output
 
     async def _handle_sensor_info_request(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
         sensor_name: str = web_request.get_str("sensor")
+        extended = web_request.get_boolean("extended", False)
         if sensor_name not in self.sensors:
             raise self.server.error(f"No valid sensor named {sensor_name}")
         sensor = self.sensors[sensor_name]
-        return sensor.get_sensor_info()
+        return sensor.get_sensor_info(extended)
 
     async def _handle_sensor_measurements_request(
         self, web_request: WebRequest
