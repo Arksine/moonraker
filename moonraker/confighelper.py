@@ -123,7 +123,7 @@ class ConfigHelper:
         )
 
     def _get_option(self,
-                    func: Callable[..., _T],
+                    func: Callable[..., Any],
                     option: str,
                     default: Union[Sentinel, _T],
                     above: Optional[Union[int, float]] = None,
@@ -131,7 +131,7 @@ class ConfigHelper:
                     minval: Optional[Union[int, float]] = None,
                     maxval: Optional[Union[int, float]] = None,
                     deprecate: bool = False
-                    ) -> _T:
+                    ) -> Any:
         section = self.section
         warn_fallback = False
         if (
