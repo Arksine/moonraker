@@ -202,8 +202,7 @@ structure using the default data path of `$HOME/printer_data`.
 │   ├── moonraker.conf
 │   └── printer.cfg
 ├── database
-│   ├── data.mdb
-│   └── lock.mdb
+│   └── moonraker-sql.db
 ├── gcodes
 │   ├── test_gcode_one.gcode
 │   └── test_gcode_two.gcode
@@ -216,7 +215,7 @@ structure using the default data path of `$HOME/printer_data`.
 └── moonraker.asvc
 ```
 
-If it is not desirible for the files and folders to exist in these specific
+If it is not desirable for the files and folders to exist in these specific
 locations it is acceptable to use symbolic links.  For example, it is common
 for the gcode folder to be located at `$HOME/gcode_files`.  Rather than
 reconfigure Klipper's `virtual_sdcard` it may be desirable to create a
@@ -566,14 +565,29 @@ Retrieve the API Key via the browser from a trusted client:
 
         {"result": "8ce6ae5d354a4365812b83140ed62e4b"}
 
-### LMDB Database Backup and Restore
+### Database Backup and Restore
 
-Moonraker uses a [LMDB Database](http://www.lmdb.tech/doc/) for persistent
-storage of procedurally generated data.  LMDB database files are platform
-dependent, and thus cannot be easily transferred between different machines.
-A file generated on a Raspberry Pi cannot be directly transferred to an x86
-machine.  Likewise, a file generated on a 32-bit version of Linux cannot
-be transferred to a 64-bit machine.
+Moonraker stores persistent data using an Sqlite database.  By default
+the database file is located at `<data_folder>/database/moonraker-sql.db`.
+API Endpoints are available to backup and restore the database.  All
+backups are stored at `<data_folder>/backup/database/<backup_name>` and
+restored from the same location.  Database files may contain sensitive
+information, therefore they are not served by Moonraker.  Another protocol
+such as SCP, SMB, etc is required to transfer a backup off of the host.
+
+Alternatively it is possible to perform a manual backup by copying the
+existing database file when the Moonraker service has been stopped.
+Restoration can be performed by stopping the Moonraker service and
+overwriting the existing database with the backup.
+
+#### LDMB Database (deprecated)
+
+Previous versions of Moonraker used a [LMDB Database](http://www.lmdb.tech/doc/)
+for persistent storage of procedurally generated data.  LMDB database files are
+platform dependent, and thus cannot be easily transferred between different
+machines. A file generated on a Raspberry Pi cannot be directly transferred
+to an x86 machine.  Likewise, a file generated on a 32-bit version of Linux
+cannot be transferred to a 64-bit machine.
 
 Moonraker includes two scripts, `backup-database.sh` and `restore-database.sh`
 to help facilitate database backups and transfers.

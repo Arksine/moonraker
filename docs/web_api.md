@@ -3555,8 +3555,10 @@ the request.  The entire settings object could be accessed by providing
 may be read by omitting the `key` argument, however as explained below it
 is not possible to modify a namespace without specifying a key.
 
-#### List namespaces
-Lists all available namespaces.
+#### List Database Info
+
+Lists all namespaces with read and/or write access.  Also lists database
+backup files.
 
 HTTP request:
 ```http
@@ -3574,14 +3576,21 @@ JSON-RPC request:
 
 Returns:
 
-An object containing an array of namespaces in the following format:
+An object containing an array of namespaces and an array of backup files.
 ```json
 {
     "namespaces": [
         "gcode_metadata",
-        "history",
-        "moonraker",
-        "test_namespace"
+        "webcams",
+        "update_manager",
+        "announcements",
+        "database",
+        "moonraker"
+    ],
+    "backups": [
+        "sqldb-backup-20240513-134542.db",
+        "testbackup.db",
+        "testbackup2.db"
     ]
 }
 ```
@@ -3698,6 +3707,180 @@ deleted item.
     "namespace": "test",
     "key": "settings.some_count",
     "value": 9001
+}
+```
+
+#### Compact Database
+
+Compacts and defragments the the sqlite database using the `VACUUM` command.
+This API cannot be requested when Klipper is printing.
+
+HTTP request:
+```http
+POST /server/database/compact
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.database.compact",
+    "id": 4654
+}
+```
+Returns:
+An object containing the size of the database on disk before and after
+the database is compacted.
+```json
+{
+    "previous_size": 139264,
+    "new_size": 122880
+}
+```
+
+#### Backup Database
+
+Creates a backup of the current database.  The backup will be
+created in the `<data_path>/backup/database/<filename>`.
+
+This API cannot be requested when Klipper is printing.
+
+HTTP request:
+```http
+POST /server/database/backup
+Content-Type: application/json
+
+{
+    "filename": "sql-db-backup.db"
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.database.post_backup",
+    "params": {
+        "filename": "sql-db-backup.db"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `filename`: An optional file name for the backup file.  The default
+   is `sqldb-backup-<year><month><day>-<hour><minute><second>`.
+
+
+Returns:
+An object containing the path on disk to the backup.
+```json
+{
+    "backup_path": "/home/test/printer_data/backup/database/sql-db-backup.db"
+}
+```
+
+#### Delete a backup
+
+Deletes a previously backed up database.
+
+HTTP request:
+```http
+DELETE /server/database/backup
+Content-Type: application/json
+
+{
+    "filename": "sql-db-backup.db"
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.database.delete_backup",
+    "params": {
+        "filename": "sql-db-backup.db"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `filename`: The name of the backup file to delete.  Must be a valid
+  filename reported in by the [database list](#list-database-info) API.
+  This parameter must be provided.
+
+Returns:
+An object containing the path on disk to the backup file that was removed.
+```json
+{
+    "backup_path": "/home/test/printer_data/backup/database/sql-db-backup.db"
+}
+```
+
+#### Restore Database
+
+Restores a previously backed up sqlite database file. The backup
+must be located at `<data_path>/backup/database/<filename>`. The
+`<filename>` must be a valid filename reported in by the
+[database list](#list-database-info) API.
+
+This API cannot be requested when Klipper is printing.
+
+!!! Note
+    Moonraker will restart immediately after this request is processed.
+
+HTTP request:
+```http
+POST /server/database/restore
+Content-Type: application/json
+
+{
+    "filename": "sql-db-backup.db"
+}
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "server.database.restore",
+    "params": {
+        "filename": "sql-db-backup.db"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `filename`: The name of the database file to restore.  Must be a valid
+  filename reported in by the [database list](#list-database-info) API.
+  This parameter must be provided.
+
+Returns:
+An object containing a list of restored namespaces and restored tables.
+```json
+{
+    "restored_tables": [
+        "table_registry",
+        "namespace_store",
+        "authorized_users",
+        "job_history",
+        "job_totals"
+    ],
+    "restored_namespaces": [
+        "database",
+        "fluidd",
+        "gcode_metadata",
+        "mainsail",
+        "moonraker",
+        "update_manager",
+        "webcams"
+    ]
 }
 ```
 
@@ -7123,7 +7306,7 @@ receive the following:
 ### Debug APIs
 
 The APIs in this section are available when Moonraker the debug argument
-(`-g`) has been supplied via the command line.  Some API may also depend
+(`-g`) has been supplied via the command line.  Some APIs may also depend
 on Moonraker's configuration, ie: an optional component may choose to
 register a debug API.
 
@@ -7131,11 +7314,11 @@ register a debug API.
     Debug APIs may expose security vulnerabilities.  They should only be
     enabled by developers on secured machines.
 
-#### List Database Namespaces (debug)
+#### List Database Info (debug)
 
-Debug version of [List Namespaces](#list-namespaces). Return value includes
-namespaces exlusively reserved for Moonraker. Only availble when Moonraker's
-debug features are enabled.
+Debug version of [List Database Info](#list-database-info). Returns
+all namespaces, including those exlusively reserved for Moonraker.
+In addition, registered SQL tables are reported.
 
 
 HTTP request:
@@ -7152,14 +7335,42 @@ JSON-RPC request:
 }
 ```
 
+Returns:
+
+An object containing an array of namespaces, an array of tables, and
+an array of backup files.
+```json
+{
+    "namespaces": [
+        "gcode_metadata",
+        "webcams",
+        "update_manager",
+        "announcements",
+        "database",
+        "moonraker"
+    ],
+    "backups": [
+        "sqldb-backup-20240513-134542.db",
+        "testbackup.db",
+        "testbackup2.db"
+    ],
+    "tables": [
+        "job_history",
+        "job_totals",
+        "namespace_store",
+        "table_registry",
+        "authorized_users"
+    ]
+}
+```
+
 #### Get Database Item (debug)
 
 Debug version of [Get Database Item](#get-database-item).  Keys within
-protected and forbidden namespaces are accessible. Only availble when
-Moonraker's debug features are enabled.
+protected and forbidden namespaces are accessible.
 
 !!! Warning
-    Moonraker's forbidden namespaces include items such as user credentials.
+    Moonraker's forbidden namespaces may include items such as user credentials.
     This endpoint should NOT be implemented in front ends directly.
 
 HTTP request:
@@ -7182,8 +7393,7 @@ JSON-RPC request:
 #### Add Database Item (debug)
 
 Debug version of [Add Database Item](#add-database-item).  Keys within
-protected and forbidden namespaces may be added. Only availble when
-Moonraker's debug features are enabled.
+protected and forbidden namespaces may be added.
 
 !!! Warning
     This endpoint should be used for testing/debugging purposes only.
@@ -7219,8 +7429,7 @@ JSON-RPC request:
 #### Delete Database Item (debug)
 
 Debug version of [Delete Database Item](#delete-database-item).  Keys within
-protected and forbidden namespaces may be removed. Only availble when
-Moonraker's debug features are enabled.
+protected and forbidden namespaces may be removed.
 
 !!! Warning
     This endpoint should be used for testing/debugging purposes only.
@@ -7244,6 +7453,93 @@ JSON-RPC request:
         "key": "{key}"
     },
     "id": 4654
+}
+```
+
+#### Get Database Table
+
+Requests all the contents of a specified table.
+
+HTTP request:
+```http
+GET /debug/database/table?table=job_history
+```
+
+JSON-RPC request:
+```json
+{
+    "jsonrpc": "2.0",
+    "method": "debug.database.table",
+    "params": {
+        "table": "job_history"
+    },
+    "id": 4654
+}
+```
+
+Parameters:
+
+- `table`:  The name of the table to request.  This parameter must
+  be provided.
+
+Returns:
+
+An object with the table's name and a list of all rows contained
+within the table.  The `rowid` will always be included for each
+row, however it may be represented by an alias.  In the example
+below the alias for `rowid` is `job_id`.
+
+```json
+{
+    "table_name": "job_history",
+    "rows": [
+        {
+            "job_id": 1,
+            "user": "No User",
+            "filename": "active_test.gcode",
+            "status": "completed",
+            "start_time": 1690749153.2661753,
+            "end_time": 1690749173.076986,
+            "print_duration": 0.0,
+            "total_duration": 19.975574419135228,
+            "filament_used": 0.0,
+            "metadata": {
+                "size": 211,
+                "modified": 1635771217.0,
+                "uuid": "627371e0-faa5-4ced-8bb4-7017d29226fa",
+                "slicer": "Unknown",
+                "gcode_start_byte": 8,
+                "gcode_end_byte": 211
+            },
+            "auxiliary_data": [],
+            "instance_id": "default"
+        },
+        {
+            "job_id": 2,
+            "user": "No User",
+            "filename": "active_test.gcode",
+            "status": "completed",
+            "start_time": 1701262034.9242446,
+            "end_time": 1701262054.7332363,
+            "print_duration": 0.0,
+            "total_duration": 19.990913168992847,
+            "filament_used": 0.0,
+            "metadata": {
+                "size": 211,
+                "modified": 1635771217.0,
+                "uuid": "627371e0-faa5-4ced-8bb4-7017d29226fa",
+                "slicer": "Unknown",
+                "gcode_start_byte": 8,
+                "gcode_end_byte": 211
+            },
+            "auxiliary_data": {
+                "spool_ids": [
+                    2
+                ]
+            },
+            "instance_id": "default"
+        }
+    ]
 }
 ```
 
