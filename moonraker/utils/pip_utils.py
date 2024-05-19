@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from ..server import Server
     from ..components.shell_command import ShellCommandFactory
 
-MIN_PIP_VERSION = (23, 3, 2)
+MIN_PIP_VERSION = (24, 0)
 MIN_PYTHON_VERSION = (3, 7)
 
 # Synchronous Subprocess Helpers

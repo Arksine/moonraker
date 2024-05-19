@@ -35,8 +35,6 @@ if TYPE_CHECKING:
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
 
-MIN_PIP_VERSION = (23, 3, 2)
-
 SUPPORTED_CHANNELS = {
     AppType.WEB: [Channel.STABLE, Channel.BETA],
     AppType.ZIP: [Channel.STABLE, Channel.BETA],
