@@ -401,7 +401,17 @@ class AppDeploy(BaseDeploy):
         pip_exec = pip_utils.AsyncPipExecutor(
             self.pip_cmd, self.server, self.cmd_helper.notify_update_response
         )
-        # Check the current pip version
+        # Check and update the pip version
+        await self._update_pip(pip_exec)
+        self.notify_status("Updating python packages...")
+        try:
+            await pip_exec.install_packages(requirements, self.pip_env_vars)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.log_exc("Error updating python requirements")
+
+    async def _update_pip(self, pip_exec: pip_utils.AsyncPipExecutor) -> None:
         self.notify_status("Checking pip version...")
         try:
             pip_ver = await pip_exec.get_pip_version()
@@ -413,18 +423,13 @@ class AppDeploy(BaseDeploy):
                 )
                 await pip_exec.update_pip()
                 self.pip_version = pip_utils.MIN_PIP_VERSION
+            else:
+                self.notify_status("Pip version up to date")
         except asyncio.CancelledError:
             raise
         except Exception as e:
             self.notify_status(f"Pip Version Check Error: {e}")
             self.log_exc("Pip Version Check Error")
-        self.notify_status("Updating python packages...")
-        try:
-            await pip_exec.install_packages(requirements, self.pip_env_vars)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            self.log_exc("Error updating python requirements")
 
     async def _collect_dependency_info(self) -> Dict[str, Any]:
         pkg_deps = await self._read_system_dependencies()
