@@ -6,7 +6,7 @@
 from __future__ import annotations
 import re
 from enum import Flag, auto
-from typing import Tuple, Optional, Dict, List
+from typing import Tuple, Optional, Dict, List, Any
 
 # Python regex for parsing version strings from PEP 440
 # https://peps.python.org/pep-0440/#appendix-b-parsing-version-strings-with-regular-expressions
@@ -58,7 +58,6 @@ GIT_VERSION_PATTERN = r"""
     )?
     (?P<dirty>-dirty)?
     (?P<inferred>-(?:inferred|shallow))?
-
 """
 
 _py_version_regex = re.compile(
@@ -94,6 +93,12 @@ class BaseVersion:
     @property
     def full_version(self) -> str:
         return self._orig
+
+    @property
+    def short_version(self) -> str:
+        if not self._valid_version:
+            return "?"
+        return f"{self._tag}-{self._dev_count}"
 
     @property
     def release(self) -> str:
@@ -233,10 +238,9 @@ class BaseVersion:
 class PyVersion(BaseVersion):
     def __init__(self, version: str) -> None:
         super().__init__(version)
-        ver_match = _py_version_regex.match(version)
-        if ver_match is None:
+        version_info = self._get_version_info()
+        if version_info is None:
             return
-        version_info = ver_match.groupdict()
         release: Optional[str] = version_info["release"]
         if release is None:
             return
@@ -246,8 +250,9 @@ class PyVersion(BaseVersion):
         self._release_tup = tuple(int(part) for part in release.split("."))
         self._extra_tup = (1, 0, 0)
         if version_info["pre"] is not None:
+            pre_conv: Dict[str, int]
             pre_conv = dict([("a", 1), ("b", 2), ("c", 3), ("r", 3), ("p", 3)])
-            lbl = version_info["pre_l"][0].lower()
+            lbl: str = version_info["pre_l"][0].lower()
             self._extra_tup = (0, pre_conv.get(lbl, 0), int(version_info["pre_n"] or 0))
             self._tag += version_info["pre"]
             self._release_type |= ReleaseType(1 << pre_conv.get(lbl, 1))
@@ -272,27 +277,64 @@ class PyVersion(BaseVersion):
         self._dev_count = int(version_info["dev_n"] or 0)
         self.local: Optional[str] = version_info["local"]
 
-    def convert_to_git(self, version_info: Dict[str, Optional[str]]) -> GitVersion:
+    @property
+    def short_version(self) -> str:
+        if not self._valid_version:
+            return "?"
+        if not self._dev_count:
+            return self._tag
+        return f"{self._tag}-{self._dev_count}"
+
+    def _get_version_info(self) -> Optional[Dict[str, Any]]:
+        ver_match = _py_version_regex.match(self._orig)
+        if ver_match is None:
+            return None
+        return ver_match.groupdict()
+
+    def bump_local_version(self, new_local: str) -> PyVersion:
+        # current patch version needs to be bumped
+        version_info = self._get_version_info()
+        if version_info is None:
+            return PyVersion("?")
+        new_ver = version_info["release"]
+        major, _, minor = new_ver.rpartition(".")
+        if major and not self._dev_count:
+            new_ver = f"v{major}.{int(minor) + 1}"
+        if version_info["pre"] is not None:
+            new_ver += version_info["pre"]
+        if version_info["post"] is not None:
+            new_ver += version_info["post"]
+        if self._dev_count:
+            new_ver += f".dev{self._dev_count + 1}"
+        else:
+            new_ver += ".dev1"
+        new_ver += f"+{new_local}"
+        return PyVersion(new_ver)
+
+    def convert_to_git(self) -> GitVersion:
+        version_info = self._get_version_info()
+        if version_info is None:
+            return GitVersion("?")
         git_version: Optional[str] = version_info["release"]
         if git_version is None:
             raise ValueError("Invalid version string")
         if self._orig[0].lower() == "v":
-            git_version == f"v{git_version}"
+            git_version = f"v{git_version}"
         local: str = version_info["local"] or ""
         # Assume semantic versioning, convert the version string.
-        if version_info["dev_n"] is not None:
+        if self._dev_count > 0:
             major, _, minor = git_version.rpartition(".")
             if major:
                 git_version = f"v{major}.{max(int(minor) - 1, 0)}"
         if version_info["pre"] is not None:
             git_version = f"{git_version}{version_info['pre']}"
-        dev_num = version_info["dev_n"] or 0
-        git_version = f"{git_version}-{dev_num}"
-        local_parts = local.split(".", 1)[0]
-        if local_parts[0]:
-            git_version = f"{git_version}-{local_parts[0]}"
-        if len(local_parts) > 1:
-            git_version = f"{git_version}-dirty"
+        git_version = f"{git_version}-{self._dev_count}"
+        if local:
+            local_parts = re.split(r"[-_\.]", local)
+            if local_parts[0]:
+                git_version = f"{git_version}-{local_parts[0]}"
+            if len(local_parts) > 1:
+                git_version = f"{git_version}-dirty"
         return GitVersion(git_version)
 
 
@@ -322,6 +364,7 @@ class GitVersion(BaseVersion):
         self._release_tup = tuple(int(part) for part in release.split("."))
         self._extra_tup = (1, 0, 0)
         if version_info["pre"] is not None:
+            pre_conv: Dict[str, int]
             pre_conv = dict([("a", 1), ("b", 2), ("c", 3), ("r", 3), ("p", 3)])
             lbl = version_info["pre_l"][0].lower()
             self._extra_tup = (0, pre_conv.get(lbl, 0), int(version_info["pre_n"] or 0))
@@ -339,12 +382,6 @@ class GitVersion(BaseVersion):
         self._is_dirty = version_info["dirty"] is not None
 
     @property
-    def short_version(self) -> str:
-        if not self._valid_version:
-            return "?"
-        return f"{self._tag}-{self._dev_count}"
-
-    @property
     def dirty(self) -> bool:
         return self._is_dirty
 
@@ -360,7 +397,7 @@ class GitVersion(BaseVersion):
             if self._is_inferred:
                 # We can't infer a previous release from another inferred release
                 return self._tag
-            type_choices = dict([(1, "a"), (2, "b"), (3, "rc")])
+            type_choices: Dict[int, str] = dict([(1, "a"), (2, "b"), (3, "rc")])
             if self.is_pre_release() and self._extra_tup > (0, 1, 0):
                 type_idx = self._extra_tup[1]
                 type_count = self._extra_tup[2]
