@@ -319,7 +319,7 @@ class AppDeploy(BaseDeploy):
         except asyncio.CancelledError:
             raise
         except Exception:
-            logging.exception(f"Error reading install script: {deps_json}")
+            logging.exception(f"Error reading install script: {inst_path}")
             return []
         plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
         plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
