@@ -52,6 +52,10 @@ DATABASE_VERSION = 2
 SQL_DB_FILENAME = "moonraker-sql.db"
 NAMESPACE_TABLE = "namespace_store"
 REGISTRATION_TABLE = "table_registry"
+SCHEMA_TABLE = (
+    "sqlite_schema" if sqlite3.sqlite_version_info >= (3, 33, 0)
+    else "sqlite_master"
+)
 
 RECORD_ENCODE_FUNCS: Dict[Type, Callable[..., bytes]] = {
     int: lambda x: b"q" + struct.pack("q", x),
@@ -789,7 +793,7 @@ class SqliteProvider(Thread):
             f"Sqlite Version: {sqlite3.sqlite_version}"
         )
         cur = self.sync_conn.execute(
-            "SELECT name FROM sqlite_schema WHERE type='table'"
+            f"SELECT name FROM {SCHEMA_TABLE} WHERE type='table'"
         )
         cur.arraysize = 100
         self._tables = set([row[0] for row in cur.fetchall()])
@@ -1347,7 +1351,7 @@ class SqliteProvider(Thread):
         self, restore_conn: sqlite3.Connection
     ) -> Dict[str, Any]:
         cursor = restore_conn.execute(
-            "SELECT name FROM sqlite_schema WHERE type = 'table'"
+            f"SELECT name FROM {SCHEMA_TABLE} WHERE type = 'table'"
         )
         cursor.arraysize = 100
         tables = [row[0] for row in cursor.fetchall()]
