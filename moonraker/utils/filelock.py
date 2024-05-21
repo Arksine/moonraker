@@ -96,7 +96,8 @@ class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
 
     def _release_file(self) -> None:
         with contextlib.suppress(OSError, PermissionError):
-            self.lock_path.unlink(missing_ok=True)
+            if self.lock_path.is_file():
+                self.lock_path.unlink()
         with contextlib.suppress(OSError, PermissionError):
             fcntl.flock(self.fd, fcntl.LOCK_UN)
         with contextlib.suppress(OSError, PermissionError):
