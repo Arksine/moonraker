@@ -85,7 +85,13 @@ def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     if config.has_section("update_manager moonraker"):
         mcfg = config["update_manager moonraker"]
         base_cfg["moonraker"]["channel"] = mcfg.get("channel", channel)
+        commit = mcfg.get("pinned_commit", None)
+        if commit is not None:
+            base_cfg["moonraker"]["pinned_commit"] = commit
     if config.has_section("update_manager klipper"):
         kcfg = config["update_manager klipper"]
         base_cfg["klipper"]["channel"] = kcfg.get("channel", channel)
+        commit = kcfg.get("pinned_commit", None)
+        if commit is not None:
+            base_cfg["klipper"]["pinned_commit"] = commit
     return config.read_supplemental_dict(base_cfg)
