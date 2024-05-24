@@ -1826,14 +1826,26 @@ enable_packagekit: True
 #   updates will be processed via PackageKit over D-Bus.  When set to False
 #   the "apt cli" fallback will be used.  The default is True.
 channel: dev
-#   The update channel applied to Klipper and Moonraker.  May dev or
-#   beta.  The dev channel will update to the latest commit pushed
+#   The update channel applied to Klipper and Moonraker.  May dev, beta or
+#   stable.  The dev channel will update to the latest commit pushed
 #   to the repo, whereas the beta channel will update to the latest
-#   commit tagged by Moonraker.  The beta channel will see less frequent
-#   updates and should be more stable.  Users on the beta channel will have
-#   more opportunity to review breaking changes before choosing to update.
+#   commit tagged by Moonraker.  The beta and stable channels will see less
+#   frequent updates and should be more stable.  Users on the beta channel will
+#   have more opportunity to review breaking changes before choosing to update.
 #   The default is dev.
 ```
+
+!!! Note
+    Configuration is automatically detected for Moonraker and Klipper, however
+    it is possible to override the `channel` and `pinned_commit` options on
+    a per application basis for each.  This can be done by specifying the
+    configuration in `moonraker.conf`.  For example:
+
+    ```ini
+    [update_manager klipper]
+    channel: dev
+    pinned_commit: 79930ed99a1fc284f41af5755908aa1fab948ce1
+    ```
 
 #### Extension Configuration
 The update manager may be configured manage additional software, henceforth
@@ -2050,6 +2062,14 @@ info_tags:
 #   Frontends my use these tags to perform additional actions or display
 #   information, see your extension documentation for details on configuration.
 #   The default is an empty list (no info tags).
+pinned_commit:
+#   A git commit hash to "pin" updates to.  When specified Moonraker will not
+#   update the repo beyond the pinned commit.  If the repo is already beyond
+#   the specified commit, or if the commit is not in the repo, futher updates
+#   are disabled until the pinned_commit is changed.  It is recommended to
+#   specify the complete hash, however abbreviated hashes with a minimum of
+#   8 characters are accepted.  The "pinned_commit" overrides the update
+#   behavior set by the "channel" option.  The default is no pinned commit.
 ```
 
 !!! Note

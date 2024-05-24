@@ -40,14 +40,15 @@ The format is based on [Keep a Changelog].
 - **spoolman**:  Report spool ids set during a print in history auxiliary data
 - **sensor**: Added support for history fields reported in auxiliary data
 - **power**:  Added support for `uhubctl` devices
+- **update_manager**: Add support for pinned git commits
 
 ### Fixed
 
 - **simplyprint**:  Fixed import error preventing the component from loading.
 - **update_manager**: Moonraker will now restart the correct "moonraker" and
   "klipper" services if they are not the default values.
-- **job_queue**: Fixed transition wihen auto is disabled
-- **history**: Added modification time to file existance checks.
+- **job_queue**: Fixed transition when auto is disabled
+- **history**: Added modification time to file existence checks.
 - **dbus_manager**: Fixed PolKit warning when PolKit features are not used.
 - **job_queue**: Fixed a bug where the `job_transition_gcode` runs when the
   queue is started.  It will now only run between jobs during automatic
