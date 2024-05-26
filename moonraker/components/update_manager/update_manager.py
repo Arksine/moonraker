@@ -11,11 +11,12 @@ import logging
 import time
 import tempfile
 import pathlib
-from .common import AppType, get_base_configuration, get_app_type
+from .common import AppType, get_base_configuration
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
 from .zip_deploy import ZipDeploy
+from .python_deploy import PythonDeploy
 from .system_deploy import PackageDeploy
 from ...common import RequestType
 from ...utils.filelock import AsyncExclusiveFileLock, LockTimeout
@@ -58,7 +59,8 @@ def get_deploy_class(
     _deployers = {
         AppType.WEB: ZipDeploy,
         AppType.GIT_REPO: GitDeploy,
-        AppType.ZIP: ZipDeploy
+        AppType.ZIP: ZipDeploy,
+        AppType.PYTHON: PythonDeploy
     }
     return _deployers.get(key, default)
 
@@ -209,7 +211,7 @@ class UpdateManager:
         kpath: str = kinfo['klipper_path']
         executable: str = kinfo['python_path']
         kupdater = self.updaters.get('klipper')
-        app_type = get_app_type(kpath)
+        app_type = AppType.detect(kpath)
         if (
             (isinstance(kupdater, AppDeploy) and
              kupdater.check_same_paths(kpath, executable)) or

@@ -38,12 +38,14 @@ if TYPE_CHECKING:
 SUPPORTED_CHANNELS = {
     AppType.WEB: [Channel.STABLE, Channel.BETA],
     AppType.ZIP: [Channel.STABLE, Channel.BETA],
-    AppType.GIT_REPO: list(Channel)
+    AppType.GIT_REPO: list(Channel),
+    AppType.PYTHON: list(Channel)
 }
 TYPE_TO_CHANNEL = {
     AppType.WEB: Channel.STABLE,
     AppType.ZIP: Channel.STABLE,
-    AppType.GIT_REPO: Channel.DEV
+    AppType.GIT_REPO: Channel.DEV,
+    AppType.PYTHON: Channel.STABLE
 }
 
 DISTRO_ALIASES = [distro.id()]
