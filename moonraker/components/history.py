@@ -65,6 +65,8 @@ def _create_totals_list(
         maximum = value if total is None else None
         totals_list.append(("history", key, maximum, total, instance))
     for item in aux_totals:
+        if not isinstance(item, dict):
+            continue
         totals_list.append(
             (
                 item["provider"],
@@ -99,6 +101,10 @@ class TotalsSqlDefinition(SqlTableDefinition):
             hist_ns: Dict[str, Any] = db_provider.get_item("moonraker", "history", {})
             job_totals: Dict[str, Any] = hist_ns.get("job_totals", BASE_TOTALS)
             aux_totals: List[Dict[str, Any]] = hist_ns.get("aux_totals", [])
+            if not isinstance(job_totals, dict):
+                job_totals = dict(BASE_TOTALS)
+            if not isinstance(aux_totals, list):
+                aux_totals = []
             totals_list = _create_totals_list(job_totals, aux_totals)
             sql_conn = db_provider.connection
             with sql_conn:
@@ -139,7 +145,12 @@ class HistorySqlDefinition(SqlTableDefinition):
             for batch in db_provider.iter_namespace("history", 1000):
                 conv_vals: List[Tuple[Any, ...]] = []
                 entry: Dict[str, Any]
-                for entry in batch.values():
+                for key, entry in batch.items():
+                    if not isinstance(entry, dict):
+                        logging.info(
+                            f"History migration, skipping invalid value: {key} {entry}"
+                        )
+                        continue
                     try:
                         conv_vals.append(
                             (

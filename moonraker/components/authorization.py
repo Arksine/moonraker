@@ -96,6 +96,8 @@ class UserSqlDefinition(SqlTableDefinition):
             users: Dict[str, Dict[str, Any]]
             users = db_provider.get_namespace("authorized_users")
             api_user = users.pop(API_USER, {})
+            if not isinstance(api_user, dict):
+                api_user = {}
             user_vals: List[Tuple[Any, ...]] = [
                 UserInfo(
                     username=API_USER,
@@ -103,7 +105,12 @@ class UserSqlDefinition(SqlTableDefinition):
                     created_on=api_user.get("created_on", time.time())
                 ).as_tuple()
             ]
-            for user in users.values():
+            for key, user in users.items():
+                if not isinstance(user, dict):
+                    logging.info(
+                        f"Auth migration, skipping invalid value: {key} {user}"
+                    )
+                    continue
                 user_vals.append(UserInfo(**user).as_tuple())
             placeholders = ",".join("?" * len(user_vals[0]))
             conn = db_provider.connection
