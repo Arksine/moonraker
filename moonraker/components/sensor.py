@@ -267,7 +267,7 @@ class Sensors:
             except Exception as e:
                 # Ensures that configuration errors are shown to the user
                 self.server.add_warning(
-                    f"Failed to configure sensor [{cfg.get_name()}]\n{e}"
+                    f"Failed to configure sensor [{cfg.get_name()}]\n{e}", exc_info=e
                 )
                 continue
 

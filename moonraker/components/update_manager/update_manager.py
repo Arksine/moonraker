@@ -130,7 +130,8 @@ class UpdateManager:
                     self.updaters[name] = deployer(cfg, self.cmd_helper)
             except Exception as e:
                 self.server.add_warning(
-                    f"[update_manager]: Failed to load extension {name}: {e}"
+                    f"[update_manager]: Failed to load extension {name}: {e}",
+                    exc_info=e
                 )
 
         self.cmd_request_lock = asyncio.Lock()

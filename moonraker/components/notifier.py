@@ -46,7 +46,7 @@ class Notifier:
                 logging.info(f"Registered notifier: '{notifier.get_name()}'")
             except Exception as e:
                 msg = f"Failed to load notifier[{cfg.get_name()}]\n{e}"
-                self.server.add_warning(msg)
+                self.server.add_warning(msg, exc_info=e)
                 continue
             self.notifiers[notifier.get_name()] = notifier
 
@@ -170,12 +170,12 @@ class NotifierInstance:
             fm: FileManager = self.server.lookup_component("file_manager")
             try:
                 rendered = self.attach.render(context)
-            except self.server.error:
-                logging.exception(f"notifier {self.name}: Failed to render attachment")
+            except self.server.error as e:
                 self.server.add_warning(
                     f"[notifier {self.name}]: The attachment is not valid. The "
                     "template failed to render.",
-                    f"notifier {self.name}"
+                    f"notifier {self.name}",
+                    exc_info=e
                 )
                 self.attach = None
             else:

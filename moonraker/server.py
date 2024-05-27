@@ -226,13 +226,17 @@ class Server:
             logging.info(item)
 
     def add_warning(
-        self, warning: str, warn_id: Optional[str] = None, log: bool = True
+        self,
+        warning: str,
+        warn_id: Optional[str] = None,
+        log: bool = True,
+        exc_info: Optional[BaseException] = None
     ) -> str:
         if warn_id is None:
             warn_id = str(id(warning))
         self.warnings[warn_id] = warning
         if log:
-            logging.warning(warning)
+            logging.warning(warning, exc_info=exc_info)
         return warn_id
 
     def remove_warning(self, warn_id: str) -> None:
@@ -246,9 +250,9 @@ class Server:
             if ret is not None:
                 await ret
         except Exception as e:
-            logging.exception(f"Component [{name}] failed post init")
-            self.add_warning(f"Component '{name}' failed to load with "
-                             f"error: {e}")
+            self.add_warning(
+                f"Component '{name}' failed to load with error: {e}", exc_info=e
+            )
             self.set_failed_component(name)
 
     def load_components(self) -> None:

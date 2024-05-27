@@ -74,7 +74,7 @@ class PrinterPower:
                 dev = dev_class(cfg)
             except Exception as e:
                 msg = f"Failed to load power device [{cfg.get_name()}]\n{e}"
-                self.server.add_warning(msg)
+                self.server.add_warning(msg, exc_info=e)
                 continue
             self.devices[dev.get_name()] = dev
 

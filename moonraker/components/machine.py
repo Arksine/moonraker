@@ -1712,8 +1712,7 @@ class InstallValidator:
         except Exception as e:
             has_error = True
             msg = f"Failed to validate {name}: {e}"
-            logging.exception(msg)
-            self.server.add_warning(msg, log=False)
+            self.server.add_warning(msg, exc_info=e)
             fm.disable_write_access()
         else:
             self.validation_enabled = False

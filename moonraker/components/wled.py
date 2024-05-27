@@ -377,7 +377,7 @@ class WLED:
             except Exception as e:
                 # Ensures errors such as "Color not supported" are visible
                 msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
-                self.server.add_warning(msg)
+                self.server.add_warning(msg, exc_info=e)
                 continue
 
         # Register two remote methods for GCODE

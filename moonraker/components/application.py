@@ -318,10 +318,9 @@ class MoonrakerApp:
             svr.listen(port, address)
         except Exception as e:
             svr_type = "HTTPS" if "ssl_options" in args else "HTTP"
-            logging.exception(f"{svr_type} Server Start Failed")
             self.server.add_warning(
                 f"Failed to start {svr_type} server: {e}.  See moonraker.log "
-                "for more details."
+                "for more details.", exc_info=e
             )
             return None
         return svr

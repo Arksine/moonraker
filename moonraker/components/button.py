@@ -31,7 +31,7 @@ class ButtonManager:
                 btn = GpioButton(cfg)
             except Exception as e:
                 msg = f"Failed to load button [{cfg.get_name()}]\n{e}"
-                self.server.add_warning(msg)
+                self.server.add_warning(msg, exc_info=e)
                 continue
             self.buttons[btn.name] = btn
         self.server.register_notification("button:button_event")

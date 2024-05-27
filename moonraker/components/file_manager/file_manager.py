@@ -1849,12 +1849,11 @@ class InotifyObserver(BaseFileSystemObserver):
             old_root.clear_events()
         try:
             root_node = InotifyRootNode(self, root, root_path)
-        except Exception:
-            logging.exception(f"Inotify: failed to create root node '{root}'")
+        except Exception as e:
             self.server.add_warning(
                 f"file_manager: Failed to create inotify root node {root}. "
                 "See moonraker.log for details.",
-                log=False
+                exc_info=e
             )
             return
         self.watched_roots[root] = root_node
@@ -1877,12 +1876,11 @@ class InotifyObserver(BaseFileSystemObserver):
         for root, node in self.watched_roots.items():
             try:
                 evts = node.scan_node()
-            except Exception:
-                logging.exception(f"Inotify: failed to scan root '{root}'")
+            except Exception as e:
                 self.server.add_warning(
                     f"file_manager: Failed to scan inotify root node '{root}'. "
                     "See moonraker.log for details.",
-                    log=False
+                    exc_info=e
                 )
                 continue
             if not evts:
