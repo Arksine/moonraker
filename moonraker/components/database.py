@@ -211,11 +211,10 @@ class MoonrakerDatabase:
         stored_iid = self.get_item("moonraker", "instance_id", None).result()
         if stored_iid is not None:
             if instance_id != stored_iid:
-                self.server.add_warning(
+                self.server.add_log_rollover_item(
+                    "uuid_mismatch",
                     "Database: Stored Instance ID does not match current Instance "
-                    "ID. Make sure that this database is not shared between multiple "
-                    f"Instances of Moonraker.\n\nCurrent UUID: {instance_id}\n"
-                    f"Stored UUID: {stored_iid}"
+                    f"ID.\n\nCurrent UUID: {instance_id}\nStored UUID: {stored_iid}"
                 )
         else:
             self.insert_item("moonraker", "instance_id", instance_id)
