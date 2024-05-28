@@ -121,16 +121,33 @@ def generate_lmdb_entries(
         return
     MAX_LMDB_NAMESPACES = 100
     MAX_LMDB_SIZE = 200 * 2**20
-    try:
-        import lmdb
-        lmdb_env: LmdbEnvironment = lmdb.open(
-            str(db_folder), map_size=MAX_LMDB_SIZE, max_dbs=MAX_LMDB_NAMESPACES
-        )
-    except Exception:
-        logging.exception(
-            "Failed to open lmdb database, aborting conversion"
-        )
-        return
+    inst_attempted: bool = False
+    while True:
+        try:
+            import lmdb
+            lmdb_env: LmdbEnvironment = lmdb.open(
+                str(db_folder), map_size=MAX_LMDB_SIZE, max_dbs=MAX_LMDB_NAMESPACES
+            )
+        except ModuleNotFoundError:
+            if inst_attempted:
+                logging.info(
+                    "Attempt to install LMDB failed, aborting conversion."
+                )
+                return
+            import sys
+            from ..utils import pip_utils
+            inst_attempted = True
+            logging.info("LMDB module not found, attempting installation...")
+            pip_cmd = f"{sys.executable} -m pip"
+            pip_exec = pip_utils.PipExecutor(pip_cmd, logging.info)
+            pip_exec.install_packages(["lmdb"])
+        except Exception:
+            logging.exception(
+                "Failed to open lmdb database, aborting conversion"
+            )
+            return
+        else:
+            break
     lmdb_namespaces: List[Tuple[str, object]] = []
     with lmdb_env.begin(buffers=True) as txn:
         # lookup existing namespaces
