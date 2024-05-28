@@ -412,7 +412,9 @@ class GitRepo:
                 self.git_messages.clear()
                 try:
                     cmd = "status --porcelain -b"
-                    resp = await self._run_git_cmd(cmd, attempts=1)
+                    resp = await self._run_git_cmd(
+                        cmd, attempts=1, corrupt_hdr="fatal:"
+                    )
                 except Exception:
                     attempts -= 1
                     resp = None
@@ -645,7 +647,7 @@ class GitRepo:
         async with self.git_operation_lock:
             for _ in range(attempts):
                 try:
-                    await self._run_git_cmd(cmd, attempts=1, corrupt_msg="error: ")
+                    await self._run_git_cmd(cmd, attempts=1, corrupt_hdr="error: ")
                 except self.cmd_helper.get_shell_command().error as err:
                     if err.return_code == 1:
                         return False
@@ -809,8 +811,7 @@ class GitRepo:
             shell_cmd = self.cmd_helper.get_shell_command()
             try:
                 await self._run_git_cmd(
-                    f"cat-file -e {commit}^{{commit}}", attempts=1,
-                    corrupt_msg=None
+                    f"cat-file -e {commit}^{{commit}}", attempts=1
                 )
             except shell_cmd.error:
                 return False
@@ -1230,7 +1231,7 @@ class GitRepo:
         self.fetch_input_recd = True
         out = output.decode().strip()
         if out:
-            if out.startswith("fatal: "):
+            if out.startswith("fatal: ") and "corrupt" in out:
                 self.repo_corrupt = True
             self.git_messages.append(out)
             self.cmd_helper.notify_update_response(out)
@@ -1265,7 +1266,7 @@ class GitRepo:
         timeout: float = 20.,
         attempts: int = 5,
         env: Optional[Dict[str, str]] = None,
-        corrupt_msg: Optional[str] = "fatal: ",
+        corrupt_hdr: Optional[str] = None,
         log_complete: bool = True
     ) -> str:
         shell_cmd = self.cmd_helper.get_shell_command()
@@ -1288,10 +1289,10 @@ class GitRepo:
             if stderr:
                 msg_lines.extend(stdout.split("\n"))
                 self.git_messages.append(stderr)
-            if corrupt_msg is not None:
+            if corrupt_hdr is not None:
                 for line in msg_lines:
                     line = line.strip().lower()
-                    if line.startswith(corrupt_msg):
+                    if line.startswith(corrupt_hdr) and "corrupt" in line:
                         self.repo_corrupt = True
                         break
             raise
