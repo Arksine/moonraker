@@ -139,6 +139,14 @@ class HistorySqlDefinition(SqlTableDefinition):
     )
     version = 1
 
+    def _get_entry_item(
+        self, entry: Dict[str, Any], name: str, default: Any = 0.
+    ) -> Any:
+        val = entry.get(name)
+        if val is None:
+            return default
+        return val
+
     def migrate(self, last_version: int, db_provider: DBProviderWrapper) -> None:
         if last_version == 0:
             conn = db_provider.connection
@@ -155,16 +163,16 @@ class HistorySqlDefinition(SqlTableDefinition):
                         conv_vals.append(
                             (
                                 None,
-                                entry.get("user", "No User"),
-                                entry["filename"],
-                                entry["status"],
-                                entry["start_time"],
-                                entry["end_time"],
-                                entry["print_duration"],
-                                entry["total_duration"],
-                                entry["filament_used"],
-                                entry["metadata"],
-                                entry.get("auxiliary_data", []),
+                                self._get_entry_item(entry, "user", "No User"),
+                                self._get_entry_item(entry, "filename"),
+                                self._get_entry_item(entry, "status", "error"),
+                                self._get_entry_item(entry, "start_time"),
+                                self._get_entry_item(entry, "end_time"),
+                                self._get_entry_item(entry, "print_duration"),
+                                self._get_entry_item(entry, "total_duration"),
+                                self._get_entry_item(entry, "filament_used"),
+                                self._get_entry_item(entry, "metadata", {}),
+                                self._get_entry_item(entry, "auxiliary_data", []),
                                 "default"
                             )
                         )
@@ -617,7 +625,7 @@ class PrinterJob:
                print_stats: Dict[str, Any] = {}
                ) -> None:
         self.end_time = time.time()
-        self.status = status
+        self.status = status if status is not None else "error"
         self.update_from_ps(print_stats)
 
     def get(self, name: str) -> Any:
@@ -638,7 +646,7 @@ class PrinterJob:
 
     def update_from_ps(self, data: Dict[str, Any]) -> None:
         for i in data:
-            if hasattr(self, i):
+            if hasattr(self, i) and data[i] is not None:
                 setattr(self, i, data[i])
 
 
