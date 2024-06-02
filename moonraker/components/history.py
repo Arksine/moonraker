@@ -164,7 +164,7 @@ class HistorySqlDefinition(SqlTableDefinition):
                             (
                                 None,
                                 self._get_entry_item(entry, "user", "No User"),
-                                self._get_entry_item(entry, "filename"),
+                                self._get_entry_item(entry, "filename", "unknown"),
                                 self._get_entry_item(entry, "status", "error"),
                                 self._get_entry_item(entry, "start_time"),
                                 self._get_entry_item(entry, "end_time"),
