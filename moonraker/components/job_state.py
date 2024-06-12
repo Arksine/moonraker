@@ -78,6 +78,9 @@ class JobState:
                 )
         if "info" in ps:
             cur_layer: Optional[int] = ps["info"].get("current_layer")
+            prev_ps = dict(self.last_print_stats)
+            if "filename" in prev_ps: # inject filename from last_print_stats
+                ps["filename"] = prev_ps["filename"]
             if cur_layer is not None:
                 self.server.send_event(
                     "job_state:layer_changed",
