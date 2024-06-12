@@ -110,8 +110,10 @@ class Notifier:
                     round(current/total/layer_trigger, 5)//1 != \
                         round(((current-1)/total)/layer_trigger, 5)//1:
 
-                    logging.info(f"Layer change notification at \
-                    {round(current/total/layer_trigger,5)//1*layer_trigger*100}%")
+                    logging.info(
+                        "Layer change notification at "
+                        f"{round(current/total/layer_trigger,5)//1*layer_trigger*100}%"
+                    )
                     await notifier.notify(evt_name, [{}, new_stats])
 
     def register_endpoints(self, config: ConfigHelper):
