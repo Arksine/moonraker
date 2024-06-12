@@ -171,8 +171,8 @@ class NotifierInstance:
             # layer_trigger out of range. Default to 0 and send logging info
             logging.info(
                 f"Layer change trigger out of range for Notifier {self.name}. "
-                + f"Expected decimal between 0 and 1, found {self.layer_trigger}. "
-                + "Ignoring layer change trigger."
+                f"Expected decimal between 0 and 1, found {self.layer_trigger}. "
+                "Ignoring layer change trigger."
             )
             self.layer_trigger = 0
         self.url = url_template.render()
