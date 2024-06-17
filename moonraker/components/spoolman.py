@@ -40,7 +40,7 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
-        self.additional_headers = config.getdict("additional_headers", default={})
+        self.additional_headers: Dict[str, str] = config.getdict("additional_headers", default={})
         self.eventloop = self.server.get_event_loop()
         self._get_spoolman_urls(config)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
