@@ -40,7 +40,9 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
-        self.additional_headers: Dict[str, str] = config.getdict("additional_headers", default={})
+        self.additional_headers: Dict[str, str] = config.getdict(
+            "additional_headers", default={}
+        )
         self.eventloop = self.server.get_event_loop()
         self._get_spoolman_urls(config)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
@@ -133,9 +135,9 @@ class SpoolManager:
                 log_connect = False
             try:
                 ws_request = tornado_httpclient.HTTPRequest(
-                  self.ws_url, 
-                  headers=self.additional_headers,
-                  connect_timeout=5.,
+                    self.ws_url,
+                    headers=self.additional_headers,
+                    connect_timeout=5.,
                 )
                 self.spoolman_ws = await tornado_ws.websocket_connect(
                     ws_request,
@@ -376,7 +378,7 @@ class SpoolManager:
             method=method,
             url=full_url,
             body=body,
-            headers=self.additional_headers, 
+            headers=self.additional_headers,
         )
         if not use_v2_response:
             response.raise_for_status()
