@@ -1475,7 +1475,7 @@ HUB_STATE_PATTERN = r"""
     (?:Port\s(?P<port>[0-9]+):)
     (?:\s(?P<bits>[0-9a-f]{4}))
     (?:\s(?P<pstate>power|off))
-    (?P<flags>(?:\s[0-9a-z]+)+)?
+    (?P<flags>(?:\s[0-9a-z.]+)+)?
     (?:\s\[(?P<desc>.+)\])?
 """
 
@@ -1488,7 +1488,7 @@ class UHubCtl(PowerDevice):
         super().__init__(config)
         self.scmd: ShellCommand = self.server.load_component(config, "shell_command")
         self.location = config.get("location")
-        self.port = config.getint("port")
+        self.port = config.getint("port", None)
         ret = shutil.which("uhubctl")
         if ret is None:
             raise config.error(
@@ -1531,11 +1531,13 @@ class UHubCtl(PowerDevice):
         self.state = result["state"]
 
     async def _run_uhubctl(self, action: str) -> Dict[str, Any]:
-        cmd = f"uhubctl -l {self.location} -p {self.port}"
-        search_prefix = "Current status"
+        cmd = f"uhubctl -l {self.location}"
+        if self.port is not None:
+            cmd += f" -p {self.port}"
+        search_prefix = f"Current status for hub {self.location}"
         if action in ["on", "off"]:
             cmd += f" -a {action}"
-            search_prefix = "New status"
+            search_prefix = f"New status for hub {self.location}"
         resp: str = await self.scmd.exec_cmd(cmd, log_complete=False)
         for line in resp.splitlines():
             if search_prefix:
@@ -1551,7 +1553,7 @@ class UHubCtl(PowerDevice):
                 status_bits = int(result["bits"], 16)
             except (TypeError, ValueError):
                 continue
-            if port != self.port:
+            if self.port is not None and port != self.port:
                 continue
             if result["pstate"] is None:
                 continue
