@@ -1360,8 +1360,8 @@ location:
 #  must be provided.
 port:
 #  Port of the USB device to control.  The port corresponds to the "-p"
-#  option of "ububctl". This parameter must be provided
-
+#  option of "ububctl".  When omitted no port is provided to the uhubctl
+#  command.
 ```
 
 !!! Tip
