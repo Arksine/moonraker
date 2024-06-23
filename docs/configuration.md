@@ -3141,6 +3141,9 @@ server: http://192.168.0.123:7912
 sync_rate: 5
 #   The interval, in seconds, between sync requests with the
 #   Spoolman server.  The default is 5.
+additional_headers:
+#   Additional headers for spoolman connection. Usefull for connecting to for example CloudFlare Zero Trust.
+#   Dict "name=value" list.  The default is empty.
 ```
 
 #### Setting the active spool from Klipper
