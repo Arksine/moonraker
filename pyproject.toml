@@ -7,7 +7,7 @@ authors = [
 ]
 dependencies = [
     "tornado==6.2.0 ; python_version=='3.7'",
-    "tornado==6.4.0 ; python_version>='3.8'",
+    "tornado==6.4.1 ; python_version>='3.8'",
     "pyserial==3.4",
     "pyserial-asyncio==0.6",
     "pillow==9.5.0 ; python_version=='3.7'",
