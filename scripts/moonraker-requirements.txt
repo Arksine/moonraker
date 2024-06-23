@@ -1,6 +1,6 @@
 # Python dependencies for Moonraker
 --find-links=python_wheels
-tornado==6.2.0 ; python_version=='3.7'
+tornado==6.4.1 ; python_version=='3.7'
 tornado==6.4.1 ; python_version>='3.8'
 pyserial==3.4
 pyserial-asyncio==0.6
