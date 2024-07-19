@@ -35,19 +35,6 @@ if TYPE_CHECKING:
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
 
-SUPPORTED_CHANNELS = {
-    AppType.WEB: [Channel.STABLE, Channel.BETA],
-    AppType.ZIP: [Channel.STABLE, Channel.BETA],
-    AppType.GIT_REPO: list(Channel),
-    AppType.PYTHON: list(Channel)
-}
-TYPE_TO_CHANNEL = {
-    AppType.WEB: Channel.STABLE,
-    AppType.ZIP: Channel.STABLE,
-    AppType.GIT_REPO: Channel.DEV,
-    AppType.PYTHON: Channel.STABLE
-}
-
 DISTRO_ALIASES = [distro.id()]
 DISTRO_ALIASES.extend(distro.like().split())
 
@@ -57,23 +44,18 @@ class AppDeploy(BaseDeploy):
     ) -> None:
         super().__init__(config, cmd_helper, prefix=prefix)
         self.config = config
-        type_choices = list(TYPE_TO_CHANNEL.keys())
-        self.type = AppType.from_string(config.get('type'))
-        if self.type not in type_choices:
-            str_types = [str(t) for t in type_choices]
-            raise config.error(
-                f"Section [{config.get_name()}], Option 'type: {self.type}': "
-                f"value must be one of the following choices: {str_types}"
-            )
-        self.channel = Channel.from_string(
-            config.get("channel", str(TYPE_TO_CHANNEL[self.type]))
+        type_choices = {str(t): t for t in AppType.valid_types()}
+        self.type = config.getchoice("type", type_choices)
+        channel_choices = {str(chnl): chnl for chnl in list(Channel)}
+        self.channel = config.getchoice(
+            "channel", channel_choices, str(self.type.default_channel)
         )
         self.channel_invalid: bool = False
-        if self.channel not in SUPPORTED_CHANNELS[self.type]:
-            str_channels = [str(c) for c in SUPPORTED_CHANNELS[self.type]]
+        if self.channel not in self.type.supported_channels:
+            str_channels = [str(c) for c in self.type.supported_channels]
             self.channel_invalid = True
             invalid_channel = self.channel
-            self.channel = TYPE_TO_CHANNEL[self.type]
+            self.channel = self.type.default_channel
             self.server.add_warning(
                 f"[{config.get_name()}]: Invalid value '{invalid_channel}' for "
                 f"option 'channel'. Type '{self.type}' supports the following "

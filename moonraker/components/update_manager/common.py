@@ -14,7 +14,8 @@ from ...utils import source_info
 from typing import (
     TYPE_CHECKING,
     Dict,
-    Union
+    Union,
+    List
 )
 
 if TYPE_CHECKING:
@@ -47,6 +48,8 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
+OPTION_OVERRIDES = ("channel", "pinned_commit", "refresh_interval")
+
 class AppType(ExtendedEnum):
     NONE = 1
     WEB = 2
@@ -66,6 +69,26 @@ class AppType(ExtendedEnum):
         else:
             return AppType.NONE
 
+    @classmethod
+    def valid_types(cls) -> List[AppType]:
+        all_types = list(cls)
+        all_types.remove(AppType.NONE)
+        return all_types
+
+    @property
+    def supported_channels(self) -> List[Channel]:
+        if self == AppType.NONE:
+            return []
+        elif self in [AppType.WEB, AppType.ZIP]:
+            return [Channel.STABLE, Channel.BETA]  # type: ignore
+        else:
+            return list(Channel)
+
+    @property
+    def default_channel(self) -> Channel:
+        if self == AppType.GIT_REPO:
+            return Channel.DEV  # type: ignore
+        return Channel.STABLE  # type: ignore
 
 class Channel(ExtendedEnum):
     STABLE = 1
@@ -84,19 +107,16 @@ def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
         "moonraker", "update_manager.klipper_exec", KLIPPER_DEFAULT_EXEC
     ).result()
     base_cfg["klipper"]["type"] = str(AppType.detect(base_cfg["klipper"]["path"]))
-    channel = config.get("channel", "dev")
-    base_cfg["moonraker"]["channel"] = channel
-    base_cfg["klipper"]["channel"] = channel
-    if config.has_section("update_manager moonraker"):
-        mcfg = config["update_manager moonraker"]
-        base_cfg["moonraker"]["channel"] = mcfg.get("channel", channel)
-        commit = mcfg.get("pinned_commit", None)
-        if commit is not None:
-            base_cfg["moonraker"]["pinned_commit"] = commit
-    if config.has_section("update_manager klipper"):
-        kcfg = config["update_manager klipper"]
-        base_cfg["klipper"]["channel"] = kcfg.get("channel", channel)
-        commit = kcfg.get("pinned_commit", None)
-        if commit is not None:
-            base_cfg["klipper"]["pinned_commit"] = commit
+    default_channel = config.get("channel", None)
+    # Check for configuration overrides
+    for app_name in base_cfg.keys():
+        if default_channel is not None:
+            base_cfg[app_name]["channel"] = default_channel
+        override_section = f"update_manager {app_name}"
+        if not config.has_section(override_section):
+            continue
+        app_cfg = config[override_section]
+        for opt in OPTION_OVERRIDES:
+            if app_cfg.has_option(opt):
+                base_cfg[app_name][opt] = app_cfg.get(opt)
     return config.read_supplemental_dict(base_cfg)
