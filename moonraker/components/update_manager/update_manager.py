@@ -204,28 +204,20 @@ class UpdateManager:
     def _set_klipper_repo(self) -> None:
         if self.klippy_identified_evt is not None:
             self.klippy_identified_evt.set()
-        kinfo = self.server.get_klippy_info()
-        if not kinfo:
-            logging.info("No valid klippy info received")
-            return
-        kpath: str = kinfo['klipper_path']
-        executable: str = kinfo['python_path']
+
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
         kupdater = self.updaters.get('klipper')
-        app_type = AppType.detect(kpath)
+        app_type = AppType.detect(kconn.path)
         if (
             (isinstance(kupdater, AppDeploy) and
-             kupdater.check_same_paths(kpath, executable)) or
+             kupdater.check_same_paths(kconn.path, kconn.executable)) or
             (app_type == AppType.NONE and type(kupdater) is BaseDeploy)
         ):
             # Current Klipper Updater is valid or unnecessary
             return
-        # Update paths in the database
-        db: DBComp = self.server.lookup_component('database')
-        db.insert_item("moonraker", "update_manager.klipper_path", kpath)
-        db.insert_item("moonraker", "update_manager.klipper_exec", executable)
         kcfg = self.app_config["klipper"]
-        kcfg.set_option("path", kpath)
-        kcfg.set_option("env", executable)
+        kcfg.set_option("path", str(kconn.path))
+        kcfg.set_option("env", str(kconn.executable))
         kcfg.set_option("type", str(app_type))
         notify = not isinstance(kupdater, AppDeploy)
         kclass = get_deploy_class(app_type, BaseDeploy)

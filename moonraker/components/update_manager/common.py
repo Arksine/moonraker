@@ -5,7 +5,6 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import os
 import sys
 import copy
 import pathlib
@@ -20,10 +19,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
-    from ..database import MoonrakerDatabase
-
-KLIPPER_DEFAULT_PATH = os.path.expanduser("~/klipper")
-KLIPPER_DEFAULT_EXEC = os.path.expanduser("~/klippy-env/bin/python")
+    from ..klippy_connection import KlippyConnection
 
 BASE_CONFIG: Dict[str, Dict[str, str]] = {
     "moonraker": {
@@ -98,15 +94,11 @@ class Channel(ExtendedEnum):
 def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     server = config.get_server()
     base_cfg = copy.deepcopy(BASE_CONFIG)
+    kconn: KlippyConnection = server.lookup_component("klippy_connection")
     base_cfg["moonraker"]["type"] = str(AppType.detect())
-    db: MoonrakerDatabase = server.lookup_component('database')
-    base_cfg["klipper"]["path"] = db.get_item(
-        "moonraker", "update_manager.klipper_path", KLIPPER_DEFAULT_PATH
-    ).result()
-    base_cfg["klipper"]["env"] = db.get_item(
-        "moonraker", "update_manager.klipper_exec", KLIPPER_DEFAULT_EXEC
-    ).result()
-    base_cfg["klipper"]["type"] = str(AppType.detect(base_cfg["klipper"]["path"]))
+    base_cfg["klipper"]["path"] = str(kconn.path)
+    base_cfg["klipper"]["env"] = str(kconn.executable)
+    base_cfg["klipper"]["type"] = str(AppType.detect(kconn.path))
     default_channel = config.get("channel", None)
     # Check for configuration overrides
     for app_name in base_cfg.keys():
