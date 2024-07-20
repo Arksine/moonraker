@@ -260,6 +260,10 @@ class Server:
         cfg_sections = set([s.split()[0] for s in config.sections()])
         cfg_sections.remove('server')
 
+        # load database to initialize saved state
+        self.load_component(config, "database")
+        self.klippy_connection.load_saved_state()
+
         # load core components
         for component in CORE_COMPONENTS:
             self.load_component(config, component)
