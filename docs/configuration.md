@@ -1808,10 +1808,8 @@ refresh_window: 0-5
 #   Default is 0-5, meaning the refresh can only occur from midnight until 5am.
 #   It can go over midnight, e.g. 22-6.
 refresh_interval: 672
-#   The interval (in hours) after which the update manager will check
-#   for new updates.  This interval is applies to updates for Moonraker,
-#   Klipper, and System Packages, and is the default for all clients.
-#   The default is 672 hours (28 days).
+#   The default interval (in hours) between which the update manager will
+#   check for new updates.  The default is 672 hours (28 days).
 enable_system_updates: True
 #   A boolean value that can be used to toggle system package updates.
 #   Currently Moonraker only supports updating packages via APT, so
@@ -1826,32 +1824,32 @@ enable_packagekit: True
 #   updates will be processed via PackageKit over D-Bus.  When set to False
 #   the "apt cli" fallback will be used.  The default is True.
 channel: dev
-#   The update channel applied to Klipper and Moonraker.  May dev, beta or
-#   stable.  The dev channel will update to the latest commit pushed
-#   to the repo, whereas the beta channel will update to the latest
+#   The default update channel applied to Klipper and Moonraker.  May be
+#   stable, beta, or dev.  The dev channel will update to the latest commit
+#   pushed to the repo, whereas the beta channel will update to the latest
 #   commit tagged by Moonraker.  The beta and stable channels will see less
-#   frequent updates and should be more stable.  Users on the beta channel will
-#   have more opportunity to review breaking changes before choosing to update.
-#   The default is dev.
+#   frequent updates.  When omitted, Moonraker and Klipper will default to
+#   the channel based extension type.
 ```
 
 !!! Note
     Configuration is automatically detected for Moonraker and Klipper, however
-    it is possible to override the `channel` and `pinned_commit` options on
-    a per application basis for each.  This can be done by specifying the
-    configuration in `moonraker.conf`.  For example:
+    it is possible to override the `channel`, `pinned_commit`, and
+    `refresh_interval` options on a per application basis for each.  This can be
+    done by specifying the configuration in `moonraker.conf`.  For example:
 
     ```ini
     [update_manager klipper]
     channel: dev
     pinned_commit: 79930ed99a1fc284f41af5755908aa1fab948ce1
+    refresh_interval: 168
     ```
 
 #### Extension Configuration
 The update manager may be configured manage additional software, henceforth
 referred to as "extensions".  In general terms, an extension may be defined
 as a piece of software hosted on GitHub.  The update manager breaks this
-down into 3 basic types:
+down into 4 basic types:
 
 - `web`: A front-end such as Mainsail or Fluidd.  Updates are deployed via
   zip files created for GitHub releases.
@@ -1860,8 +1858,10 @@ down into 3 basic types:
   manage extensions installed a service such as KlipperScreen, repos containing
   configuration, and unofficial 3rd party extensions for Klipper and Moonraker.
   See the note below in reference to unofficial extensions.
-- `zip`:  This can be used to managed various extensions like the `git_repo`
+- `zip`:  This can be used to manage various extensions like the `git_repo`
   type, however its updates are deployed via zipped GitHub releases.
+- `python`:  The python type can be used to update python applications installed
+  using `pip` in a virtual environment.
 
 !!! Note
     To benefit the community Moonraker facilitates updates for 3rd party
@@ -1956,12 +1956,11 @@ type: git_repo
 #   extension chooses to deploy updates, see its documentation for details.
 #   This parameter must be provided.
 channel: dev
-#   The update channel.  The available value differs depending on the
-#   "type" option.
-#      type: git_repo - May be dev or beta.  The dev channel will update to
-#                       the latest pushed commit, whereas the beta channel
-#                       will update to the latest tagged commit.
+#   The update channel.  May be set to stable, beta, or dev.
 #   The default is dev.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
 path:
 #   The absolute path to the client's files on disk. This parameter must be
 #   provided.
@@ -2097,6 +2096,7 @@ either be cross-platform, or it needs to deploy binaries for multiple platforms
 and be able to choose the correct one based on the system.
 
 ```ini
+type: zip
 channel: stable
 #   May be stable or beta.  When beta is specified "pre-release"
 #   updates are available.  The default is stable.
@@ -2129,11 +2129,106 @@ info_tags:
 #   options.
 ```
 
+#### Python Application Configuration
+
+The `python` type can be used to update python applications installed via pip
+in a virtual environment.  Moonraker can update applications installed from
+a python index such as [PyPI](https://pypi.org/), or from a
+[github repo](https://pip.pypa.io/en/stable/topics/vcs-support/).  The source
+is automatically detected based on the metadata of the currently installed
+package.
+
+```ini
+type: python
+channel: stable
+#   May be stable or beta.  When beta is specified "pre-release"
+#   updates are available.  The default is stable.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
+virtualenv:
+#   Path to the virtual enviromnent containing the python application.
+project_name:
+#   Name of the python project as listed in the python package index.  If
+#   the packaged is sourced from GitHub, this will be the name of the package
+#   when built.  The default is the name specified by the configuration
+#   section.
+primary_branch:
+#   For packages sourced from GitHub, this option may be used to specify the
+#   branch to fetch updates from when the channel is set to "dev".  The default
+#   is no primary branch.
+is_system_service: True
+managed_services:
+info_tags:
+#   See the git_repo type documentation for detailed descriptions of the above
+#   options.
+```
+
+##### The optional release_info file
+
+Python applications may include a `release_info` file in the package
+folder that provides supplemental information for the application.  The
+`release_info` file should contain a json object with the following fields:
+
+
+- `project_name`: The name of the project as listed in the python index.
+- `package_name`: The name of the package as installed.  This is often the
+  same of the `project_name`, but may differ.
+- `urls`: An object containing a mapping of url types to urls.  These urls
+  should match urls provided in the metadata.
+- `package_version`:  The version of the built package.
+- `git_version`:  The git version as returned by
+  `git describe --tags --always --long --dirty`
+- `commit_sha`:  The hash of the git commit the build was based on.
+- `build_time`:  The time of the build in ISO format.
+- `system_dependencies`:  An object containing a mapping of OS packages
+  the python application depends on.  The object should be of the same
+  format described in the
+  [system dependencies file](#the-system-dependencies-file-format) used
+  by the `git_repo` and `zip` types.
+
+  For example, Moonraker's `release_info` looks similar to the following:
+
+```json
+{
+    "project_name": "moonraker",
+    "package_name": "moonraker",
+    "urls": {
+        "homepage": "https://github.com/Arksine/moonraker",
+        "repository": "https://github.com/Arksine/moonraker",
+        "documentation": "https://moonraker.readthedocs.io",
+        "changelog": "https://moonraker.readthedocs.io/en/latest/changelog/"
+    },
+    "package_version": "0.9.0",
+    "git_version": "v0.9.0-0-g2abdb11",
+    "commit_sha": "2abdb112a5f16e6d5286df3680cf7fdb77aed845",
+    "build_time": "2024-05-26T18:59:52+00:00",
+    "system_dependencies": {
+        "debian": [
+            "python3-virtualenv",
+            "python3-dev",
+            "libopenjp2-7",
+            "libsodium-dev",
+            "zlib1g-dev",
+            "libjpeg-dev",
+            "packagekit",
+            "wireless-tools",
+            "curl"
+        ]
+    }
+}
+```
+
+Moonraker uses the [PDM backend](https://backend.pdm-project.org/) to perform
+its package builds.  An example of a pdm build script that generates a
+`release_info` file may be found
+[here](https://github.com/Arksine/moonraker/blob/master/scripts/pdm_build_dist.py).
+
 #### The System Dependencies File Format
 
-When an application depends on OS packages it is possible to specify them
-in a file that Moonraker can refer to.  During an update Moonraker will
-use this file to install new dependencies if they are detected.
+When a `zip` or `git_repo` application depends on OS packages it is possible
+to specify them in a file that Moonraker can refer to.  During an update
+Moonraker will use this file to install new dependencies if they are detected.
 
 Below is an example of Moonraker's system dependcies file, located at
 in the repository at
@@ -2186,6 +2281,9 @@ address:
 #   parameter must be provided.
 port:
 #   Port the Broker is listening on.  Default is 1883.
+client_id:
+#   A string client identifer sent by the client to the broker after
+#   connecting.  The default is a randomly assigned client id.
 enable_tls: False
 #   Enables SSL/TLS connections when set to true.  Note that if a user intends
 #   to connect to a local MQTT service using a self signed certificate then
