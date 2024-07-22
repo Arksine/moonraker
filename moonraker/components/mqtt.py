@@ -352,11 +352,13 @@ class MQTTClient(APITransport):
                 "between 0 and 2")
         self.publish_split_status = \
             config.getboolean("publish_split_status", False)
+        client_id: Optional[str] = config.get("client_id", None)
         if PAHO_MQTT_VERSION < (2, 0):
-            self.client = ExtPahoClient(protocol=self.protocol)
+            self.client = ExtPahoClient(client_id, protocol=self.protocol)
         else:
             self.client = ExtPahoClient(
-                paho_mqtt.CallbackAPIVersion.VERSION1, protocol=self.protocol
+                paho_mqtt.CallbackAPIVersion.VERSION1, client_id,
+                protocol=self.protocol
             )
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
