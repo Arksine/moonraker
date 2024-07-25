@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
+## [0.9.0] - 2024-07-25
+
 ### Added
 - **notifier**: The `attach` option now supports Jinja2 templates.
 - **notifier**: The `attach` option may now contain multiple attachments,
@@ -182,6 +184,7 @@ The format is based on [Keep a Changelog].
 [api_changes.md]: api_changes.md
 
 <!-- Versions -->
-[unreleased]: https://github.com/Arksine/moonraker/compare/v0.8.0...HEAD
+[unreleased]: https://github.com/Arksine/moonraker/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Arksine/moonraker/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Arksine/moonraker/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Arksine/moonraker/releases/tag/v0.7.1
