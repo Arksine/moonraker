@@ -13,10 +13,7 @@ import re
 import json
 import logging
 from dataclasses import dataclass
-if sys.version_info < (3, 8):
-    from importlib_metadata import Distribution, PathDistribution, PackageMetadata
-else:
-    from importlib.metadata import Distribution, PathDistribution, PackageMetadata
+from importlib_metadata import Distribution, PathDistribution, PackageMetadata
 from .exceptions import ServerError
 
 # Annotation imports
