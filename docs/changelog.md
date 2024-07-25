@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
+## [0.9.1] - 2024-07-25
+
+### Fixed
+- **source_info**: Fixed `importlib.metadata` compatibility issues with python
+  versions 3.9 or older.
+
 ## [0.9.0] - 2024-07-25
 
 ### Added
@@ -184,7 +190,8 @@ The format is based on [Keep a Changelog].
 [api_changes.md]: api_changes.md
 
 <!-- Versions -->
-[unreleased]: https://github.com/Arksine/moonraker/compare/v0.9.0...HEAD
+[unreleased]: https://github.com/Arksine/moonraker/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/Arksine/moonraker/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Arksine/moonraker/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Arksine/moonraker/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Arksine/moonraker/releases/tag/v0.7.1
