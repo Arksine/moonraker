@@ -52,8 +52,8 @@ class PythonDeploy(AppDeploy):
         self.project_name = config.get("project_name", self.name)
         self.source: PackageSource = PackageSource.UNKNOWN
         self.repo_url: str = ""
-        self.repo_owner: str = ""
-        self.repo_name: str = ""
+        self.repo_owner: str = "?"
+        self.repo_name: str = "?"
         self.current_version: PyVersion = PyVersion("?")
         self.git_version: GitVersion = GitVersion("?")
         self.current_sha: str = "?"
@@ -113,6 +113,7 @@ class PythonDeploy(AppDeploy):
         if direct_url_data is None:
             self.source = PackageSource.PIP
             self.repo_url = self._get_url(["repository", "repo"], package_info)
+            self._match_repo_url()
             return
         self.log_debug(f"Direct URL info: {direct_url_data}")
         vcs_info: Dict[str, str] = direct_url_data.get("vcs_info", {})
@@ -128,16 +129,21 @@ class PythonDeploy(AppDeploy):
         except KeyError:
             self._add_warning("Failed to retrive direct_url vcs info")
             return
+        if not self._match_repo_url():
+            self._add_warning(f"Invalid repo url: {self.repo_url}")
+            return
+        self.source = PackageSource.GITHUB
+
+    def _match_repo_url(self) -> bool:
         url_match = re.match(
             r"https://(?:www\.)?github\.com/(?P<owner>.+?)/(?P<proj>.+?)(?:\.git|$)",
             self.repo_url, re.IGNORECASE
         )
         if url_match is None:
-            self._add_warning(f"Invalid repo url: {self.repo_url}")
-            return
-        self.source = PackageSource.GITHUB
+            return False
         self.repo_owner = url_match["owner"] or "?"
         self.repo_name = url_match["proj"] or "?"
+        return True
 
     def _get_url(self, keys: List[str], package_info: PackageInfo) -> str:
         release_info = package_info.release_info
@@ -257,6 +263,7 @@ class PythonDeploy(AppDeploy):
         install_data: List[Dict[str, Any]] = data.get("install", [])
         if not install_data:
             # No update available
+            self.upstream_version = self.current_version
             return
         metadata: Dict[str, Any] = install_data[0].get("metadata", {})
         name: str = normalize_project_name(metadata.get("name", ""))
