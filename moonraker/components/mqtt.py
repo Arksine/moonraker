@@ -340,6 +340,7 @@ class MQTTClient(APITransport):
                 f"Invalid value '{protocol}' for option 'mqtt_protocol' "
                 "in section [mqtt]. Must be one of "
                 f"{MQTT_PROTOCOLS.values()}")
+        self.client_id = config.get('client_id', socket.gethostname())
         self.instance_name = config.get('instance_name', socket.gethostname())
         if '+' in self.instance_name or '#' in self.instance_name:
             raise config.error(
