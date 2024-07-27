@@ -1,0 +1,13 @@
+repos:
+- repo: local
+  hooks:
+  - id: sync-requirements
+    name: sync python requirements
+    language: system
+    entry: python3 scripts/sync_dependencies.py
+    files: ^pyproject.toml$
+  - id: sync-os-packages
+    name: sync packages
+    language: system
+    entry: python3 scripts/sync_dependencies.py
+    files: ^scripts/system-dependencies.json$

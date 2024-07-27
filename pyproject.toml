@@ -51,9 +51,13 @@ documentation = "https://moonraker.readthedocs.io"
 changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 
 [project.optional-dependencies]
-msgspec=["msgspec>=0.18.4 ; python_version>='3.8'"]
-uvloop=["uvloop>=0.17.0"]
-speedups = ["moonraker[msgspec,uvloop]"]
+msgspec = ["msgspec>=0.18.4 ; python_version>='3.8'"]
+uvloop = ["uvloop>=0.17.0"]
+speedups = [
+    "msgspec>=0.18.4 ; python_version>='3.8'",
+    "uvloop>=0.17.0"
+]
+dev = ["pre-commit"]
 
 [tool.pdm.version]
 source = "scm"
