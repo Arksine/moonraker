@@ -8,6 +8,7 @@
         "libjpeg-dev",
         "packagekit",
         "wireless-tools",
-        "curl"
+        "curl",
+        "build-essential"
     ]
 }

@@ -1,11 +1,11 @@
 #!/bin/bash
-# This script installs Moonraker on a Raspberry Pi machine running
-# Raspbian/Raspberry Pi OS based distributions.
+# This script installs Moonraker on Debian based Linux distros.
 
+SUPPORTED_DISTROS="debian"
 PYTHONDIR="${MOONRAKER_VENV:-${HOME}/moonraker-env}"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
-FORCE_DEFAULTS="${MOONRAKER_FORCE_DEFAULTS:-n}"
+FORCE_SYSTEM_INSTALL="${MOONRAKER_FORCE_SYSTEM_INSTALL:-n}"
 DISABLE_SYSTEMCTL="${MOONRAKER_DISABLE_SYSTEMCTL:-n}"
 SKIP_POLKIT="${MOONRAKER_SKIP_POLKIT:-n}"
 CONFIG_PATH="${MOONRAKER_CONFIG_PATH}"
@@ -14,17 +14,77 @@ DATA_PATH="${MOONRAKER_DATA_PATH}"
 INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
 SERVICE_VERSION="1"
+DISTRIBUTION=""
+IS_SRC_DIST="n"
+PACKAGES=""
 
-package_decode_script=$( cat << EOF
-import sys
-import json
-try:
-  ret = json.load(sys.stdin)
-except Exception:
-  exit(0)
-sys.stdout.write(' '.join(ret['debian']))
-EOF
-)
+# Check deprecated FORCE_DEFAULTS environment variable
+if [ ! -z "${MOONRAKER_FORCE_DEFAULTS}" ]; then
+    echo "Deprecated MOONRAKER_FORCE_DEFAULTS environment variable"
+    echo -e "detected.  Please use MOONRAKER_FORCE_SYSTEM_INSTALL\n"
+    FORCE_SYSTEM_INSTALL=$MOONRAKER_FORCE_DEFAULTS
+fi
+
+# Force script to exit if an error occurs
+set -e
+
+# Find source director from the pathname of this script
+SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
+
+# Determine if Moonraker is to be installed from source
+if [ -f "${SRCDIR}/moonraker/__init__.py" ]; then
+    echo "Installing from Moonraker source..."
+    IS_SRC_DIST="y"
+fi
+
+# Detect Current Distribution
+detect_distribution() {
+    distro_list=""
+    if [ -f "/etc/os-release" ]; then
+        distro_list="$( grep -Po "^ID=\K.+" /etc/os-release || true )"
+        like_str="$( grep -Po "^ID_LIKE=\K.+" /etc/os-release || true )"
+        if [ ! -z "${like_str}" ]; then
+            distro_list="${distro_list} ${like_str}"
+        fi
+        if [ ! -z "${distro_list}" ]; then
+            echo "Found Linux distribution IDs: ${distro_list}"
+        else
+            echo "Unable to detect Linux Distribution."
+        fi
+    fi
+
+    distro_id=""
+    while [ "$distro_list" != "$distro_id" ]; do
+        distro_id="${distro_list%% *}"
+        distro_list="${distro_list#$distro_id }"
+        supported_dists=$SUPPORTED_DISTROS
+        supported_id=""
+        while [ "$supported_dists" != "$supported_id" ]; do
+            supported_id="${supported_dists%% *}"
+            supported_dists="${supported_dists#$supported_id }"
+            if [ "$distro_id" = "$supported_id" ]; then
+                DISTRIBUTION=$distro_id
+                echo "Distribution detected: $DISTRIBUTION"
+                break
+            fi
+        done
+        [ ! -z "$DISTRIBUTION" ] && break
+    done
+
+    if [ -z "$DISTRIBUTION" ] && [ -x "$( which apt-get || true )" ]; then
+        # Fall back to debian if apt-get is deteted
+        echo "Found apt-get, falling back to debian distribution"
+        DISTRIBUTION="debian"
+    fi
+
+    # *** AUTO GENERATED OS PACKAGE DEPENDENCES START ***
+    if [ ${DISTRIBUTION} = "debian" ]; then
+        PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
+        PACKAGES="${PACKAGES} libjpeg-dev packagekit wireless-tools curl"
+        PACKAGES="${PACKAGES} build-essential"
+    fi
+    # *** AUTO GENERATED OS PACKAGE DEPENDENCES END ***
+}
 
 # Step 2: Clean up legacy installation
 cleanup_legacy() {
@@ -41,30 +101,19 @@ cleanup_legacy() {
 # Step 3: Install packages
 install_packages()
 {
+    if [ -z "${PACKAGES}" ]; then
+        echo "Unsupported Linux Distribution ${DISTRIBUTION}. "
+        echo "Bypassing system package installation."
+        return
+    fi
     # Update system package info
     report_status "Running apt-get update..."
     sudo apt-get update --allow-releaseinfo-change
 
-    system_deps="${SRCDIR}/scripts/system-dependencies.json"
-    if [ -f "${system_deps}" ]; then
-        if [ ! -x "$(command -v python3)" ]; then
-            report_status "Installing python3 base package..."
-            sudo apt-get install --yes python3
-        fi
-        PKGS="$( cat ${system_deps} | python3 -c "${package_decode_script}" )"
-
-    else
-        echo "Error: system-dependencies.json not found, falling back to legacy pacakge list"
-        PKGLIST="${PKGLIST} python3-virtualenv python3-dev"
-        PKGLIST="${PKGLIST} libopenjp2-7 libsodium-dev zlib1g-dev libjpeg-dev"
-        PKGLIST="${PKGLIST} packagekit wireless-tools curl"
-        PKGS=${PKGLIST}
-    fi
-
     # Install desired packages
     report_status "Installing Moonraker Dependencies:"
-    report_status "${PKGS}"
-    sudo apt-get install --yes ${PKGS}
+    report_status "${PACKAGES}"
+    sudo apt-get install --yes ${PACKAGES}
 }
 
 # Step 4: Create python virtual environment
@@ -88,11 +137,21 @@ create_virtualenv()
 
     # Install/update dependencies
     export SKIP_CYTHON=1
-    ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
+    if [ $IS_SRC_DIST = "y" ]; then
+        report_status "Installing Moonraker python dependencies..."
+        ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
 
-    if [ ${SPEEDUPS} = "y" ]; then
-        report_status "Installing Speedups..."
-        ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-speedups.txt
+        if [ ${SPEEDUPS} = "y" ]; then
+            report_status "Installing Speedups..."
+            ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-speedups.txt
+        fi
+    else
+        report_status "Installing Moonraker package via Pip..."
+        if [ ${SPEEDUPS} = "y" ]; then
+            ${PYTHONDIR}/bin/pip install -U moonraker[speedups]
+        else
+            ${PYTHONDIR}/bin/pip install -U moonraker
+        fi
     fi
 }
 
@@ -141,16 +200,16 @@ install_script()
 {
     # Create systemd service file
     ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
-    if [ ! -f $ENV_FILE ] || [ $FORCE_DEFAULTS = "y" ]; then
+    if [ ! -f $ENV_FILE ] || [ $FORCE_SYSTEM_INSTALL = "y" ]; then
         rm -f $ENV_FILE
         env_vars="MOONRAKER_DATA_PATH=\"${DATA_PATH}\""
         [ -n "${CONFIG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_CONFIG_PATH=\"${CONFIG_PATH}\""
         [ -n "${LOG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_LOG_PATH=\"${LOG_PATH}\""
         env_vars="${env_vars}\nMOONRAKER_ARGS=\"-m moonraker\""
-        env_vars="${env_vars}\nPYTHONPATH=\"${SRCDIR}\"\n"
+        [ $IS_SRC_DIST = "y" ] && env_vars="${env_vars}\nPYTHONPATH=\"${SRCDIR}\"\n"
         echo -e $env_vars > $ENV_FILE
     fi
-    [ -f $SERVICE_FILE ] && [ $FORCE_DEFAULTS = "n" ] && return
+    [ -f $SERVICE_FILE ] && [ $FORCE_SYSTEM_INSTALL = "n" ] && return
     report_status "Installing system start script..."
     sudo groupadd -f moonraker-admin
     sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
@@ -184,32 +243,51 @@ EOF
 check_polkit_rules()
 {
     if [ ! -x "$(command -v pkaction || true)" ]; then
+        echo "PolKit not installed"
+        return
+    fi
+    if [ "${SKIP_POLKIT}" = "y" ]; then
+        echo "Skipping PolKit rules installation"
         return
     fi
     POLKIT_VERSION="$( pkaction --version | grep -Po "(\d+\.?\d*)" )"
     NEED_POLKIT_INSTALL="n"
-    if [ "$POLKIT_VERSION" = "0.105" ]; then
-        POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker.pkla"
-        # legacy policykit rules don't give users other than root read access
-        if sudo [ ! -f $POLKIT_LEGACY_FILE ]; then
-            NEED_POLKIT_INSTALL="y"
+    if [ $FORCE_SYSTEM_INSTALL = "n" ]; then
+        if [ "$POLKIT_VERSION" = "0.105" ]; then
+            POLKIT_LEGACY_FILE="/etc/polkit-1/localauthority/50-local.d/10-moonraker.pkla"
+            # legacy policykit rules don't give users other than root read access
+            if sudo [ ! -f $POLKIT_LEGACY_FILE ]; then
+                NEED_POLKIT_INSTALL="y"
+            else
+                echo "PolKit rules file found at ${POLKIT_LEGACY_FILE}"
+            fi
+        else
+            POLKIT_FILE="/etc/polkit-1/rules.d/moonraker.rules"
+            POLKIT_USR_FILE="/usr/share/polkit-1/rules.d/moonraker.rules"
+            if sudo [ -f $POLKIT_FILE ]; then
+                echo "PolKit rules file found at ${POLKIT_FILE}"
+            elif sudo [ -f $POLKIT_USR_FILE ]; then
+                echo "PolKit rules file found at ${POLKIT_USR_FILE}"
+            else
+                NEED_POLKIT_INSTALL="y"
+            fi
         fi
     else
-        POLKIT_FILE="/etc/polkit-1/rules.d/moonraker.rules"
-        POLKIT_USR_FILE="/usr/share/polkit-1/rules.d/moonraker.rules"
-        if [ ! -f $POLKIT_FILE ] && [ ! -f $POLKIT_USR_FILE ]; then
-            NEED_POLKIT_INSTALL="y"
-        fi
+        NEED_POLKIT_INSTALL="y"
     fi
     if [ "${NEED_POLKIT_INSTALL}" = "y" ]; then
-        if [ "${SKIP_POLKIT}" = "y" ]; then
-            echo -e "\n*** No PolicyKit Rules detected, run 'set-policykit-rules.sh'"
-            echo "*** if you wish to grant Moonraker authorization to manage"
-            echo "*** system services, reboot/shutdown the system, and update"
-            echo "*** packages."
+        report_status "Installing PolKit Rules"
+        polkit_script="${SRCDIR}/scripts/set-policykit-rules.sh"
+        if [ $IS_SRC_DIST != "y" ]; then
+            polkit_script="${PYTHONDIR}/share/moonraker"
+            polkit_script="${polkit_script}/scripts/set-policykit-rules.sh"
+        fi
+        if [ -f "$polkit_script" ]; then
+            set +e
+            $polkit_script -z
+            set -e
         else
-            report_status "Installing PolKit Rules"
-            ${SRCDIR}/scripts/set-policykit-rules.sh -z
+            echo "PolKit rule install script not found at $polkit_script"
         fi
     fi
 }
@@ -235,17 +313,11 @@ verify_ready()
     fi
 }
 
-# Force script to exit if an error occurs
-set -e
-
-# Find SRCDIR from the pathname of this script
-SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
-
 # Parse command line arguments
 while getopts "rfzxsc:l:d:a:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
-        f) FORCE_DEFAULTS="y";;
+        f) FORCE_SYSTEM_INSTALL="y";;
         z) DISABLE_SYSTEMCTL="y";;
         x) SKIP_POLKIT="y";;
         s) SPEEDUPS="y";;
@@ -273,6 +345,7 @@ SERVICE_FILE="${SYSTEMDDIR}/${INSTANCE_ALIAS}.service"
 
 # Run installation steps defined above
 verify_ready
+detect_distribution
 cleanup_legacy
 install_packages
 create_virtualenv
