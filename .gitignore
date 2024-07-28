@@ -11,3 +11,4 @@ start_moonraker
 .pdm-python
 build
 dist
+share
