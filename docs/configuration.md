@@ -2222,7 +2222,7 @@ folder that provides supplemental information for the application.  The
 Moonraker uses the [PDM backend](https://backend.pdm-project.org/) to perform
 its package builds.  An example of a pdm build script that generates a
 `release_info` file may be found
-[here](https://github.com/Arksine/moonraker/blob/master/scripts/pdm_build_dist.py).
+[here](https://github.com/Arksine/moonraker/blob/master/pdm_build.py).
 
 #### The System Dependencies File Format
 
