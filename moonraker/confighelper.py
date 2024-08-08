@@ -1108,7 +1108,10 @@ class FileSourceWrapper(ConfigSourceWrapper):
 def get_configuration(
     server: Server, app_args: Dict[str, Any]
 ) -> ConfigHelper:
-    start_path = pathlib.Path(app_args['config_file']).expanduser().resolve()
+    cfg_file = app_args["config_file"]
+    if app_args["is_backup_config"]:
+        cfg_file = app_args["backup_config"]
+    start_path = pathlib.Path(cfg_file).expanduser().absolute()
     source = FileSourceWrapper(server)
     source.read_file(start_path)
     if not source.config.has_section('server'):

@@ -130,7 +130,8 @@ class LogManager:
         return eventloop.run_in_thread(self.file_hdlr.doRollover)
 
     def stop_logging(self):
-        self.listener.stop()
+        if self.listener is not None:
+            self.listener.stop()
 
     async def _handle_log_rollover(
         self, web_request: WebRequest

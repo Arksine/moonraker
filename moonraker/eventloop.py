@@ -27,7 +27,7 @@ _uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
 _uvl_enabled = False
 if _uvl_var in ["y", "yes", "true"]:
     with contextlib.suppress(ImportError):
-        import uvloop
+        import uvloop  # type: ignore
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         _uvl_enabled = True
 
@@ -48,7 +48,7 @@ class EventLoop:
         return self.aioloop
 
     def reset(self) -> None:
-        self.aioloop = self._create_new_loop()
+        self.aioloop = asyncio.get_running_loop()
         self.add_signal_handler = self.aioloop.add_signal_handler
         self.remove_signal_handler = self.aioloop.remove_signal_handler
         self.add_reader = self.aioloop.add_reader
@@ -126,7 +126,7 @@ class EventLoop:
             host, port, family=0, type=socket.SOCK_STREAM
         )
         for res in ainfo:
-            af, socktype, proto, canonname, sa = res
+            af, socktype, proto, _cannon_name, _sa = res
             sock = None
             try:
                 sock = socket.socket(af, socktype, proto)
@@ -151,12 +151,6 @@ class EventLoop:
                 err = None
         else:
             raise socket.error("getaddrinfo returns an empty list")
-
-    def start(self):
-        self.aioloop.run_forever()
-
-    def stop(self):
-        self.aioloop.stop()
 
     def close(self):
         self.aioloop.close()
