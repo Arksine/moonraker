@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
+### Changed
+- **server**: Use `asyncio.run` to launch the server as recommended by the
+  official Python documentation.
+- **announcements**: Look for xml files at `<data_path>/development/announcements`
+  when `dev_mode` is set to True.
+
+### Fixed
+- **confighelper**: Don't resolve symbolic links to the main configuration file.
+
+
 ## [0.9.2] - 2024-07-30
 
 ### Added
