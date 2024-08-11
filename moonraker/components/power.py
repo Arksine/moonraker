@@ -446,13 +446,14 @@ class HTTPDevice(PowerDevice):
     ) -> None:
         super().__init__(config)
         self.client: HttpClient = self.server.lookup_component("http_client")
-        if is_generic:
-            return
-        self.addr: str = config.get("address")
-        self.port = config.getint("port", default_port)
         self.user = config.load_template("user", default_user).render()
         self.password = config.load_template("password", default_password).render()
         self.has_basic_auth: bool = False
+        if is_generic:
+            return
+        addr_parts = config.get("address").strip("/").split("/")
+        self.addr: str = "/".join([quote(part) for part in addr_parts])
+        self.port = config.getint("port", default_port)
         self.protocol = config.get("protocol", default_protocol)
         if self.port == -1:
             self.port = 443 if self.protocol.lower() == "https" else 80
@@ -990,7 +991,7 @@ class Tasmota(HTTPDevice):
             "password": self.password,
             "cmnd": out_cmd
         })
-        url = f"{self.protocol}://{quote(self.addr)}/cm?{query}"
+        url = f"{self.protocol}://{self.addr}/cm?{query}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -1035,7 +1036,7 @@ class Shelly(HTTPDevice):
         elif command != "info":
             raise self.server.error(f"Invalid shelly command: {command}")
         query = urlencode(query_args)
-        url = f"{self.protocol}://{quote(self.addr)}/{out_cmd}?{query}"
+        url = f"{self.protocol}://{self.addr}/{out_cmd}?{query}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -1062,7 +1063,7 @@ class SmartThings(HTTPDevice):
         if (command == "on" or command == "off"):
             method = "POST"
             url = (
-                f"{self.protocol}://{quote(self.addr)}"
+                f"{self.protocol}://{self.addr}"
                 f"/v1/devices/{quote(self.device)}/commands"
             )
             body = [
@@ -1075,7 +1076,7 @@ class SmartThings(HTTPDevice):
         elif command == "info":
             method = "GET"
             url = (
-                f"{self.protocol}://{quote(self.addr)}/v1/devices/"
+                f"{self.protocol}://{self.addr}/v1/devices/"
                 f"{quote(self.device)}/components/main/capabilities/"
                 "switch/status"
             )
@@ -1124,7 +1125,7 @@ class HomeSeer(HTTPDevice):
             query_args["label"] = state
         query = urlencode(query_args)
         url = (
-            f"{self.protocol}://{quote(self.addr)}:{self.port}/JSON?{query}"
+            f"{self.protocol}://{self.addr}:{self.port}/JSON?{query}"
         )
         return await self._send_http_command(url, request)
 
@@ -1159,7 +1160,7 @@ class HomeAssistant(HTTPDevice):
         else:
             raise self.server.error(
                 f"Invalid homeassistant command: {command}")
-        url = f"{self.protocol}://{quote(self.addr)}:{self.port}/{out_cmd}"
+        url = f"{self.protocol}://{self.addr}:{self.port}/{out_cmd}"
         headers = {
             'Authorization': f'Bearer {self.token}'
         }
@@ -1198,7 +1199,7 @@ class Loxonev1(HTTPDevice):
             out_cmd = f"jdev/sps/io/{quote(self.output_id)}"
         else:
             raise self.server.error(f"Invalid loxonev1 command: {command}")
-        url = f"http://{quote(self.addr)}/{out_cmd}"
+        url = f"http://{self.addr}/{out_cmd}"
         return await self._send_http_command(url, command)
 
     async def _send_status_request(self) -> str:
@@ -1408,7 +1409,7 @@ class HueDevice(HTTPDevice):
     async def _send_power_request(self, state: str) -> str:
         new_state = True if state == "on" else False
         url = (
-            f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
+            f"{self.protocol}://{self.addr}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
             f"/{quote(self.state_key)}"
         )
@@ -1424,7 +1425,7 @@ class HueDevice(HTTPDevice):
 
     async def _send_status_request(self) -> str:
         url = (
-            f"{self.protocol}://{quote(self.addr)}:{self.port}/api/{quote(self.user)}"
+            f"{self.protocol}://{self.addr}:{self.port}/api/{quote(self.user)}"
             f"/{self.device_type}s/{quote(self.device_id)}"
         )
         ret = await self.client.request("GET", url)
