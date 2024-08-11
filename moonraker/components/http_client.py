@@ -80,7 +80,9 @@ class HttpClient:
         retry_pause_time: float = .1,
         enable_cache: bool = False,
         send_etag: bool = True,
-        send_if_modified_since: bool = True
+        send_if_modified_since: bool = True,
+        basic_auth_user: Optional[str] = None,
+        basic_auth_pass: Optional[str] = None
     ) -> HttpResponse:
         cache_key = url.split("?", 1)[0]
         method = method.upper()
@@ -103,9 +105,17 @@ class HttpClient:
             headers = req_headers
 
         timeout = 1 + connect_timeout + request_timeout
-        request = HTTPRequest(url, method, headers, body=body,
-                              request_timeout=request_timeout,
-                              connect_timeout=connect_timeout)
+        req_args: Dict[str, Any] = dict(
+            body=body,
+            request_timeout=request_timeout,
+            connect_timeout=connect_timeout
+        )
+        if basic_auth_user is not None:
+            assert basic_auth_pass is not None
+            req_args["auth_username"] = basic_auth_user
+            req_args["auth_password"] = basic_auth_pass
+            req_args["auth_mode"] = "basic"
+        request = HTTPRequest(url, method, headers, **req_args)
         err: Optional[BaseException] = None
         for i in range(attempts):
             if i:
