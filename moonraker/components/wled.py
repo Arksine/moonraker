@@ -9,12 +9,9 @@
 # Wiki at https://kno.wled.ge/
 
 from __future__ import annotations
-from enum import Enum
 import logging
 import asyncio
 import serial_asyncio
-from tornado.httpclient import AsyncHTTPClient
-from tornado.httpclient import HTTPRequest
 from ..utils import json_wrapper as jsonw
 from ..common import RequestType
 
@@ -31,12 +28,13 @@ from typing import (
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
+    from .http_client import HttpClient
 
-class OnOff(str, Enum):
+class OnOff:
     on: str = "on"
     off: str = "off"
 
-class Strip():
+class Strip:
     _COLORSIZE: int = 4
 
     def __init__(self: Strip,
@@ -64,7 +62,7 @@ class Strip():
     def get_strip_info(self: Strip) -> Dict[str, Any]:
         return {
             "strip": self.name,
-            "status": self.onoff.value,
+            "status": self.onoff,
             "chain_count": self.chain_count,
             "preset": self.preset,
             "brightness": self.brightness,
@@ -281,7 +279,7 @@ class StripHttp(Strip):
         self.url = f"{protocol}://{addr}:{port}/json"
 
         self.timeout: float = cfg.getfloat("timeout", 2.)
-        self.client = AsyncHTTPClient()
+        self.client: HttpClient = self.server.lookup_component("http_client")
 
     async def send_wled_command_impl(self: StripHttp,
                                      state: Dict[str, Any],
@@ -289,27 +287,18 @@ class StripHttp(Strip):
                                      ) -> None:
         async with self.request_mutex:
             logging.debug(f"WLED: url:{self.url} json:{state}")
-
-            headers = {"Content-Type": "application/json"}
-            request = HTTPRequest(url=self.url,
-                                  method="POST",
-                                  headers=headers,
-                                  body=jsonw.dumps(state),
-                                  connect_timeout=self.timeout,
-                                  request_timeout=self.timeout)
-            for i in range(retries):
-                try:
-                    response = await self.client.fetch(request)
-                except Exception:
-                    if i == retries - 1:
-                        raise
-                    await asyncio.sleep(1.0)
-                else:
-                    break
-
-            logging.debug(
-                f"WLED: url:{self.url} status:{response.code} "
-                f"response:{response.body.decode()}")
+            response = await self.client.post(
+                self.url,
+                state,
+                attempts=3,
+                connect_timeout=self.timeout,
+                request_timeout=self.timeout
+            )
+            if self.server.is_verbose_enabled():
+                logging.debug(
+                    f"WLED: url:{self.url} status: {response.status_code} "
+                    f"response: {response.content.decode()}"
+                )
 
 class StripSerial(Strip):
     def __init__(self: StripSerial,
@@ -536,6 +525,8 @@ class WLED:
             result = await self._process_request(
                 strip, action, preset, brightness, intensity, speed
             )
+        else:
+            raise self.server.error("Request not supported", 405)
         return {strip_name: result}
 
     async def _handle_batch_wled_request(self: WLED,
