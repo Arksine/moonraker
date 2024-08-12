@@ -5,14 +5,11 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import serial
-import os
 import time
-import errno
 import logging
 import asyncio
 from collections import deque
-from ..utils import ServerError
+from ..utils import ServerError, async_serial
 from ..utils import json_wrapper as jsonw
 
 # Annotation imports
@@ -43,126 +40,6 @@ class PanelDueError(ServerError):
 
 RESTART_GCODES = ["RESTART", "FIRMWARE_RESTART"]
 
-class SerialConnection:
-    def __init__(self,
-                 config: ConfigHelper,
-                 paneldue: PanelDue
-                 ) -> None:
-        self.event_loop = config.get_server().get_event_loop()
-        self.paneldue = paneldue
-        self.port: str = config.get('serial')
-        self.baud = config.getint('baud', 57600)
-        self.partial_input: bytes = b""
-        self.ser: Optional[serial.Serial] = None
-        self.fd: Optional[int] = None
-        self.connected: bool = False
-        self.send_busy: bool = False
-        self.send_buffer: bytes = b""
-        self.attempting_connect: bool = True
-
-    def disconnect(self, reconnect: bool = False) -> None:
-        if self.connected:
-            if self.fd is not None:
-                self.event_loop.remove_reader(self.fd)
-                self.fd = None
-            self.connected = False
-            if self.ser is not None:
-                self.ser.close()
-            self.ser = None
-            self.partial_input = b""
-            self.send_buffer = b""
-            self.paneldue.initialized = False
-            logging.info("PanelDue Disconnected")
-        if reconnect and not self.attempting_connect:
-            self.attempting_connect = True
-            self.event_loop.delay_callback(1., self.connect)
-
-    async def connect(self) -> None:
-        self.attempting_connect = True
-        start_time = connect_time = time.time()
-        while not self.connected:
-            if connect_time > start_time + 30.:
-                logging.info("Unable to connect, aborting")
-                break
-            logging.info(f"Attempting to connect to: {self.port}")
-            try:
-                # XXX - sometimes the port cannot be exclusively locked, this
-                # would likely be due to a restart where the serial port was
-                # not correctly closed.  Maybe don't use exclusive mode?
-                self.ser = serial.Serial(
-                    self.port, self.baud, timeout=0, exclusive=True)
-            except (OSError, IOError, serial.SerialException):
-                logging.exception(f"Unable to open port: {self.port}")
-                await asyncio.sleep(2.)
-                connect_time += time.time()
-                continue
-            self.fd = self.ser.fileno()
-            fd = self.fd = self.ser.fileno()
-            os.set_blocking(fd, False)
-            self.event_loop.add_reader(fd, self._handle_incoming)
-            self.connected = True
-            logging.info("PanelDue Connected")
-        self.attempting_connect = False
-
-    def _handle_incoming(self) -> None:
-        # Process incoming data using same method as gcode.py
-        if self.fd is None:
-            return
-        try:
-            data = os.read(self.fd, 4096)
-        except os.error:
-            return
-
-        if not data:
-            # possibly an error, disconnect
-            self.disconnect(reconnect=True)
-            logging.info("serial_display: No data received, disconnecting")
-            return
-
-        # Remove null bytes, separate into lines
-        data = data.strip(b'\x00')
-        lines = data.split(b'\n')
-        lines[0] = self.partial_input + lines[0]
-        self.partial_input = lines.pop()
-        for line in lines:
-            try:
-                decoded_line = line.strip().decode('utf-8', 'ignore')
-                self.paneldue.process_line(decoded_line)
-            except ServerError:
-                logging.exception(
-                    f"GCode Processing Error: {decoded_line}")
-                self.paneldue.handle_gcode_response(
-                    f"!! GCode Processing Error: {decoded_line}")
-            except Exception:
-                logging.exception("Error during gcode processing")
-
-    def send(self, data: bytes) -> None:
-        self.send_buffer += data
-        if not self.send_busy:
-            self.send_busy = True
-            self.event_loop.register_callback(self._do_send)
-
-    async def _do_send(self) -> None:
-        assert self.fd is not None
-        while self.send_buffer:
-            if not self.connected:
-                break
-            try:
-                sent = os.write(self.fd, self.send_buffer)
-            except os.error as e:
-                if e.errno == errno.EBADF or e.errno == errno.EPIPE:
-                    sent = 0
-                else:
-                    await asyncio.sleep(.001)
-                    continue
-            if sent:
-                self.send_buffer = self.send_buffer[sent:]
-            else:
-                logging.exception(
-                    "Error writing data, closing serial connection")
-                self.disconnect(reconnect=True)
-                return
-        self.send_busy = False
 
 class PanelDue:
     def __init__(self, config: ConfigHelper) -> None:
@@ -179,6 +56,7 @@ class PanelDue:
         self.file_metadata: Dict[str, Any] = {}
         self.enable_checksum = config.getboolean('enable_checksum', True)
         self.debug_queue: Deque[str] = deque(maxlen=100)
+        self.enabled: bool = True
 
         # Initialize tracked state.
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
@@ -214,7 +92,7 @@ class PanelDue:
             self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
         self.non_trivial_keys = config.getlist('non_trivial_keys', ["Klipper state"])
-        self.ser_conn = SerialConnection(config, self)
+        self.ser_conn = async_serial.AsyncSerialConnection(config)
         logging.info("PanelDue Configured")
 
         # Register server events
@@ -257,8 +135,38 @@ class PanelDue:
             'M999': lambda args: "FIRMWARE_RESTART"
         }
 
+    async def run_serial(self) -> None:
+        last_exc = Exception()
+        while self.enabled:
+            try:
+                self.ser_conn.open()
+            except (self.ser_conn.error, OSError) as e:
+                if type(last_exc) != type(e) and last_exc.args != e.args:
+                    logging.exception("PanelDue Serial Open Error")
+                    last_exc = e
+                await asyncio.sleep(2.)
+                continue
+            reader = self.ser_conn.reader
+            decoded_line: str = ""
+            async for line in reader:
+                try:
+                    decoded_line = line.strip().decode('utf-8', 'ignore')
+                    self.process_line(decoded_line)
+                except asyncio.CancelledError:
+                    raise
+                except ServerError:
+                    msg = f"GCode Processing Error: {decoded_line}"
+                    logging.exception(msg)
+                    self.handle_gcode_response(f"!! {msg}")
+                except Exception:
+                    logging.exception("Error during gcode processing")
+            if self.enabled:
+                await asyncio.sleep(2.)
+            last_exc = Exception()
+            self.initialized = False
+
     async def component_init(self) -> None:
-        await self.ser_conn.connect()
+        self.serial_task = self.event_loop.create_task(self.run_serial())
 
     async def _process_klippy_ready(self) -> None:
         # Request "info" and "configfile" status
@@ -820,8 +728,11 @@ class PanelDue:
             response['err'] = 1
         self.write_response(response)
 
-    def close(self) -> None:
-        self.ser_conn.disconnect()
+    async def close(self) -> None:
+        self.enabled = False
+        await self.ser_conn.close()
+        if hasattr(self, "serial_task"):
+            await self.serial_task
         msg = "\nPanelDue GCode Dump:"
         for i, gc in enumerate(self.debug_queue):
             msg += f"\nSequence {i}: {gc}"
