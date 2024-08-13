@@ -11,7 +11,7 @@
 from __future__ import annotations
 import logging
 import asyncio
-import serial_asyncio
+from ..utils import async_serial
 from ..utils import json_wrapper as jsonw
 from ..common import RequestType
 
@@ -119,7 +119,6 @@ class Strip:
                                  state: Dict[str, Any]) -> None:
         try:
             await self.send_wled_command_impl(state)
-
             self.error_state = None
         except Exception as e:
             msg = f"WLED: Error {e}"
@@ -301,30 +300,52 @@ class StripHttp(Strip):
                 )
 
 class StripSerial(Strip):
-    def __init__(self: StripSerial,
-                 name: str,
-                 cfg: ConfigHelper):
-        super().__init__(name, cfg)
-
+    def __init__(self, name: str, config: ConfigHelper) -> None:
+        super().__init__(name, config)
         # Read the serial information (requires wled 0.13 2108250 or greater)
-        self.serialport: str = cfg.get("serial")
-        self.baud: int = cfg.getint("baud", 115200, above=49)
+        self.serial = async_serial.AsyncSerialConnection(config, 115200)
+        self.enabled: bool = True
+        self.serial_task: Optional[asyncio.Task] = None
 
-    async def send_wled_command_impl(self: StripSerial,
-                                     state: Dict[str, Any]) -> None:
+    async def run_serial(self) -> None:
+        last_exc = Exception()
+        while self.enabled:
+            try:
+                self.serial.open()
+            except (self.serial.error, OSError) as e:
+                if type(last_exc) != type(e) and last_exc.args != e.args:
+                    logging.exception("WLED Serial Open Error")
+                    last_exc = e
+                await asyncio.sleep(2.)
+                continue
+            reader = self.serial.reader
+            # flush reader
+            while True:
+                ret = await reader.read(1024)
+                if not ret:
+                    break
+                logging.debug(f"Received Serial Data: {ret.decode(errors='ignore')}")
+            if self.enabled:
+                await asyncio.sleep(2.)
+            last_exc = Exception()
+
+    async def initialize(self) -> None:
+        eventloop = self.server.get_event_loop()
+        self.serial_task = eventloop.create_task(self.run_serial())
+        for _ in range(5):
+            await asyncio.sleep(.01)
+            if self.serial.connected:
+                break
+        await super().initialize()
+
+    async def send_wled_command_impl(self, state: Dict[str, Any]) -> None:
         async with self.request_mutex:
-            if not hasattr(self, 'ser'):
-                _, self.ser = await serial_asyncio.open_serial_connection(
-                    url=self.serialport, baudrate=self.baud)
+            logging.debug(f"WLED: serial:{self.serial.port} json:{state}")
+            self.serial.send(jsonw.dumps(state))
 
-            logging.debug(f"WLED: serial:{self.serialport} json:{state}")
-
-            self.ser.write(jsonw.dumps(state))
-
-    def close(self: StripSerial):
-        if hasattr(self, 'ser'):
-            self.ser.close()
-            logging.info(f"WLED: Closing serial {self.serialport}")
+    def close(self):
+        self.enabled = False
+        self.serial.close()
 
 class WLED:
     def __init__(self: WLED, config: ConfigHelper) -> None:
@@ -339,10 +360,9 @@ class WLED:
             "HTTP": StripHttp,
             "SERIAL": StripSerial
         }
-        self.strips = {}
+        self.strips: Dict[str, Strip] = {}
         for section in prefix_sections:
             cfg = config[section]
-
             try:
                 name_parts = cfg.get_name().split(maxsplit=1)
                 if len(name_parts) != 2:
@@ -360,9 +380,7 @@ class WLED:
                 strip_class = strip_types.get(strip_type.upper())
                 if strip_class is None:
                     raise config.error(f"Unsupported Strip Type: {strip_type}")
-
                 self.strips[name] = strip_class(name, cfg)
-
             except Exception as e:
                 # Ensures errors such as "Color not supported" are visible
                 msg = f"Failed to initialise strip [{cfg.get_name()}]\n{e}"
