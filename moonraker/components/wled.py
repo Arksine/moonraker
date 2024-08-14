@@ -11,6 +11,7 @@
 from __future__ import annotations
 import logging
 import asyncio
+import pprint
 from ..utils import async_serial
 from ..utils import json_wrapper as jsonw
 from ..common import RequestType
@@ -23,7 +24,8 @@ from typing import (
     Any,
     Optional,
     Dict,
-    Coroutine
+    Coroutine,
+    cast
 )
 
 if TYPE_CHECKING:
@@ -67,6 +69,12 @@ class Strip:
         }
 
     async def initialize(self) -> None:
+        # Print current state
+        ret = await self._send_wled_command({"v": True})
+        logging.debug(
+            f"Initial WLED State for strip {self.name}:\n"
+            f"{pprint.pformat(ret, 2, 100, compact=True)}"
+        )
         await self._set_initial_state()
 
     async def _set_initial_state(self) -> None:
@@ -114,16 +122,18 @@ class Strip:
             elem_size = len(led_data)
             self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
 
-    async def send_wled_command_impl(self, state: Dict[str, Any]) -> None:
-        pass
+    async def send_wled_command_impl(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        raise NotImplementedError("Children must implement send_wled_command")
 
     def close(self: Strip) -> Optional[Coroutine]:
         pass
 
-    async def _send_wled_command(self, state: Dict[str, Any]) -> None:
+    async def _send_wled_command(self, state: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            await self.send_wled_command_impl(state)
             self.error_state = None
+            return await self.send_wled_command_impl(state)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             msg = f"WLED: Error {e}"
             self.error_state = msg
@@ -285,23 +295,19 @@ class StripHttp(Strip):
         self.timeout: float = config.getfloat("timeout", 2.)
         self.client: HttpClient = self.server.lookup_component("http_client")
 
-    async def send_wled_command_impl(
-        self, state: Dict[str, Any], retries: int = 3
-    ) -> None:
+    async def send_wled_command_impl(self, state: Dict[str, Any]) -> Dict[str, Any]:
         async with self.request_mutex:
             logging.debug(f"WLED: url:{self.url} json:{state}")
             response = await self.client.post(
                 self.url,
                 state,
-                attempts=retries,
+                attempts=3,
                 connect_timeout=self.timeout,
                 request_timeout=self.timeout
             )
-            if self.server.is_verbose_enabled():
-                logging.debug(
-                    f"WLED: url:{self.url} status: {response.status_code} "
-                    f"response: {response.content.decode()}"
-                )
+            if not state.get("v", False):
+                return {}
+            return cast(dict, response.json())
 
 class StripSerial(Strip):
     def __init__(self, name: str, config: ConfigHelper) -> None:
@@ -310,6 +316,7 @@ class StripSerial(Strip):
         self.serial = async_serial.AsyncSerialConnection(config, 115200)
         self.enabled: bool = True
         self.serial_task: Optional[asyncio.Task] = None
+        self.pending_response: Optional[asyncio.Future] = None
 
     async def run_serial(self) -> None:
         last_exc = Exception()
@@ -324,11 +331,17 @@ class StripSerial(Strip):
                 continue
             reader = self.serial.reader
             # flush reader
-            while True:
-                ret = await reader.read(1024)
-                if not ret:
-                    break
-                logging.debug(f"Received Serial Data: {ret}")
+            async for line in reader:
+                try:
+                    data = jsonw.loads(line.strip())
+                except jsonw.JSONDecodeError:
+                    logging.debug(f"Recieved Serial Data: {line}")
+                else:
+                    if (
+                        self.pending_response is not None and
+                        not self.pending_response.done()
+                    ):
+                        self.pending_response.set_result(data)
             if self.enabled:
                 await asyncio.sleep(2.)
             last_exc = Exception()
@@ -342,16 +355,30 @@ class StripSerial(Strip):
                 break
         await super().initialize()
 
-    async def send_wled_command_impl(self, state: Dict[str, Any]) -> None:
+    async def send_wled_command_impl(self, state: Dict[str, Any]) -> Dict[str, Any]:
         async with self.request_mutex:
+            eventloop = self.server.get_event_loop()
             logging.debug(f"WLED: serial:{self.serial.port} json:{state}")
-            self.serial.send(jsonw.dumps(state))
+            if state.get("v", False):
+                fut = self.pending_response = eventloop.create_future()
+                self.serial.send(jsonw.dumps(state))
+                ret = await asyncio.wait_for(fut, 2.0)
+                self.pending_response = None
+                return ret
+            else:
+                self.serial.send(jsonw.dumps(state))
+                return {}
 
     async def close(self):
         self.enabled = False
         await self.serial.close()
         if self.serial_task is not None:
             await self.serial_task
+        if (
+            self.pending_response is not None and
+            not self.pending_response.done()
+        ):
+            self.pending_response.set_exception(self.server.error("Server Shutdown"))
 
 class WLED:
     def __init__(self, config: ConfigHelper) -> None:
