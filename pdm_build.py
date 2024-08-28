@@ -48,7 +48,6 @@ def pdm_build_initialize(context: Context) -> None:
     context.ensure_build_dir()
     proj_name: str = context.config.metadata['name']
     build_dir = pathlib.Path(context.build_dir)
-    data_path = context.root.joinpath(f"share/{proj_name}")
     pkg_path = build_dir.joinpath(__package_name__)
     pkg_path.mkdir(parents=True, exist_ok=True)
     rinfo_path: pathlib.Path = pkg_path.joinpath("release_info")
@@ -80,9 +79,6 @@ def pdm_build_initialize(context: Context) -> None:
             rinfo_data = rinfo_path.read_text()
         else:
             rinfo_data = ""
-    data_path.mkdir(parents=True, exist_ok=True)
-    if rinfo_data:
-        data_path.joinpath("release_info").write_text(rinfo_data)
     git_ignore = build_dir.joinpath(".gitignore")
     if git_ignore.is_file():
         git_ignore.unlink()
