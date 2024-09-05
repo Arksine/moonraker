@@ -38,17 +38,10 @@ def retrieve_git_version(source_path: pathlib.Path) -> str:
     cmd = f"git -C {source_path} describe --always --tags --long --dirty"
     return _run_git_command(cmd)
 
-
-def pdm_build_clean(context: Context) -> None:
-    share_path: pathlib.Path = context.root.joinpath("share")
-    if share_path.exists():
-        shutil.rmtree(str(share_path))
-
 def pdm_build_initialize(context: Context) -> None:
     context.ensure_build_dir()
     proj_name: str = context.config.metadata['name']
     build_dir = pathlib.Path(context.build_dir)
-    data_path = context.root.joinpath(f"share/{proj_name}")
     pkg_path = build_dir.joinpath(__package_name__)
     pkg_path.mkdir(parents=True, exist_ok=True)
     rinfo_path: pathlib.Path = pkg_path.joinpath("release_info")
@@ -74,30 +67,16 @@ def pdm_build_initialize(context: Context) -> None:
         # Write the release info to both the package and the data path
         rinfo_data = json.dumps(release_info, indent=4)
         rinfo_path.write_text(rinfo_data)
-    else:
-        rinfo_path = context.root.joinpath(f"{proj_name}/release_info")
-        if rinfo_path.is_file():
-            rinfo_data = rinfo_path.read_text()
-        else:
-            rinfo_data = ""
-    data_path.mkdir(parents=True, exist_ok=True)
-    if rinfo_data:
-        data_path.joinpath("release_info").write_text(rinfo_data)
-    scripts_path: pathlib.Path = context.root.joinpath("scripts")
-    scripts_dest: pathlib.Path = data_path.joinpath("scripts")
-    scripts_dest.mkdir()
-    for item in scripts_path.iterdir():
-        if item.name in ("__pycache__", "python_wheels"):
-            continue
-        if item.is_dir():
-            shutil.copytree(str(item), str(scripts_dest.joinpath(item.name)))
-        else:
-            shutil.copy2(str(item), str(scripts_dest))
+        scripts_path: pathlib.Path = context.root.joinpath("scripts")
+        scripts_dest: pathlib.Path = pkg_path.joinpath("scripts")
+        scripts_dest.mkdir()
+        for item in scripts_path.iterdir():
+            if item.name in ("__pycache__", "python_wheels"):
+                continue
+            if item.is_dir():
+                shutil.copytree(str(item), str(scripts_dest.joinpath(item.name)))
+            else:
+                shutil.copy2(str(item), str(scripts_dest))
     git_ignore = build_dir.joinpath(".gitignore")
     if git_ignore.is_file():
         git_ignore.unlink()
-
-def pdm_build_finalize(context: Context, artifact: pathlib.Path) -> None:
-    share_path: pathlib.Path = context.root.joinpath("share")
-    if share_path.exists():
-        shutil.rmtree(str(share_path))

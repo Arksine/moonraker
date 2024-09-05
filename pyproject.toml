@@ -67,16 +67,12 @@ write_template = "__version__ = '{}'\n"
 [tool.pdm.build]
 excludes = ["./**/.git", "moonraker/moonraker.py"]
 includes = ["moonraker"]
-source-includes = ["scripts"]
 editable-backend = "path"
 custom-hook = "pdm_build.py"
-
-[tool.pdm.build.wheel-data]
-data = [{path = "share/moonraker/**/*", relative-to = "."}]
 
 [project.scripts]
 moonraker = "moonraker.server:main"
 
 [build-system]
-requires = ["pdm-backend"]
+requires = ["pdm-backend==2.3.3"]
 build-backend = "pdm.backend"
