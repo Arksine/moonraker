@@ -279,8 +279,9 @@ check_polkit_rules()
         report_status "Installing PolKit Rules"
         polkit_script="${SRCDIR}/scripts/set-policykit-rules.sh"
         if [ $IS_SRC_DIST != "y" ]; then
-            polkit_script="${PYTHONDIR}/share/moonraker"
-            polkit_script="${polkit_script}/scripts/set-policykit-rules.sh"
+            py_bin="$PYTHONDIR/bin/python"
+            pkg_path="$( $py_bin -c 'import moonraker; print(moonraker.__path__[0])')"
+            polkit_script="${pkg_path}/scripts/set-policykit-rules.sh"
         fi
         if [ -f "$polkit_script" ]; then
             set +e
