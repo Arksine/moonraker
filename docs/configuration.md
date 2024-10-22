@@ -3275,6 +3275,24 @@ With the above configuration it is possible to run the `SET_ACTIVE_SPOOL ID=1`
 command to set the currently tracked spool ID to `1`, and the `CLEAR_ACTIVE_SPOOL`
 to clear spool tracking (useful when unloading filament for example).
 
+
+### `[klipper_estimator]`
+
+Enables gcode processing through [klipper_estimator](https://github.com/Annex-Engineering/klipper_estimator)
+to update gcode estimated time.
+
+```ini
+# moonraker.conf
+
+[klipper-estimator]
+executable_path: /tmp/klipper-estimator
+#Where klipper-estimator executable is
+download: False
+#If set to true, it will download the latest version of the executable
+asset_name: klipper_estimator_rpi
+#The asset name to download for your installation, see the list on the releases page: https://github.com/Annex-Engineering/klipper_estimator/releases
+```
+
 ## Include directives
 
 It is possible to include configuration from other files via include
