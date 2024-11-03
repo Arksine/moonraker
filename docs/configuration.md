@@ -3284,7 +3284,7 @@ to update gcode estimated time.
 ```ini
 # moonraker.conf
 
-[klipper-estimator]
+[klipper_estimator]
 executable_path: /tmp/klipper-estimator
 #Where klipper-estimator executable is
 download: False
