@@ -594,11 +594,11 @@ class Simplify3D(BaseSlicer):
 
     def parse_filament_name(self) -> Optional[str]:
         return regex_find_string(
-            r";\s+printMaterial,(%S)", self.header_data)
+            r";\s+(?:printMaterial|autoConfigureBrand),(%S)", self.header_data)
 
     def parse_filament_type(self) -> Optional[str]:
         return regex_find_string(
-            r";\s+makerBotModelMaterial,(%S)", self.footer_data)
+            r";\s+autoConfigureMaterial,(%S)", self.footer_data)
 
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(r';\s+Build (t|T)ime:.*', self.footer_data)
