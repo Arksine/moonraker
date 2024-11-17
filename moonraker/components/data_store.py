@@ -160,7 +160,8 @@ class DataStore:
             if not cmd:
                 continue
             self.gcode_queue.append(
-                {'message': script, 'time': curtime, 'type': "command"})
+                {'message': cmd, 'time': curtime, 'type': "command"}
+            )
 
     async def _handle_gcode_store_request(self,
                                           web_request: WebRequest
