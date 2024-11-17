@@ -2,8 +2,6 @@
 # Helper Script for fetching the API Key from a moonraker database
 DATABASE_PATH="${HOME}/printer_data/database"
 MOONRAKER_ENV="${HOME}/moonraker-env"
-DB_ARGS="--read=READ --db=authorized_users get _API_KEY_USER_"
-API_REGEX='(?<="api_key": ")([^"]+)'
 
 print_help()
 {
@@ -14,7 +12,7 @@ print_help()
     echo "optional arguments:"
     echo "  -h                  show this message"
     echo "  -e <env path>       path to Moonraker env folder"
-    echo "  -d <database path>  path to Moonraker LMDB database folder"
+    echo "  -d <database path>  path to Moonraker SQLite database folder"
     exit 0
 }
 
@@ -39,4 +37,10 @@ if [ ! -d $DATABASE_PATH ]; then
     exit -1
 fi
 
-${PYTHON_BIN} -mlmdb --env=${DATABASE_PATH} ${DB_ARGS} | grep -Po "${API_REGEX}"
+${PYTHON_BIN} - <<EOF
+import sqlite3
+con = sqlite3.connect("${DATABASE_PATH}/moonraker-sql.db")
+cur = con.execute("SELECT password FROM authorized_users WHERE username='_API_KEY_USER_';")
+print(f"api_key: {cur.fetchone()[0]}")
+con.close()
+EOF
