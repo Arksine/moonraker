@@ -2529,7 +2529,7 @@ been scanned the endpoint will force a rescan
 
 HTTP request:
 ```http
-GET /server/files/metascan?filename={filename}
+POST /server/files/metascan?filename={filename}
 ```
 
 JSON-RPC request:
