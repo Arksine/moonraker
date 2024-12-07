@@ -372,8 +372,6 @@ service: mjpegstreamer
 #   ends may use this configuration to determine how to connect to the service
 #   and interpret its stream.  See the tip following this example for
 #   currently known values.  The default is "mjpegstreamer".
-location: printer
-#   A string describing the location of the camera.  Default is printer.
 target_fps: 15
 #   An integer value specifying the target framerate.  The default is 15 fps.
 target_fps_idle: 5
