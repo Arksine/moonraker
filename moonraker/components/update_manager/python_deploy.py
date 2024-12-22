@@ -362,7 +362,7 @@ class PythonDeploy(AppDeploy):
             pip_args = f"install -U git+https://github.com/{repo}"
             if rollback:
                 pip_args += f"@{self.rollback_ref}"
-            elif self.channel == "dev":
+            elif self.channel == Channel.DEV:
                 current_ref = self.current_sha
                 if self.primary_branch is not None:
                     pip_args += f"@{self.primary_branch}"
