@@ -1,7 +1,7 @@
 #!/bin/bash
 # This script installs Moonraker on Debian based Linux distros.
 
-SUPPORTED_DISTROS="debian"
+SUPPORTED_DISTROS="debian ubuntu"
 PYTHONDIR="${MOONRAKER_VENV:-${HOME}/moonraker-env}"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
@@ -15,6 +15,7 @@ INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
 SERVICE_VERSION="1"
 DISTRIBUTION=""
+DISTRO_VERSION=""
 IS_SRC_DIST="n"
 PACKAGES=""
 
@@ -37,11 +38,34 @@ if [ -f "${SRCDIR}/moonraker/__init__.py" ]; then
     IS_SRC_DIST="y"
 fi
 
+compare_version () {
+    if [ -z "$DISTRO_VERSION" ]; then
+        return 1
+    fi
+      compare_script=$(cat << EOF
+import re
+def convert_ver(ver):
+  ver = ver.strip()
+  ver_match = re.match(r"\d+(\.\d+)*((?:-|\.).+)?", ver)
+  if ver_match is None:
+    return (ver,)
+  return tuple([int(p) if p.isdigit() else p for p in re.split(r"\.|-", ver)])
+dist_version = convert_ver("$DISTRO_VERSION")
+req_version = convert_ver("$2")
+exit(int(not dist_version $1 req_version))
+EOF
+)
+    python3 -c "$compare_script"
+}
+
 # Detect Current Distribution
 detect_distribution() {
     distro_list=""
+    orig_id=""
     if [ -f "/etc/os-release" ]; then
-        distro_list="$( grep -Po "^ID=\K.+" /etc/os-release || true )"
+        DISTRO_VERSION="$( grep -Po "^VERSION_ID=\"?\K[^\"]+" /etc/os-release || true )"
+        orig_id="$( grep -Po "^ID=\K.+" /etc/os-release || true )"
+        distro_list=$orig_id
         like_str="$( grep -Po "^ID_LIKE=\K.+" /etc/os-release || true )"
         if [ ! -z "${like_str}" ]; then
             distro_list="${distro_list} ${like_str}"
@@ -71,19 +95,23 @@ detect_distribution() {
         [ ! -z "$DISTRIBUTION" ] && break
     done
 
+    if [ "$DISTRIBUTION" != "$orig_id" ]; then
+        DISTRO_VERSION=""
+    fi
+
     if [ -z "$DISTRIBUTION" ] && [ -x "$( which apt-get || true )" ]; then
-        # Fall back to debian if apt-get is deteted
+        # Fall back to debian if apt-get is detected
         echo "Found apt-get, falling back to debian distribution"
         DISTRIBUTION="debian"
     fi
 
-    # *** AUTO GENERATED OS PACKAGE DEPENDENCES START ***
+    # *** AUTO GENERATED OS PACKAGE DEPENDENCIES START ***
     if [ ${DISTRIBUTION} = "debian" ]; then
         PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
         PACKAGES="${PACKAGES} libjpeg-dev packagekit wireless-tools curl"
         PACKAGES="${PACKAGES} build-essential"
     fi
-    # *** AUTO GENERATED OS PACKAGE DEPENDENCES END ***
+    # *** AUTO GENERATED OS PACKAGE DEPENDENCIES END ***
 }
 
 # Step 2: Clean up legacy installation
@@ -106,13 +134,14 @@ install_packages()
         echo "Bypassing system package installation."
         return
     fi
+    report_status "Installing Moonraker System Packages..."
+    echo "Linux Distribution: ${DISTRIBUTION} ${DISTRO_VERSION}"
+    echo "Packages: ${PACKAGES}"
     # Update system package info
     report_status "Running apt-get update..."
     sudo apt-get update --allow-releaseinfo-change
 
     # Install desired packages
-    report_status "Installing Moonraker Dependencies:"
-    report_status "${PACKAGES}"
     sudo apt-get install --yes ${PACKAGES}
 }
 

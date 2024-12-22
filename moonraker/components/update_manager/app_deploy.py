@@ -262,6 +262,51 @@ class AppDeploy(BaseDeploy):
                     svc = kconn.unit_name
                 await machine.do_service_action("restart", svc)
 
+    def _convert_version(self, version: str) -> Tuple[str | int, ...]:
+        version = version.strip()
+        ver_match = re.match(r"\d+(\.\d+)*((?:-|\.).+)?", version)
+        if ver_match is not None:
+            return tuple([
+                int(part) if part.isdigit() else part
+                for part in re.split(r"\.|-", version)
+            ])
+        return (version,)
+
+    def _parse_system_dep(self, full_spec: str) -> str | None:
+        parts = full_spec.split(";", maxsplit=1)
+        if len(parts) == 1:
+            return full_spec
+        dep_parts = re.split(r"(==|!=|<=|>=|<|>)", parts[1].strip())
+        if len(dep_parts) != 3 or dep_parts[0].strip().lower() != "distro_version":
+            logging.info(f"Invalid requirement specifier: {full_spec}")
+            return None
+        pkg_name = parts[0].strip()
+        operator = dep_parts[1].strip()
+        distro_ver = self._convert_version(distro.version())
+        req_version = self._convert_version(dep_parts[2].strip())
+        try:
+            if operator == "<":
+                if distro_ver < req_version:
+                    return pkg_name
+            elif operator == ">":
+                if distro_ver > req_version:
+                    return pkg_name
+            elif operator == "==":
+                if distro_ver == req_version:
+                    return pkg_name
+            elif operator == "!=":
+                if distro_ver != req_version:
+                    return pkg_name
+            elif operator == ">=":
+                if distro_ver >= req_version:
+                    return pkg_name
+            elif operator == "<=":
+                if distro_ver <= req_version:
+                    return pkg_name
+        except TypeError:
+            pass
+        return None
+
     async def _read_system_dependencies(self) -> List[str]:
         eventloop = self.server.get_event_loop()
         if self.system_deps_json is not None:
@@ -281,7 +326,13 @@ class AppDeploy(BaseDeploy):
                             f"Dependency file '{deps_json.name}' contains an empty "
                             f"package definition for linux distro '{distro_id}'"
                         )
-                    return dep_info[distro_id]
+                        continue
+                    processed_deps: List[str] = []
+                    for dep in dep_info[distro_id]:
+                        parsed_dep = self._parse_system_dep(dep)
+                        if parsed_dep is not None:
+                            processed_deps.append(parsed_dep)
+                    return processed_deps
             else:
                 self.log_info(
                     f"Dependency file '{deps_json.name}' has no package definition "
