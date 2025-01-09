@@ -110,6 +110,15 @@ detect_distribution() {
         PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
         PACKAGES="${PACKAGES} libjpeg-dev packagekit wireless-tools curl"
         PACKAGES="${PACKAGES} build-essential"
+    elif [ ${DISTRIBUTION} = "ubuntu" ]; then
+        PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
+        PACKAGES="${PACKAGES} libjpeg-dev packagekit curl build-essential"
+        if ( compare_version "<=" "24.04" ); then
+            PACKAGES="${PACKAGES} wireless-tools"
+        fi
+        if ( compare_version ">=" "24.10" ); then
+            PACKAGES="${PACKAGES} iw"
+        fi
     fi
     # *** AUTO GENERATED OS PACKAGE DEPENDENCIES END ***
 }
