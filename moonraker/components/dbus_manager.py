@@ -8,9 +8,9 @@ import os
 import asyncio
 import pathlib
 import logging
-import dbus_next
-from dbus_next.aio import MessageBus, ProxyInterface
-from dbus_next.constants import BusType
+import dbus_fast
+from dbus_fast.aio import MessageBus, ProxyInterface
+from dbus_fast.constants import BusType
 
 # Annotation imports
 from typing import (
@@ -30,8 +30,8 @@ DOC_URL = (
 )
 
 class DbusManager:
-    Variant = dbus_next.Variant
-    DbusError = dbus_next.errors.DBusError
+    Variant = dbus_fast.Variant
+    DbusError = dbus_fast.errors.DBusError
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.bus: Optional[MessageBus] = None
@@ -46,8 +46,8 @@ class DbusManager:
         self.polkit_subject = [
             "unix-process",
             {
-                "pid": dbus_next.Variant("u", os.getpid()),
-                "start-time": dbus_next.Variant("t", start_clk_ticks)
+                "pid": dbus_fast.Variant("u", os.getpid()),
+                "start-time": dbus_fast.Variant("t", start_clk_ticks)
             }
         ]
 

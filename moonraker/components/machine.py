@@ -51,8 +51,8 @@ if TYPE_CHECKING:
     from .announcements import Announcements
     from .proc_stats import ProcStats
     from .dbus_manager import DbusManager
-    from dbus_next.aio.proxy_object import ProxyInterface
-    from dbus_next.signature import Variant
+    from dbus_fast.aio.proxy_object import ProxyInterface
+    from dbus_fast.signature import Variant
     SudoReturn = Union[Awaitable[Tuple[str, bool]], Tuple[str, bool]]
     SudoCallback = Callable[[], SudoReturn]
 

@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from ..dbus_manager import DbusManager
     from ..machine import Machine
     from .update_manager import CommandHelper
-    from dbus_next import Variant
-    from dbus_next.aio import ProxyInterface
+    from dbus_fast import Variant
+    from dbus_fast.aio import ProxyInterface
     JsonType = Union[List[Any], Dict[str, Any]]
 
 
