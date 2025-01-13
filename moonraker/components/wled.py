@@ -324,7 +324,7 @@ class StripSerial(Strip):
             try:
                 self.serial.open()
             except (self.serial.error, OSError) as e:
-                if type(last_exc) != type(e) and last_exc.args != e.args:
+                if type(last_exc) is not type(e) and last_exc.args != e.args:
                     logging.exception("WLED Serial Open Error")
                     last_exc = e
                 await asyncio.sleep(2.)

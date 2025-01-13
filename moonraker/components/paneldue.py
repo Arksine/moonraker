@@ -141,7 +141,7 @@ class PanelDue:
             try:
                 self.ser_conn.open()
             except (self.ser_conn.error, OSError) as e:
-                if type(last_exc) != type(e) and last_exc.args != e.args:
+                if type(last_exc) is not type(e) and last_exc.args != e.args:
                     logging.exception("PanelDue Serial Open Error")
                     last_exc = e
                 await asyncio.sleep(2.)
