@@ -928,6 +928,11 @@ class Authorization:
     def cors_enabled(self) -> bool:
         return self.cors_domains is not None
 
+    def get_api_key(self) -> Optional[str]:
+        if not self.enable_api_key:
+            return None
+        return self.api_key
+
     def close(self) -> None:
         self.prune_timer.stop()
 
