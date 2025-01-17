@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ...utils.source_info import PackageInfo
     from ...components.file_manager.file_manager import FileManager
-    from .update_manager import CommandHelper
 
 class PackageSource(Enum):
     PIP = 0
@@ -37,8 +36,8 @@ class PackageSource(Enum):
 
 
 class PythonDeploy(AppDeploy):
-    def __init__(self, config: ConfigHelper, cmd_helper: CommandHelper) -> None:
-        super().__init__(config, cmd_helper, "Python Package")
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config, "Python Package")
         self._configure_virtualenv(config)
         if self.virtualenv is None:
             raise config.error(

@@ -27,16 +27,11 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
-    from .update_manager import CommandHelper
     from ..file_manager.file_manager import FileManager
 
 class ZipDeploy(AppDeploy):
-    def __init__(
-        self,
-        config: ConfigHelper,
-        cmd_helper: CommandHelper
-    ) -> None:
-        super().__init__(config, cmd_helper, "Zip Application")
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config, "Zip Application")
         self._configure_path(config, False)
         if self.type == AppType.ZIP:
             self._configure_virtualenv(config)

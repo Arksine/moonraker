@@ -31,7 +31,6 @@ from typing import (
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
-    from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
 
@@ -39,10 +38,8 @@ DISTRO_ALIASES = [distro.id()]
 DISTRO_ALIASES.extend(distro.like().split())
 
 class AppDeploy(BaseDeploy):
-    def __init__(
-            self, config: ConfigHelper, cmd_helper: CommandHelper, prefix: str
-    ) -> None:
-        super().__init__(config, cmd_helper, prefix=prefix)
+    def __init__(self, config: ConfigHelper, prefix: str) -> None:
+        super().__init__(config, prefix=prefix)
         self.config = config
         type_choices = {str(t): t for t in AppType.valid_types()}
         self.type = config.getchoice("type", type_choices)

@@ -35,12 +35,9 @@ if TYPE_CHECKING:
 
 
 class PackageDeploy(BaseDeploy):
-    def __init__(self,
-                 config: ConfigHelper,
-                 cmd_helper: CommandHelper
-                 ) -> None:
-        super().__init__(config, cmd_helper, "system", "", "")
-        cmd_helper.set_package_updater(self)
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config, "system", "", "")
+        self.cmd_helper.set_package_updater(self)
         self.use_packagekit = config.getboolean("enable_packagekit", True)
         self.available_packages: List[str] = []
 
