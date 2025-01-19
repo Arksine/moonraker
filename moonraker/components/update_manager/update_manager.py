@@ -15,7 +15,7 @@ from .common import AppType, get_base_configuration
 from .base_deploy import BaseDeploy
 from .app_deploy import AppDeploy
 from .git_deploy import GitDeploy
-from .zip_deploy import ZipDeploy
+from .net_deploy import NetDeploy
 from .python_deploy import PythonDeploy
 from .system_deploy import PackageDeploy
 from ...common import RequestType
@@ -57,10 +57,11 @@ def get_deploy_class(
 ) -> Union[Type[BaseDeploy], _T]:
     key = AppType.from_string(app_type) if isinstance(app_type, str) else app_type
     _deployers = {
-        AppType.WEB: ZipDeploy,
+        AppType.WEB: NetDeploy,
         AppType.GIT_REPO: GitDeploy,
-        AppType.ZIP: ZipDeploy,
-        AppType.PYTHON: PythonDeploy
+        AppType.ZIP: NetDeploy,
+        AppType.PYTHON: PythonDeploy,
+        AppType.EXECUTABLE: NetDeploy
     }
     return _deployers.get(key, default)
 
