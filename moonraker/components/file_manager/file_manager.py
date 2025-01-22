@@ -2526,6 +2526,9 @@ class MetadataStorage:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
                 else:
+                    await self.server.send_event(
+                        "file_manager:metadata_processed", fname
+                    )
                     break
             else:
                 if ufp_path is None:
