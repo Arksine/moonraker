@@ -277,6 +277,6 @@ def prepare_install_args(packages: Union[pathlib.Path, List[str]]) -> str:
             raise FileNotFoundError(
                 f"Invalid path to requirements_file '{packages}'"
             )
-        return f"-r {packages}"
+        return f"-U -r {packages}"
     reqs = [req.replace("\"", "'") for req in packages]
-    return " ".join([f"\"{req}\"" for req in reqs])
+    return "-U " + " ".join([f"\"{req}\"" for req in reqs])
