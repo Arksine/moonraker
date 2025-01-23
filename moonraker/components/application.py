@@ -701,6 +701,8 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 args, req_type, transport, ip, self.current_user
             )
         except ServerError as e:
+            if self.server.is_verbose_enabled():
+                logging.exception("API Request Failure")
             raise tornado.web.HTTPError(
                 e.status_code, reason=str(e)) from e
         if self.wrap_result:
