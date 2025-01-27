@@ -152,6 +152,7 @@ class GitDeploy(AppDeploy):
     def get_update_status(self) -> Dict[str, Any]:
         status = super().get_update_status()
         status.update(self.repo.get_repo_status())
+        status["name"] = self.name
         return status
 
     def get_persistent_data(self) -> Dict[str, Any]:
