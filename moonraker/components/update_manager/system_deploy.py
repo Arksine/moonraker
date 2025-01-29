@@ -74,7 +74,7 @@ class PackageDeploy(BaseDeploy):
                 self.log_info("PackageDeploy: Using APT CLI Provider")
                 self.prefix = "Package Manager APT: "
                 provider = fallback
-        self.provider = provider
+        self.provider = provider  # type: ignore
         return storage
 
     async def _get_fallback_provider(self) -> Optional[BasePackageProvider]:
@@ -148,8 +148,10 @@ class PackageDeploy(BaseDeploy):
 
     def get_update_status(self) -> Dict[str, Any]:
         return {
-            'package_count': len(self.available_packages),
-            'package_list': self.available_packages
+            "name": self.name,
+            "configured_type": "system",
+            "package_count": len(self.available_packages),
+            "package_list": self.available_packages
         }
 
 class BasePackageProvider:
