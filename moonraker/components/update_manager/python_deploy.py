@@ -50,6 +50,11 @@ class PythonDeploy(AppDeploy):
         self._configure_managed_services(config)
         self.primary_branch = config.get("primary_branch", None)
         self.project_name = config.get("project_name", self.name)
+        self.extras: str | None = None
+        extras_match = re.match(r"([^[]+)\[([^]]+)\]", self.project_name)
+        if extras_match is not None:
+            self.project_name = extras_match.group(1)
+            self.extras = extras_match.group(2)
         self.source: PackageSource = PackageSource.UNKNOWN
         self.repo_url: str = ""
         self.repo_owner: str = "?"
@@ -88,6 +93,7 @@ class PythonDeploy(AppDeploy):
         status = super().get_update_status()
         status.update({
             "detected_type": "python_package",
+            "name": self.name,
             "branch": self.primary_branch,
             "owner": self.repo_owner,
             "repo_name": self.repo_name,
@@ -335,6 +341,8 @@ class PythonDeploy(AppDeploy):
 
     async def update(self, rollback: bool = False) -> bool:
         project_name = normalize_project_name(self.project_name)
+        if self.extras is not None:
+            project_name = f"{project_name}[{self.extras}]"
         assert self.pip_cmd is not None
         pip_args: str
         if not self.upstream_version.is_valid_version():
@@ -359,15 +367,15 @@ class PythonDeploy(AppDeploy):
             if self.current_sha == self.upstream_sha:
                 return False
             repo = f"{self.repo_owner}/{self.repo_name}"
-            pip_args = f"install -U git+https://github.com/{repo}"
             if rollback:
-                pip_args += f"@{self.rollback_ref}"
+                repo += f"@{self.rollback_ref}"
             elif self.channel == Channel.DEV:
                 current_ref = self.current_sha
                 if self.primary_branch is not None:
-                    pip_args += f"@{self.primary_branch}"
+                    repo += f"@{self.primary_branch}"
             else:
-                pip_args += f"@{self.upstream_version.tag}"
+                repo += f"@{self.upstream_version.tag}"
+            pip_args = f"install -U '{project_name} @ git+https://github.com/{repo}'"
         else:
             raise self.server.error("Cannot update, package source is unknown")
         await self._update_pip(pip_exec)
