@@ -2150,9 +2150,10 @@ virtualenv:
 #   Path to the virtual enviromnent containing the python application.
 project_name:
 #   Name of the python project as listed in the python package index.  If
-#   the packaged is sourced from GitHub, this will be the name of the package
-#   when built.  The default is the name specified by the configuration
-#   section.
+#   the packaged is sourced from GitHub, this will be the name of the project
+#   specified in the build.  Optional "extras" may be added, see the tip
+#   follwing this example for details.  The default is the name specified by the
+#   configuration section.
 primary_branch:
 #   For packages sourced from GitHub, this option may be used to specify the
 #   branch to fetch updates from when the channel is set to "dev".  The default
@@ -2163,6 +2164,17 @@ info_tags:
 #   See the git_repo type documentation for detailed descriptions of the above
 #   options.
 ```
+
+!!! Tip
+    Python packages with "extras" may be specified using the `project_name`
+    option.  For example, assume we want to update a project named "pyapp"
+    that has an "extra" defined named "requests":
+    ```
+    [update_manager pyapp]
+    type: python
+    project_name: pyapp[requests]
+    virtualenv: ~/pyapp
+    ```
 
 ##### The optional release_info file
 

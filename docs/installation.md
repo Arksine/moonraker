@@ -586,13 +586,28 @@ Some clients may require an API Key to connect to Moonraker.  After the
 generate an API Key.  There are two ways in which the key may be retrieved
 by the user:
 
-Retrieve the API Key via the command line (SSH):
+#### Retrieve the API Key via the command line (SSH):
 ```
 cd ~/moonraker/scripts
 ./fetch-apikey.sh
 ```
 
-Retrieve the API Key via the browser from a trusted client:
+Additionally its possible to generate a new API Key with the `-g`
+option:
+
+```
+cd ~/moonraker/scripts
+./fetch-apikey.sh -g
+```
+
+If Moonraker is running it must be restarted for the new API key to
+take affect:
+
+```
+sudo systemctl restart moonraker
+```
+
+#### Retrieve the API Key via the browser from a trusted client:
 
 - Navigate to `http://{moonraker-host}/access/api_key`, where
   `{moonraker-host}` is the host name or ip address of the desired
