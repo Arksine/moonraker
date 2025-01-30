@@ -8,6 +8,9 @@ from __future__ import annotations
 import logging
 from ..utils import Sentinel
 from ..common import WebRequest, APITransport, RequestType
+import os
+import shutil
+import json
 
 # Annotation imports
 from typing import (
@@ -26,6 +29,7 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
+    from .file_manager.file_manager import FileManager
     Subscription = Dict[str, Optional[List[Any]]]
     SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
     _T = TypeVar("_T")
@@ -44,6 +48,7 @@ class KlippyAPI(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.klippy: Klippy = self.server.lookup_component("klippy_connection")
+        self.fm: FileManager = self.server.lookup_component("file_manager")
         self.eventloop = self.server.get_event_loop()
         app_args = self.server.get_app_args()
         self.version = app_args.get('software_version')
@@ -73,6 +78,15 @@ class KlippyAPI(APITransport):
         )
         self.server.register_event_handler(
             "server:klippy_disconnect", self._on_klippy_disconnect
+        )
+        self.server.register_endpoint(
+            "/printer/list_endpoints", RequestType.GET, self.list_endpoints
+        )
+        self.server.register_endpoint(
+            "/printer/breakheater", RequestType.POST, self.breakheater
+        )
+        self.server.register_endpoint(
+            "/printer/breakmacro", RequestType.POST, self.breakmacro
         )
 
     def _on_klippy_disconnect(self) -> None:
@@ -140,6 +154,20 @@ class KlippyAPI(APITransport):
             filename = filename[1:]
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
+        homedir = os.path.expanduser("~")
+        if os.path.split(filename)[0].split(os.path.sep)[0] != ".cache":
+            base_path = os.path.join(homedir, "printer_data/gcodes")
+            target = os.path.join(".cache", os.path.basename(filename))
+            cache_path = os.path.join(base_path, ".cache")
+            if not os.path.exists(cache_path):
+                os.makedirs(cache_path)
+            shutil.rmtree(cache_path)
+            os.makedirs(cache_path)
+            metadata = self.fm.gcode_metadata.metadata.get(filename, None)
+            self.copy_file_to_cache(os.path.join(base_path, filename), os.path.join(base_path, target))
+            msg = "// metadata=" + json.dumps(metadata)
+            self.server.send_event("server:gcode_response", msg)
+            filename = target
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         if wait_klippy_started:
             await self.klippy.wait_started()
@@ -169,8 +197,24 @@ class KlippyAPI(APITransport):
     ) -> Union[_T, str]:
         self.server.send_event("klippy_apis:cancel_requested")
         logging.info("Requesting job cancel...")
+        await self._send_klippy_request(
+            "breakmacro", {}, default)
+        await self._send_klippy_request(
+            "breakheater", {}, default)
         return await self._send_klippy_request(
             "pause_resume/cancel", {}, default)
+    
+    async def breakheater(
+        self, default: Union[Sentinel, _T] = Sentinel.MISSING
+    ) -> Union[_T, str]:
+        return await self._send_klippy_request(
+            "breakheater", {}, default)
+    
+    async def breakmacro(
+        self, default: Union[Sentinel, _T] = Sentinel.MISSING
+    ) -> Union[_T, str]:
+        return await self._send_klippy_request(
+            "breakmacro", {}, default)
 
     async def do_restart(
         self, gc: str, wait_klippy_started: bool = False
@@ -294,6 +338,17 @@ class KlippyAPI(APITransport):
         for cb in self.subscription_callbacks:
             self.eventloop.register_callback(cb, status, eventtime)
         self.server.send_event("server:status_update", status)
+
+    def copy_file_to_cache(self, origin, target):
+        stat = os.statvfs("/")
+        free_space = stat.f_frsize * stat.f_bfree
+        filesize = os.path.getsize(os.path.join(origin))
+        if (filesize < free_space):
+            shutil.copy(origin, target)
+        else:
+            msg = "!! Insufficient disk space, unable to read the file."
+            self.server.send_event("server:gcode_response", msg)
+            raise self.server.error("Insufficient disk space, unable to read the file.", 500)
 
 def load_component(config: ConfigHelper) -> KlippyAPI:
     return KlippyAPI(config)

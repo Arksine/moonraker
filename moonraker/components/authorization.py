@@ -254,6 +254,11 @@ class Authorization:
             "/access/user/password", RequestType.POST, self._handle_password_reset,
             transports=TransportType.HTTP | TransportType.WEBSOCKET
         )
+        # Custom endpoint: find a user by username and reset password (only suitable for ordinary user)
+        self.server.register_endpoint(
+            "/access/user/password_by_name", RequestType.POST, self._handle_password_reset_by_name,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET
+        )
         self.server.register_endpoint(
             "/access/api_key", RequestType.GET | RequestType.POST,
             self._handle_apikey_request,
@@ -499,6 +504,29 @@ class Authorization:
         return {
             'username': username,
             'action': "user_password_reset"
+        }
+    
+    async def _handle_password_reset_by_name(self,
+                                     web_request: WebRequest
+                                     ) -> Dict[str, str]:
+        username: str = web_request.get_str('username')
+        new_pass: str = web_request.get_str('new_password')
+
+        user_info = self.users[username]
+        if user_info.source == "ldap":
+            raise self.server.error(
+                f"Can´t Reset password for ldap user {username}")
+        if username in RESERVED_USERS:
+            raise self.server.error(
+                f"Invalid Reset Request for user {username}")
+        salt = bytes.fromhex(user_info.salt)
+        new_hashed_pass = hashlib.pbkdf2_hmac(
+            'sha256', new_pass.encode(), salt, HASH_ITER).hex()
+        self.users[username].password = new_hashed_pass
+        await self._sync_user(username)
+        return {
+            'username': username,
+            'action': "user_password_reset_by_name"
         }
 
     async def _login_jwt_user(
@@ -852,18 +880,22 @@ class Authorization:
     ) -> Optional[UserInfo]:
         if request.method == "OPTIONS":
             return None
+        
+        # Allow local request
+        try:
+            # logging.info(f"request.remote_ip: {request.remote_ip}, is_loopback: {ipaddress.ip_address(request.remote_ip).is_loopback}") # type: ignore
+            ip = ipaddress.ip_address(request.remote_ip) # type: ignore
+            if ip.is_loopback:
+                return None
+        except ValueError:
+            logging.exception(
+                f"Unable to Create IP Address {request.remote_ip}")
+            ip = None
 
         # Check JSON Web Token
         jwt_user = self._check_json_web_token(request, auth_required)
         if jwt_user is not None:
             return jwt_user
-
-        try:
-            ip = ipaddress.ip_address(request.remote_ip)  # type: ignore
-        except ValueError:
-            logging.exception(
-                f"Unable to Create IP Address {request.remote_ip}")
-            ip = None
 
         # Check oneshot access token
         ost: Optional[List[bytes]] = request.arguments.get('token', None)

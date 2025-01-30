@@ -357,6 +357,16 @@ class Machine:
             "moonraker": self.unit_name,
             "klipper": kconn.unit_name
         }
+        # Used for Qidi Slicer searching device
+        dev_name = web_request.get_str('dev_name',default=None)
+        if dev_name !=None:
+            Note=open('/dev_info.txt',mode='w')   
+            Note.write(dev_name)   
+            Note.close()
+        with open('/dev_info.txt', 'r') as f:         
+            content = f.read() 
+            f.close()
+        self.system_info["machine_name"] =  content          
         return {"system_info": sys_info}
 
     async def _set_sudo_password(
