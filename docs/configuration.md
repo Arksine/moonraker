@@ -3287,6 +3287,22 @@ With the above configuration it is possible to run the `SET_ACTIVE_SPOOL ID=1`
 command to set the currently tracked spool ID to `1`, and the `CLEAR_ACTIVE_SPOOL`
 to clear spool tracking (useful when unloading filament for example).
 
+#### Sending spool info to Klipper
+
+When changing the spool id, spoolman will fetch info about the spool
+from Spoolman and it can send that info to Klipper.
+
+Moonraker does that by running gcode like this:
+"`_SPOOLMAN_SET_FIELD_name VALUE=val`".
+where name is the field's name. For nestled fields, the names are separated by '_'.
+
+Ie if the spool has a filament id of 2, it will run:
+`_SPOOLMAN_SET_FIELD_filament_id VALUE=2`.
+
+When the spool id is cleared, it will run:
+`_SPOOLMAN_CLEAR_FIELDS`.
+
+
 ## Include directives
 
 It is possible to include configuration from other files via include
