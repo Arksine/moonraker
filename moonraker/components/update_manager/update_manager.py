@@ -162,6 +162,9 @@ class UpdateManager:
             "/machine/update/full", RequestType.POST, self._handle_full_update_request
         )
         self.server.register_endpoint(
+            "/machine/update/upgrade", RequestType.POST, self._handle_update_request
+        )
+        self.server.register_endpoint(
             "/machine/update/status", RequestType.GET, self._handle_status_request
         )
         self.server.register_endpoint(
@@ -277,16 +280,17 @@ class UpdateManager:
             self.cmd_helper.notify_update_refreshed()
         return eventtime + UPDATE_REFRESH_INTERVAL
 
-    async def _handle_update_request(self,
-                                     web_request: WebRequest
-                                     ) -> str:
+    async def _handle_update_request(self, web_request: WebRequest) -> str:
         if self.kconn.is_printing():
-            raise self.server.error("Update Refused: Klippy is printing")
+            raise self.server.error("Update Refused: Klippy is printing", 503)
         app: str = web_request.get_endpoint().split("/")[-1]
-        if app == "client":
-            app = web_request.get_str('name')
+        if app in ("upgrade", "client"):
+            app_name = web_request.get_str("name", None)
+            if app_name is None:
+                return await self._handle_full_update_request(web_request)
+            app = app_name
         if self.cmd_helper.is_app_updating(app):
-            return f"Object {app} is currently being updated"
+            raise self.server.error(f"Item {app} is currently updating", 503)
         updater = self.updaters.get(app, None)
         if updater is None:
             raise self.server.error(f"Updater {app} not available", 404)
@@ -302,12 +306,10 @@ class UpdateManager:
                 self.cmd_helper.clear_update_info()
         return "ok"
 
-    async def _handle_full_update_request(self,
-                                          web_request: WebRequest
-                                          ) -> str:
+    async def _handle_full_update_request(self, web_request: WebRequest) -> str:
         async with self.cmd_request_lock:
             app_name = ""
-            self.cmd_helper.set_update_info('full', id(web_request))
+            self.cmd_helper.set_update_info("full", id(web_request), True)
             self.cmd_helper.notify_update_response(
                 "Preparing full software update...")
             try:
@@ -360,6 +362,7 @@ class UpdateManager:
                 self.cmd_helper.set_full_complete(True)
                 self.cmd_helper.notify_update_response(
                     f"Error updating {app_name}: {e}", is_complete=True)
+                raise
             finally:
                 self.cmd_helper.clear_update_info()
             return "ok"
@@ -552,10 +555,12 @@ class CommandHelper:
     def get_umdb(self) -> NamespaceWrapper:
         return self.umdb
 
-    def set_update_info(self, app: str, uid: int) -> None:
+    def set_update_info(
+        self, app: str, uid: int, full: bool = False
+    ) -> None:
         self.cur_update_app = app
         self.cur_update_id = uid
-        self.full_update = app == "full"
+        self.full_update = full
         self.full_complete = not self.full_update
         self.pending_service_restarts.clear()
 
@@ -582,7 +587,7 @@ class CommandHelper:
         return svc_name in self.pending_service_restarts
 
     def is_app_updating(self, app_name: str) -> bool:
-        return self.cur_update_app == app_name
+        return self.cur_update_app == app_name or self.full_update
 
     def is_update_busy(self) -> bool:
         return self.cur_update_app is not None
