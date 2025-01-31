@@ -34,6 +34,8 @@ if TYPE_CHECKING:
 
 DB_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spoolman.spool_id"
+KLIPPER_SPOOL_SET_MACRO_PREFIX = "_SPOOLMAN_SET_FIELD_"
+KLIPPER_SPOOL_CLEAR_MACRO = "_SPOOLMAN_CLEAR_FIELDS"
 
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
@@ -46,6 +48,7 @@ class SpoolManager:
         self.spoolman_ws: Optional[WebSocketClientConnection] = None
         self.connection_task: Optional[asyncio.Task] = None
         self.spool_check_task: Optional[asyncio.Task] = None
+        self.klipper_update_task: Optional[asyncio.Task] = None
         self.ws_connected: bool = False
         self.reconnect_delay: float = 2.
         self.is_closing: bool = False
@@ -212,12 +215,16 @@ class SpoolManager:
             return
         self.spool_check_task.cancel()
 
+    async def _fetch_spool_info(self, spool_id: Union[int, None]) -> HttpResponse:
+        response = await self.http_client.get(
+            f"{self.spoolman_url}/v1/spool/{spool_id}",
+            connect_timeout=1., request_timeout=2.
+        )
+        return response
+
     async def _check_spool_deleted(self) -> None:
         if self.spool_id is not None:
-            response = await self.http_client.get(
-                f"{self.spoolman_url}/v1/spool/{self.spool_id}",
-                connect_timeout=1., request_timeout=2.
-            )
+            response = await self._fetch_spool_info(self.spool_id)
             if response.status_code == 404:
                 logging.info(f"Spool ID {self.spool_id} not found, setting to None")
                 self.pending_reports.pop(self.spool_id, None)
@@ -285,10 +292,83 @@ class SpoolManager:
         self.spool_history.tracker.update(spool_id)
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
+        self._klipper_update(spool_id)
         self.server.send_event(
             "spoolman:active_spool_set", {"spool_id": spool_id}
         )
         logging.info(f"Setting active spool to: {spool_id}")
+
+    def _cancel_klipper_update_task(self) -> None:
+        if self.klipper_update_task is None or self.klipper_update_task.done():
+            return
+        self.klipper_update_task.cancel()
+
+    def _klipper_update(self, spool_id: Union[int, None]) -> None:
+        assert spool_id is None or isinstance(spool_id, int)
+        self._cancel_klipper_update_task()
+        self.klipper_update_task = self.eventloop.create_task(
+            self._klipper_fetch_spool_and_update(spool_id)
+        )
+
+    def _has_spoolman_set_macros(self, objects: List[str]) -> bool:
+        prefix = "gcode_macro " + KLIPPER_SPOOL_SET_MACRO_PREFIX
+        for k in objects:
+            if k.startswith(prefix):
+                return True
+        return False
+
+    async def _klipper_fetch_spool_and_update(self, spool_id: Union[int, None]) -> None:
+        objects: List[str] = await self.klippy_apis.get_object_list(default=[])
+        if spool_id is not None:
+            if self._has_spoolman_set_macros(objects):
+                logging.debug(f"Fetching data from Spoolman id={spool_id}")
+                response = await self._fetch_spool_info(self.spool_id)
+                if response.status_code == 404:
+                    logging.info(f"Spool ID {self.spool_id} not found, clearing")
+                    self.klipper_update_task = None
+                    self.set_active_spool(None)
+                elif response.has_error():
+                    err_msg = self._get_response_error(response)
+                    logging.info(f"Attempt to fetch spool info failed: {err_msg}")
+                else:
+                    logging.info(f"Fetched Spool data for ID {self.spool_id}")
+                    spool_data = response.json()
+                    logging.debug(f"Got data from Spoolman {spool_data}")
+                    await self._call_klipper_with_data(
+                        KLIPPER_SPOOL_SET_MACRO_PREFIX,
+                        spool_data,
+                        objects,
+                    )
+            else:
+                logging.debug("No spoolman gcode set macros found")
+        else:
+            if "gcode_macro " + KLIPPER_SPOOL_CLEAR_MACRO in objects:
+                logging.info(f"Sending gcode to klipper: {KLIPPER_SPOOL_CLEAR_MACRO}")
+                await self.klippy_apis.run_gcode(KLIPPER_SPOOL_CLEAR_MACRO)
+            else:
+                logging.debug("No spoolman gcode clear macro found")
+
+        self.klipper_update_task = None
+
+    async def _call_klipper_with_data(
+        self,
+        prefix: str,
+        spool_data: Any,
+        objects: List[str],
+    ) -> None:
+
+        for key, val in spool_data.items():
+            macro_name = prefix + key
+            if isinstance(val, dict):
+                await self._call_klipper_with_data(macro_name + "_", val, objects)
+            elif "gcode_macro " + macro_name in objects:
+                if isinstance(val, int):
+                    script = f"{macro_name} VALUE={val}"
+                else:
+                    val = val.replace("\"", "''")
+                    script = f"{macro_name} VALUE=\"{val}\""
+                logging.info(f"Run in klipper: '{script}'")
+                await self.klippy_apis.run_gcode(script)
 
     async def report_extrusion(self, eventtime: float) -> float:
         if not self.ws_connected:
@@ -413,6 +493,7 @@ class SpoolManager:
         if self.spoolman_ws is not None:
             self.spoolman_ws.close(1001, "Moonraker Shutdown")
         self._cancel_spool_check_task()
+        self._cancel_klipper_update_task()
         if self.connection_task is None or self.connection_task.done():
             return
         try:
