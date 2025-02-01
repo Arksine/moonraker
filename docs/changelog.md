@@ -16,6 +16,20 @@ The format is based on [Keep a Changelog].
 - **wled**: Use the `async_serial` utility for serial comms.
 - **paneldue**: Use the `async_serial` utility for serial comms.
 - **scripts**: Update `fetch-apikey.sh` to query the SQL database
+- **update_manager**: The following endpoints have been deprecated
+  as of API version 1.5.0:
+  - `/machine/update/full`
+  - `/machine/update/client`
+  - `/machine/update/moonraker`
+  - `/machine/update/klipper`
+  - `/machine/update/system`
+
+  The new `/machine/update/upgrade` endpoint replaces the functionality
+  of all of the above.  The deprecated endpoints will NOT be removed,
+  so existing software does not need to be changed.  New software
+  should use the new endpoint, however it may be desirable to also
+  support the deprecated `full` and `client` endpoints for compatibility
+  with older API versions.
 
 ### Fixed
 - **python_deploy**: fix "dev" channel updates for GitHub sources.
