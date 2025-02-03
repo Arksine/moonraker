@@ -808,6 +808,19 @@ The full JSON-RPC response.
 }
 ```
 
+##### State
+
+State will be one of the following values:
+
+- **"ready"**: Klippy is connected, and ready for action.
+  You may proceed to request status of printer objects make
+  subscriptions, get the file list, etc.
+- **"error"**: Klippy has experienced an error.
+- **"shutdown"**: Klippy is in a shutdown state.
+- **"startup"**: Klippy is currently starting up.  You can
+  re-request `/server/info` or `/printer/info` in 2 seconds.
+
+
 !!! Note
     This request will never return an HTTP error. When an error is
     encountered a JSON-RPC error response will be returned.
@@ -8278,16 +8291,10 @@ the websocket:
         is not authorized or Moonraker is not running.  Direct the user to
         SSH into the machine and check `/tmp/moonraker.log`.
       - If the response returns success, check the result's `klippy_state`
-        field:
-        - `klippy_state == "ready"`: you may proceed to request status of
-          printer objects make subscriptions, get the file list, etc.
-        - `klippy_state == "error"`:  Klippy has experienced an error
-          starting up
-        - `klippy_state == "shutdown"`: Klippy is in a shutdown state.
-        - `klippy_state == "startup"`: re-request `/server/info` in 2 seconds.
-             - If  `error` or `shutdown` is detected it might be wise to prompt
-               the user. You can get a description from the `state_message`
-               field of a `/printer/info` request.
+        field.
+      - If  `error` or `shutdown` is detected it might be wise to prompt
+        the user. You can get a description from the `state_message`
+        field of a `/printer/info` request.
 3. Repeat step 2 until Klipper reports ready.
 4. Clients should watch for the `notify_klippy_disconnected` event.  If
    received then Klippy has either been stopped or restarted.  In this
