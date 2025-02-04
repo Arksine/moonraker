@@ -2815,6 +2815,7 @@ events: *
 #      cancelled
 #      paused
 #      resumed
+#      layer_changed - note, this is excluded from *. See below.
 #   This parameter must be provided.
 body: "Your printer status has changed to {event_name}"
 #   The body of the notification. This option accepts Jinja2 templates, where
@@ -2848,22 +2849,29 @@ attach:
 ```
 
 !!! Tip
-    The `event_args` field of the Jinja2 context passed to templates in
-    this section receives a list of "arguments" passed to the event.  For
-    those familiar with Python this list is known as "variable arguments".
-    Currently the notifier only supports two kinds of events: those
-    triggered by a change in the job state and those triggered from a remote
-    method call frm a `gcode_macro`.
+The `event_args` field of the Jinja2 context passed to templates in
+this section receives a list of "arguments" passed to the event.  For
+those familiar with Python this list is known as "variable arguments".
+Currently the notifier only supports two kinds of events: those
+triggered by a change in the job state and those triggered from a remote
+method call frm a `gcode_macro`.
 
-    For `remote method` events the `event_args` field will always be
-    an empty list.  For `job state` events the `event_args` field will
-    contain two items. The first item (`event_args[0]`) contains the
-    job state recorded prior to the event, the second item (`event_args[1]`)
-    contains the current job state.  In most cases users will be interested
-    in the current job state (`event_args[1]`).
+For `remote method` events the `event_args` field will always be
+an empty list.  For `job state` events the `event_args` field will
+contain two items. The first item (`event_args[0]`) contains the
+job state recorded prior to the event, the second item (`event_args[1]`)
+contains the current job state.  In most cases users will be interested
+in the current job state (`event_args[1]`).
 
-    The `job state` is a dict that contains the values reported by
-    Klipper's [print_stats](printer_objects.md#print_stats) object.
+The `job state` is a dict that contains the values reported by
+Klipper's [print_stats](printer_objects.md#print_stats) object.
+	
+A `timestamp` value, generated from Python's `datetime.now()` function, is also
+included in the event data. This can be presented in a notification message in
+your preferred date and time format in Jinja2 using the `strftime` function and
+[format patterns](
+https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior).
+For example: `{timestamp.strftime('%d/%m/%Y %H:%M.%S')}`
 
 #### An example:
 ```ini
@@ -2893,6 +2901,65 @@ body: {event_message}
 attach: http://192.168.1.100/webcam/?action=snapshot
 ```
 
+#### Configuring layer change progress notifications
+The `layer_changed` notification event can be generated at configurable layer change
+percentages during the print. Additional configuration parameters can be created in a
+`[notifier my_layer_change_message]` block.
+
+The layer_change event receives a reduced set of information from the print.
+`event_args[0]` is empty in the layer change event, with `event_args[1]` holding a
+limited version of the current print state.
+
+```
+event_arg[1].total_duration:     current number of seconds the job has been running.
+event_arg[1].print_duration:     current number of seconds the job has been printing.
+event_arg[1].filament used:      current length of filament used.
+event_arg[1].info.total_layer:   total number of layers declared in the job's G-code.
+event_arg[1].info.current_layer: the current layer number.
+```
+
+Multiple `events: layer_changed` notifier configurations are permitted, e.g. if you
+want to use multiple notifier services, or permit more frequent progress updates for
+larger (taller) prints.
+
+In order to pass the total layer count and current layer count, additional G-code is
+required from the the slicer. Add the following to the `Start G-code` and `After layer
+change G-code`. The following are taken from the printer custom G-code in PrusaSlicer.
+
+#### Start G-code:
+`SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]`
+
+#### After layer change G-code:
+`SET_PRINT_STATS_INFO CURRENT_LAYER={layer_num + 1}`
+
+An example:
+```ini
+# moonraker.conf
+
+[notifier event_layerchange]
+url: tgram://{bottoken}/{ChatID}
+events: layer_changed
+layer_trigger: 0.25
+# a ratio between 0.0 and 1.0 representing at which percentage of the progess
+# (current layer / total layers) to trigger the layer change message.
+# Note this can only be generated based on layer progress. There are currently no
+# estimated duration statistics available.
+# 0.25 would generate a message every 25% (25%, 50% and 75%). No layer change is 
+# generated at 0%, because this is the start event, nor 100% as this is the complete
+# event. If layer_trigger is not specified, or out of 0.0-1.0 it defaults to 0 and
+# no messages are generated.
+minimum_layers: 100
+# the whole number of total layers the print must be before progress messages are
+# generated. This stops progress messages being generated in quick succession
+# for smaller prints.
+body: Progress Update
+  Layer Count: {event_args[1].info.current_layer} of {event_args[1].info.total_layer}
+  Layer Progress: {
+  (event_args[1].info.current_layer / event_args[1].info.total_layer * 100
+   if event_args[1].info.total_layer is not none and event_args[1].info.total_layer > 0
+   else 0)| int}%
+```
+   
 #### Notifying from Klipper
 It is possible to invoke your notifiers from the Klippy host, this can be done
 with a gcode_macro, such as:
