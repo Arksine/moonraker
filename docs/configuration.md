@@ -1,4 +1,5 @@
-#
+# Configuration
+
 This document describes Moonraker's full configuration. By default Moonraker
 loads the configuration file from `~/moonraker.conf`, however prebuilt
 images such as MainsailOS and FluiddPi configure Moonraker to load the
@@ -25,7 +26,7 @@ rules:
 
 For example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # This is a comment
 [section_name] # This is a comment
 opt_one: http://this.is/#not-a-comment
@@ -62,7 +63,7 @@ Moonraker's core components are always loaded regardless of configuration.
 The `[server]` section provides essential configuration for Moonraker.
 This section is required.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 
 # moonraker.conf
 
@@ -105,21 +106,22 @@ enable_debug_logging: False
 #   Verbose logging is enabled by the '-v' command line option.
 ```
 
-!!! Note
-    Previously the `[server]` section contained `ssl_certificate_path` and
-    `ssl_key_path` options. These options are now deprecated, as both locations
-    are determined by the `data path` and `alias` configured on the command
-    line, ie `<data_file_path>/certs/<alias>.cert`.  By default the certificate
-    path resolves to `$HOME/moonraker_data/certs/moonraker.cert` and the key
-    path resolves to `$HOME/moonraker_data/certs/moonraker.key`.  Both files
-    may be symbolic links.
+/// Note
+Previously the `[server]` section contained `ssl_certificate_path` and
+`ssl_key_path` options. These options are now deprecated, as both locations
+are determined by the `data path` and `alias` configured on the command
+line, ie `<data_file_path>/certs/<alias>.cert`.  By default the certificate
+path resolves to `$HOME/moonraker_data/certs/moonraker.cert` and the key
+path resolves to `$HOME/moonraker_data/certs/moonraker.key`.  Both files
+may be symbolic links.
+///
 
 ### `[file_manager]`
 
 The `file_manager` section provides configuration for Moonraker's file
 management functionality.  If omitted defaults will be used.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 queue_gcode_uploads: False
 #   When set to True the file manager will add uploads to the job_queue when
@@ -158,15 +160,17 @@ enable_config_write_access: True
 #   configuration changes.  The default is True.
 ```
 
-!!! Note
-    Previously the `[file_manager]` section contained `config_path` and
-    `log_path` options. These options are now deprecated, as both locations
-    are determined by the `data path` configured on the command line.
+/// Note
+Previously the `[file_manager]` section contained `config_path` and
+`log_path` options. These options are now deprecated, as both locations
+are determined by the `data path` configured on the command line.
+///
 
-!!! Tip
-    It is also possible to enable object processing directly in the slicer.
-    See the [preprocess-cancellation](https://github.com/kageurufu/cancelobject-preprocessor)
-    documentation for details.
+/// Tip
+It is also possible to enable object processing directly in the slicer.
+See the [preprocess-cancellation](https://github.com/kageurufu/cancelobject-preprocessor)
+documentation for details.
+///
 
 ### `[machine]`
 
@@ -174,7 +178,7 @@ The `machine` section provides configuration for Moonraker's machine component, 
 is responsible for for collecting "machine" (ie: PC, SBC, etc) data and communicating
 with system services such as systemd.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 [machine]
 provider: systemd_dbus
@@ -213,20 +217,22 @@ supervisord_config_path:
 #   The default is no path.
 ```
 
-!!! Note
-    See the [install documentation](installation.md#policykit-permissions) for
-    details on PolicyKit permissions when using the DBus provider.
+/// Note
+See the [install documentation](installation.md#policykit-permissions) for
+details on PolicyKit permissions when using the DBus provider.
+///
 
-!!! Warning
-    Some distributions (ie: DietPi) disable and mask the `systemd-logind`
-    service.  This service is necessary for the DBus provider to issue
-    `reboot` and `shutdown` commands.  In this scenario, Moonraker will fall
-    back to CLI based `reboot` and `shutdown` commands.  These commands require
-    that Moonraker be able to run `sudo` commands without a password or that the
-    `sudo_password` option is set.
+/// Warning
+Some distributions (ie: DietPi) disable and mask the `systemd-logind`
+service.  This service is necessary for the DBus provider to issue
+`reboot` and `shutdown` commands.  In this scenario, Moonraker will fall
+back to CLI based `reboot` and `shutdown` commands.  These commands require
+that Moonraker be able to run `sudo` commands without a password or that the
+`sudo_password` option is set.
 
-    Alternatively it may be possible to enable the `systemd-logind` service,
-    consult with your distributions's documentation.
+Alternatively it may be possible to enable the `systemd-logind` service,
+consult with your distributions's documentation.
+///
 
 #### Allowed Services
 
@@ -255,7 +261,7 @@ when adding a value to `moonraker.asvc`.
 It is possible to call the `shutdown_machine` and `reboot_machine`
 remote methods from a gcode macro in Klipper.  For example:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro SHUTDOWN]
@@ -269,11 +275,12 @@ gcode:
 
 ### `[database]`
 
-!!! Note
-    This section no long has configuration options.  Previously the
-    `database_path` option was used to determine the location of
-    the database folder, it is now determined by the `data path`
-    configured on the command line.
+/// Note
+This section no long has configuration options.  Previously the
+`database_path` option was used to determine the location of
+the database folder, it is now determined by the `data path`
+configured on the command line.
+///
 
 ### `[data_store]`
 
@@ -282,7 +289,7 @@ data store.  Note that this is different from the `database`, as it stores
 data in memory and does not persist between restarts.  If omitted defaults
 will be used.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 temperature_store_size: 1200
@@ -299,7 +306,7 @@ gcode_store_size:  1000
 The `job_queue` section provides configuration for Moonraker's gcode job
 queuing.  If omitted defaults will be used.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 load_on_startup: False
@@ -330,7 +337,7 @@ job_transition_gcode:
 The `announcements` section provides supplemental configuration for
 Moonraker announcements.  If omitted defaults will be used.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [announcements]
@@ -356,7 +363,7 @@ precedent over a webcam in the database by the same name.  The options
 available may not apply to all front ends, refer to your front end's
 documentation for details on camera configuration.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 [webcam my_camera_name]
 location: printer
 #   A description of the webcam location, ie: what the webcam is observing.
@@ -402,47 +409,48 @@ aspect_ratio: 4:3
 #   The default is 4:3.
 ```
 
-!!! Tip
-    The following are known `icon` values:
+/// Tip
+The following are known `icon` values:
 
-    | Icon Description | [webcam] icon value | Supported Frontends |
-    | ---------------- | --------------------| -------- |
-    | Printer | `mdiPrinter3d` | Mainsail |
-    | Nozzle | `mdiPrinter3dNozzle` | Mainsail |
-    | Bed | `mdiRadiatorDisabled` | Mainsail |
-    | Webcam | `mdiWebcam` | Mainsail |
-    | Filament | `mdiAlbum` | Mainsail |
-    | Door | `mdiDoor` | Mainsail |
-    | MCU | `mdiRaspberryPi` | Mainsail |
-    | Hot | `mdiCampfire` | Mainsail |
+| Icon Description | [webcam] icon value   | Supported Frontends |
+| ---------------- | --------------------- | ------------------- |
+| Printer          | `mdiPrinter3d`        | Mainsail            |
+| Nozzle           | `mdiPrinter3dNozzle`  | Mainsail            |
+| Bed              | `mdiRadiatorDisabled` | Mainsail            |
+| Webcam           | `mdiWebcam`           | Mainsail            |
+| Filament         | `mdiAlbum`            | Mainsail            |
+| Door             | `mdiDoor`             | Mainsail            |
+| MCU              | `mdiRaspberryPi`      | Mainsail            |
+| Hot              | `mdiCampfire`         | Mainsail            |
 
-    The documentation for
-    [Mainsail](https://docs.mainsail.xyz/overview/settings/webcams#service)
-    and [Fluidd](https://docs.fluidd.xyz/features/cameras)
-    contain descriptions for their respective streaming service options.
-    Below is a table of values mapping currently known service types to
-    the values accepted by the webcam's `service` option:
+The documentation for
+[Mainsail](https://docs.mainsail.xyz/overview/settings/webcams#service)
+and [Fluidd](https://docs.fluidd.xyz/features/cameras)
+contain descriptions for their respective streaming service options.
+Below is a table of values mapping currently known service types to
+the values accepted by the webcam's `service` option:
 
-    | Service Type | [webcam] service value | Supported Frontends |
-    | ------------- | --------------------- | ------------------- |
-    | MJPEG-Streamer | `mjpegstreamer` | Mainsail, Fluidd |
-    | Adaptive MJPEG-Streamer | `mjpegstreamer-adaptive` | Mainsail, Fluidd |
-    | UV4L-MJPEG | `uv4l-mjpeg` |  Mainsail |
-    | IP-Camera | `ipstream` | Mainsail, Fluidd |
-    | WebRTC (camera-streamer) | `webrtc-camerastreamer` | Mainsail, Fluidd |
-    | WebRTC (go2rtc) | `webrtc-go2rtc` | Mainsail, Fluidd |
-    | WebRTC (MediaMTX) | `webrtc-mediamtx` | Mainsail |
-    | WebRTC (Janus) | `webrtc-janus` | Mainsail |
-    | HLS Streamer | `hlsstream` | Mainsail, Fluidd |
-    | jMuxer | `jmuxer-stream` | Mainsail |
-    | HTTP Page | `iframe`| Fluidd |
+| Service Type             | [webcam] service value   | Supported Frontends |
+| ------------------------ | ------------------------ | ------------------- |
+| MJPEG-Streamer           | `mjpegstreamer`          | Mainsail, Fluidd    |
+| Adaptive MJPEG-Streamer  | `mjpegstreamer-adaptive` | Mainsail, Fluidd    |
+| UV4L-MJPEG               | `uv4l-mjpeg`             | Mainsail            |
+| IP-Camera                | `ipstream`               | Mainsail, Fluidd    |
+| WebRTC (camera-streamer) | `webrtc-camerastreamer`  | Mainsail, Fluidd    |
+| WebRTC (go2rtc)          | `webrtc-go2rtc`          | Mainsail, Fluidd    |
+| WebRTC (MediaMTX)        | `webrtc-mediamtx`        | Mainsail            |
+| WebRTC (Janus)           | `webrtc-janus`           | Mainsail            |
+| HLS Streamer             | `hlsstream`              | Mainsail, Fluidd    |
+| jMuxer                   | `jmuxer-stream`          | Mainsail            |
+| HTTP Page                | `iframe`                 | Fluidd              |
+///
 
 ### `[authorization]`
 
 The `[authorization]` section provides configuration for Moonraker's
 authorization module.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [authorization]
@@ -497,13 +505,14 @@ default_source: moonraker
 #   "moonraker"  The default is "moonraker".
 ```
 
-!!! Tip
-    When configuring the `trusted_clients` option it is generally recommended
-    to stick with IP ranges and avoid including domain names.  When attempting to
-    authenticate a request against a domain name Moonraker must perform a DNS
-    lookup. If the DNS service is not available then authentication will fail
-    and an error will be returned.  In addition, DNS lookups will introduce delay
-    in the response.
+/// Tip
+When configuring the `trusted_clients` option it is generally recommended
+to stick with IP ranges and avoid including domain names.  When attempting to
+authenticate a request against a domain name Moonraker must perform a DNS
+lookup. If the DNS service is not available then authentication will fail
+and an error will be returned.  In addition, DNS lookups will introduce delay
+in the response.
+///
 
 ## Optional Components
 
@@ -515,7 +524,7 @@ includes components that may not have any configuration.
 The `ldap` module may be used by `[authorization]` to perform user
 authentication though an ldap server.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [ldap]
@@ -561,7 +570,7 @@ Enables partial support of OctoPrint API is implemented with the purpose of
 allowing uploading of sliced prints to a moonraker instance.
 Currently PrusaSlicer derivatives and Cura with Cura-OctoPrint.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [octoprint_compat]
@@ -588,23 +597,15 @@ webcam_enabled: True
 #   Enables the webcam.  The default is True.
 ```
 
-!!! Tip
-    It is possible to embed "Prusa" style thumbnails in .gcode files using
-    the latest version of Cura.  Select `Extensions` -> `Post Processing` ->
-    `Modify G-Code`.  In the dialog click the `Add a script` button and select
-    `Create Thumbnail`.   Change the width and height (most Moonraker clients
-    handle 300x300 well) then click close.  A single large thumbnail is all
-    that is necessary, Moonraker will generate a smaller 32x32 thumbnail from
-    it.  This is convenient for users who do not wish to upload in UFP format.
-
-### `[history]`
-Enables print history tracking.
-
-```ini
-# moonraker.conf
-
-[history]
-```
+/// Tip
+It is possible to embed "Prusa" style thumbnails in .gcode files using
+the latest version of Cura.  Select `Extensions` -> `Post Processing` ->
+`Modify G-Code`.  In the dialog click the `Add a script` button and select
+`Create Thumbnail`.   Change the width and height (most Moonraker clients
+handle 300x300 well) then click close.  A single large thumbnail is all
+that is necessary, Moonraker will generate a smaller 32x32 thumbnail from
+it.  This is convenient for users who do not wish to upload in UFP format.
+///
 
 ### `[paneldue]`
 Enables PanelDue display support.  The PanelDue should be connected to the
@@ -612,7 +613,7 @@ host machine, either via the machine's UART GPIOs or through a USB-TTL
 converter.  Currently PanelDue Firmware Version 1.24 is supported.  Other
 releases may not behave correctly.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [paneldue]
@@ -646,7 +647,8 @@ to specify commands (either built in or gcode_macros) that will show up
 in the PanelDue's "macro" menu.
 
 Note that buzzing the piezo requires the following gcode_macro in `printer.cfg`:
-```ini
+
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro PANELDUE_BEEP]
@@ -668,7 +670,7 @@ each with their own section, ie: `[power my_printer]`, `[power my_led]`.
 
 The following configuration options are available for all power device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [power device_name]
@@ -725,17 +727,18 @@ bound_services:
 #   The default is no services are bound to the device.
 ```
 
-!!! Note
-    If a device has been bound to the `klipper` service and the
-    `restart_klipper_when_powered` option is set to `True`, the restart
-    will be scheduled to execute after Klipper reports that its startup
-    sequence is complete.
+/// Note
+If a device has been bound to the `klipper` service and the
+`restart_klipper_when_powered` option is set to `True`, the restart
+will be scheduled to execute after Klipper reports that its startup
+sequence is complete.
+///
 
 #### GPIO Device Configuration
 
 The following options are available for `gpio` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 pin: gpiochip0/gpio26
@@ -758,7 +761,7 @@ timer:
 
 Examples:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Control a relay providing power to the printer
@@ -786,7 +789,7 @@ initial_state: on
 
 The following options are available for `klipper_device` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 object_name: output_pin my_pin
@@ -805,16 +808,18 @@ timer:
 #    default is no timer is set.
 ```
 
-!!! Warning
-    Klipper devices cannot be used to toggle the printer's power supply as they
-    require that Klipper be running and in the "Ready" state.
+/// Warning
+Klipper devices cannot be used to toggle the printer's power supply as they
+require that Klipper be running and in the "Ready" state.
+///
 
-!!! Note
-    Some of the options common to all `[power]` devices are not available for
-    the `klipper_device` type.  Specifically `off_when_shutdown` and
-    `restart_klipper_when_powered` may not be configured.  The `bound_service`
-    option is restricted, it may not be set to an instance of `klipper` or
-    `klipper_mcu`.
+/// Note
+Some of the options common to all `[power]` devices are not available for
+the `klipper_device` type.  Specifically `off_when_shutdown` and
+`restart_klipper_when_powered` may not be configured.  The `bound_service`
+option is restricted, it may not be set to an instance of `klipper` or
+`klipper_mcu`.
+///
 
 ##### Gcode Macro Restrictions
 
@@ -823,7 +828,7 @@ VALUE parameter, and they must report and update a `value` variable.  The value
 should be 1 when the device is on, and 0 when the device is off.  For example,
 a macro could be configured like the following in `printer.cfg`:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 # Assume we have a neopixel we want to control
@@ -853,7 +858,7 @@ gcode:
 
 This can be controlled via Moonraker with the following in `moonraker.conf`:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power flare]
@@ -867,7 +872,7 @@ locked_while_printing: True
 
 Output Pin Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Control a relay providing power to the printer
@@ -876,16 +881,17 @@ type: klipper_device
 object_name: output_pin my_pin
 ```
 
-!!! Tip
-    If you need to use pwm you can wrap the call to `SET_PIN` in a
-    gcode_macro and configure Moonraker to toggle the Macro rather than
-    the pin directly.
+/// Tip
+If you need to use pwm you can wrap the call to `SET_PIN` in a
+gcode_macro and configure Moonraker to toggle the Macro rather than
+the pin directly.
+///
 
 #### RF Device Configuration
 
 The following options are available for gpio controlled `rf` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 pin: gpiochip0/gpio26
@@ -912,19 +918,20 @@ off_code:
 
 #### TPLink Smartplug Configuration
 
-!!! Warning
-    TPLink has removed access to the local API for some of its Kasa devices
-    in recent firmware releases.  As such, it is possible that Moonraker
-    will be unable to communicate with your device.  While TPLink claims that
-    they will provide a new local API, they have have not done so as of
-    December 22nd, 2021.
-    See [this TPLink forum post](https://community.tp-link.com/en/smart-home/forum/topic/239364)
-    and [this Home Assistant Alert](https://alerts.home-assistant.io/#tplink.markdown)
-    for details.
+/// Warning
+TPLink has removed access to the local API for some of its Kasa devices
+in recent firmware releases.  As such, it is possible that Moonraker
+will be unable to communicate with your device.  While TPLink claims that
+they will provide a new local API, they have have not done so as of
+December 22nd, 2021.
+See [this TPLink forum post](https://community.tp-link.com/en/smart-home/forum/topic/239364)
+and [this Home Assistant Alert](https://alerts.home-assistant.io/#tplink.markdown)
+for details.
+///
 
 The following options are available for `tplink_smartplug` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -941,7 +948,7 @@ output_id:
 
 Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power printer_plug]
@@ -953,7 +960,7 @@ address: 192.168.1.123
 
 The following options are available for `tasmota` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 #
 #   Note:
@@ -970,14 +977,15 @@ output_id:
 #   more than one output.  Default is 1.
 ```
 
-!!! Note
-    This implementation communicates with Tasmota firmware through its
-    HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
-    to control devices flashed with Tasmota.
+/// Note
+This implementation communicates with Tasmota firmware through its
+HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
+to control devices flashed with Tasmota.
+///
 
 Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power tasmota_plug]
@@ -990,10 +998,11 @@ password: mypassword
 
 The following options are available for `shelly` device types:
 
-!!! Note
-    Currently only Gen 1 Shelly devices support Authentication
+/// Note
+Currently only Gen 1 Shelly devices support Authentication
+///
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -1012,14 +1021,15 @@ output_id:
 #   more than one output.  Default is 1.
 ```
 
-!!! Note
-    This implementation communicates with Shelly firmware through its
-    HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
-    to control Shelly devices.
+/// Note
+This implementation communicates with Shelly firmware through its
+HTTP APIs.  It is also possible to use [MQTT](#mqtt-device-configuration)
+to control Shelly devices.
+///
 
 Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power shelly_plug]
@@ -1033,7 +1043,7 @@ password: password2
 
 The following options are available for `homeseer` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -1061,7 +1071,7 @@ password:
 
 The following options are available for `homeassistant` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -1088,7 +1098,7 @@ status_delay: 1.0
 ```
 
 Example:
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power homeassistant_switch]
@@ -1105,7 +1115,7 @@ domain: switch
 
 The following options are available for `loxone` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -1129,7 +1139,7 @@ output_id:
 
 The following options are available for `mqtt` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 qos:
@@ -1181,22 +1191,24 @@ query_after_command:
 #  command topic.  This should only be necessary if the device does not publish a
 #  response to a command request to the state topic.  The default is False.
 ```
-!!! Note
-    Moonraker's MQTT client must be properly configured to add a MQTT device.
-    See the [mqtt](#mqtt) section for details.
+/// Note
+Moonraker's MQTT client must be properly configured to add a MQTT device.
+See the [mqtt](#mqtt) section for details.
+///
 
-!!! Tip
-    MQTT is the most robust way of managing networked devices through
-    Moonraker.  A well implemented MQTT device will publish all
-    changes in state to the `state_topic`.  Moonraker receives these changes,
-    updates its internal state, and notifies connected clients.  This allows
-    for device control outside of Moonraker.  Note however that post command
-    actions, such as bound services, will not be run if a device is toggled
-    outside of Moonraker.
+/// Tip
+MQTT is the most robust way of managing networked devices through
+Moonraker.  A well implemented MQTT device will publish all
+changes in state to the `state_topic`.  Moonraker receives these changes,
+updates its internal state, and notifies connected clients.  This allows
+for device control outside of Moonraker.  Note however that post command
+actions, such as bound services, will not be run if a device is toggled
+outside of Moonraker.
+///
 
 Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Example configuration for ing with Tasmota firmware over mqtt
@@ -1226,15 +1238,16 @@ query_after_command: False
 ```
 ####  SmartThings (HTTP)
 
-!!! Important
-    SmartThings Developer API Topics:
+/// attention | Important
+SmartThings Developer API Topics:
 
-    * See [Getting a Bearer Token](https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/)
-    * See [Getting a list of devices](https://developer-preview.smartthings.com/api/public#operation/getDevices)
+* See [Getting a Bearer Token](https://developer-preview.smartthings.com/docs/advanced/authorization-and-permissions/)
+* See [Getting a list of devices](https://developer-preview.smartthings.com/api/public#operation/getDevices)
+///
 
 The following options are available for `smartthings` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address: api.smartthings.com
@@ -1249,7 +1262,7 @@ device:
 ```
 
 Example:
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power smartthings_switch]
@@ -1270,11 +1283,12 @@ Authentication with basic header stored in Moonraker.secrets (see the [secrets]
 documentation for details).
 You have to convert your "username:password" to base64 and put in Moonraker.secrets file.
 
-!!! Note
-    If http unsecure is required, configure Domoticz to allow basic auth on http.
-    https://www.domoticz.com/wiki/Security#API_Protection
+/// Note
+If http unsecure is required, configure Domoticz to allow basic auth on http.
+https://www.domoticz.com/wiki/Security#API_Protection
+///
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [power printer_domoticz]
@@ -1317,7 +1331,7 @@ response_template:
 
 The following options are available for `hue` device types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 address:
@@ -1347,13 +1361,14 @@ device_type: light
 
 Support for toggling USB powered devices via [uhubctl](https://github.com/mvp/uhubctl).
 
-!!! Note
-    The host machine must have `uhubctl` installed as a prerequisite.  In addition,
-    the required [udev rules](https://github.com/mvp/uhubctl#linux-usb-permissions)
-    must be installed on the host to give Moonraker permission to toggle hub
-    power without sudo.
+/// Note
+The host machine must have `uhubctl` installed as a prerequisite.  In addition,
+the required [udev rules](https://github.com/mvp/uhubctl#linux-usb-permissions)
+must be installed on the host to give Moonraker permission to toggle hub
+power without sudo.
+///
 
-```ini
+```ini {title="Moonraker Config Specification"}
 location:
 #  Device location of the USB Hub connected to the device to control.  The
 #  location corresponds to the "-l" option of "uhubctl". This parameter
@@ -1364,28 +1379,29 @@ port:
 #  command.
 ```
 
-!!! Tip
-    The `uhubctl` software can be used to list all compatible hubs on the
-    system by simply executing `uhubctl` with no arguments.  The following
-    is example output from a Raspberry Pi 3B+:
+/// Tip
+The `uhubctl` software can be used to list all compatible hubs on the
+system by simply executing `uhubctl` with no arguments.  The following
+is example output from a Raspberry Pi 3B+:
 
-    ```
-    Current status for hub 1-1.1 [0424:2514, USB 2.00, 3 ports, ppps]
-      Port 1: 0503 power highspeed enable connect [0424:7800]
-      Port 2: 0100 power
-      Port 3: 0100 power
-    Current status for hub 1-1 [0424:2514, USB 2.00, 4 ports, ppps]
-      Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 3 ports, ppps]
-      Port 2: 0100 power
-      Port 3: 0103 power enable connect [1d50:614e Klipper rp2040 45503571290B1068]
-      Port 4: 0100 power
-    Current status for hub 1 [1d6b:0002 Linux 6.6.28+rpt-rpi-v7 dwc_otg_hcd DWC OTG Controller 3f980000.usb, USB 2.00, 1 ports, ppps]
-      Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 4 ports, ppps]
-    ```
+```
+Current status for hub 1-1.1 [0424:2514, USB 2.00, 3 ports, ppps]
+  Port 1: 0503 power highspeed enable connect [0424:7800]
+  Port 2: 0100 power
+  Port 3: 0100 power
+Current status for hub 1-1 [0424:2514, USB 2.00, 4 ports, ppps]
+  Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 3 ports, ppps]
+  Port 2: 0100 power
+  Port 3: 0103 power enable connect [1d50:614e Klipper rp2040 45503571290B1068]
+  Port 4: 0100 power
+Current status for hub 1 [1d6b:0002 Linux 6.6.28+rpt-rpi-v7 dwc_otg_hcd DWC OTG Controller 3f980000.usb, USB 2.00, 1 ports, ppps]
+  Port 1: 0503 power highspeed enable connect [0424:2514, USB 2.00, 4 ports, ppps]
+```
+///
 
 ##### Example
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.config
 
 # Example for controlling a device connected to a Raspberry Pi 3B+.
@@ -1401,7 +1417,7 @@ port: 2
 Support for configurable HTTP switches.  This device type may be used when
 no specific implementation is available for a switch.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 on_url:
 off_url:
 status_url:
@@ -1546,7 +1562,7 @@ types using generic http.  The first example shows how a [tasmota](#tasmota-conf
 switch may be implemented.  Tasmota depends on `GET` http requests for all actions,
 making it the most simple type of generic implementation:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power generic_tasmota]
@@ -1580,7 +1596,7 @@ based authentication, requiring that the request add an `Authorization` header.
 Finally, the on and off HTTP requests do not consistently return device state,
 making necessary to send a status request after an on or off request.
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power generic_homeassistant]
@@ -1628,7 +1644,7 @@ response_template:
 
 It is possible to toggle device power from the Klippy host, this can be done
 with a gcode_macro, such as:
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro POWER_OFF_PRINTER]
@@ -1647,7 +1663,7 @@ The `POWER_OFF_PRINTER` gcode can be run to turn off the "printer" device.
 This could be used in conjunction with Klipper's idle timeout to turn the
 printer off when idle with a configuration similar to that of below:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [delayed_gcode delayed_printer_off]
@@ -1675,7 +1691,7 @@ gcode command.
 The following example presumes that the user a `[power heaters]`
 device configured in `moonraker.conf`:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 # Create a Macro to Power on the Heaters.  This is necessary to be
@@ -1700,11 +1716,12 @@ gcode:
 
 ```
 
-!!! Warning
-    The `SDCARD_PRINT_FILE` G-Code command will be executed when a Moonraker
-    forwards a request to start a print.  Do not put this command in a G-Code
-    file or in a macro that is run from a G-Code file.  This will result in an
-    `SD Busy` error and abort the print.
+/// Warning
+The `SDCARD_PRINT_FILE` G-Code command will be executed when a Moonraker
+forwards a request to start a print.  Do not put this command in a G-Code
+file or in a macro that is run from a G-Code file.  This will result in an
+`SD Busy` error and abort the print.
+///
 
 
 ##### Force a power device to change state during a print
@@ -1721,7 +1738,7 @@ configured in `moonraker.conf` with the `locked_when_printing` option
 set to `True`.  The slicer would be configured to set `USE_MMU=1` for
 the print start macro when the MMU is in use.
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro POWER_ON_MMU]
@@ -1750,7 +1767,7 @@ be set in the `[file_manager]`, `load_on_startup: True` must be set in
 `[job_queue]` and `one_when_job_queued: True` must be set in `[power dev_name]`,
 where "dev_name" the the name of your power device.  For example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Configure the file manager to queue uploaded files when the "start" flag
@@ -1781,11 +1798,12 @@ flag set to true will be queued.  This "printer" device will be
 notified and powered on.  Finally, the job_queue will load and start
 the queued print after Klipper reports itself as "ready".
 
-!!! Note
-    This procedure assumes that the printer is powered off when the
-    gcode file is uploaded.  It also assumes that the `job_queue` is
-    empty, if any jobs exist in the queue then the next job on the
-    queue will be loaded.
+/// Note
+This procedure assumes that the printer is powered off when the
+gcode file is uploaded.  It also assumes that the `job_queue` is
+empty, if any jobs exist in the queue then the next job on the
+queue will be loaded.
+///
 
 
 ### `[update_manager]`
@@ -1793,7 +1811,7 @@ This enables moonraker's update manager.  Note that updates can only be
 performed on pristine git repos.  Repos that have been modified on
 disk or cloned from unofficial sources are not supported.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [update_manager]
@@ -1832,18 +1850,19 @@ channel: dev
 #   the channel based extension type.
 ```
 
-!!! Note
-    Configuration is automatically detected for Moonraker and Klipper, however
-    it is possible to override the `channel`, `pinned_commit`, and
-    `refresh_interval` options on a per application basis for each.  This can be
-    done by specifying the configuration in `moonraker.conf`.  For example:
+/// Note
+Configuration is automatically detected for Moonraker and Klipper, however
+it is possible to override the `channel`, `pinned_commit`, and
+`refresh_interval` options on a per application basis for each.  This can be
+done by specifying the configuration in `moonraker.conf`.  For example:
 
-    ```ini
-    [update_manager klipper]
-    channel: dev
-    pinned_commit: 79930ed99a1fc284f41af5755908aa1fab948ce1
-    refresh_interval: 168
-    ```
+```ini {title="Moonraker Config Example"}
+[update_manager klipper]
+channel: dev
+pinned_commit: 79930ed99a1fc284f41af5755908aa1fab948ce1
+refresh_interval: 168
+```
+///
 
 #### Extension Configuration
 The update manager may be configured manage additional software, henceforth
@@ -1863,39 +1882,41 @@ down into 4 basic types:
 - `python`:  The python type can be used to update python applications installed
   using `pip` in a virtual environment.
 
-!!! Note
-    To benefit the community Moonraker facilitates updates for 3rd party
-    "Klippy Extras" and "Moonraker Components".  While many of these
-    extensions are well developed and tested, users should always be
-    careful when using such code extensions.  Moonraker and Klipper provide
-    no official support for such extensions, thus users experiencing an
-    issue should not create bug reports on the Klipper or Moonraker issue
-    trackers without first reproducing the issue using pristine versions
-    of Moonraker and/or Klipper.
+/// Note
+To benefit the community Moonraker facilitates updates for 3rd party
+"Klippy Extras" and "Moonraker Components".  While many of these
+extensions are well developed and tested, users should always be
+careful when using such code extensions.  Moonraker and Klipper provide
+no official support for such extensions, thus users experiencing an
+issue should not create bug reports on the Klipper or Moonraker issue
+trackers without first reproducing the issue using pristine versions
+of Moonraker and/or Klipper.
+///
 
 ####  Web type (front-end) configuration
 
-!!! Note
-    Front-end developers that wish to deploy updates via Moonraker
-    should host releases on their GitHub repo.  In the root of each
-    release a `release_info.json` file should be present.  This
-    file must contain a JSON object with the following fields:
+/// Note
+Front-end developers that wish to deploy updates via Moonraker
+should host releases on their GitHub repo.  In the root of each
+release a `release_info.json` file should be present.  This
+file must contain a JSON object with the following fields:
 
-    - `project_name`:  The name of the GitHub project
-    - `project_owner`: The User or Organization that owns the project
-    - `version`: The current release version
+- `project_name`:  The name of the GitHub project
+- `project_owner`: The User or Organization that owns the project
+- `version`: The current release version
 
-    For example, a `release_info.json` for Mainsail might contain the
-    following:
-    ```json
-    {
-      "project_name": "mainsail",
-      "project_owner": "mainsail-crew",
-      "version": "v2.5.1"
-    }
-    ```
+For example, a `release_info.json` for Mainsail might contain the
+following:
+```json
+{
+  "project_name": "mainsail",
+  "project_owner": "mainsail-crew",
+  "version": "v2.5.1"
+}
+```
+///
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [update_manager extension_name]
@@ -1936,16 +1957,17 @@ info_tags:
 
 #### Git Repo Configuration
 
-!!! Note
-    Git repos must have at least one tag for Moonraker to identify its
-    version.  The tag may be lightweight or annotated.  The tag must be in
-    semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
-    integer values.  For example, a repos first tag might be `v0.0.1`.
+/// Note
+Git repos must have at least one tag for Moonraker to identify its
+version.  The tag may be lightweight or annotated.  The tag must be in
+semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
+integer values.  For example, a repos first tag might be `v0.0.1`.
 
-    Moonraker can update repos without tags, however front ends may disable
-    update controls when version information is not reported by Moonraker.
+Moonraker can update repos without tags, however front ends may disable
+update controls when version information is not reported by Moonraker.
+///
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 # When defining a service, the "extension_name" must be the name of the
@@ -2071,15 +2093,16 @@ pinned_commit:
 #   behavior set by the "channel" option.  The default is no pinned commit.
 ```
 
-!!! Note
-    If this application requires a restart after an update it may be necessary
-    to grant Moonraker permission to manage its service. See the
-    [allowed services](#allowed-services) section for details on which
-    services Moonraker is allowed to manage and how to add additional services.
+/// Note
+If this application requires a restart after an update it may be necessary
+to grant Moonraker permission to manage its service. See the
+[allowed services](#allowed-services) section for details on which
+services Moonraker is allowed to manage and how to add additional services.
 
-    Also not that systemd services are case sensitive.  The `extension_name`
-    in the section header and the value provided in the `managed_services`
-    option must match the case of the systemd unit file.
+Also not that systemd services are case sensitive.  The `extension_name`
+in the section header and the value provided in the `managed_services`
+option must match the case of the systemd unit file.
+///
 
 #### Zip Application Configuration
 
@@ -2095,7 +2118,7 @@ The thing to keep in mind is that any application updated through Moonraker need
 either be cross-platform, or it needs to deploy binaries for multiple platforms
 and be able to choose the correct one based on the system.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 type: zip
 channel: stable
 #   May be stable or beta.  When beta is specified "pre-release"
@@ -2138,7 +2161,7 @@ a python index such as [PyPI](https://pypi.org/), or from a
 is automatically detected based on the metadata of the currently installed
 package.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 type: python
 channel: stable
 #   May be stable or beta.  When beta is specified "pre-release"
@@ -2165,16 +2188,18 @@ info_tags:
 #   options.
 ```
 
-!!! Tip
-    Python packages with "extras" may be specified using the `project_name`
-    option.  For example, assume we want to update a project named "pyapp"
-    that has an "extra" defined named "requests":
-    ```
-    [update_manager pyapp]
-    type: python
-    project_name: pyapp[requests]
-    virtualenv: ~/pyapp
-    ```
+/// Tip
+Python packages with "extras" may be specified using the `project_name`
+option.  For example, assume we want to update a project named "pyapp"
+that has an "extra" defined named "requests":
+
+```
+[update_manager pyapp]
+type: python
+project_name: pyapp[requests]
+virtualenv: ~/pyapp
+```
+///
 
 ##### The optional release_info file
 
@@ -2284,7 +2309,7 @@ for details on on JSON-RPC.
 It is also possible for other components within Moonraker to use MQTT to
 publish and subscribe to topics.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [mqtt]
@@ -2399,7 +2424,7 @@ api_qos:
 It is possible to publish a topic from a Klipper gcode macro with the
 `publish_mqtt_topic` remote method.  For example:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro PUBLISH_ALERT]
@@ -2435,7 +2460,7 @@ Enables control of a [WLED](https://kno.wled.ge/) strip. Moonraker always
 supports 4 color channel strips - the color order is defined within WLED
 itself.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [wled strip_name]
@@ -2465,7 +2490,7 @@ color_order:
 #   Color order for WLED strip, RGB or RGBW (default: RGB)
 ```
 Below are some examples:
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [wled case]
@@ -2492,7 +2517,7 @@ chain_count: 3
 It is possible to control wled from the klippy host, this can be done using
 one or more macros, such as:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro WLED_ON]
@@ -2550,7 +2575,7 @@ gcode:
 Enables support for Zeroconf (Apple Bonjour) discovery, allowing external services
 detect and use Moonraker instances.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [zeroconf]
@@ -2566,7 +2591,7 @@ enable_ssdp:
 ### `[button]`
 Enables support for handling `button` events.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [button my_button]
@@ -2638,15 +2663,16 @@ Additionally, the following context variables are available:
   etc.  Note that the data in this field does not persist across Moonraker
   restarts.
 
-!!! Warning
-    It is recommended to avoid API calls that may block (ie: the `update` APIs).
-    Only one event may be rendered at a time, subsequent events received will be
-    delayed. Calling a blocking API would effectively make the button
-    non-responsive until the API call returns.
+/// Warning
+It is recommended to avoid API calls that may block (ie: the `update` APIs).
+Only one event may be rendered at a time, subsequent events received will be
+delayed. Calling a blocking API would effectively make the button
+non-responsive until the API call returns.
+///
 
 Button Template Examples:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Emergency Stop Example
@@ -2701,17 +2727,18 @@ separate from `moonraker.conf`.  This allows users to safely distribute
 their configuration and log files without revealing credentials and
 other sensitive information.
 
-!!! Note
-    This section no longer has configuration options.  Previously the
-    `secrets_path` option was used to specify the location of the file.
-    The secrets file name and location is now determined by the `data path`
-    and `alias` command line options, ie: `<data_base_path>/moonraker.secrets`.
-    For a typical single instance installation this resolves to
-    `$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
+/// Note
+This section no longer has configuration options.  Previously the
+`secrets_path` option was used to specify the location of the file.
+The secrets file name and location is now determined by the `data path`
+and `alias` command line options, ie: `<data_base_path>/moonraker.secrets`.
+For a typical single instance installation this resolves to
+`$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
+///
 
 Example ini secrets file:
 
-```ini
+```ini {title="secrets.ini"}
 # /home/pi/printer_data/moonraker.secrets
 
 [mqtt_credentials]
@@ -2725,7 +2752,7 @@ token: long_token_string
 
 Example json secrets file:
 
-```json
+```json {title="secrets.json"}
 {
     "mqtt_credentials": {
         "username": "mqtt_user",
@@ -2737,11 +2764,12 @@ Example json secrets file:
 }
 ```
 
-!!! Tip
-    Generally speaking `ini` files are easier to manually edit.  However,
-    options are limited to string values without parsing and converting.
-    The strength of `json` is that a field may be an integer, string,
-    float, boolean, array, or object.
+/// Tip
+Generally speaking `ini` files are easier to manually edit.  However,
+options are limited to string values without parsing and converting.
+The strength of `json` is that a field may be an integer, string,
+float, boolean, array, or object.
+///
 
 #### Accessing secret credentials
 
@@ -2751,7 +2779,7 @@ Moonraker's configuration that accept credentials support templates.
 
 MQTT configuration example with secret credentials:
 
-```ini
+```ini {title="Moonraker Config Example"}
 [mqtt]
 address: mqtt-broker.local
 port: 1883
@@ -2762,18 +2790,19 @@ password: {secrets.mqtt_credentials.password}
 enable_moonraker_api: True
 ```
 
-!!! warning
-    The purpose of the `[secrets]` module is to keep credentials and
-    other sensitive information out of configuration files and Moonraker's
-    log.  These items are stored in plain text, it is wise to use
-    unique credentials. Never leave a Moonraker client application open
-    unattended in an untrusted location, as it would be possible for a
-    malicious actor to reconfigure moonraker to send items stored in the
-    secrets file to themselves via `mqtt`, `notifier`, etc.
+/// warning
+The purpose of the `[secrets]` module is to keep credentials and
+other sensitive information out of configuration files and Moonraker's
+log.  These items are stored in plain text, it is wise to use
+unique credentials. Never leave a Moonraker client application open
+unattended in an untrusted location, as it would be possible for a
+malicious actor to reconfigure moonraker to send items stored in the
+secrets file to themselves via `mqtt`, `notifier`, etc.
+///
 
 Home Assistant Switch Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power homeassistant_switch]
@@ -2786,7 +2815,6 @@ token: {secrets.home_assistant.token}
 domain: switch
 ```
 
-
 ### `[notifier]`
 
 Enables the notification service. Multiple "notifiers" may be configured,
@@ -2798,7 +2826,7 @@ All notifiers require an url for a service to be set up. Moonraker depends on
 Available services and their corresponding at urls may be found on the
 [Apprise Wiki](https://github.com/caronc/apprise/wiki).
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [notifier telegram]
@@ -2848,26 +2876,27 @@ attach:
 #   hosted on your local network can only be viewed within that network.
 ```
 
-!!! Tip
-    The `event_args` field of the Jinja2 context passed to templates in
-    this section receives a list of "arguments" passed to the event.  For
-    those familiar with Python this list is known as "variable arguments".
-    Currently the notifier only supports two kinds of events: those
-    triggered by a change in the job state and those triggered from a remote
-    method call frm a `gcode_macro`.
+/// Tip
+The `event_args` field of the Jinja2 context passed to templates in
+this section receives a list of "arguments" passed to the event.  For
+those familiar with Python this list is known as "variable arguments".
+Currently the notifier only supports two kinds of events: those
+triggered by a change in the job state and those triggered from a remote
+method call frm a `gcode_macro`.
 
-    For `remote method` events the `event_args` field will always be
-    an empty list.  For `job state` events the `event_args` field will
-    contain two items. The first item (`event_args[0]`) contains the
-    job state recorded prior to the event, the second item (`event_args[1]`)
-    contains the current job state.  In most cases users will be interested
-    in the current job state (`event_args[1]`).
+For `remote method` events the `event_args` field will always be
+an empty list.  For `job state` events the `event_args` field will
+contain two items. The first item (`event_args[0]`) contains the
+job state recorded prior to the event, the second item (`event_args[1]`)
+contains the current job state.  In most cases users will be interested
+in the current job state (`event_args[1]`).
 
-    The `job state` is a dict that contains the values reported by
-    Klipper's [print_stats](printer_objects.md#print_stats) object.
+The `job state` is a dict that contains the values reported by
+Klipper's [print_stats](printer_objects.md#print_stats) object.
+///
 
 #### An example:
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [notifier print_start]
@@ -2897,7 +2926,7 @@ attach: http://192.168.1.100/webcam/?action=snapshot
 #### Notifying from Klipper
 It is possible to invoke your notifiers from the Klippy host, this can be done
 with a gcode_macro, such as:
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro NOTIFY_FILAMENT_CHANGE]
@@ -2913,7 +2942,7 @@ Enables support for print monitoring through
 [SimplyPrint](https://simplyprint.io),
 publicly launched Moonraker integration Nov 21st 2022.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 [simplyprint]
 webcam_name:
@@ -2944,35 +2973,36 @@ ambient_sensor:
 #   to estimate ambient temperature when the heater is idle and cool.
 ```
 
-!!! Note
-    This module collects and uploads the following data to SimplyPrint:
+/// Note
+This module collects and uploads the following data to SimplyPrint:
 
-    - Klipper's version, connection state, and date pulled
-    - Moonraker's version
-    - Currently connected front-end and version
-    - Current python version
-    - Linux distribution and version
-    - Network connection type (wifi or ethernet)
-    - wifi SSID (if connected)
-    - LAN IP address
-    - LAN hostname
-    - CPU model
-    - CPU core count
-    - Total system memory
-    - CPU usage
-    - Memory usage
-    - Current extruder selected
-    - Extruder and bed temperatures
-    - Mesh data (if Klipper has `bed_mesh` configured)
-    - Current print state
-    - Loaded file metadata, including estimated filament usage and print time
-    - Current print filament usage
-    - Current print time elapse
-    - Estimated ambient temperature
-    - Webcam configuration (if available)
-    - Webcam images.
-    - Power device state (if configured)
-    - Filament sensor state (if configured)
+- Klipper's version, connection state, and date pulled
+- Moonraker's version
+- Currently connected front-end and version
+- Current python version
+- Linux distribution and version
+- Network connection type (wifi or ethernet)
+- wifi SSID (if connected)
+- LAN IP address
+- LAN hostname
+- CPU model
+- CPU core count
+- Total system memory
+- CPU usage
+- Memory usage
+- Current extruder selected
+- Extruder and bed temperatures
+- Mesh data (if Klipper has `bed_mesh` configured)
+- Current print state
+- Loaded file metadata, including estimated filament usage and print time
+- Current print filament usage
+- Current print time elapse
+- Estimated ambient temperature
+- Webcam configuration (if available)
+- Webcam images.
+- Power device state (if configured)
+- Filament sensor state (if configured)
+///
 
 More on how your data is used in the SimplyPrint privacy policy here;
 [https://simplyprint.io/legal/privacy](https://simplyprint.io/legal/privacy)
@@ -2987,7 +3017,7 @@ sources may be configured, each with their own section, ie: `[sensor current]`,
 
 The following configuration options are available for all sensor types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [sensor my_sensor]
@@ -3018,98 +3048,99 @@ history_field_{field_name}:
 #   for a detailed explanation of this option.
 ```
 
-!!! note "History Fields"
-    A `history_field_{name}` option must contain a series of key-value pairs.
-    The key and value must be separated by an equal sign (=), and each
-    pair must be separated by a newline.  The following keys are
-    available:
+/// note | History Fields
+A `history_field_{name}` option must contain a series of key-value pairs.
+The key and value must be separated by an equal sign (=), and each
+pair must be separated by a newline.  The following keys are
+available:
 
-    -  `parameter`: The name of the sensor parameter which is used to
-       provide values for this field.  This name must match a field name
-       set in the specific sensor implementation (ie: see the
-       "state_response_template" option for the MQTT type.)  This must
-       be provided.
-    -  `desc`: A brief description of the field.
-    -  `strategy`:  The tracking strategy used to calculate the value
-       stored in the history. See below for available strategies.
-       The default is "basic".
-    -  `units`:  An optional unit specifier for the value
-    -  `init_tracker`:  When set to true the tracked value will be initialized
-       to the last sensor measurement when a job starts.  The "delta"
-       strategy will initialize its "last value", setting this measurement
-       as the reference rather than the first received after the print starts.
-       Default is false.
-    -  `exclude_paused`:  When set to true the values received when
-       a job is paused will be ignored.  Default is false.
-    -  `report_total`:  When set to true the value reported for all
-       jobs will be accumulated and reported in the history totals.
-       Default is false.
-    -  `report_maximum`:  When set to true maximum value for all jobs
-       will be reported in the history totals.  Default is false.
-    -  `precision`:  An integer value indicating the precision to use when
-       reporting decimal values.  This precision applies to both job history
-       AND job totals.  The default is no precision, ie: no rounding will
-       occur.
+-  `parameter`: The name of the sensor parameter which is used to
+    provide values for this field.  This name must match a field name
+    set in the specific sensor implementation (ie: see the
+    "state_response_template" option for the MQTT type.)  This must
+    be provided.
+-  `desc`: A brief description of the field.
+-  `strategy`:  The tracking strategy used to calculate the value
+    stored in the history. See below for available strategies.
+    The default is "basic".
+-  `units`:  An optional unit specifier for the value
+-  `init_tracker`:  When set to true the tracked value will be initialized
+    to the last sensor measurement when a job starts.  The "delta"
+    strategy will initialize its "last value", setting this measurement
+    as the reference rather than the first received after the print starts.
+    Default is false.
+-  `exclude_paused`:  When set to true the values received when
+    a job is paused will be ignored.  Default is false.
+-  `report_total`:  When set to true the value reported for all
+    jobs will be accumulated and reported in the history totals.
+    Default is false.
+-  `report_maximum`:  When set to true maximum value for all jobs
+    will be reported in the history totals.  Default is false.
+-  `precision`:  An integer value indicating the precision to use when
+    reporting decimal values.  This precision applies to both job history
+    AND job totals.  The default is no precision, ie: no rounding will
+    occur.
 
-    Note that job totals for history fields only persist for a currently
-    configured sensor and history field name.  If the name of the sensor
-    changes, the name of the field changes, or if either are removed
-    from the configuration, then their totals will be discarded.  This
-    prevents the accumulation of stale totals.
+Note that job totals for history fields only persist for a currently
+configured sensor and history field name.  If the name of the sensor
+changes, the name of the field changes, or if either are removed
+from the configuration, then their totals will be discarded.  This
+prevents the accumulation of stale totals.
 
-    Moonraker provides several history tracking strategies that can be used
-    accommodate how values should be tracked and stored in the job history:
+Moonraker provides several history tracking strategies that can be used
+accommodate how values should be tracked and stored in the job history:
 
-    - `basic`: This strategy should be used if the value should be stored
-      in history directly as it is received.  Simply put, the last value
-      received before a job completes will be the value stored in the job
-      history.
-    - `accumulate`:  When a job starts, the tracked value initialized to 0 or
-      the last received measurement.  New measurements will be added to the
-      tracked value as they are received.  The total cumulative value will be
-      reported when the job ends.
-    - `delta`:  When a job starts the tracked value is 0.  The total value
-      will be the delta between the final measurement received before the job
-      ends and the first measurement received when after job begins.  Note that
-      if `exclude_paused` is set then the tracker will accumulate deltas
-      between pauses.  If the measurement does not update frequently this could
-      significantly alter the final result.
-    - `average`: Reports an average of all measurements received during the job.
-    - `maximum`: Reports the maximum value of all measurements received during
-       the job.
-    - `minimum`: Reports the minimum value of all measurements received during
-       the job.
-    - `collect`:  Measurements are stored in a list as they are received.
-      Duplicate measurements are discarded.  A maximum of 100 entries may
-      be stored, the oldest measurements will be discarded when this limit
-      is exceeded.  This strategy is useful for a sensor that reports some
-      data infrequently and its desirable to include all measurements in the
-      job history.  For example, the `spoolman` component uses this strategy
-      to report all spool IDs set during a job.  When this strategy is enabled
-      the `track_total` and `track_maximum` options are ignored, as it is not
-      possible to report totals for a collection.
+- `basic`: This strategy should be used if the value should be stored
+  in history directly as it is received.  Simply put, the last value
+  received before a job completes will be the value stored in the job
+  history.
+- `accumulate`:  When a job starts, the tracked value initialized to 0 or
+  the last received measurement.  New measurements will be added to the
+  tracked value as they are received.  The total cumulative value will be
+  reported when the job ends.
+- `delta`:  When a job starts the tracked value is 0.  The total value
+  will be the delta between the final measurement received before the job
+  ends and the first measurement received when after job begins.  Note that
+  if `exclude_paused` is set then the tracker will accumulate deltas
+  between pauses.  If the measurement does not update frequently this could
+  significantly alter the final result.
+- `average`: Reports an average of all measurements received during the job.
+- `maximum`: Reports the maximum value of all measurements received during
+    the job.
+- `minimum`: Reports the minimum value of all measurements received during
+    the job.
+- `collect`:  Measurements are stored in a list as they are received.
+  Duplicate measurements are discarded.  A maximum of 100 entries may
+  be stored, the oldest measurements will be discarded when this limit
+  is exceeded.  This strategy is useful for a sensor that reports some
+  data infrequently and its desirable to include all measurements in the
+  job history.  For example, the `spoolman` component uses this strategy
+  to report all spool IDs set during a job.  When this strategy is enabled
+  the `track_total` and `track_maximum` options are ignored, as it is not
+  possible to report totals for a collection.
 
-    Example:
+Example:
 
-    ```
-    history_field_total_energy:
-      parameter=energy
-      desc=Printer power consumption
-      strategy=delta
-      units=kWh
-      init_tracker=false
-      exclude_paused=false
-      report_total=true
-      report_maximum=true
-      precision=6
-    ```
+```
+history_field_total_energy:
+  parameter=energy
+  desc=Printer power consumption
+  strategy=delta
+  units=kWh
+  init_tracker=false
+  exclude_paused=false
+  report_total=true
+  report_maximum=true
+  precision=6
+```
+///
 
 
 #### MQTT Sensor Configuration
 
 The following options are available for `mqtt` sensor types:
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 qos:
@@ -3126,7 +3157,7 @@ state_response_template:
 #  string) and the value of the measurement (either integer or float number).
 #
 #  This allows for sensor that can return multiple readings (e.g. temperature/
-#  humidity sensors or powermeters).
+#  humidity sensors or power meters).
 #  For example:
 #    {% set notification = payload|fromjson %}
 #    {set_result("temperature", notification["temperature"]|float)}
@@ -3138,19 +3169,21 @@ state_response_template:
 #  to a numeric format and passed to Moonraker. This parameter must be provided.
 ```
 
-!!! Note
-    Moonraker's MQTT client must be properly configured to add a MQTT sensor.
-    See the [mqtt](#mqtt) section for details.
+/// Note
+Moonraker's MQTT client must be properly configured to add a MQTT sensor.
+See the [mqtt](#mqtt) section for details.
+///
 
-!!! Tip
-    MQTT is the most robust way of collecting sensor data from networked
-    devices through Moonraker.  A well implemented MQTT sensor will publish all
-    changes in state to the `state_topic`.  Moonraker receives these changes,
-    updates its internal state, and notifies connected clients.
+/// Tip
+MQTT is the most robust way of collecting sensor data from networked
+devices through Moonraker.  A well implemented MQTT sensor will publish all
+changes in state to the `state_topic`.  Moonraker receives these changes,
+updates its internal state, and notifies connected clients.
+///
 
 Example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 # Example configuration for a Shelly Pro 1PM (Gen2) switch with
@@ -3180,15 +3213,16 @@ state_response_template:
 
 Tasmota Example:
 
-!!! Note
-    It may be necessary to set Tasmota's Telemetry Period to a low value
-    to achieve a decent response.  This can be done in the with the
-    `TelePeriod` command via the console.  For example, the command
-    to set the telemetry period to 10 seconds is:
+/// Note
+It may be necessary to set Tasmota's Telemetry Period to a low value
+to achieve a decent response.  This can be done in the with the
+`TelePeriod` command via the console.  For example, the command
+to set the telemetry period to 10 seconds is:
 
-    `cmnd/%device_name%/TelePeriod` with a payload of `10`.
+`cmnd/%device_name%/TelePeriod` with a payload of `10`.
+///
 
-```ini
+```ini {title="Moonraker Config Example"}
 [sensor tasmota_power]
 type: mqtt
 state_topic: tele/tasmota_switch/SENSOR
@@ -3243,7 +3277,7 @@ the Spoolman database.
 
 Front ends can also utilize this config to provide a built-in management tool.
 
-```ini
+```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [spoolman]
@@ -3261,7 +3295,7 @@ with Klipper.  This method may be used to set the active spool ID, or clear it,
 using gcode macros.  For example, the following could be added to Klipper's
 `printer.cfg`:
 
-```ini
+```ini {title="Klipper Config Example"}
 # printer.cfg
 
 [gcode_macro SET_ACTIVE_SPOOL]
@@ -3296,7 +3330,7 @@ to those in Klipper, ie: `[include relative_path]`.  The `relative_path`
 is a path relative to the configuration file's parent folder, and may
 include wildcards.  For example:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [include my_extra_config.conf]
@@ -3333,7 +3367,7 @@ For an example of how to use the `do` statement, lets assume we need to
 send a specific json payload with an MQTT power device command.  Rather
 than attempt to type out the json ourselves, it may be easier to create
 a `dictionary` object and convert it to json:
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [power my_mqtt_device]
@@ -3376,7 +3410,7 @@ such as:
 To correct these warnings, the user must modify `moonraker.conf`.  For example,
 your current configuration may look like the following:
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [server]
@@ -3389,7 +3423,7 @@ gcode_store_size: 1000
 
 You will need to change it to the following;
 
-```ini
+```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
 [server]
@@ -3405,9 +3439,10 @@ The common front-ends provide a UI for modifying `moonraker.conf`, otherwise
 it will be necessary to ssh into the host and use a tool such as `nano` to
 make the changes.
 
-!!! Warning
-    Make sure `moonraker.conf` does not have duplicate sections, and double
-    check to make sure that the formatting is correct.
+/// Warning
+Make sure `moonraker.conf` does not have duplicate sections, and double
+check to make sure that the formatting is correct.
+///
 
 Once the changes are complete you may use the UI to restart Moonraker and
 the warnings should clear.
