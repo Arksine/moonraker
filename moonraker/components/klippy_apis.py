@@ -266,12 +266,15 @@ class KlippyAPI(APITransport):
         objects: Mapping[str, Optional[List[str]]],
         transport: APITransport,
         default: Union[Sentinel, _T] = Sentinel.MISSING,
+        full_response: bool = False
     ) -> Union[_T, Dict[str, Any]]:
         params = {"objects": dict(objects)}
         result = await self._send_klippy_request(
             SUBSCRIPTION_ENDPOINT, params, default, transport
         )
         if isinstance(result, dict) and "status" in result:
+            if full_response:
+                return result
             return result["status"]
         if default is not Sentinel.MISSING:
             return default
