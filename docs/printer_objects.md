@@ -39,6 +39,17 @@ The format is [X, Y, Z, E].
 
 ## webhooks
 
+/// warning
+Websocket and Unix Socket subscribers to the `webhooks` object
+should not rely on it for asynchronous `startup`, `ready`, or
+`error` state updates. By the time Moonraker has established
+a connection to Klipper it is possible that the `webhooks`
+state is already beyond the startup phase.
+
+MQTT subscriptions will publish the first `state` detected
+after Klippy exits the `startup` phase.
+///
+
 ```{.json title="Printer Object Example"}
 {
   "state": "startup",

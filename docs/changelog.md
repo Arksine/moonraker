@@ -30,9 +30,17 @@ The format is based on [Keep a Changelog].
   should use the new endpoint, however it may be desirable to also
   support the deprecated `full` and `client` endpoints for compatibility
   with older API versions.
+- **build**: Bump PDM-Backend to 2.4.3.
+- **build**: Bump Apprise to 1.9.2
+- **build**: Bump Tornado to 6.4.2
+- **build**: Bump Streaming-form-data to 1.19.1
+- **build**: Bump Jinja2 to 3.1.5
 
 ### Fixed
 - **python_deploy**: fix "dev" channel updates for GitHub sources.
+- **mqtt**: Publish the result of the Klipper status subscription request.
+  This fixes issues with MQTT clients missing the initial status updates
+  after Klippy restarts.
 
 ### Added
 - **application**: Verify that a filename is present when parsing the
