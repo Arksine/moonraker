@@ -351,6 +351,7 @@ class PythonDeploy(AppDeploy):
             self.pip_cmd, self.server, self.cmd_helper.notify_update_response
         )
         current_ref = self.current_version.tag
+        pip_args = "install -U --upgrade-strategy eager"
         if self.source == PackageSource.PIP:
             # We can't depend on the SHA being available for PyPI packages,
             # so we must compare versions
@@ -359,7 +360,7 @@ class PythonDeploy(AppDeploy):
                 self.upstream_version <= self.current_version
             ):
                 return False
-            pip_args = f"install -U {project_name}"
+            pip_args = f"{pip_args} {project_name}"
             if rollback:
                 pip_args += f"=={self.rollback_ref}"
         elif self.source == PackageSource.GITHUB:
@@ -374,7 +375,7 @@ class PythonDeploy(AppDeploy):
                     repo += f"@{self.primary_branch}"
             else:
                 repo += f"@{self.upstream_version.tag}"
-            pip_args = f"install -U '{project_name} @ git+https://github.com/{repo}'"
+            pip_args = f"{pip_args} '{project_name} @ git+https://github.com/{repo}'"
         else:
             raise self.server.error("Cannot update, package source is unknown")
         await self._update_pip(pip_exec)
