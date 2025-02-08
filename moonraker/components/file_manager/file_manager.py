@@ -2520,6 +2520,9 @@ class MetadataStorage:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
                 else:
+                    self.server.send_event("file_manager:metadata_updated", {
+                        "filename": fname
+                    })
                     break
             else:
                 if ufp_path is None:
