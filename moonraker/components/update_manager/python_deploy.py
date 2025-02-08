@@ -245,6 +245,7 @@ class PythonDeploy(AppDeploy):
 
     async def refresh(self) -> None:
         try:
+            await self._update_local_state()
             if self.source == PackageSource.PIP:
                 await self._refresh_pip()
             elif self.source == PackageSource.GITHUB:
