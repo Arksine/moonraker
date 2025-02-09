@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog].
 - **pip_utils**:  Use the "upgrade" option when installing python packages.
   This will force upgrades to the latest version available as resolved by
   the requirement specifier.
+- **python_deploy**: Use the "eager" dependency update strategy.
 - **wled**: Use the `async_serial` utility for serial comms.
 - **paneldue**: Use the `async_serial` utility for serial comms.
 - **scripts**: Update `fetch-apikey.sh` to query the SQL database
@@ -38,6 +39,7 @@ The format is based on [Keep a Changelog].
 
 ### Fixed
 - **python_deploy**: fix "dev" channel updates for GitHub sources.
+- **python_deploy**: fix release rollbacks.
 - **mqtt**: Publish the result of the Klipper status subscription request.
   This fixes issues with MQTT clients missing the initial status updates
   after Klippy restarts.
@@ -60,6 +62,9 @@ The format is based on [Keep a Changelog].
   simply iterate over the values of the `version_info` object.
 - **python_deploy**: Add support for updating python packages with
   "extras" installed.
+- **update_manager**:  Add support for updating `executable` binaries.
+- **analysis**: Initial support for gcode file time analysis using
+  [Klipper Estimator](https://github.com/Annex-Engineering/klipper_estimator).
 
 
 ## [0.9.3] - 2024-09-05
