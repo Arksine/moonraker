@@ -964,6 +964,10 @@ SUPPORTED_DATA = [
     'chamber_temp',
     'filament_name',
     'filament_type',
+    'filament_color',
+    'extruder_color',
+    'filament_temp',
+    'referenced_tools',
     'filament_total',
     'filament_weight_total',
     'thumbnails']
