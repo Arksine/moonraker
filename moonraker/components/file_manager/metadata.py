@@ -193,6 +193,18 @@ class BaseSlicer(object):
     def parse_filament_type(self) -> Optional[str]:
         return None
 
+    def parse_filament_color(self) -> Optional[str]:
+        return None
+
+    def parse_extruder_color(self) -> Optional[str]:
+        return None
+
+    def parse_filament_temp(self) -> Optional[str]:
+        return None
+
+    def parse_referenced_tools(self) -> Optional[str]:
+        return None
+
     def parse_estimated_time(self) -> Optional[float]:
         return None
 
@@ -380,6 +392,18 @@ class PrusaSlicer(BaseSlicer):
         return regex_find_string(
             r";\sfilament_settings_id\s=\s(%S)", self.footer_data
         )
+
+    def parse_filament_color(self) -> Optional[str]:
+        return regex_find_string(r"^;\s*filament_colour\s*=\s(%S)", self.footer_data)
+
+    def parse_extruder_color(self) -> Optional[str]:
+        return regex_find_string(r"^;\s*extruder_colour\s*=\s(%S)", self.footer_data)
+
+    def parse_filament_temp(self) -> Optional[str]:
+        return regex_find_string(r"^;\s*(nozzle_)?temperature\s*=\s(%S)", self.footer_data)
+
+    def parse_referenced_tools(self) -> Optional[str]:
+        return regex_find_string(r"^;\s*referenced_tools\s*=\s(%S)", self.footer_data)
 
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
