@@ -205,6 +205,9 @@ class BaseSlicer(object):
     def parse_referenced_tools(self) -> Optional[str]:
         return None
 
+    def parse_single_extruder_multi_material(self) -> Optional[int]:
+        return None
+
     def parse_estimated_time(self) -> Optional[float]:
         return None
 
@@ -404,6 +407,9 @@ class PrusaSlicer(BaseSlicer):
 
     def parse_referenced_tools(self) -> Optional[str]:
         return regex_find_string(r";\sreferenced_tools\s=\s(%S)", self.footer_data)
+
+    def parse_single_extruder_multi_material(self) -> Optional[int]:
+        return regex_find_int(r";\ssingle_extruder_multi_material\s=\s(%D)", self.footer_data)
 
     def parse_estimated_time(self) -> Optional[float]:
         time_match = re.search(
@@ -968,6 +974,7 @@ SUPPORTED_DATA = [
     'extruder_color',
     'filament_temp',
     'referenced_tools',
+    'single_extruder_multi_material',
     'filament_total',
     'filament_weight_total',
     'thumbnails']
