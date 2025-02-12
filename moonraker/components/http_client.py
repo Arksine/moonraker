@@ -108,7 +108,8 @@ class HttpClient:
         req_args: Dict[str, Any] = dict(
             body=body,
             request_timeout=request_timeout,
-            connect_timeout=connect_timeout
+            connect_timeout=connect_timeout,
+            allow_ipv6=self.server.ipv6_enabled()
         )
         if basic_auth_user is not None:
             assert basic_auth_pass is not None
@@ -261,8 +262,10 @@ class HttpClient:
                     url, headers={"Accept": content_type},
                     connect_timeout=connect_timeout,
                     request_timeout=request_timeout,
+                    allow_ipv6=self.server.ipv6_enabled(),
                     streaming_callback=dl.on_chunk_recd,
-                    header_callback=dl.on_headers_recd)
+                    header_callback=dl.on_headers_recd
+                )
                 timeout = connect_timeout + request_timeout + 1.
                 resp = await asyncio.wait_for(fut, timeout)
             except asyncio.CancelledError:

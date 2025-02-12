@@ -10,6 +10,7 @@ import logging
 import re
 import contextlib
 import tornado.websocket as tornado_ws
+from tornado.httpclient import HTTPRequest
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
 from typing import (
@@ -128,10 +129,13 @@ class SpoolManager:
             if log_connect:
                 logging.info(f"Connecting To Spoolman: {self.ws_url}")
                 log_connect = False
+            req = HTTPRequest(
+                self.ws_url, connect_timeout=5.,
+                allow_ipv6=self.server.ipv6_enabled()
+            )
             try:
                 self.spoolman_ws = await tornado_ws.websocket_connect(
-                    self.ws_url,
-                    connect_timeout=5.,
+                    req,
                     ping_interval=20.,
                     ping_timeout=60.
                 )

@@ -160,6 +160,9 @@ class Server:
     def is_verbose_enabled(self) -> bool:
         return self.app_args["verbose"]
 
+    def ipv6_enabled(self) -> bool:
+        return socket.has_ipv6
+
     def _parse_config(self) -> confighelper.ConfigHelper:
         config = confighelper.get_configuration(self, self.app_args)
         # log config file

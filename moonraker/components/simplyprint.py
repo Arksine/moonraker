@@ -12,6 +12,7 @@ import time
 import pathlib
 import base64
 import tornado.websocket
+from tornado.httpclient import HTTPRequest
 from tornado.escape import url_escape
 import logging.handlers
 import tempfile
@@ -197,10 +198,12 @@ class SimplyPrint(APITransport):
             if log_connect:
                 logging.info(f"Connecting To SimplyPrint: {url}")
                 log_connect = False
+            req = HTTPRequest(
+                url, connect_timeout=5.,
+                allow_ipv6=self.server.ipv6_enabled()
+            )
             try:
-                self.ws = await tornado.websocket.websocket_connect(
-                    url, connect_timeout=5.,
-                )
+                self.ws = await tornado.websocket.websocket_connect(req)
                 setattr(self.ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
                 self._last_ping_received = cur_time
