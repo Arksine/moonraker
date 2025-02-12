@@ -350,6 +350,11 @@ class KlippyConnection:
             machine.log_service_info(svc_info)
 
     def _save_path_info(self) -> None:
+        if (
+            "klipper_path" not in self._klippy_info or
+            "python_path" not in self._klippy_info
+        ):
+            return
         kpath = pathlib.Path(self._klippy_info["klipper_path"])
         kexec = pathlib.Path(self._klippy_info["python_path"])
         db: Database = self.server.lookup_component("database")
