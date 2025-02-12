@@ -379,8 +379,6 @@ service: mjpegstreamer
 #   ends may use this configuration to determine how to connect to the service
 #   and interpret its stream.  See the tip following this example for
 #   currently known values.  The default is "mjpegstreamer".
-location: printer
-#   A string describing the location of the camera.  Default is printer.
 target_fps: 15
 #   An integer value specifying the target framerate.  The default is 15 fps.
 target_fps_idle: 5
@@ -545,7 +543,7 @@ auto_dump_default_config: false
 #   configuration is only dumped if the default configuration file
 #   does not exist.  The default is false.
 estimator_timeout: 600
-#   The maximum amount of time (in seconds) Klipper Esti+mator
+#   The maximum amount of time (in seconds) Klipper Estimator
 #   is given to process a gcode file before processing is
 #   aborted.  The default is 600 seconds.
 enable_auto_analysis: false
@@ -1938,7 +1936,7 @@ of Moonraker and/or Klipper.
 
 #### The release_info.json file
 
-The `web`, `zip`, and `exectuable` types require that the install
+The `web`, `zip`, and `executable` types require that the install
 folder contain a `release_info.json` file.  This file contains
 information the update manager uses to validate the local install.
 
@@ -2241,9 +2239,9 @@ the folder containing the executable.
 
 The `executable` type can be used to deploy pre-built executable binaries
 through GitHub releases.  Executable types can be installed as system services
-and may specifiy OS package dependencies.
+and may specify OS package dependencies.
 
-Like `web` and `zip` types, `executuable` types must include a `release_info.json`
+Like `web` and `zip` types, `executable` types must include a `release_info.json`
 file (see the [web type](#web-type-front-end-configuration) not for details).
 In addition, `executable` types can be configured to update dependencies and manage
 services.
