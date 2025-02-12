@@ -990,9 +990,11 @@ class SimplyPrint(APITransport):
         firmware_date: str = ""
         # Approximate the firmware "date" using the last modified
         # time of the Klippy source folder
-        kpath = pathlib.Path(kinfo["klipper_path"]).joinpath("klippy")
-        if kpath.is_dir():
-            mtime = kpath.stat().st_mtime
+        kconn: KlippyConnection
+        kconn = self.server.lookup_component("klippy_connection")
+        klippy_dir = kconn.path.joinpath("klippy")
+        if klippy_dir.is_dir():
+            mtime = klippy_dir.stat().st_mtime
             firmware_date = time.asctime(time.gmtime(mtime))
         version: str = kinfo["software_version"]
         unsafe = version.endswith("-dirty") or version == "?"
