@@ -15,6 +15,8 @@ import asyncio
 import zipfile
 import time
 import math
+import shlex
+import contextlib
 from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
@@ -2307,6 +2309,7 @@ class MetadataStorage:
         self.pending_requests: Dict[
             str, Tuple[Dict[str, Any], asyncio.Event]] = {}
         self.busy: bool = False
+        self.processors: Dict[str, Dict[str, Any]] = {}
 
     def prune_storage(self) -> None:
         # Check for removed gcode files while moonraker was shutdown
@@ -2359,6 +2362,23 @@ class MetadataStorage:
 
     def is_file_processing(self, fname: str) -> bool:
         return fname in self.pending_requests
+
+    def register_gcode_processor(
+        self, name: str, config: Dict[str, Any] | None
+    ) -> None:
+        if config is None:
+            self.processors.pop(name, None)
+            return
+        elif name in self.processors:
+            raise self.server.error(f"File processor {name} already registered")
+        required_fields = ("name", "command", "timeout")
+        for req_field in required_fields:
+            if req_field not in config:
+                raise self.server.error(
+                    f"File processor configuration requires a `{req_field}` field"
+                )
+        self.processors[name] = config
+        logging.info(f"GCode Processor {name} registered")
 
     def _has_valid_data(self,
                         fname: str,
@@ -2551,22 +2571,37 @@ class MetadataStorage:
                                     ) -> None:
         # Escape single quotes in the file name so that it may be
         # properly loaded
-        filename = filename.replace("\"", "\\\"")
-        cmd = " ".join([sys.executable, METADATA_SCRIPT, "-p",
-                        self.gc_path, "-f", f"\"{filename}\""])
+        config: Dict[str, Any] = {
+            "filename": filename,
+            "gcode_dir": self.gc_path,
+            "check_objects": self.enable_object_proc,
+            "ufp_path": ufp_path,
+            "processors": list(self.processors.values())
+        }
         timeout = self.default_metadata_parser_timeout
-        if ufp_path is not None and os.path.isfile(ufp_path):
+        if ufp_path is not None or self.enable_object_proc:
             timeout = max(timeout, 300.)
-            ufp_path.replace("\"", "\\\"")
-            cmd += f" -u \"{ufp_path}\""
-        if self.enable_object_proc:
-            timeout = max(timeout, 300.)
-            cmd += " --check-objects"
+        if self.processors:
+            proc_timeout = sum(
+                [proc.get("timeout", 0) for proc in self.processors.values()]
+            )
+            timeout = max(timeout, proc_timeout)
+        eventloop = self.server.get_event_loop()
+        md_cfg = await eventloop.run_in_thread(self._create_metadata_cfg, config)
+        cmd = " ".join([sys.executable, METADATA_SCRIPT, "-c", shlex.quote(md_cfg)])
         result = bytearray()
-        sc: SCMDComp = self.server.lookup_component('shell_command')
-        scmd = sc.build_shell_command(cmd, callback=result.extend, log_stderr=True)
-        if not await scmd.run(timeout=timeout):
-            raise self.server.error("Extract Metadata returned with error")
+        try:
+            sc: SCMDComp = self.server.lookup_component('shell_command')
+            scmd = sc.build_shell_command(
+                cmd, callback=result.extend, log_stderr=True
+            )
+            if not await scmd.run(timeout=timeout):
+                raise self.server.error("Extract Metadata returned with error")
+        finally:
+            def _rm_md_config():
+                with contextlib.suppress(OSError):
+                    os.remove(md_cfg)
+            await eventloop.run_in_thread(_rm_md_config)
         try:
             decoded_resp: Dict[str, Any] = jsonw.loads(result.strip())
         except Exception:
@@ -2580,6 +2615,13 @@ class MetadataStorage:
         metadata.update({'print_start_time': None, 'job_id': None})
         self.metadata[path] = metadata
         self.mddb[path] = metadata
+
+    def _create_metadata_cfg(self, config: Dict[str, Any]) -> str:
+        with tempfile.NamedTemporaryFile(
+            prefix="metacfg-", suffix=".json", delete=False
+        ) as f:
+            f.write(jsonw.dumps(config))
+            return f.name
 
 def load_component(config: ConfigHelper) -> FileManager:
     return FileManager(config)
