@@ -54,6 +54,8 @@ RELEASE_INFO = {
     "asset_name": ""
 }
 
+IDENT_REGEX = r"^; Processed by klipper_estimator (?P<version>v?\d+(?:\.\d+)*)"
+
 class GcodeAnalysis:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -64,6 +66,7 @@ class GcodeAnalysis:
         if not tool_folder.exists():
             tool_folder.mkdir(parents=True)
         self.estimator_timeout = config.getint("estimator_timeout", 600)
+        self.auto_analyze = config.getboolean("enable_auto_analysis", False)
         self.auto_dump_defcfg = config.getboolean("auto_dump_default_config", False)
         self.default_config = tool_folder.joinpath("default_estimator_cfg.json")
         self.estimator_config = self.default_config
@@ -80,10 +83,6 @@ class GcodeAnalysis:
                     f"File '{est_config}' does not exist in 'config' root"
                 )
             self.estimator_config = est_path
-        if config.getboolean("enable_auto_analysis", False):
-            self.server.register_event_handler(
-                "file_manager:metadata_processed", self._on_metadata_processed
-            )
         self.estimator_path: pathlib.Path | None = None
         self.estimator_ready: bool = False
         self.estimator_version: str = "?"
@@ -121,6 +120,29 @@ class GcodeAnalysis:
         if not self.updater_registered:
             # Add reserved path when updates are disabled
             self.file_manger.add_reserved_path("analysis", tool_folder, False)
+        # Register Klipper Estimator's GCode Processor configuration
+        # with the metadata processor.  Keep a reference to the config
+        # so it can be updated after the Klipper Estimator Executable is
+        # verified in component_init().
+        self.proc_config: Dict[str, Any] = {
+            "name": "klipper_estimator",
+            "command": [
+                str(self.estimator_path),
+                "--config_file",
+                str(self.estimator_config),
+                "post-process",
+                "{gcode_file_path}"
+            ],
+            "timeout": self.estimator_timeout,
+            "version": self.estimator_version,
+            "ident": {
+                "regex": IDENT_REGEX,
+                "location": "footer"
+            },
+            "enabled": False
+        }
+        mdst = self.file_manger.get_metadata_storage()
+        mdst.register_gcode_processor("klipper_estimator", self.proc_config)
         self.server.register_endpoint(
             "/server/analysis/status", RequestType.GET,
             self._handle_status_request
@@ -155,18 +177,17 @@ class GcodeAnalysis:
                 f"{self.default_config}"
             )
             eventloop = self.server.get_event_loop()
-            eventloop.create_task(self._dump_estimator_config(self.default_config))
-
-    async def _on_metadata_processed(self, rel_gc_path: str) -> None:
-        if not self.estimator_ready:
-            logging.info("Klipper Estimator not available")
-            return
-        try:
-            full_path = self.file_manger.get_full_path("gcodes", rel_gc_path)
-            ret = await self.estimate_file(full_path)
-            self._update_metadata_est_time(rel_gc_path, ret)
-        except self.server.error:
-            logging.exception("Klipper Estimator failure")
+            if (
+                self.auto_analyze and
+                self.default_config == self.estimator_config and
+                not self.default_config.exists()
+            ):
+                async def _dump_and_update_proc_cfg() -> None:
+                    await self._dump_estimator_config(self.default_config)
+                    self._update_gcode_proc_config()
+                eventloop.create_task(_dump_and_update_proc_cfg())
+            else:
+                eventloop.create_task(self._dump_estimator_config(self.default_config))
 
     def _update_metadata_est_time(
         self, gc_fname: str, est_data: Dict[str, Any]
@@ -181,27 +202,47 @@ class GcodeAnalysis:
             md_storage.insert(gc_fname, gc_metadata)
 
     async def component_init(self) -> None:
-        if self.estimator_path is None:
-            return
-        if not self.estimator_path.exists():
-            # Download Klipper Estimator
-            await self._download_klipper_estimator(self.estimator_path)
-        if not self._check_estimator_perms(self.estimator_path):
-            self.server.add_warning(
-                "[analysis]: Moonraker lacks permission to execute Klipper Estimator",
-                "analysis_permission"
-            )
-            return
-        else:
-            await self._detect_estimator_version()
-        if self.estimator_version == "?":
-            logging.info("Failed to initialize Klipper Estimator")
-        else:
-            await self._check_release_info(self.estimator_path)
-            self.estimator_ready = True
-            logging.info(
-                f"Klipper Estimator Version {self.estimator_version} detected"
-            )
+        if self.estimator_path is not None:
+            if not self.estimator_path.exists():
+                # Download Klipper Estimator
+                await self._download_klipper_estimator(self.estimator_path)
+            if not self._check_estimator_perms(self.estimator_path):
+                self.server.add_warning(
+                    "[analysis]: Moonraker lacks permission to execute "
+                    "Klipper Estimator"
+                )
+            else:
+                await self._detect_estimator_version()
+            if self.estimator_version == "?":
+                logging.info("Failed to initialize Klipper Estimator")
+            else:
+                await self._check_release_info(self.estimator_path)
+                self.estimator_ready = True
+                logging.info(
+                    f"Klipper Estimator Version {self.estimator_version} detected"
+                )
+        self._update_gcode_proc_config()
+
+    def _update_gcode_proc_config(self) -> None:
+        self.proc_config["version"] = self.estimator_version
+        enabled = False
+        if self.auto_analyze:
+            if not self.estimator_ready:
+                enabled = False
+                logging.info(
+                    "Klipper Estimator executable failed validation, "
+                    "auto analysis disabled."
+                )
+            elif not self.estimator_config.is_file():
+                enabled = False
+                logging.info(
+                    "Klipper Estimator config file does not exist, "
+                    "auto analysis disabled."
+                )
+            else:
+                logging.info("Klipper Estimator Auto Analysis Enabled")
+                enabled = True
+        self.proc_config["enabled"] = enabled
 
     def _detect_platform(self) -> Optional[str]:
         # Detect OS
@@ -246,10 +287,16 @@ class GcodeAnalysis:
             logging.info(f"Downloading latest {est_name}...")
             url = ESTIMATOR_URL.format(asset=est_name)
             http_client: HttpClient = self.server.lookup_component("http_client")
-            await http_client.download_file(
-                url, "application/octet-stream", estimator_path
-            )
-            logging.info("Klipper Estimator download complete.")
+            try:
+                await http_client.download_file(
+                    url, "application/octet-stream", estimator_path
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("Failed to download Klipper estimator")
+            else:
+                logging.info("Klipper Estimator download complete.")
 
     async def _detect_estimator_version(self) -> None:
         cmd = f"{self.estimator_path} --version"
@@ -262,6 +309,8 @@ class GcodeAnalysis:
             self.estimator_version = ver_match.group(1)
 
     def _check_estimator_perms(self, estimator_path: pathlib.Path) -> bool:
+        if not estimator_path.is_file():
+            return False
         req_perms = stat.S_IXUSR | stat.S_IXGRP
         kest_perms = stat.S_IMODE(estimator_path.stat().st_mode)
         if req_perms & kest_perms != req_perms:
