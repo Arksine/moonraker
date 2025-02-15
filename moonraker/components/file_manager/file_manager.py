@@ -1602,6 +1602,14 @@ class InotifyNode:
             pending_node.stop_event("create_node")
         self.pending_file_events[file_name] = evt_name
 
+    def clear_file_event(self, file_name: str) -> str | None:
+        evt = self.pending_file_events.pop(file_name, None)
+        if evt is not None:
+            pending_node = self.search_pending_event("create_node")
+            if pending_node is not None:
+                pending_node.reset_event("create_node", INOTIFY_BUNDLE_TIME)
+        return evt
+
     def complete_file_write(self, file_name: str) -> None:
         self.flush_delete()
         evt_name = self.pending_file_events.pop(file_name, None)
@@ -1982,6 +1990,8 @@ class InotifyObserver(BaseFileSystemObserver):
             child_node.clear_events(include_children=True)
             self.log_nodes()
             action = "delete_dir"
+        else:
+            parent_node.clear_file_event(name)
         self.notify_filelist_changed(action, root, item_path)
 
     def _schedule_pending_move(
@@ -2105,6 +2115,16 @@ class InotifyObserver(BaseFileSystemObserver):
                 hdl.cancel()
                 prev_root = prev_parent.get_root()
                 prev_path = os.path.join(prev_parent.get_path(), prev_name)
+                prev_evt = prev_parent.clear_file_event(prev_name)
+                if prev_evt is not None:
+                    # Handle case where file is opened, moved, then closed
+                    node.schedule_file_event(evt.name, prev_evt)
+                    if prev_evt == "create_file":
+                        # Swallow the move event for newly created files.  A
+                        # "create_file" notification will be sent when the file
+                        # is closed.
+                        self.clear_metadata(prev_root, prev_path)
+                        return
                 move_res = self.try_move_metadata(prev_root, root, prev_path, file_path)
                 if root == "gcodes":
                     coro = self._finish_gcode_move(
