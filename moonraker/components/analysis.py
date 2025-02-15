@@ -189,18 +189,6 @@ class GcodeAnalysis:
             else:
                 eventloop.create_task(self._dump_estimator_config(self.default_config))
 
-    def _update_metadata_est_time(
-        self, gc_fname: str, est_data: Dict[str, Any]
-    ) -> None:
-        md_storage = self.file_manger.get_metadata_storage()
-        gc_metadata = md_storage.get(gc_fname, None)
-        if gc_metadata is not None:
-            if "slicer_estimated_time" not in gc_metadata:
-                prev_est = gc_metadata.get("estimated_time", 0)
-                gc_metadata["slicer_estimated_time"] = prev_est
-            gc_metadata["estimated_time"] = round(est_data["total_time"], 2)
-            md_storage.insert(gc_fname, gc_metadata)
-
     async def component_init(self) -> None:
         if self.estimator_path is not None:
             if not self.estimator_path.exists():
@@ -448,7 +436,6 @@ class GcodeAnalysis:
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
         gcode_file = web_request.get_str("filename").strip("/")
-        update_metadata = web_request.get_boolean("update_metadata", False)
         estimator_config = web_request.get_str("estimator_config", None)
         gc_path = self.file_manger.get_full_path("gcodes", gcode_file)
         if not gc_path.is_file():
@@ -465,8 +452,6 @@ class GcodeAnalysis:
                     "are not allowed"
                 )
         ret = await self.estimate_file(gc_path, est_cfg_path)
-        if update_metadata:
-            self._update_metadata_est_time(gcode_file, ret)
         return ret
 
     async def _handle_dump_cfg_request(
