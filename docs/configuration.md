@@ -547,15 +547,25 @@ estimator_timeout: 600
 #   is given to process a gcode file before processing is
 #   aborted.  The default is 600 seconds.
 enable_auto_analysis: false
-#   When set to true Klipper Estimator will be used to perform a time
-#   analysis for gcode files immediately after metadata is processed.
-#   The "total_time" result will replace the existing "estimated_time"
-#   field in the gcode metadata.  This automates the time analysis for
-#   any event that triggers metadata processing.   Default is false.
+#   When set to true Klipper Estimator will be used to perform a
+#   post-process on gcode files immediately prior to metadata extraction.
+#   The post-process will update the time estimate and M73 commands present
+#   in the gcode file.  This automates the time analysis for any event
+#   that triggers metadata processing.   Default is false.
 enable_estimator_updates: false
 #   When true Moonraker will create and register an entry for
 #   klipper_estimator with the update manager.  Default is false.
 ```
+
+/// note
+When the `[analysis]` component is configured Moonraker's metadata
+processor will be able to detect if a file has been previously processed
+by Klipper Estimator, even when `enable_auto_analysis` is `false`. This
+information is reported in the metadata's `file_processors` field.
+
+When `enable_auto_analysis` is set to `true` a post-process will
+be performed if the file has not been previously processed.
+///
 
 ### `[ldap]`
 
