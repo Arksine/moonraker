@@ -13,6 +13,7 @@ import stat
 import re
 import logging
 import asyncio
+import shlex
 from ..common import RequestType
 from ..utils import json_wrapper as jsonw
 from typing import (
@@ -55,6 +56,21 @@ RELEASE_INFO = {
 }
 
 IDENT_REGEX = r"^; Processed by klipper_estimator (?P<version>v?\d+(?:\.\d+)*)"
+
+def _check_processed(gc_path: pathlib.Path) -> str | None:
+    size = gc_path.stat().st_size
+    # Read the last 64K
+    start = max(0, size - (64 * 1024))
+    with gc_path.open("rb") as f:
+        if start:
+            f.seek(start)
+        data = f.read().decode(errors="ignore")
+    # If Klipper Estimator is processed multiple times it will
+    # add a new identifier for each one.
+    versions = re.findall(IDENT_REGEX, data, re.MULTILINE)
+    if not versions:
+        return None
+    return versions[-1]
 
 class GcodeAnalysis:
     def __init__(self, config: ConfigHelper) -> None:
@@ -149,7 +165,11 @@ class GcodeAnalysis:
         )
         self.server.register_endpoint(
             "/server/analysis/estimate", RequestType.POST,
-            self._handle_estimation_request
+            self._handle_estimator_request
+        )
+        self.server.register_endpoint(
+            "/server/analysis/process", RequestType.POST,
+            self._handle_estimator_request
         )
         self.server.register_endpoint(
             "/server/analysis/dump_config", RequestType.POST,
@@ -344,8 +364,11 @@ class GcodeAnalysis:
         port = host_info["port"]
         return f"http://{address}:{port}/"
 
-    def _gen_estimate_cmd(
-        self, gc_path: pathlib.Path, est_cfg_path: pathlib.Path
+    def _gen_estimator_cmd(
+        self,
+        gc_path: pathlib.Path,
+        est_cfg_path: pathlib.Path,
+        is_post_process: bool = False
     ) -> str:
         if self.estimator_path is None or not self.estimator_ready:
             raise self.server.error("Klipper Estimator not available")
@@ -353,11 +376,10 @@ class GcodeAnalysis:
             raise self.server.error(
                 f"Klipper Estimator config {est_cfg_path.name} does not exist"
             )
+        action = "post-process" if is_post_process else "estimate -f json"
         cmd = str(self.estimator_path)
-        escaped_cfg = str(est_cfg_path).replace("\"", "\\\"")
-        cmd = f"{cmd} --config_file \"{escaped_cfg}\""
-        escaped_gc = str(gc_path).replace("\"", "\\\"")
-        cmd = f"{cmd} estimate -f json \"{escaped_gc}\""
+        cmd = f"{cmd} --config_file {shlex.quote(str(est_cfg_path))}"
+        cmd = f"{cmd} {action} {shlex.quote(str(gc_path))}"
         return cmd
 
     def _gen_dump_cmd(self) -> str:
@@ -402,8 +424,7 @@ class GcodeAnalysis:
     ) -> Dict[str, Any]:
         async with self.cmd_lock:
             if est_config is None:
-                # Fall back to estimator config specified in the [analysis]
-                # section.
+                # Fall back to estimator config specified in the [analysis] section.
                 est_config = self.estimator_config
             if not est_config.is_file():
                 raise self.server.error(
@@ -412,10 +433,44 @@ class GcodeAnalysis:
             if not gc_path.is_file():
                 raise self.server.error(f"GCode File '{gc_path}' does not exist")
             scmd: ShellCommandFactory = self.server.lookup_component("shell_command")
-            est_cmd = self._gen_estimate_cmd(gc_path, est_config)
+            est_cmd = self._gen_estimator_cmd(gc_path, est_config)
             ret = await scmd.exec_cmd(est_cmd, self.estimator_timeout)
             data = jsonw.loads(ret)
             return data["sequences"][0]
+
+    async def post_process_file(
+        self,
+        gc_path: pathlib.Path,
+        est_config: Optional[pathlib.Path] = None,
+        force: bool = False
+    ) -> Dict[str, Any]:
+        async with self.cmd_lock:
+            if est_config is None:
+                # Fall back to estimator config specified in the [analysis] section.
+                est_config = self.estimator_config
+            if not est_config.is_file():
+                raise self.server.error(
+                    f"Estimator config file '{est_config}' does not exist"
+                )
+            if not gc_path.is_file():
+                raise self.server.error(f"GCode File '{gc_path}' does not exist")
+            eventloop = self.server.get_event_loop()
+            proc_ver = await eventloop.run_in_thread(_check_processed, gc_path)
+            bypassed = processed = proc_ver is not None
+            if not processed or force:
+                scmd: ShellCommandFactory
+                scmd = self.server.lookup_component("shell_command")
+                pp_cmd = self._gen_estimator_cmd(gc_path, est_config, True)
+                await scmd.exec_cmd(pp_cmd, self.estimator_timeout)
+                proc_ver = self.estimator_version
+                bypassed = False
+            else:
+                logging.info(f"File {gc_path.name} already processed, aborting")
+            return {
+                "prev_processed": processed,
+                "version": proc_ver,
+                "bypassed": bypassed,
+            }
 
     async def _handle_status_request(
         self, web_request: WebRequest
@@ -432,7 +487,7 @@ class GcodeAnalysis:
             "using_default_config": is_default
         }
 
-    async def _handle_estimation_request(
+    async def _handle_estimator_request(
         self, web_request: WebRequest
     ) -> Dict[str, Any]:
         gcode_file = web_request.get_str("filename").strip("/")
@@ -451,7 +506,14 @@ class GcodeAnalysis:
                     "Invalid value for param 'estimator_config', '..' segments "
                     "are not allowed"
                 )
-        ret = await self.estimate_file(gc_path, est_cfg_path)
+        ep = web_request.get_endpoint().split("/")[-1]
+        if ep == "estimate":
+            ret = await self.estimate_file(gc_path, est_cfg_path)
+        elif ep == "process":
+            force = web_request.get_boolean("force", False)
+            ret = await self.post_process_file(gc_path, est_cfg_path, force)
+        else:
+            raise self.server.error(f"Unknown request {ep}", 404)
         return ret
 
     async def _handle_dump_cfg_request(
