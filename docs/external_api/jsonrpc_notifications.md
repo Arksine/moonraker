@@ -584,6 +584,7 @@ notify_history_changed
                     "size": 538254,
                     "modified": 1646770808,
                     "uuid": "4022d6bd-e5f5-45d7-84af-f38bcc57a5d3",
+                    "file processors": [],
                     "slicer": "PrusaSlicer",
                     "slicer_version": "2.4.0+linux-x64-GTK3",
                     "gcode_start_byte": 51238,

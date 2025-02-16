@@ -576,8 +576,7 @@ Content-Type: application/json
 
 {
     "filename": "my_file.gcode",
-    "estimator_config": "custom_estimator_cfg.json",
-    "update_metadata": false
+    "estimator_config": "custom_estimator_cfg.json"
 }
 ```
 
@@ -587,8 +586,7 @@ Content-Type: application/json
     "method": "server.analysis.estimate",
     "params": {
         "filename": "my_file.gcode",
-        "estimator_config": "custom_estimator_cfg.json",
-        "update_metadata": false
+        "estimator_config": "custom_estimator_cfg.json"
     }
     "id": 4654
 }
@@ -609,10 +607,6 @@ Content-Type: application/json
 |                    |        |                    | in the `[analysis]` section of            |^
 |                    |        |                    | `moonraker.conf` or the default dumped    |^
 |                    |        |                    | config will be used.                      |^
-| `update_metadata`  |  bool  | false              | When set to `true` the `estimated_time`   |
-|                    |        |                    | field of the gcode file's metadata will   |^
-|                    |        |                    | be overwritten with the `total_time`      |^
-|                    |        |                    | result from Klipper Estimator.            |^
 
 ///
 
@@ -1251,6 +1245,83 @@ All time estimates are reported in seconds.
 
 ///
 
+### Post process a file
+
+Klipper Estimator will perform a time analysis and use the results to
+modify the time estimates in the file.  If M73 (progress) commands are
+present they will also be modified.
+
+```{.http .apirequest title="HTTP Request"}
+POST /server/analysis/process
+Content-Type: application/json
+
+{
+    "filename": "my_file.gcode",
+    "estimator_config": "custom_estimator_cfg.json",
+    "force": false
+}
+```
+
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "server.analysis.process",
+    "params": {
+        "filename": "my_file.gcode",
+        "estimator_config": "custom_estimator_cfg.json",
+        "force": false
+    }
+    "id": 4654
+}
+```
+
+/// api-parameters
+    open: True
+
+| Name               |  Type  | Default            | Description                                    |
+| ------------------ | :----: | ------------------ | ---------------------------------------------- |
+| `filename`         | string | **REQUIRED**       | The path to the gcode file to post-process.    |
+|                    |        |                    | This should be a path relative to the `gcodes` |^
+|                    |        |                    | root folder.                                   |^
+| `estimator_config` | string | **CONFIG_DEFAULT** | The path to a Klipper Estimator config         |
+|                    |        |                    | file, relative to the `config` root            |^
+|                    |        |                    | folder.  When omitted the file configured      |^
+|                    |        |                    | in the `[analysis]` section of                 |^
+|                    |        |                    | `moonraker.conf` or the default dumped         |^
+|                    |        |                    | config will be used.                           |^
+| `force`            |  bool  | false              | By default the request will not perform a new  |
+|                    |        |                    | post-process if the file was already processed |^
+|                    |        |                    | by Klipper Estimator. When `force` is `true`   |^
+|                    |        |                    | the file will be post-processed regardless.    |^
+
+///
+
+```{.json .apiresponse title="Example Response"}
+{
+    "prev_processed": false,
+    "version": "v3.7.3",
+    "bypassed": false
+}
+```
+
+/// api-response-spec
+    open: True
+
+| Field            | Type | Description                                                |
+| ---------------- | :--: | ---------------------------------------------------------- |
+| `prev_processed` | bool | Will be `true` if the requested file was previously        |
+|                  |      | processed by Klipper Estimator.                            |^
+| `version`        | str  | The version of Klipper Estimator used to process the file. |
+| `bypassed`       | bool | Will be `true` if the post-processing was bypassed.  This  |
+|                  |      | occurs if the file was previously processed by Klipper     |^
+|                  |      | Estimator and the `force` argument is `false`.             |^
+
+///
+
+/// note
+If the `file_manager` has `inotify` enabled the post-process will trigger a
+`create_file` event, which will in turn trigger metadata extraction.
+///
 
 ### Dump the current configuration
 
