@@ -372,6 +372,12 @@ class FileManager:
             return ""
         return os.path.relpath(full_path, start=root_dir)
 
+    def get_full_path(self, root: str, relative_path: str) -> pathlib.Path:
+        root_dir = self.file_paths.get(root, None)
+        if root_dir is None:
+            raise self.server.error(f"Unknown root {root}")
+        return pathlib.Path(root_dir).joinpath(relative_path)
+
     def get_metadata_storage(self) -> MetadataStorage:
         return self.gcode_metadata
 
@@ -2520,6 +2526,9 @@ class MetadataStorage:
                     logging.exception("Error running extract_metadata.py")
                     retries -= 1
                 else:
+                    await self.server.send_event(
+                        "file_manager:metadata_processed", fname
+                    )
                     break
             else:
                 if ufp_path is None:

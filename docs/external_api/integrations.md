@@ -510,6 +510,853 @@ proxied directly.
 
 ///
 
+## Klipper Estimator time analysis
+
+Moonraker's `analysis` component uses
+[Klipper Estimator](https://github.com/Annex-Engineering/klipper_estimator)
+to perform gcode file time analysis.  The endpoints in this section are available
+when the `[analysis]` section has been configured in `moonraker.conf`.
+
+### Get Analysis Status
+
+```{.http .apirequest title="HTTP Request"}
+GET /server/analysis/status
+```
+
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "server.analysis.status",
+    "id": 4654
+}
+```
+
+/// collapse-code
+```{.json .apiresponse title="Example Response"}
+{
+    "estimator_executable": "klipper_estimator_rpi",
+    "estimator_ready": true,
+    "estimator_version": "v3.7.3",
+    "estimator_config_exists": true,
+    "using_default_config": false
+}
+```
+///
+
+/// api-response-spec
+    open: True
+
+| Field                     |  Type  | Description                                  |
+| ------------------------- | :----: | -------------------------------------------- |
+| `estimator_executable`    | string | The name of the Klipper Estimator executable |
+|                           |        | file.                                        |^
+| `estimator_ready`         |  bool  | A value of `true` indicates that the Klipper |
+|                           |        | Estimator binary is present and successfully |^
+|                           |        | reports its version.                         |^
+| `estimator_version`       | string | The version reported by Klipper Estimator.   |
+| `estimator_config_exists` |  bool  | A value of `true` indicates that a valid     |
+|                           |        | Klipper Estimator config file exists.        |^
+| `using_default_config`    |  bool  | Reports `true` when Klipper Estimator is     |
+|                           |        | configured to use the default config.        |^
+
+//// note
+When Klipper Estimator is first initialized Moonraker downloads the binary
+and grants it executable permissions.  A default configuration will be
+dumped when Klippy reports `ready`.  The default configuration will not
+exist until Klippy is `ready` and available.
+////
+
+///
+
+### Perform a time analysis
+
+```{.http .apirequest title="HTTP Request"}
+POST /server/analysis/estimate
+Content-Type: application/json
+
+{
+    "filename": "my_file.gcode",
+    "estimator_config": "custom_estimator_cfg.json",
+    "update_metadata": false
+}
+```
+
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "server.analysis.estimate",
+    "params": {
+        "filename": "my_file.gcode",
+        "estimator_config": "custom_estimator_cfg.json",
+        "update_metadata": false
+    }
+    "id": 4654
+}
+```
+
+/// api-parameters
+    open: True
+
+| Name               |  Type  | Default            | Description                               |
+| ------------------ | :----: | ------------------ | ----------------------------------------- |
+| `filename`         | string | **REQUIRED**       | The path to the gcode file to perform     |
+|                    |        |                    | a time estimate on.  This should be a     |^
+|                    |        |                    | path relative to the `gcodes` root        |^
+|                    |        |                    | folder.                                   |^
+| `estimator_config` | string | **CONFIG_DEFAULT** | The path to a Klipper Estimator config    |
+|                    |        |                    | file, relative to the `config` root       |^
+|                    |        |                    | folder.  When omitted the file configured |^
+|                    |        |                    | in the `[analysis]` section of            |^
+|                    |        |                    | `moonraker.conf` or the default dumped    |^
+|                    |        |                    | config will be used.                      |^
+| `update_metadata`  |  bool  | false              | When set to `true` the `estimated_time`   |
+|                    |        |                    | field of the gcode file's metadata will   |^
+|                    |        |                    | be overwritten with the `total_time`      |^
+|                    |        |                    | result from Klipper Estimator.            |^
+
+///
+
+/// collapse-code
+```{.json .apiresponse title="Example Response"}
+{
+    "total_time": 3086.8131575260686,
+    "total_distance": 63403.85014049082,
+    "total_extrude_distance": 2999.883480000007,
+    "max_flow": 7.593973828405062,
+    "max_speed": 180,
+    "num_moves": 19068,
+    "total_z_time": 122.51358592092325,
+    "total_output_time": 2789.122405609832,
+    "total_travel_time": 257.9946362351847,
+    "total_extrude_only_time": 39.446115681036936,
+    "phase_times": {
+        "acceleration": 360.966527738102,
+        "cruise": 2365.24977575805,
+        "deceleration": 360.3468540299323
+    },
+    "kind_times": {
+        "Bridge infill": 86.61878955677516,
+        "Custom": 1.1925285421682654,
+        "External perimeter": 727.5477605614387,
+        "Gap fill": 11.412536370727818,
+        "Internal infill": 1035.7116673043204,
+        "Overhang perimeter": 0.966786878164481,
+        "Perimeter": 562.2619470028691,
+        "Skirt/Brim": 22.540480459569807,
+        "Solid infill": 573.0419719937473,
+        "Top solid infill": 65.26868885629558
+    },
+    "layer_times": [
+        [
+            0,
+            0.05059644256269407
+        ],
+        [
+            0.2,
+            58.177320509927746
+        ],
+        [
+            0.5,
+            31.954084022391182
+        ],
+        [
+            0.6,
+            0.9089208501630478
+        ],
+        [
+            0.8,
+            33.99706357305071
+        ],
+        [
+            1.1,
+            25.96804446085199
+        ],
+        [
+            1.4,
+            26.479048320454805
+        ],
+        [
+            1.7,
+            26.582581091690333
+        ],
+        [
+            2,
+            27.072868276853875
+        ],
+        [
+            2.3,
+            23.266380178000148
+        ],
+        [
+            2.6,
+            23.32793916103499
+        ],
+        [
+            2.9,
+            22.68151682077201
+        ],
+        [
+            3.2,
+            39.49402504999236
+        ],
+        [
+            3.5,
+            27.195385252006332
+        ],
+        [
+            3.8,
+            28.109438088654816
+        ],
+        [
+            4.1,
+            24.08349852277251
+        ],
+        [
+            4.4,
+            23.917674876902552
+        ],
+        [
+            4.7,
+            23.202091559017017
+        ],
+        [
+            5,
+            23.198343943562456
+        ],
+        [
+            5.3,
+            22.153783595351126
+        ],
+        [
+            5.6,
+            21.808169596228392
+        ],
+        [
+            5.9,
+            21.904068197159418
+        ],
+        [
+            6.2,
+            21.726213600349016
+        ],
+        [
+            6.5,
+            21.555689782559813
+        ],
+        [
+            6.8,
+            21.56001088763045
+        ],
+        [
+            7.1,
+            21.616583527557026
+        ],
+        [
+            7.4,
+            21.587509695967398
+        ],
+        [
+            7.7,
+            21.582874923811257
+        ],
+        [
+            8,
+            21.57728927279966
+        ],
+        [
+            8.3,
+            21.76624101342738
+        ],
+        [
+            8.6,
+            21.450965502680578
+        ],
+        [
+            8.9,
+            21.461465610564524
+        ],
+        [
+            9.2,
+            21.366725852519636
+        ],
+        [
+            9.5,
+            21.362167027170038
+        ],
+        [
+            9.8,
+            25.600580479722474
+        ],
+        [
+            10.1,
+            26.282946643536636
+        ],
+        [
+            10.4,
+            26.693162061300253
+        ],
+        [
+            10.7,
+            25.87730466751283
+        ],
+        [
+            11,
+            25.837521272340645
+        ],
+        [
+            11.3,
+            25.220649143903664
+        ],
+        [
+            11.6,
+            24.91627368335564
+        ],
+        [
+            11.9,
+            24.565979527961527
+        ],
+        [
+            12.2,
+            21.901257609622963
+        ],
+        [
+            12.5,
+            21.26785043389243
+        ],
+        [
+            12.8,
+            21.099317506268335
+        ],
+        [
+            13.1,
+            21.524648538390988
+        ],
+        [
+            13.4,
+            24.108699996006557
+        ],
+        [
+            13.7,
+            24.373866962973825
+        ],
+        [
+            14,
+            25.230795272831255
+        ],
+        [
+            14.3,
+            25.47226683972438
+        ],
+        [
+            14.6,
+            26.051098821629687
+        ],
+        [
+            14.9,
+            26.2540071554197
+        ],
+        [
+            15.2,
+            26.54261709911606
+        ],
+        [
+            15.5,
+            22.769433528123376
+        ],
+        [
+            15.8,
+            22.57337903594234
+        ],
+        [
+            16.1,
+            22.120135631848644
+        ],
+        [
+            16.4,
+            22.302142435605443
+        ],
+        [
+            16.7,
+            22.490758568112852
+        ],
+        [
+            17,
+            22.216297455855806
+        ],
+        [
+            17.3,
+            22.241988841558136
+        ],
+        [
+            17.6,
+            22.030502249189826
+        ],
+        [
+            17.9,
+            21.442566629762368
+        ],
+        [
+            18.2,
+            21.537227968334165
+        ],
+        [
+            18.5,
+            21.187671992912446
+        ],
+        [
+            18.8,
+            21.176477375060422
+        ],
+        [
+            19.1,
+            21.176107665494644
+        ],
+        [
+            19.4,
+            21.164450306340775
+        ],
+        [
+            19.7,
+            21.211793185762044
+        ],
+        [
+            20,
+            21.049079879215107
+        ],
+        [
+            20.3,
+            21.018544238429598
+        ],
+        [
+            20.6,
+            20.833976711167224
+        ],
+        [
+            20.9,
+            20.833976711167224
+        ],
+        [
+            21.2,
+            20.833976711167224
+        ],
+        [
+            21.5,
+            20.833976711167224
+        ],
+        [
+            21.8,
+            20.833976711167224
+        ],
+        [
+            22.1,
+            20.833976711167224
+        ],
+        [
+            22.4,
+            21.258875428281975
+        ],
+        [
+            22.7,
+            21.303045487271195
+        ],
+        [
+            23,
+            21.54997891912768
+        ],
+        [
+            23.3,
+            21.4000724519804
+        ],
+        [
+            23.6,
+            21.172838007877022
+        ],
+        [
+            23.9,
+            21.89326824952405
+        ],
+        [
+            24.2,
+            22.260210513833638
+        ],
+        [
+            24.5,
+            22.34815676766725
+        ],
+        [
+            24.8,
+            23.018360476759195
+        ],
+        [
+            25.1,
+            22.83742910264808
+        ],
+        [
+            25.4,
+            21.884928399224517
+        ],
+        [
+            25.7,
+            21.16791844379882
+        ],
+        [
+            26,
+            21.062339082163817
+        ],
+        [
+            26.3,
+            20.497926920922225
+        ],
+        [
+            26.6,
+            20.441458670088437
+        ],
+        [
+            26.9,
+            20.497926920922225
+        ],
+        [
+            27.2,
+            21.411213211524064
+        ],
+        [
+            27.5,
+            21.205564835097203
+        ],
+        [
+            27.8,
+            21.403735651236662
+        ],
+        [
+            28.1,
+            21.72317504502876
+        ],
+        [
+            28.4,
+            20.83804429637327
+        ],
+        [
+            28.7,
+            20.992445860036398
+        ],
+        [
+            29,
+            20.96056166031732
+        ],
+        [
+            29.3,
+            20.96056166031732
+        ],
+        [
+            29.6,
+            20.96056166031732
+        ],
+        [
+            29.9,
+            20.96056166031732
+        ],
+        [
+            30.2,
+            21.163385361246583
+        ],
+        [
+            30.5,
+            21.375398470771565
+        ],
+        [
+            30.8,
+            21.845443716854845
+        ],
+        [
+            31.1,
+            21.003381151310677
+        ],
+        [
+            31.4,
+            20.660669538703793
+        ],
+        [
+            31.7,
+            20.497926920922225
+        ],
+        [
+            32,
+            20.441458670088437
+        ],
+        [
+            32.3,
+            20.497926920922225
+        ],
+        [
+            32.6,
+            20.441458670088437
+        ],
+        [
+            32.9,
+            20.497926920922225
+        ],
+        [
+            33.2,
+            20.441458670088437
+        ],
+        [
+            33.5,
+            20.497926920922225
+        ],
+        [
+            33.8,
+            20.441458670088437
+        ],
+        [
+            34.1,
+            36.85516926371657
+        ],
+        [
+            34.4,
+            23.906291084020573
+        ],
+        [
+            34.7,
+            24.10243730191063
+        ],
+        [
+            35,
+            29.058094876089566
+        ],
+        [
+            35.3,
+            21.585307365265763
+        ],
+        [
+            35.6,
+            21.977729818546266
+        ],
+        [
+            35.9,
+            21.982243563755652
+        ],
+        [
+            36.2,
+            21.84660060776076
+        ],
+        [
+            36.5,
+            21.852866392888306
+        ],
+        [
+            36.8,
+            21.809194828486756
+        ],
+        [
+            37.1,
+            20.510222555418448
+        ],
+        [
+            37.4,
+            19.19335211292996
+        ],
+        [
+            37.7,
+            17.170142031218244
+        ],
+        [
+            38,
+            15.027435648219916
+        ],
+        [
+            38.3,
+            12.070425871333898
+        ],
+        [
+            38.6,
+            9.187916276700111
+        ],
+        [
+            38.9,
+            8.965728773112703
+        ],
+        [
+            39.2,
+            6.353229978247989
+        ],
+        [
+            39.5,
+            6.225660195566472
+        ],
+        [
+            39.8,
+            0.5801244322591914
+        ],
+        [
+            40.1,
+            0.2925785856185972
+        ]
+    ]
+}
+```
+///
+
+/// api-response-spec
+    open: True
+
+//// Note
+This specification applies to the values returned by
+Klipper Estimator version `v3.7.3`.
+
+All time estimates are reported in seconds.
+////
+
+| Field                     |   Type    | Description                                            |
+| ------------------------- | :-------: | ------------------------------------------------------ |
+| `total_time`              |   float   | The total estimated time spent on the job.             |
+| `total_distance`          |   float   | The total estimated travel distance of the tool in mm. |
+| `total_extrude_distance`  |   float   | The total estimated extrude distance in mm.            |
+| `max_flow`                |   float   | The maximum flow rate detected in mm^3^/s.             |
+| `max_speed`               |   float   | The maximum tool movement speed detected in mm/s.      |
+| `num_moves`               |    int    | The total number of moves detected.                    |
+| `total_z_time`            |   float   | The estimated amount of time spent moving on the       |
+|                           |           | Z axis.                                                |^
+| `total_output_time`       |   float   | The estimated amount of time moving while extruding.   |
+| `total_travel_time`       |   float   | The estimated amount of time the tool spent traveling. |
+| `total_extrude_only_time` |   float   | The estimated amount of time the tool spent extruding  |
+|                           |           | without other movement.                                |^
+| `phase_times`             |  object   | A `Phase Times` object.                                |
+|                           |           | #phase-times-object-spec                               |+
+| `kind_times`              |  object   | A `Kind Times` object.                                 |
+|                           |           | #kind-times-object-spec                                |+
+| `layer_times`             | [[float]] | An array of 2-element arrays.  The first element       |
+|                           |           | is the layer height, the second is the estimated       |^
+|                           |           | time spent printing the layer.                         |^
+
+| Field          | Type  | Description                                           |
+| -------------- | :---: | ----------------------------------------------------- |
+| `acceleration` | float | The amount of time the tool spent accelerating during |
+|                |       | the print job.                                        |^
+| `cruise`       | float | The amount of time the tool spent at cruise velocity  |
+|                |       | during the print job.                                 |^
+| `deceleration` | float | The amount of time the tool spent decelerating during |
+|                |       | the print job.                                        |^
+{ #phase-times-object-spec } Phase Times
+
+| Field       | Type  | Description                                                       |
+| ----------- | :---: | ----------------------------------------------------------------- |
+| *kind_desc* | float | An entry where the key is a description of the "kind" of item     |
+|             |       | being printed and its value is the total time spent printing      |^
+|             |       | this "kind".  The "kind" is determined by comments in the slicer. |^
+|             |       | For example `Perimeter` and `Bridge infill` are "kinds" reported  |^
+|             |       | by PrusaSlicer.  If the "kind" is not available Klipper Estimator |^
+|             |       | will report it under `Other`.  The `Kind Times` object may have   |^
+|             |       | multiple *kind_desc* entries.                                     |^
+{ #kind-times-object-spec } Kind Times
+
+///
+
+
+### Dump the current configuration
+
+Create a Klipper Estimator configuration file using Klippy's
+current settings.
+
+/// note
+Klippy must be connected and in the `ready` state to run
+this request.
+///
+
+```{.http .apirequest title="HTTP Request"}
+POST /server/analysis/dump_config
+Content-Type: application/json
+
+{
+    "dest_config": "custom_estimator_cfg.json"
+}
+```
+
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "server.analysis.dump_config",
+    "params": {
+        "dest_config": "custom_estimator_cfg.json"
+    }
+    "id": 4654
+}
+```
+
+/// api-parameters
+    open: True
+
+| Name          |  Type  | Default | Description                               |
+| ------------- | :----: | ------- | ----------------------------------------- |
+| `dest_config` | string | null    | The name of the destination config file   |
+|               |        |         | for the dump. This should be a path       |^
+|               |        |         | relative to the `config` root folder.     |^
+|               |        |         | If omitted the result of the dump will    |^
+|               |        |         | be saved to the default Klipper Estimator |^
+|               |        |         | configuration file.                       |^
+
+//// Note
+The default configuration for Klipper Estimator is stored in the same
+folder as the binary.
+
+```
+<data_path>/tools/klipper_estimator/default_estimator_cfg.json
+```
+////
+
+///
+
+/// collapse-code
+```{.json .apiresponse title="Example Response"}
+{
+    "dest_root": "config",
+    "dest_config_path": "est_cfg_test.json",
+    "klipper_estimator_config": {
+        "max_velocity": 300,
+        "max_acceleration": 1500,
+        "minimum_cruise_ratio": 0.5,
+        "square_corner_velocity": 5,
+        "instant_corner_velocity": 1,
+        "move_checkers": [
+            {
+                "axis_limiter": {
+                    "axis": [
+                        0,
+                        0,
+                        1
+                    ],
+                    "max_velocity": 15,
+                    "max_accel": 200
+                }
+            },
+            {
+                "extruder_limiter": {
+                    "max_velocity": 120,
+                    "max_accel": 1250
+                }
+            }
+        ]
+    }
+}
+```
+///
+
+/// api-response-spec
+    open: True
+
+| Field                      |      Type      | Description                               |
+| -------------------------- | :------------: | ----------------------------------------- |
+| `dest_root`                | string \| null | The destination root folder of the dumped |
+|                            |                | configuration file.  Will be `null` if    |^
+|                            |                | the dumped file is the default config.    |^
+| `dest_config`              |     sting      | The path of the dumped configuration file |
+|                            |                | relative to the `dest_root`.  If the      |^
+|                            |                | `dest_root` is null then this will be     |^
+|                            |                | the default configuration's file name.    |^
+| `klipper_estimator_config` |     object     | An object containing the output of the    |
+|                            |                | dump command.                             |^
+
+///
+
 
 ## OctoPrint API emulation
 

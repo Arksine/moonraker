@@ -69,11 +69,13 @@ notify_status_update
     "jsonrpc": "2.0",
     "method": "notify_status_update",
     "params": [
-        "gcode_move": {
-            "speed": 1500,
-        },
-        "toolhead": {
-            "status": "Ready"
+        {
+            "gcode_move": {
+                "speed": 1500,
+            },
+            "toolhead": {
+                "status": "Ready"
+            }
         },
         578243.57824499
     ]
@@ -511,35 +513,37 @@ notify_proc_stat_update
 {
     "jsonrpc": "2.0",
     "method": "notify_proc_stat_update",
-    "params": [{
-        "moonraker_stats": {
-            "time": 1615837812.0894408,
-            "cpu_usage": 1.99,
-            "memory": 23636,
-            "mem_units": "kB"
-        },
-        "cpu_temp": 44.008,
-        "network": {
-            "lo": {
-                "rx_bytes": 114555457,
-                "tx_bytes": 114555457,
-                "bandwidth": 2911.49
+    "params": [
+        {
+            "moonraker_stats": {
+                "time": 1615837812.0894408,
+                "cpu_usage": 1.99,
+                "memory": 23636,
+                "mem_units": "kB"
             },
-            "wlan0": {
-                "rx_bytes": 48773134,
-                "tx_bytes": 115035939,
-                "bandwidth": 3458.77
-            }
-        },
-        "system_cpu_usage": {
-            "cpu": 2.53,
-            "cpu0": 3.03,
-            "cpu1": 5.1,
-            "cpu2": 1.02,
-            "cpu3": 1
-        },
-        "websocket_connections": 2
-    }]
+            "cpu_temp": 44.008,
+            "network": {
+                "lo": {
+                    "rx_bytes": 114555457,
+                    "tx_bytes": 114555457,
+                    "bandwidth": 2911.49
+                },
+                "wlan0": {
+                    "rx_bytes": 48773134,
+                    "tx_bytes": 115035939,
+                    "bandwidth": 3458.77
+                }
+            },
+            "system_cpu_usage": {
+                "cpu": 2.53,
+                "cpu0": 3.03,
+                "cpu1": 5.1,
+                "cpu2": 1.02,
+                "cpu3": 1
+            },
+            "websocket_connections": 2
+        }
+    ]
 }
 ```
 ///
@@ -1268,7 +1272,7 @@ when the current active spool ID has changed.
 notify_active_spool_set
 ```
 
-```json
+```{.json .apiresponse title="Example Notification"}
 {
     "jsonrpc": "2.0",
     "method": "notify_active_spool_set",
@@ -1308,7 +1312,7 @@ the connection status to Spoolman changes.
 notify_spoolman_status_changed
 ```
 
-```json
+```{.json .apiresponse title="Example Notification"}
 {
     "jsonrpc": "2.0",
     "method": "notify_spoolman_status_changed",

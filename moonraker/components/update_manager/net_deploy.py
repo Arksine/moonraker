@@ -1,4 +1,4 @@
-# Zip Application Deployment implementation
+# Net Hosted Application Deployment implementation
 #
 # Copyright (C) 2024  Eric Callahan <arksine.code@gmail.com>
 #
@@ -9,6 +9,7 @@ import pathlib
 import shutil
 import zipfile
 import logging
+import stat
 from .app_deploy import AppDeploy
 from .common import Channel, AppType
 from ...utils import source_info
@@ -27,16 +28,11 @@ from typing import (
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
-    from .update_manager import CommandHelper
     from ..file_manager.file_manager import FileManager
 
-class ZipDeploy(AppDeploy):
-    def __init__(
-        self,
-        config: ConfigHelper,
-        cmd_helper: CommandHelper
-    ) -> None:
-        super().__init__(config, cmd_helper, "Zip Application")
+class NetDeploy(AppDeploy):
+    def __init__(self, config: ConfigHelper) -> None:
+        super().__init__(config, "Zip Application")
         self._configure_path(config, False)
         if self.type == AppType.ZIP:
             self._configure_virtualenv(config)
@@ -44,8 +40,13 @@ class ZipDeploy(AppDeploy):
             self._configure_managed_services(config)
         elif self.type == AppType.WEB:
             self.prefix = f"Web Client {self.name}: "
+        elif self.type == AppType.EXECUTABLE:
+            self.prefix = f"Executable {self.name}: "
+            self._configure_sysdeps(config)
+            self._configure_managed_services(config)
         self.repo = config.get('repo').strip().strip("/")
         self.owner, self.project_name = self.repo.split("/", 1)
+        self.asset_name: Optional[str] = None
         self.persistent_files: List[str] = []
         self.warnings: List[str] = []
         self.anomalies: List[str] = []
@@ -61,6 +62,10 @@ class ZipDeploy(AppDeploy):
         self._configure_persistent_files(config)
 
     def _configure_persistent_files(self, config: ConfigHelper) -> None:
+        if self.type == AppType.EXECUTABLE:
+            # executable types do not wipe the entire directory,
+            # so no need for persistent files
+            return
         pfiles = config.getlist('persistent_files', None)
         if pfiles is not None:
             self.persistent_files = [pf.strip("/") for pf in pfiles]
@@ -110,6 +115,7 @@ class ZipDeploy(AppDeploy):
                     project_name = uinfo["project_name"]
                     owner = uinfo["project_owner"]
                     self.version = uinfo["version"]
+                    self.asset_name = uinfo.get("asset_name", None)
                 except Exception:
                     logging.exception("Failed to load release_info.json.")
                 else:
@@ -124,6 +130,22 @@ class ZipDeploy(AppDeploy):
                         self.repo = detected_repo
                         self.owner = owner
                         self.project_name = project_name
+                    if self.type == AppType.EXECUTABLE:
+                        if self.asset_name is None:
+                            self.warnings.append(
+                                "Executable types require the 'asset_name' field in "
+                                "release_info.json"
+                            )
+                            self._is_valid = False
+                        else:
+                            fname = self.asset_name
+                            exec_file = self.path.joinpath(fname)
+                            if not exec_file.exists():
+                                self.warnings.append(
+                                    f"File {fname} not found in configured path for "
+                                    "executable type"
+                                )
+                                self._is_valid = False
             elif self.type == AppType.WEB:
                 version_path = self.path.joinpath(".version")
                 if version_path.is_file():
@@ -188,7 +210,7 @@ class ZipDeploy(AppDeploy):
         dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
         self.dl_info = cast(Tuple[str, str, int], tuple(dl_info))
         if not self.needs_refresh():
-            self._log_zipapp_info()
+            self._log_app_info()
         return storage
 
     def get_persistent_data(self) -> Dict[str, Any]:
@@ -209,7 +231,7 @@ class ZipDeploy(AppDeploy):
             await self._get_remote_version()
         except Exception:
             logging.exception("Error Refreshing Client")
-        self._log_zipapp_info()
+        self._log_app_info()
         self._save_state()
 
     async def _fetch_github_version(
@@ -259,14 +281,22 @@ class ZipDeploy(AppDeploy):
         if not result:
             return
         self.remote_version = result.get('name', "?")
-        release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
+        assets: List[Dict[str, Any]] = result.get("assets", [{}])
+        release_asset: Dict[str, Any] = assets[0] if assets else {}
+        if self.asset_name is not None:
+            for asset in assets:
+                if asset.get("name", "") == self.asset_name:
+                    release_asset = asset
+                    break
+            else:
+                logging.info(f"Asset '{self.asset_name}' not found")
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
         self.dl_info = (dl_url, content_type, size)
         self._is_prerelease = result.get('prerelease', False)
 
-    def _log_zipapp_info(self):
+    def _log_app_info(self):
         warn_str = ""
         if self.warnings or self.anomalies:
             warn_str = "\nWarnings:\n"
@@ -319,6 +349,46 @@ class ZipDeploy(AppDeploy):
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src_path), str(dest_path))
 
+    def _set_exec_perms(self, exec: pathlib.Path) -> None:
+        req_perms = stat.S_IXUSR | stat.S_IXGRP
+        kest_perms = stat.S_IMODE(exec.stat().st_mode)
+        if req_perms & kest_perms != req_perms:
+            try:
+                exec.chmod(kest_perms | req_perms)
+            except OSError:
+                logging.exception(
+                    f"Failed to set executable permission for file {exec}"
+                )
+
+    async def _finalize_executable(self, tmp_file: pathlib.Path, new_ver: str) -> None:
+        if not self.type == AppType.EXECUTABLE:
+            return
+        # Remove existing binary
+        exec_path = self.path.joinpath(tmp_file.name)
+        if exec_path.is_file():
+            exec_path.unlink()
+        eventloop = self.server.get_event_loop()
+        # move download to the configured path
+        dest = await eventloop.run_in_thread(
+            shutil.move, str(tmp_file), str(self.path)
+        )
+        dest_path = pathlib.Path(dest)
+        # give file executable permissions
+        self._set_exec_perms(dest_path)
+        # Update release_info.json.  This is required as executable distributions
+        # can't be bundled with release info.
+        rinfo = self.path.joinpath("release_info.json")
+        if not rinfo.is_file():
+            return
+        eventloop = self.server.get_event_loop()
+        # If the new version does not match the version in release_info.json,
+        # update it.
+        data = await eventloop.run_in_thread(rinfo.read_text)
+        uinfo: Dict[str, Any] = jsonw.loads(data)
+        if uinfo["version"] != new_ver:
+            uinfo["version"] = new_ver
+            await eventloop.run_in_thread(rinfo.write_bytes, jsonw.dumps(uinfo))
+
     async def update(
         self,
         rollback_info: Optional[Tuple[str, str, int]] = None,
@@ -332,6 +402,7 @@ class ZipDeploy(AppDeploy):
         if rollback_info is not None:
             dl_url, content_type, size = rollback_info
             start_msg = "Rolling Back..." if not is_recover else "Recovering..."
+            new_ver = self.rollback_version if not is_recover else self.version
         else:
             if self.remote_version == "?":
                 await self._get_remote_version()
@@ -339,6 +410,7 @@ class ZipDeploy(AppDeploy):
                     raise self.server.error(
                         f"{self.prefix}Unable to locate update"
                     )
+            new_ver = self.remote_version
             dl_url, content_type, size = self.dl_info
             if self.version == self.remote_version:
                 # Already up to date
@@ -351,12 +423,15 @@ class ZipDeploy(AppDeploy):
         self.notify_status(start_msg)
         self.notify_status("Downloading Release...")
         dep_info: Optional[Dict[str, Any]] = None
-        if self.type == AppType.ZIP:
+        if self.type in (AppType.ZIP, AppType.EXECUTABLE):
             dep_info = await self._collect_dependency_info()
         td = await self.cmd_helper.create_tempdir(self.name, "app")
         try:
             tempdir = pathlib.Path(td.name)
-            temp_download_file = tempdir.joinpath(f"{self.name}.zip")
+            if self.asset_name is not None:
+                temp_download_file = tempdir.joinpath(self.asset_name)
+            else:
+                temp_download_file = tempdir.joinpath(f"{self.name}.zip")
             temp_persist_dir = tempdir.joinpath(self.name)
             client = self.cmd_helper.get_http_client()
             await client.download_file(
@@ -366,19 +441,22 @@ class ZipDeploy(AppDeploy):
             self.notify_status(
                 f"Download Complete, extracting release to '{self.path}'"
             )
-            await event_loop.run_in_thread(
-                self._extract_release, temp_persist_dir, temp_download_file
-            )
+            if self.type == AppType.EXECUTABLE:
+                await self._finalize_executable(temp_download_file, new_ver)
+            else:
+                await event_loop.run_in_thread(
+                    self._extract_release, temp_persist_dir, temp_download_file
+                )
         finally:
             await event_loop.run_in_thread(td.cleanup)
         if dep_info is not None:
             await self._update_dependencies(dep_info, force_dep_update)
-        self.version = self.remote_version
+        self.version = new_ver
         await self._validate_release_info()
         if self._is_valid and rollback_info is None:
             self.rollback_version = current_version
             self.rollback_repo = self.repo
-        self._log_zipapp_info()
+        self._log_app_info()
         self._save_state()
         await self.restart_service()
         msg = "Update Finished..." if rollback_info is None else "Rollback Complete"

@@ -379,8 +379,6 @@ service: mjpegstreamer
 #   ends may use this configuration to determine how to connect to the service
 #   and interpret its stream.  See the tip following this example for
 #   currently known values.  The default is "mjpegstreamer".
-location: printer
-#   A string describing the location of the camera.  Default is printer.
 target_fps: 15
 #   An integer value specifying the target framerate.  The default is 15 fps.
 target_fps_idle: 5
@@ -518,6 +516,46 @@ in the response.
 
 Optional Components are only loaded if present in `moonraker.conf`.  This
 includes components that may not have any configuration.
+
+### `[analysis]`
+
+The `analysis` component enables gcode file time analysis using
+[Klipper Estimator](https://github.com/Annex-Engineering/klipper_estimator).
+When enabled, Moonraker will automatically download the `klipper_estimator`
+binary and optionally create an [update manger](#update_manager) entry for it.
+
+```ini {title="Moonraker Config Specification"}
+# moonraker.conf
+platform: auto
+#   The platform flavor of Klipper Estimator to use.  Must be a choice
+#   from rpi, linux, osx, and auto. Note that "rpi" supports armv7 and
+#   aarch64 linux platforms, whereas "linux" supports amd64 linux
+#   platform.  The auto choice will attempt to automatically determine
+#   the correct platform.  The default is auto.
+estimator_config:
+#   A path relative to the "config" root specifying a config
+#   file to use for Klipper Estimator.  The default is to
+#   use a configuration dumped with data retrieved from Klipper's
+#   current settings.
+auto_dump_default_config: false
+#   When set to true the default configuration for Klipper Estimator
+#   will be dumped every time Klippy restarts.  When false the
+#   configuration is only dumped if the default configuration file
+#   does not exist.  The default is false.
+estimator_timeout: 600
+#   The maximum amount of time (in seconds) Klipper Estimator
+#   is given to process a gcode file before processing is
+#   aborted.  The default is 600 seconds.
+enable_auto_analysis: false
+#   When set to true Klipper Estimator will be used to perform a time
+#   analysis for gcode files immediately after metadata is processed.
+#   The "total_time" result will replace the existing "estimated_time"
+#   field in the gcode metadata.  This automates the time analysis for
+#   any event that triggers metadata processing.   Default is false.
+enable_estimator_updates: false
+#   When true Moonraker will create and register an entry for
+#   klipper_estimator with the update manager.  Default is false.
+```
 
 ### `[ldap]`
 
@@ -1879,6 +1917,9 @@ down into 4 basic types:
   See the note below in reference to unofficial extensions.
 - `zip`:  This can be used to manage various extensions like the `git_repo`
   type, however its updates are deployed via zipped GitHub releases.
+- `executable`:  Like the `zip` type this can be used to manage applications
+  and extensions.  An executable type must be a pre-built binary executable
+  file hosted on GitHub.
 - `python`:  The python type can be used to update python applications installed
   using `pip` in a virtual environment.
 
@@ -1893,27 +1934,57 @@ trackers without first reproducing the issue using pristine versions
 of Moonraker and/or Klipper.
 ///
 
-####  Web type (front-end) configuration
+#### The release_info.json file
 
-/// Note
-Front-end developers that wish to deploy updates via Moonraker
-should host releases on their GitHub repo.  In the root of each
-release a `release_info.json` file should be present.  This
-file must contain a JSON object with the following fields:
+The `web`, `zip`, and `executable` types require that the install
+folder contain a `release_info.json` file.  This file contains
+information the update manager uses to validate the local install.
 
-- `project_name`:  The name of the GitHub project
-- `project_owner`: The User or Organization that owns the project
-- `version`: The current release version
+| Field           | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| `project_name`  | The name of the GitHub project hosting the software. |
+| `project_owner` | The User or Organization that owns the project.      |
+| `version`       | The version of the installed software.  This should  |
+|                 | match the release tag on GitHub.                     |^
+| `asset_name`    | The name of the asset to download on GitHub.  This   |
+|                 | is optional for `web` and `zip` types, they will     |^
+|                 | default to `{config_section_name}.zip`.  The         |^
+|                 | `executable` type **REQUIRES** this field.           |^
+{ #release-info-json-spec } Release Info Specification
 
-For example, a `release_info.json` for Mainsail might contain the
-following:
-```json
+```json {title="Web Type Release Info Example"}
 {
   "project_name": "mainsail",
   "project_owner": "mainsail-crew",
   "version": "v2.5.1"
 }
 ```
+
+```json {title="Executable Type Release Info Example"}
+{
+  "project_name":"klipper_estimator",
+  "project_owner":"Annex-Engineering",
+  "version":"v3.7.3",
+  "asset_name":"klipper_estimator_rpi"
+}
+```
+
+/// note
+Moonraker automatically creates the above `release_info.json`
+file for Klipper Estimator when the [analysis](#analysis)
+section is configured in `moonraker.conf`.  When the
+`enable_updates` option is enabled Moonraker will register
+Klipper Estimator with the update manager, so there is no
+need to add a `[update manager klipper_estimator]` section
+to the configuration.
+///
+
+####  Web type (front-end) configuration
+
+/// Note
+Software using the `web` type should host their distribution
+in a zip file as a GitHub release.  The zip file MUST contain
+[release_info.json](#the-release_infojson-file).
 ///
 
 ```ini {title="Moonraker Config Specification"}
@@ -2106,17 +2177,21 @@ option must match the case of the systemd unit file.
 
 #### Zip Application Configuration
 
+/// Note
+Software using the `zip` type should host their distribution
+in a zip file as a GitHub release.  The zip file MUST contain
+[release_info.json](#the-release_infojson-file).
+///
+
 The `zip` type can be used to deploy zipped application updates through GitHub
 releases.  They can be thought of as a combination of the `web` and `git_repo`
-types.  Like `web` types, zipped applications must include a `release_info.json`
-file (see the [web type](#web-type-front-end-configuration) not for details).
-In addition, `zip` types can be configured to update dependencies and manage
+types.  Like `web` types, the are GitHub hosted zip archives.  Like `git_repo`
+types, `zip` types can be configured to update dependencies and manage
 services.
 
-The `zip` type is ideal for applications that need to be built before deployment.
-The thing to keep in mind is that any application updated through Moonraker needs
-either be cross-platform, or it needs to deploy binaries for multiple platforms
-and be able to choose the correct one based on the system.
+The `zip` type is ideal for applications that must bundle multiple files in
+a release.  If bundling executable files, keep in mind that Moonraker runs
+on multiple architectures.
 
 ```ini {title="Moonraker Config Specification"}
 type: zip
@@ -2145,6 +2220,54 @@ virtualenv:
 requirements:
 system_dependencies:
 enable_node_updates:
+is_system_service: True
+managed_services:
+info_tags:
+#   See the git_repo type documentation for detailed descriptions of the above
+#   options.
+```
+
+#### Executable Configuration
+
+/// Note
+Software using the `executable` type should host their binaries
+on GitHub as a release.  The initial installer for the executable
+MUST create [release_info.json](#the-release_infojson-file) in
+the folder containing the executable.
+///
+
+
+The `executable` type can be used to deploy pre-built executable binaries
+through GitHub releases.  Executable types can be installed as system services
+and may specify OS package dependencies.
+
+Like `web` and `zip` types, `executable` types must include a `release_info.json`
+file (see the [web type](#web-type-front-end-configuration) not for details).
+In addition, `executable` types can be configured to update dependencies and manage
+services.
+
+The `executable` type is ideal for applications that need to be built before deployment.
+The thing to keep in mind is that any application updated through Moonraker needs
+either be cross-platform, or it needs to deploy binaries for multiple platforms
+and be able to choose the correct one based on the system.
+
+```ini {title="Moonraker Config Specification"}
+type: executable
+channel: stable
+#   May be stable or beta.  When beta is specified "pre-release"
+#   updates are available.  The default is stable.
+repo:
+#   This is the GitHub repo of the application, in the format of owner/repo_name.
+path:
+#   The path to folder containing the executable on disk.  This folder must contain a
+#   a previously installed application and a valid release_info.json file.
+#   The folder must not be located within a git repo and it must not be located
+#   within a path that Moonraker has reserved, ie: it cannot share a path with
+#   another extension. This parameter must be provided.
+refresh_interval:
+#   This overrides the refresh_interval set in the primary [update_manager]
+#   section.
+system_dependencies:
 is_system_service: True
 managed_services:
 info_tags:
@@ -2201,7 +2324,13 @@ virtualenv: ~/pyapp
 ```
 ///
 
-##### The optional release_info file
+##### The optional python release_info file
+
+/// note
+This file has a different specification than the
+[release_info.json](#the-release_infojson-file)
+file required by other types.
+///
 
 Python applications may include a `release_info` file in the package
 folder that provides supplemental information for the application.  The
@@ -2226,7 +2355,7 @@ folder that provides supplemental information for the application.  The
 
   For example, Moonraker's `release_info` looks similar to the following:
 
-```json
+```json {title="Python release_info example"}
 {
     "project_name": "moonraker",
     "package_name": "moonraker",

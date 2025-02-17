@@ -31,7 +31,6 @@ from typing import (
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
-    from .update_manager import CommandHelper
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
 
@@ -39,10 +38,8 @@ DISTRO_ALIASES = [distro.id()]
 DISTRO_ALIASES.extend(distro.like().split())
 
 class AppDeploy(BaseDeploy):
-    def __init__(
-            self, config: ConfigHelper, cmd_helper: CommandHelper, prefix: str
-    ) -> None:
-        super().__init__(config, cmd_helper, prefix=prefix)
+    def __init__(self, config: ConfigHelper, prefix: str) -> None:
+        super().__init__(config, prefix=prefix)
         self.config = config
         type_choices = {str(t): t for t in AppType.valid_types()}
         self.type = config.getchoice("type", type_choices)
@@ -134,17 +131,21 @@ class AppDeploy(BaseDeploy):
         if self.py_exec is not None:
             self.python_reqs = self.path.joinpath(config.get("requirements"))
             self._verify_path(config, 'requirements', self.python_reqs)
-        deps = config.get("system_dependencies", None)
-        if deps is not None:
-            self.system_deps_json = self.path.joinpath(deps).resolve()
-            self._verify_path(config, 'system_dependencies', self.system_deps_json)
-        else:
+        if not self._configure_sysdeps(config):
             # Fall back on deprecated "install_script" option if dependencies file
             # not present
             install_script = config.get('install_script', None)
             if install_script is not None:
                 self.install_script = self.path.joinpath(install_script).resolve()
                 self._verify_path(config, 'install_script', self.install_script)
+
+    def _configure_sysdeps(self, config: ConfigHelper) -> bool:
+        deps = config.get("system_dependencies", None)
+        if deps is not None:
+            self.system_deps_json = self.path.joinpath(deps).resolve()
+            self._verify_path(config, 'system_dependencies', self.system_deps_json)
+            return True
+        return False
 
     def _configure_managed_services(self, config: ConfigHelper) -> None:
         svc_default = []
