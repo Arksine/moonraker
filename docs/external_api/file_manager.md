@@ -260,7 +260,7 @@ GET /server/files/metadata?filename=tools/drill.gcode
 | `size`                  |   int    | The gcode file size in bytes.                                |
 | `modified`              |  float   | The last modified time in Unix Time (seconds).               |
 | `uuid`                  |  string  | A unique identifier for the metadata object.                 |
-| `file_processors`       | [string] | An array of `File Processors` that have performed processed  |
+| `file_processors`       | [string] | An array of `File Processors` that have processed            |
 |                         |          | and modified the file.                                       |^
 |                         |          | #file-processor-app-desc                                     |+
 | `slicer`                |  string  | The name of the slicer software used to slice the file.      |
