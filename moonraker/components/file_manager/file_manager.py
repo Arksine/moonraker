@@ -176,7 +176,7 @@ class FileManager:
             if prune:
                 self.gcode_metadata.prune_storage()
 
-    async def component_init(self):
+    def start_file_observer(self):
         self.fs_observer.initialize()
 
     def _update_fixed_paths(self) -> None:
@@ -1889,6 +1889,8 @@ class InotifyObserver(BaseFileSystemObserver):
                 self._notify_root_updated, mevts, root, root_path)
 
     def initialize(self) -> None:
+        if self.initialized:
+            return
         for root, node in self.watched_roots.items():
             try:
                 evts = node.scan_node()
