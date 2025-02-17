@@ -195,6 +195,13 @@ class Server:
         if optional_comps:
             await asyncio.gather(*optional_comps)
 
+        # Wait until all components are initialized to start the file
+        # observer.  This allows other components to register gcode file
+        # processors before metadata is processed for gcode files that
+        # do not have a metadata entry.
+        file_manager: FileManager = self.lookup_component("file_manager")
+        file_manager.start_file_observer()
+
         if not self.warnings:
             await self.event_loop.run_in_thread(self.config.create_backup)
 
