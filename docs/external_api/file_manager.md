@@ -214,7 +214,7 @@ GET /server/files/metadata?filename=tools/drill.gcode
     "size": 1629418,
     "modified": 1706359465.4947228,
     "uuid": "473a41d2-15f4-434b-aeb4-ab96eb122bbf",
-    "file processors": [],
+    "file_processors": [],
     "slicer": "PrusaSlicer",
     "slicer_version": "2.7.1+win64",
     "gcode_start_byte": 87410,
