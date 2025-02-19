@@ -1,5 +1,5 @@
 {
-     "debian": [
+    "debian": [
         "python3-virtualenv",
         "python3-dev",
         "libopenjp2-7",
