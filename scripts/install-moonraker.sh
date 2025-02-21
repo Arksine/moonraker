@@ -1,7 +1,6 @@
 #!/bin/bash
 # This script installs Moonraker on Debian based Linux distros.
 
-SUPPORTED_DISTROS="debian ubuntu"
 PYTHONDIR="${MOONRAKER_VENV:-${HOME}/moonraker-env}"
 SYSTEMDDIR="/etc/systemd/system"
 REBUILD_ENV="${MOONRAKER_REBUILD_ENV:-n}"
@@ -38,89 +37,196 @@ if [ -f "${SRCDIR}/moonraker/__init__.py" ]; then
     IS_SRC_DIST="y"
 fi
 
-compare_version () {
-    if [ -z "$DISTRO_VERSION" ]; then
-        return 1
-    fi
-      compare_script=$(cat << EOF
-import re
-def convert_ver(ver):
-  ver = ver.strip()
-  ver_match = re.match(r"\d+(\.\d+)*((?:-|\.).+)?", ver)
-  if ver_match is None:
-    return (ver,)
-  return tuple([int(p) if p.isdigit() else p for p in re.split(r"\.|-", ver)])
-dist_version = convert_ver("$DISTRO_VERSION")
-req_version = convert_ver("$2")
-exit(int(not dist_version $1 req_version))
-EOF
-)
-    python3 -c "$compare_script"
-}
-
 # Detect Current Distribution
 detect_distribution() {
-    distro_list=""
-    orig_id=""
     if [ -f "/etc/os-release" ]; then
-        DISTRO_VERSION="$( grep -Po "^VERSION_ID=\"?\K[^\"]+" /etc/os-release || true )"
-        orig_id="$( grep -Po "^ID=\K.+" /etc/os-release || true )"
-        distro_list=$orig_id
-        like_str="$( grep -Po "^ID_LIKE=\K.+" /etc/os-release || true )"
-        if [ ! -z "${like_str}" ]; then
-            distro_list="${distro_list} ${like_str}"
-        fi
-        if [ ! -z "${distro_list}" ]; then
-            echo "Found Linux distribution IDs: ${distro_list}"
-        else
-            echo "Unable to detect Linux Distribution."
-        fi
+        source "/etc/os-release"
+        DISTRO_VERSION="$VERSION_ID"
+        DISTRIBUTION="$ID"
     fi
 
-    distro_id=""
-    while [ "$distro_list" != "$distro_id" ]; do
-        distro_id="${distro_list%% *}"
-        distro_list="${distro_list#$distro_id }"
-        supported_dists=$SUPPORTED_DISTROS
-        supported_id=""
-        while [ "$supported_dists" != "$supported_id" ]; do
-            supported_id="${supported_dists%% *}"
-            supported_dists="${supported_dists#$supported_id }"
-            if [ "$distro_id" = "$supported_id" ]; then
-                DISTRIBUTION=$distro_id
-                echo "Distribution detected: $DISTRIBUTION"
-                break
-            fi
-        done
-        [ ! -z "$DISTRIBUTION" ] && break
-    done
+    # *** AUTO GENERATED OS PACKAGE SCRIPT START ***
+    get_pkgs_script=$(cat << EOF
+from __future__ import annotations
+import shlex
+import re
+import pathlib
+import logging
 
-    if [ "$DISTRIBUTION" != "$orig_id" ]; then
-        DISTRO_VERSION=""
-    fi
+from typing import Tuple, Dict, List, Any
 
-    if [ -z "$DISTRIBUTION" ] && [ -x "$( which apt-get || true )" ]; then
-        # Fall back to debian if apt-get is detected
-        echo "Found apt-get, falling back to debian distribution"
-        DISTRIBUTION="debian"
-    fi
+def _get_distro_info() -> Dict[str, Any]:
+    try:
+        import distro
+    except ModuleNotFoundError:
+        pass
+    else:
+        return dict(
+            distro_id=distro.id(),
+            distro_version=distro.version(),
+            aliases=distro.like().split()
+        )
+    release_file = pathlib.Path("/etc/os-release")
+    release_info: Dict[str, str] = {}
+    with release_file.open("r") as f:
+        lexer = shlex.shlex(f, posix=True)
+        lexer.whitespace_split = True
+        for item in list(lexer):
+            if "=" in item:
+                key, val = item.split("=", maxsplit=1)
+                release_info[key] = val
+    return dict(
+        distro_id=release_info.get("ID", ""),
+        distro_version=release_info.get("VERSION_ID", ""),
+        aliases=release_info.get("ID_LIKE", "").split()
+    )
 
-    # *** AUTO GENERATED OS PACKAGE DEPENDENCIES START ***
-    if [ ${DISTRIBUTION} = "debian" ]; then
-        PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
-        PACKAGES="${PACKAGES} libjpeg-dev packagekit wireless-tools curl"
-        PACKAGES="${PACKAGES} build-essential"
-    elif [ ${DISTRIBUTION} = "ubuntu" ]; then
-        PACKAGES="python3-virtualenv python3-dev libopenjp2-7 libsodium-dev zlib1g-dev"
-        PACKAGES="${PACKAGES} libjpeg-dev packagekit curl build-essential"
-        if ( compare_version "<=" "24.04" ); then
-            PACKAGES="${PACKAGES} wireless-tools"
-        fi
-        if ( compare_version ">=" "24.10" ); then
-            PACKAGES="${PACKAGES} iw"
-        fi
-    fi
-    # *** AUTO GENERATED OS PACKAGE DEPENDENCIES END ***
+def _convert_version(version: str) -> Tuple[str | int, ...]:
+    version = version.strip()
+    ver_match = re.match(r"\d+(\.\d+)*((?:-|\.).+)?", version)
+    if ver_match is not None:
+        return tuple([
+            int(part) if part.isdigit() else part
+            for part in re.split(r"\.|-", version)
+        ])
+    return (version,)
+
+class SysDepsParser:
+    def __init__(self, distro_info: Dict[str, Any] | None = None) -> None:
+        if distro_info is None:
+            distro_info = _get_distro_info()
+        self.distro_id: str = distro_info.get("distro_id", "")
+        self.aliases: List[str] = distro_info.get("aliases", [])
+        self.distro_version: Tuple[int | str, ...] = tuple()
+        version = distro_info.get("distro_version")
+        if version:
+            self.distro_version = _convert_version(version)
+
+    def _parse_spec(self, full_spec: str) -> str | None:
+        parts = full_spec.split(";", maxsplit=1)
+        if len(parts) == 1:
+            return full_spec
+        pkg_name = parts[0].strip()
+        expressions = re.split(r"( and | or )", parts[1].strip())
+        if not len(expressions) & 1:
+            logging.info(
+                f"Requirement specifier is missing an expression "
+                f"between logical operators : {full_spec}"
+            )
+            return None
+        last_result: bool = True
+        last_logical_op: str | None = "and"
+        for idx, exp in enumerate(expressions):
+            if idx & 1:
+                if last_logical_op is not None:
+                    logging.info(
+                        "Requirement specifier contains sequential logical "
+                        f"operators: {full_spec}"
+                    )
+                    return None
+                logical_op = exp.strip()
+                if logical_op not in ("and", "or"):
+                    logging.info(
+                        f"Invalid logical operator {logical_op} in requirement "
+                        f"specifier: {full_spec}")
+                    return None
+                last_logical_op = logical_op
+                continue
+            elif last_logical_op is None:
+                logging.info(
+                    f"Requirement specifier contains two seqential expressions "
+                    f"without a logical operator: {full_spec}")
+                return None
+            dep_parts = re.split(r"(==|!=|<=|>=|<|>)", exp.strip())
+            req_var = dep_parts[0].strip().lower()
+            if len(dep_parts) != 3:
+                logging.info(f"Invalid comparison, must be 3 parts: {full_spec}")
+                return None
+            elif req_var == "distro_id":
+                left_op: str | Tuple[int | str, ...] = self.distro_id
+                right_op = dep_parts[2].strip().strip("\"'")
+            elif req_var == "distro_version":
+                if not self.distro_version:
+                    logging.info(
+                        "Distro Version not detected, cannot satisfy requirement: "
+                        f"{full_spec}"
+                    )
+                    return None
+                left_op = self.distro_version
+                right_op = _convert_version(dep_parts[2].strip().strip("\"'"))
+            else:
+                logging.info(f"Invalid requirement specifier: {full_spec}")
+                return None
+            operator = dep_parts[1].strip()
+            try:
+                compfunc = {
+                    "<": lambda x, y: x < y,
+                    ">": lambda x, y: x > y,
+                    "==": lambda x, y: x == y,
+                    "!=": lambda x, y: x != y,
+                    ">=": lambda x, y: x >= y,
+                    "<=": lambda x, y: x <= y
+                }.get(operator, lambda x, y: False)
+                result = compfunc(left_op, right_op)
+                if last_logical_op == "and":
+                    last_result &= result
+                else:
+                    last_result |= result
+                last_logical_op = None
+            except Exception:
+                logging.exception(f"Error comparing requirements: {full_spec}")
+                return None
+        if last_result:
+            return pkg_name
+        return None
+
+    def parse_dependencies(self, sys_deps: Dict[str, List[str]]) -> List[str]:
+        if not self.distro_id:
+            logging.info(
+                "Failed to detect current distro ID, cannot parse dependencies"
+            )
+            return []
+        all_ids = [self.distro_id] + self.aliases
+        for distro_id in all_ids:
+            if distro_id in sys_deps:
+                if not sys_deps[distro_id]:
+                    logging.info(
+                        f"Dependency data contains an empty package definition "
+                        f"for linux distro '{distro_id}'"
+                    )
+                    continue
+                processed_deps: List[str] = []
+                for dep in sys_deps[distro_id]:
+                    parsed_dep = self._parse_spec(dep)
+                    if parsed_dep is not None:
+                        processed_deps.append(parsed_dep)
+                return processed_deps
+        else:
+            logging.info(
+                f"Dependency data has no package definition for linux "
+                f"distro '{self.distro_id}'"
+            )
+        return []
+# *** SYSTEM DEPENDENCIES START ***
+system_deps = {
+    "debian": [
+        "python3-virtualenv", "python3-dev", "libopenjp2-7", "libsodium-dev",
+        "zlib1g-dev", "libjpeg-dev", "packagekit",
+        "wireless-tools; distro_id != 'ubuntu' or distro_version <= '24.04'",
+        "iw; distro_id == 'ubuntu' and distro_version >= '24.10'", "curl",
+        "build-essential"
+    ],
+}
+# *** SYSTEM DEPENDENCIES END ***
+parser = SysDepsParser()
+pkgs = parser.parse_dependencies(system_deps)
+if pkgs:
+    print(' '.join(pkgs), end="")
+exit(0)
+EOF
+)
+    # *** AUTO GENERATED OS PACKAGE SCRIPT END ***
+    PACKAGES="$( python3 -c "$get_pkgs_script" )"
 }
 
 # Step 2: Clean up legacy installation
