@@ -1595,7 +1595,7 @@ class ShellCmd(PowerDevice):
         self.scmd: ShellCommand = self.server.load_component(config, "shell_command")
         self.on_cmd = config.get('on_cmd')
         self.off_cmd = config.get('off_cmd')
-        self.timeout: Optional[float] = config.getfloat('timeout', 1.0)
+        self.timeout = config.getfloat('timeout', 1.0)
         
     async def init_state(self) -> None:
         if self.initial_state is None:
