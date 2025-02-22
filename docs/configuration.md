@@ -1460,6 +1460,49 @@ location: 1-1
 port: 2
 ```
 
+#### Arbitrary devices via Shell commands
+
+Control any device as long as you can come up with a way to control it with a shell command.
+
+The most practical way of doing it will likely be with a short Python script, although it doesn't have to be.
+
+```ini {title="Moonraker Config Specification"}
+# moonraker.conf
+
+on_cmd:
+#   Command to be ran to switch the device on. This parameter must be provided.
+off_cmd:
+#   Command to be ran to switch the device off. This parameter must be provided.
+timeout:
+#   Number of seconds after which the subprocess spawned by the command will be 
+#   forcefully terminated. It should not need to be increased in most cases. Default is 1 second.
+```
+
+/// Warning
+These commands will not recognize the tilde (`~`) shorthand for your home directory, and as such, you must always use full paths when referring to files.
+
+`python3 /home/<user>/printer_data/psuctrl.py on` will work
+
+`python3 ~/printer_data/psuctrl.py on` will not.
+///
+
+
+Example:
+
+```ini {title="Moonraker Config Example"}
+# moonraker.conf
+
+#   This assumes the presence of a Python script in the path /home/nyan/printer_data/psuctrl.py,
+#   that recieves an 'on' or 'off' argument and controls the power supply accordingly.
+#   (eg. by sending a command via serial to an Arduino, which in turn controls the 
+#   PSU directly or via a relay)
+
+[power atx_psu]
+type: shell_cmd
+on_cmd: python3 /home/nyan/printer_data/psuctrl.py on
+off_cmd: python3 /home/nyan/printer_data/psuctrl.py off
+```
+
 #### Generic HTTP Devices
 
 Support for configurable HTTP switches.  This device type may be used when

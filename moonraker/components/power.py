@@ -60,7 +60,8 @@ class PrinterPower:
             "smartthings": SmartThings,
             "hue": HueDevice,
             "http": GenericHTTP,
-            "uhubctl": UHubCtl
+            "uhubctl": UHubCtl,
+            "shell_cmd": ShellCmd
         }
 
         for section in prefix_sections:
@@ -1585,6 +1586,32 @@ class UHubCtl(PowerDevice):
             f"port {self.port}, "
         )
 
+class ShellCmd(PowerDevice):
+    def __init__(self,
+                 config: ConfigHelper,
+                 initial_val: Optional[int] = None
+                 ) -> None:
+        super().__init__(config)
+        self.scmd: ShellCommand = self.server.load_component(config, "shell_command")
+        self.on_cmd: Optional[str] = config.get('on_cmd')
+        self.off_cmd: Optional[str] = config.get('off_cmd')
+        self.timeout: Optional[float] = config.getfloat('timeout', 1.0)
+        
+    async def init_state(self) -> None:
+        if self.initial_state is None:
+            self.set_power("off")
+        else:
+            self.set_power("on" if self.initial_state else "off")
+
+    def refresh_status(self) -> None:
+        pass
+
+    def set_power(self, state) -> None:
+        if state == "on":
+            self.scmd.exec_cmd(cmd=self.on_cmd, timeout=self.timeout)
+        else:
+            self.scmd.exec_cmd(cmd=self.off_cmd, timeout=self.timeout)
+        self.state = state
 
 # The power component has multiple configuration sections
 def load_component(config: ConfigHelper) -> PrinterPower:
