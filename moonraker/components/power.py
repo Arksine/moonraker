@@ -1596,7 +1596,7 @@ class ShellCmd(PowerDevice):
         self.on_cmd = config.get('on_cmd')
         self.off_cmd = config.get('off_cmd')
         self.timeout = config.getfloat('timeout', 1.0)
-        
+
     async def init_state(self) -> None:
         if self.initial_state is None:
             self.set_power("off")
