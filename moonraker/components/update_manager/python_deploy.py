@@ -11,8 +11,9 @@ import logging
 from enum import Enum
 from ...utils.source_info import normalize_project_name, load_distribution_info
 from ...utils.versions import PyVersion, GitVersion
+from ...utils.sysdeps_parser import SysDepsParser
 from ...utils import pip_utils, json_wrapper
-from .app_deploy import AppDeploy, Channel, DISTRO_ALIASES
+from .app_deploy import AppDeploy, Channel
 
 # Annotation imports
 from typing import (
@@ -208,20 +209,8 @@ class PythonDeploy(AppDeploy):
         if rinfo is None:
             return []
         dep_info = rinfo.get("system_dependencies", {})
-        for distro_id in DISTRO_ALIASES:
-            if distro_id in dep_info:
-                if not dep_info[distro_id]:
-                    self.log_info(
-                        f"Package release_info contains an empty system "
-                        f"package definition for linux distro '{distro_id}'"
-                    )
-                return dep_info[distro_id]
-        else:
-            self.log_info(
-                "Package release_info has no package definition "
-                f" for linux distro '{DISTRO_ALIASES[0]}'"
-            )
-            return []
+        parser = SysDepsParser()
+        return parser.parse_dependencies(dep_info)
 
     async def _update_local_state(self) -> None:
         self.warnings.clear()
@@ -413,6 +402,12 @@ class PythonDeploy(AppDeploy):
     async def _update_sys_deps(self, prev_deps: List[str]) -> None:
         new_deps = self.system_deps
         deps_diff = list(set(new_deps) - set(prev_deps))
+        if new_deps or prev_deps:
+            self.log_debug(
+                f"Pre-update system dependencies: {prev_deps}\n"
+                f"Post-update system dependencies: {new_deps}\n"
+                f"Difference to be installed: {deps_diff}"
+            )
         if deps_diff:
             await self._install_packages(deps_diff)
 

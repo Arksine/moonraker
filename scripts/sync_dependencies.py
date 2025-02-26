@@ -10,110 +10,96 @@ import argparse
 import pathlib
 import tomllib
 import json
-import re
-from typing import Dict, List, Tuple
+import ast
+from io import StringIO, TextIOBase
+from typing import Dict, List, Iterator
 
 MAX_LINE_LENGTH = 88
 SCRIPTS_PATH = pathlib.Path(__file__).parent
-INST_PKG_HEADER = "# *** AUTO GENERATED OS PACKAGE DEPENDENCIES START ***"
-INST_PKG_FOOTER = "# *** AUTO GENERATED OS PACKAGE DEPENDENCIES END ***"
+INST_PKG_HEADER = "# *** AUTO GENERATED OS PACKAGE SCRIPT START ***"
+INST_PKG_FOOTER = "# *** AUTO GENERATED OS PACKAGE SCRIPT END ***"
+DEPS_HEADER = "# *** SYSTEM DEPENDENCIES START ***"
+DEPS_FOOTER = "# *** SYSTEM DEPENDENCIES END ***"
 
-def gen_multline_var(
-    var_name: str,
-    values: List[str],
-    indent: int = 0,
-    is_first: bool = True
-) -> str:
+def gen_pkg_list(values: List[str], indent: int = 0) -> Iterator[str]:
     idt = " " * indent
     if not values:
-        return f'{idt}{var_name}=""'
-    line_list: List[str] = []
-    if is_first:
-        current_line = f"{idt}{var_name}=\"{values.pop(0)}"
-    else:
-        current_line = (f"{idt}{var_name}=\"${{{var_name}}} {values.pop(0)}")
+        return
+    current_line = f"{idt}\"{values.pop(0)}\","
     for val in values:
-        if len(current_line) + len(val) + 2 > MAX_LINE_LENGTH:
-            line_list.append(f'{current_line}"')
-            current_line = (f"{idt}{var_name}=\"${{{var_name}}} {val}")
+        if len(current_line) + len(val) + 4 > MAX_LINE_LENGTH:
+            yield current_line + "\n"
+            current_line = f"{idt}\"{val}\","
         else:
-            current_line += f" {val}"
-    line_list.append(f'{current_line}"')
-    return "\n".join(line_list)
+            current_line += f" \"{val}\","
+    yield current_line.rstrip(",") + "\n"
 
-def parse_sysdeps_file() -> Dict[str, List[Tuple[str, str, str]]]:
-    sys_deps_file = SCRIPTS_PATH.joinpath("system-dependencies.json")
-    base_deps: Dict[str, List[str]] = json.loads(sys_deps_file.read_bytes())
-    parsed_deps: Dict[str, List[Tuple[str, str, str]]] = {}
-    for distro, pkgs in base_deps.items():
-        parsed_deps[distro] = []
-        for dep in pkgs:
-            parts = dep.split(";", maxsplit=1)
-            if len(parts) == 1:
-                parsed_deps[distro].append((dep.strip(), "", ""))
-            else:
-                pkg_name = parts[0].strip()
-                dep_parts = re.split(r"(==|!=|<=|>=|<|>)", parts[1].strip())
-                comp_var = dep_parts[0].strip().lower()
-                if len(dep_parts) != 3 or comp_var != "distro_version":
-                    continue
-                operator = dep_parts[1].strip()
-                req_version = dep_parts[2].strip()
-                parsed_deps[distro].append((pkg_name, operator, req_version))
-    return parsed_deps
+def write_parser_script(sys_deps: Dict[str, List[str]], out_hdl: TextIOBase) -> None:
+    parser_file = SCRIPTS_PATH.parent.joinpath("moonraker/utils/sysdeps_parser.py")
+    out_hdl.write("    get_pkgs_script=$(cat << EOF\n")
+    with parser_file.open("r") as f:
+        for line in f:
+            if not line.strip().startswith("#"):
+                out_hdl.write(line)
+    out_hdl.write(f"{DEPS_HEADER}\n")
+    out_hdl.write("system_deps = {\n")
+    for distro, packages in sys_deps.items():
+        indent = " " * 4
+        out_hdl.write(f"{indent}\"{distro}\": [\n")
+        # Write packages
+        for line in gen_pkg_list(packages, 8):
+            out_hdl.write(line)
+        out_hdl.write(f"{indent}],\n")
+    out_hdl.write("}\n")
+    out_hdl.write(f"{DEPS_FOOTER}\n")
+    out_hdl.writelines("""
+parser = SysDepsParser()
+pkgs = parser.parse_dependencies(system_deps)
+if pkgs:
+    print(' '.join(pkgs), end="")
+exit(0)
+EOF
+)
+""".lstrip())
 
 def sync_packages() -> int:
     inst_script = SCRIPTS_PATH.joinpath("install-moonraker.sh")
-    new_deps = parse_sysdeps_file()
+    sys_deps_file = SCRIPTS_PATH.joinpath("system-dependencies.json")
+    prev_deps: Dict[str, List[str]] = {}
+    new_deps: Dict[str, List[str]] = json.loads(sys_deps_file.read_bytes())
     # Copy install script in memory.
-    install_data: List[str] = []
-    prev_deps: Dict[str, List[Tuple[str, str, str]]] = {}
-    distro_name = ""
-    cur_spec: Tuple[str, str] | None = None
+    install_data = StringIO()
+    prev_deps_str: str = ""
     skip_data = False
+    collect_deps = False
     with inst_script.open("r") as inst_file:
         for line in inst_file:
             cur_line = line.strip()
             if not skip_data:
-                install_data.append(line)
+                install_data.write(line)
             else:
                 # parse current dependencies
-                distro_match = re.match(
-                    r"(?:el)?if \[ \$\{DISTRIBUTION\} = \"([a-z0-9._-]+)\" \]; then",
-                    cur_line
-                )
-                if distro_match is not None:
-                    distro_name = distro_match.group(1)
-                    prev_deps[distro_name] = []
-                else:
-                    if cur_spec is not None and cur_line == "fi":
-                        cur_spec = None
+                if collect_deps:
+                    if line.rstrip() == DEPS_FOOTER:
+                        collect_deps = False
                     else:
-                        req_match = re.match(
-                            r"if \( compare_version \"(<|>|==|!=|<=|>=)\" "
-                            r"\"([a-zA-Z0-9._-]+)\" \); then",
-                            cur_line
-                        )
-                        if req_match is not None:
-                            parts = req_match.groups()
-                            cur_spec = (parts[0], parts[1])
-                        elif cur_line.startswith("PACKAGES"):
-                            pkgs = cur_line.split("=", maxsplit=1)[1].strip('"')
-                            pkg_list = pkgs.split()
-                            if pkg_list and pkg_list[0] == "${PACKAGES}":
-                                pkg_list.pop(0)
-                            operator, req_version = "", ""
-                            if cur_spec is not None:
-                                operator, req_version = cur_spec
-                            for pkg in pkg_list:
-                                prev_deps[distro_name].append(
-                                    (pkg, operator, req_version)
-                                )
+                        prev_deps_str += line
+                elif line.rstrip() == DEPS_HEADER:
+                    collect_deps = True
             if cur_line == INST_PKG_HEADER:
                 skip_data = True
             elif cur_line == INST_PKG_FOOTER:
                 skip_data = False
-                install_data.append(line)
+                install_data.write(line)
+    if prev_deps_str:
+        try:
+            # start at the beginning of the dict literal
+            idx = prev_deps_str.find("{")
+            if idx > 0:
+                prev_deps = ast.literal_eval(prev_deps_str[idx:])
+        except Exception:
+            pass
+    print(f"Previous Dependencies:\n{prev_deps}")
     # Check if an update is necessary
     if set(prev_deps.keys()) == set(new_deps.keys()):
         for distro, prev_pkgs in prev_deps.items():
@@ -124,52 +110,14 @@ def sync_packages() -> int:
             # Dependencies match, exit
             print("System package dependencies match")
             return 0
+    install_data.seek(0)
     print("Writing new system dependencies to install script...")
     with inst_script.open("w+") as inst_file:
         # Find and replace old package defs
         for line in install_data:
             inst_file.write(line)
             if line.strip() == INST_PKG_HEADER:
-                indent_count = len(line) - len(line.lstrip())
-                idt = " " * indent_count
-                # Write Package data
-                first_distro = True
-                for distro, packages in new_deps.items():
-                    prefix = f"{idt}if" if first_distro else f"{idt}elif"
-                    first_distro = False
-                    inst_file.write(
-                        f'{prefix} [ ${{DISTRIBUTION}} = "{distro}" ]; then\n'
-                    )
-                    pkgs_by_op: Dict[Tuple[str, str], List[str]] = {}
-                    base_list: List[str] = []
-                    for pkg_spec in packages:
-                        if not pkg_spec[1] or not pkg_spec[2]:
-                            base_list.append(pkg_spec[0])
-                        else:
-                            key = (pkg_spec[1], pkg_spec[2])
-                            pkgs_by_op.setdefault(key, []).append(pkg_spec[0])
-                    is_first = True
-                    if base_list:
-                        pkg_var = gen_multline_var(
-                            "PACKAGES", base_list, indent_count + 4
-                        )
-                        inst_file.write(pkg_var)
-                        inst_file.write("\n")
-                        is_first = False
-                    if pkgs_by_op:
-                        for (operator, req_ver), pkg_list in pkgs_by_op.items():
-                            req_idt = idt + " " * 4
-                            inst_file.write(
-                                f"{req_idt}if ( compare_version \"{operator}\" "
-                                f"\"{req_ver}\" ); then\n"
-                            )
-                            req_pkgs = gen_multline_var(
-                                "PACKAGES", pkg_list, indent_count + 8, is_first
-                            )
-                            inst_file.write(req_pkgs)
-                            inst_file.write("\n")
-                            inst_file.write(f"{req_idt}fi\n")
-                inst_file.write(f"{idt}fi\n")
+                write_parser_script(new_deps, inst_file)
     return 1
 
 def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: List[str]) -> bool:

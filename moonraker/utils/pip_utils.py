@@ -12,6 +12,7 @@ import subprocess
 import pathlib
 import shutil
 import threading
+import logging
 from dataclasses import dataclass
 
 # Annotation imports
@@ -34,6 +35,9 @@ if TYPE_CHECKING:
 MIN_PIP_VERSION = (24, 0)
 MIN_PYTHON_VERSION = (3, 7)
 
+class PipException(Exception):
+    pass
+
 # Synchronous Subprocess Helpers
 def _run_subprocess_with_response(
     cmd: str,
@@ -48,7 +52,7 @@ def _run_subprocess_with_response(
     if proc.returncode == 0:
         return proc.stdout.strip()
     err = proc.stderr
-    raise Exception(f"Failed to run pip command '{cmd}': {err}")
+    raise PipException(f"Failed to run pip command '{cmd}': {err}")
 
 def _process_subproc_output(
     stdout: IO[str],
@@ -80,9 +84,9 @@ def _run_subprocess(
             process.wait(timeout)
     ret = process.poll()
     if ret != 0:
-        raise Exception(f"Failed to run pip command '{cmd}'")
+        raise PipException(f"Failed to run pip command '{cmd}'")
 
-@ dataclass(frozen=True)
+@dataclass(frozen=True)
 class PipVersionInfo:
     pip_version_string: str
     python_version_string: str
@@ -124,7 +128,10 @@ class PipExecutor:
 
     def update_pip(self) -> None:
         pip_ver = ".".join([str(part) for part in MIN_PIP_VERSION])
-        self.call_pip(f"install pip=={pip_ver}", 120.)
+        try:
+            self.call_pip(f"install pip=={pip_ver}", 120.)
+        except PipException:
+            logging.exception("Failed to update pip")
 
     def install_packages(
         self,
@@ -209,10 +216,13 @@ class AsyncPipExecutor:
     async def update_pip(self) -> None:
         pip_ver = ".".join([str(part) for part in MIN_PIP_VERSION])
         shell_cmd = self.get_shell_cmd()
-        await shell_cmd.run_cmd_async(
-            f"{self.pip_cmd} install pip=={pip_ver}",
-            self.notify_callback, timeout=1200., attempts=3, log_stderr=True
-        )
+        try:
+            await shell_cmd.run_cmd_async(
+                f"{self.pip_cmd} install pip=={pip_ver}",
+                self.notify_callback, timeout=1200., attempts=1, log_stderr=True
+            )
+        except shell_cmd.error:
+            logging.exception("Failed to Update Pip")
 
     async def install_packages(
         self,
