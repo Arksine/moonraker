@@ -222,7 +222,7 @@ class BaseSlicer(object):
     def parse_filament_temps(self) -> Optional[List[int]]:
         return None
 
-    def parse_referenced_tools(self) -> Optional[List[str]]:
+    def parse_referenced_tools(self) -> Optional[List[int]]:
         return None
 
     def parse_mmu_print(self) -> Optional[int]:
@@ -433,7 +433,7 @@ class PrusaSlicer(BaseSlicer):
         except ValueError:
             return None
 
-    def parse_referenced_tools(self) -> Optional[List[str]]:
+    def parse_referenced_tools(self) -> Optional[List[int]]:
         tools = regex_find_strings(
             r";\sreferenced_tools\s=\s(%S)", ",;", self.footer_data
         )
