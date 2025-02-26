@@ -282,7 +282,9 @@ GET /server/files/metadata?filename=tools/drill.gcode
 | `filament_temps`        |  [int]   | List of base temperatures for filaments, in Celsius.         |
 | `filament_type`         |  string  | The type(s) of filament used, ie: `PLA`.                     |
 | `filament_total`        |  float   | The total length filament used in mm.                        |
+| `filament_change_count` |   int    | The number of filament changes in the print.                 |
 | `filament_weight_total` |  float   | The total weight of filament used in grams.                  |
+| `filament_weights`      | [float]  | List of weights in grams used by each tool in the print.     |
 | `mmu_print`             |   int    | Identifies a multimaterial print with single extruder.       |
 | `referenced_tools`      |  [int]   | List of tool numbers used in the print.                      |
 | `thumbnails`            | [object] | A list of `Thumbnail Info` objects.                          |

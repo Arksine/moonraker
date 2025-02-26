@@ -207,6 +207,9 @@ class BaseSlicer(object):
     def parse_filament_weight_total(self) -> Optional[float]:
         return None
 
+    def parse_filament_weights(self) -> Optional[List[float]]:
+        return None
+
     def parse_filament_name(self) -> Optional[str]:
         return None
 
@@ -238,6 +241,9 @@ class BaseSlicer(object):
         return None
 
     def parse_first_layer_extr_temp(self) -> Optional[float]:
+        return None
+
+    def parse_filament_change_count(self) -> Optional[int]:
         return None
 
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
@@ -404,6 +410,16 @@ class PrusaSlicer(BaseSlicer):
             self.footer_data
         )
 
+    def parse_filament_weights(self) -> Optional[List[float]]:
+        line = regex_find_string(r'filament\sused\s\[g\]\s=\s(%S)\n', self.footer_data)
+        if line:
+            weights = regex_find_floats(
+                r"(%F)", line
+            )
+            if weights:
+                return weights
+        return None
+
     def parse_filament_type(self) -> Optional[str]:
         return regex_find_string(
             r";\sfilament_type\s=\s(%S)", self.footer_data
@@ -487,6 +503,9 @@ class PrusaSlicer(BaseSlicer):
 
     def parse_layer_count(self) -> Optional[int]:
         return regex_find_int(r"; total layers count = (%D)", self.footer_data)
+
+    def parse_filament_change_count(self) -> Optional[int]:
+        return regex_find_int(r"; total filament change = (%D)", self.footer_data)
 
 class Slic3rPE(PrusaSlicer):
     def check_identity(self, data: str) -> bool:
@@ -999,12 +1018,14 @@ SUPPORTED_DATA = [
     'filament_name',
     'filament_type',
     'filament_colors',
+    'filament_change_count',
     'extruder_colors',
     'filament_temps',
     'referenced_tools',
     'mmu_print',
     'filament_total',
     'filament_weight_total',
+    'filament_weights',
     'thumbnails'
 ]
 
