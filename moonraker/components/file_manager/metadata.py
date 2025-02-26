@@ -409,11 +409,6 @@ class PrusaSlicer(BaseSlicer):
             r";\sfilament_type\s=\s(%S)", self.footer_data
         )
 
-    def parse_filament_type(self) -> Optional[str]:
-        return regex_find_string(
-            r";\sfilament_type\s=\s(%S)", self.footer_data
-        )
-
     def parse_filament_name(self) -> Optional[str]:
         return regex_find_string(
             r";\sfilament_settings_id\s=\s(%S)", self.footer_data
