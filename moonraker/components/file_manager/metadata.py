@@ -69,6 +69,15 @@ def regex_find_ints(pattern: str, data: str) -> List[int]:
             pass
     return []
 
+def regex_find_strings(pattern: str, separators: str, data: str) -> List[str]:
+    pattern = pattern.replace(r"(%S)", r"(.*)")
+    separators = re.escape(separators)
+    delimiters = rf"[{separators}]"
+    match = re.search(pattern, data)
+    if match and match.group(1):
+        return re.split(delimiters, match.group(1).strip('"'))
+    return []
+
 def regex_find_float(pattern: str, data: str) -> Optional[float]:
     pattern = pattern.replace(r"(%F)", r"([0-9]*\.?[0-9]+)")
     match = re.search(pattern, data)
@@ -202,6 +211,21 @@ class BaseSlicer(object):
         return None
 
     def parse_filament_type(self) -> Optional[str]:
+        return None
+
+    def parse_filament_colors(self) -> Optional[List[str]]:
+        return None
+
+    def parse_extruder_colors(self) -> Optional[List[str]]:
+        return None
+
+    def parse_filament_temps(self) -> Optional[List[int]]:
+        return None
+
+    def parse_referenced_tools(self) -> Optional[List[int]]:
+        return None
+
+    def parse_mmu_print(self) -> Optional[int]:
         return None
 
     def parse_estimated_time(self) -> Optional[float]:
@@ -381,11 +405,46 @@ class PrusaSlicer(BaseSlicer):
         )
 
     def parse_filament_type(self) -> Optional[str]:
-        return regex_find_string(r";\sfilament_type\s=\s(%S)", self.footer_data)
+        return regex_find_string(
+            r";\sfilament_type\s=\s(%S)", self.footer_data
+        )
 
     def parse_filament_name(self) -> Optional[str]:
         return regex_find_string(
             r";\sfilament_settings_id\s=\s(%S)", self.footer_data
+        )
+
+    def parse_filament_colors(self) -> Optional[List[str]]:
+        return regex_find_strings(
+            r";\sfilament_colour\s=\s(%S)", ",;", self.footer_data
+        )
+
+    def parse_extruder_colors(self) -> Optional[List[str]]:
+        return regex_find_strings(
+            r";\sextruder_colour\s=\s(%S)", ",;", self.footer_data
+        )
+
+    def parse_filament_temps(self) -> Optional[List[int]]:
+        temps = regex_find_strings(
+            r";\s(?:nozzle_)?temperature\s=\s(%S)", ",;", self.footer_data
+        )
+        try:
+            return [int(t) for t in temps]
+        except ValueError:
+            return None
+
+    def parse_referenced_tools(self) -> Optional[List[int]]:
+        tools = regex_find_strings(
+            r";\sreferenced_tools\s=\s(%S)", ",;", self.footer_data
+        )
+        try:
+            return [int(t) for t in tools]
+        except ValueError:
+            return None
+
+    def parse_mmu_print(self) -> Optional[int]:
+        return regex_find_int(
+            r";\ssingle_extruder_multi_material\s=\s(%D)", self.footer_data
         )
 
     def parse_estimated_time(self) -> Optional[float]:
@@ -939,6 +998,11 @@ SUPPORTED_DATA = [
     'chamber_temp',
     'filament_name',
     'filament_type',
+    'filament_colors',
+    'extruder_colors',
+    'filament_temps',
+    'referenced_tools',
+    'mmu_print',
     'filament_total',
     'filament_weight_total',
     'thumbnails'

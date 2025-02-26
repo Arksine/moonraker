@@ -254,7 +254,6 @@ GET /server/files/metadata?filename=tools/drill.gcode
 
 /// api-response-spec
     open: True
-
 | Field                   |   Type   | Description                                                  |
 | ----------------------- | :------: | ------------------------------------------------------------ |
 | `size`                  |   int    | The gcode file size in bytes.                                |
@@ -277,10 +276,15 @@ GET /server/files/metadata?filename=tools/drill.gcode
 | `first_layer_extr_temp` |  float   | The configured first layer extruder temperature, in Celsius. |
 | `first_layer_bed_temp`  |  float   | The configured first layer bed temperature, in Celsius.      |
 | `chamber_temp`          |  float   | The configured chamber temperature, in Celsius.              |
-| `filament_name`         |   str    | The name of the filament used.                               |
-| `filament_type`         |   str    | The type of filament used, ie: `PLA`.                        |
+| `filament_name`         |  string  | The name(s) of the filaments contained in print.             |
+| `filament_colors`       | [string] | List of filament colors used in #RRGGBB format.              |
+| `extruder_colors`       | [string] | List of  slicer defined extruder colors for the print.       |
+| `filament_temps`        |  [int]   | List of base temperatures for filaments, in Celsius.         |
+| `filament_type`         |  string  | The type(s) of filament used, ie: `PLA`.                     |
 | `filament_total`        |  float   | The total length filament used in mm.                        |
 | `filament_weight_total` |  float   | The total weight of filament used in grams.                  |
+| `mmu_print`             |   int    | Identifies a multimaterial print with single extruder.       |
+| `referenced_tools`      |  [int]   | List of tool numbers used in the print.                      |
 | `thumbnails`            | [object] | A list of `Thumbnail Info` objects.                          |
 |                         |          | #thumbnail-info-spec                                         |+
 | `job_id`                | string?  | The last `history` job ID associated with the gcode.         |
