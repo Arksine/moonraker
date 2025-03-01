@@ -6,7 +6,8 @@ body:
     attributes:
       value: |
         This issue form is for reporting bugs only!
-        If you have a feature request, please use [Feature Request](/new?template=feature_request.yml)
+        If you have a feature request, please use [Feature Request](/new?template=feature_request.yml).
+        All bug reports MUST include `moonraker.log` as an attachment.
   - type: textarea
     id: what-happened
     attributes:
@@ -27,6 +28,7 @@ body:
         - MoonCord
         - KlipperScreen
         - MobileRaker
+        - OctoApp
         - Other
     validations:
       required: true
