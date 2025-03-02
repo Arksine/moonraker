@@ -505,6 +505,9 @@ class PrusaSlicer(BaseSlicer):
         return regex_find_int(r"; total layers count = (%D)", self.footer_data)
 
     def parse_filament_change_count(self) -> Optional[int]:
+        res = regex_find_int(r"; total toolchanges = (%D)", self.footer_data)
+        if res is not None:
+            return res
         return regex_find_int(r"; total filament change = (%D)", self.footer_data)
 
 class Slic3rPE(PrusaSlicer):
