@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 import logging
 from asyncio import Lock
+from uuid import uuid4
 from ..common import (
     JobEvent,
     RequestType,
@@ -122,7 +123,7 @@ class HistorySqlDefinition(SqlTableDefinition):
     prototype = (
         f"""
         {HIST_TABLE} (
-            job_id INTEGER PRIMARY KEY ASC,
+            job_id TEXT(36) PRIMARY KEY,
             user TEXT NOT NULL,
             filename TEXT,
             status TEXT NOT NULL,
@@ -272,7 +273,7 @@ class History:
             if req_type == RequestType.GET:
                 job_id = web_request.get_str("uid")
                 cursor = await self.history_table.execute(
-                    f"SELECT * FROM {HIST_TABLE} WHERE job_id = ?", (int(job_id, 16),)
+                    f"SELECT * FROM {HIST_TABLE} WHERE job_id = ?", (job_id),
                 )
                 result = await cursor.fetchone()
                 if result is None:
@@ -298,7 +299,7 @@ class History:
                 job_id = web_request.get_str("uid")
                 async with self.history_table as tx:
                     cursor = await tx.execute(
-                        f"DELETE FROM {HIST_TABLE} WHERE job_id = ?", (int(job_id, 16),)
+                        f"DELETE FROM {HIST_TABLE} WHERE job_id = ?", (job_id,)
                     )
                 if cursor.rowcount < 1:
                     raise self.server.error(f"Invalid job uid: {job_id}", 404)
@@ -421,7 +422,7 @@ class History:
                 logging.info(f"Error saving job, filename '{job.filename}'")
                 return
             self.current_job_id = new_id
-            job_id = f"{new_id:06X}"
+            job_id = str(uuid4())
             self.update_metadata(job_id)
             logging.debug(
                 f"History Job Added - Id: {job_id}, File: {job.filename}"

@@ -9,6 +9,7 @@ import asyncio
 import time
 import logging
 from ..common import JobEvent, RequestType
+from uuid import uuid4
 
 # Annotation imports
 from typing import (
@@ -334,7 +335,7 @@ class JobQueue:
 class QueuedJob:
     def __init__(self, filename: str, user: Optional[UserInfo] = None) -> None:
         self.filename = filename
-        self.job_id = f"{id(self):016X}"
+        self.job_id = str(uuid4())
         self.time_added = time.time()
         self._user = user
 
