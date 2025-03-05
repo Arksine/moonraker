@@ -71,11 +71,19 @@ def regex_find_ints(pattern: str, data: str) -> List[int]:
 
 def regex_find_strings(pattern: str, separators: str, data: str) -> List[str]:
     pattern = pattern.replace(r"(%S)", r"(.*)")
-    separators = re.escape(separators)
-    delimiters = rf"[{separators}]"
     match = re.search(pattern, data)
     if match and match.group(1):
-        return re.split(delimiters, match.group(1).strip('"'))
+        separators = re.escape(separators)
+        pattern = rf'\s*(")(?:\\"|[^"])*"\s*|[^{separators}]+'
+        parsed_matches: List[str] = []
+        for m in re.finditer(pattern, match.group(1)):
+            (val, sep) = m.group(0, 1)
+            val = val.strip()
+            if sep:
+                val = val[1:-1].replace(rf'\{sep}', sep).strip()
+            if val:
+                parsed_matches.append(val)
+        return parsed_matches
     return []
 
 def regex_find_float(pattern: str, data: str) -> Optional[float]:
