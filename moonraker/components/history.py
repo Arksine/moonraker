@@ -9,6 +9,7 @@ import time
 import logging
 from asyncio import Lock
 from uuid import uuid4
+from pathlib import Path
 from ..common import (
     JobEvent,
     RequestType,
@@ -78,6 +79,21 @@ def _create_totals_list(
             )
         )
     return totals_list
+
+PENDING_JOB_ID_PATH = Path("/tmp/pending_job_id")
+def set_pending_job_id(job_id: str):
+    global PENDING_JOB_ID
+    with open("/tmp/pending_job_id", "w") as f:
+        f.write(job_id)
+
+def get_pending_job_id():
+    if PENDING_JOB_ID_PATH.exists():
+        with open("/tmp/pending_job_id", "r") as f:
+            return f.read().strip()
+    return None
+
+def clear_pending_job_id():
+    PENDING_JOB_ID_PATH.unlink(True)
 
 class TotalsSqlDefinition(SqlTableDefinition):
     name = TOTALS_TABLE
@@ -228,7 +244,7 @@ class History:
         )
 
         self.current_job: Optional[PrinterJob] = None
-        self.current_job_id: Optional[int] = None
+        self.current_job_id: Optional[str] = None
         self.job_user: str = "No User"
         self.job_paused: bool = False
 
@@ -327,7 +343,7 @@ class History:
             if since != -1:
                 sql_statement += " and start_time > ?"
                 values.append(since)
-            sql_statement += f" ORDER BY job_id {order}"
+            sql_statement += f" ORDER BY start_time {order}"
             if limit > 0:
                 sql_statement += " LIMIT ? OFFSET ?"
                 values.append(limit)
@@ -409,6 +425,7 @@ class History:
         await self.finish_job("klippy_disconnect", last_ps)
 
     async def add_job(self, job: PrinterJob) -> None:
+        global PENDING_JOB_ID
         async with self.request_lock:
             self.current_job = job
             self.current_job_id = None
@@ -417,7 +434,10 @@ class History:
             for field in self.auxiliary_fields:
                 field.tracker.reset()
             self.current_job.set_aux_data(self.auxiliary_fields)
-            new_id = await self.save_job(job, None)
+            new_id = await self.save_job(job, get_pending_job_id())
+            if get_pending_job_id():
+                logging.info(f"Job ID specified as {get_pending_job_id()}")
+                clear_pending_job_id()
             if new_id is None:
                 logging.info(f"Error saving job, filename '{job.filename}'")
                 return
@@ -429,7 +449,7 @@ class History:
             )
             self.send_history_event("added")
 
-    async def save_job(self, job: PrinterJob, job_id: Optional[int]) -> Optional[int]:
+    async def save_job(self, job: PrinterJob, job_id: Optional[str]) -> Optional[str]:
         values: List[Any] = [
             job_id,
             job.user,
@@ -444,6 +464,8 @@ class History:
             job.auxiliary_data,
             "default"
         ]
+        if job_id is None:
+            job_id = job_id
         placeholders = ",".join("?" * len(values))
         async with self.history_table as tx:
             cursor = await tx.execute(
