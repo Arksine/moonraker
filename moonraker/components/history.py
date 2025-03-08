@@ -465,13 +465,13 @@ class History:
             "default"
         ]
         if job_id is None:
-            job_id = job_id
+            job_id = str(uuid4())
         placeholders = ",".join("?" * len(values))
         async with self.history_table as tx:
             cursor = await tx.execute(
                 f"REPLACE INTO {HIST_TABLE} VALUES({placeholders})", values
             )
-        return cursor.lastrowid
+        return job_id
 
     async def delete_job(self, job_id: Union[int, str]) -> None:
         if isinstance(job_id, str):
