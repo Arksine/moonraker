@@ -353,7 +353,7 @@ class History:
             jobs: List[Dict[str, Any]] = []
             for row in await cursor.fetchall():
                 job = dict(row)
-                job_id = f"{row['job_id']:06X}"
+                job_id = row['job_id']
                 jobs.append(self._prep_requested_job(job, job_id))
             return {"count": len(jobs), "jobs": jobs}
 
