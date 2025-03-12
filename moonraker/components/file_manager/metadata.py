@@ -438,14 +438,24 @@ class PrusaSlicer(BaseSlicer):
         return None
 
     def parse_filament_type(self) -> Optional[str]:
-        return regex_find_string(
-            r";\sfilament_type\s=\s(%S)", self.footer_data
+        result = regex_find_strings(
+            r";\sfilament_type\s=\s(%S)", ",;", self.footer_data
         )
+        if len(result) > 1:
+            return json.dumps(result)
+        elif result:
+            return result[0]
+        return None
 
     def parse_filament_name(self) -> Optional[str]:
-        return regex_find_string(
-            r";\sfilament_settings_id\s=\s(%S)", self.footer_data
+        result = regex_find_strings(
+            r";\sfilament_settings_id\s=\s(%S)", ",;", self.footer_data
         )
+        if len(result) > 1:
+            return json.dumps(result)
+        elif result:
+            return result[0]
+        return None
 
     def parse_filament_colors(self) -> Optional[List[str]]:
         return regex_find_strings(
