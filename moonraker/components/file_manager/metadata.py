@@ -581,13 +581,30 @@ class Cura(BaseSlicer):
         return regex_find_float(r";MAXZ:(%F)", self.header_data)
 
     def parse_filament_total(self) -> Optional[float]:
-        filament = regex_find_float(r";Filament\sused:\s(%F)m", self.header_data)
-        if filament is not None:
-            filament *= 1000
-        return filament
+        line = regex_find_string(r';Filament\sused:\s(%S)\n', self.header_data)
+        if line:
+            filament = regex_find_floats(
+                r"(%F)", line
+            )
+            if filament:
+                return sum(length * 1000 for length in filament)
+        return None
 
     def parse_filament_weight_total(self) -> Optional[float]:
-        return regex_find_float(r";Filament\sweight\s=\s.(%F).", self.header_data)
+        filament_weights = self.parse_filament_weights()
+        if filament_weights:
+            return sum(filament_weights)
+        return None
+
+    def parse_filament_weights(self) -> Optional[List[float]]:
+        line = regex_find_string(r';Filament\sweight\s=\s\[(%S)\]', self.header_data)
+        if line:
+            weights = regex_find_floats(
+                r"(%F)", line
+            )
+            if weights:
+                return weights
+        return None
 
     def parse_filament_type(self) -> Optional[str]:
         return regex_find_string(r";Filament\stype\s=\s(%S)", self.header_data)
