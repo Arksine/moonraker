@@ -627,6 +627,13 @@ def main(from_package: bool = True) -> None:
         help="disable logging to a file"
     )
     parser.add_argument(
+        "-s", "--structured-logging",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_STRUCTURED_LOGGING"),
+        help="Enable structured file logging"
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action='store_const',
         const=True,
@@ -691,7 +698,8 @@ def main(from_package: bool = True) -> None:
         "is_backup_config": False,
         "is_python_package": from_package,
         "instance_uuid": instance_uuid,
-        "unix_socket_path": unix_sock
+        "unix_socket_path": unix_sock,
+        "structured_logging": cmd_line_args.structured_logging
     }
 
     # Setup Logging

@@ -14,6 +14,7 @@ import asyncio
 import platform
 from queue import SimpleQueue as Queue
 from .common import RequestType
+from .utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
@@ -29,6 +30,34 @@ if TYPE_CHECKING:
     from .server import Server
     from .common import WebRequest
     from .components.klippy_connection import KlippyConnection
+
+class StructuredFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        record.message = record.getMessage()
+        record.asctime = self.formatTime(record, self.datefmt)
+        msg = record.message
+        if record.exc_info:
+            # Cache the traceback text to avoid converting it multiple times
+            # (it's constant anyway)
+            if not record.exc_text:
+                record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            if msg[-1:] != "\n":
+                msg += "\n"
+            msg += record.exc_text
+        if record.stack_info:
+            if msg[-1:] != "\n":
+                msg += "\n"
+            msg += self.formatStack(record.stack_info)
+        data = {
+            "time": record.asctime,
+            "level": record.levelname,
+            "file": record.filename,
+            "function": record.funcName,
+            "line": record.lineno,
+            "message": msg.strip()
+        }
+        return jsonw.dumps(data).decode()
 
 # Coroutine friendly QueueHandler courtesy of Martjin Pieters:
 # https://www.zopatista.com/python/2019/05/11/asyncio-logging/
@@ -59,6 +88,9 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
     def write_header(self) -> None:
         if self.stream is None:
             return
+        if self.app_args["structured_logging"]:
+            self._write_structured_header()
+            return
         strtime = time.asctime(time.gmtime())
         header = f"{'-'*20} Log Start | {strtime} {'-'*20}\n"
         self.stream.write(header)
@@ -68,6 +100,18 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
         if self.rollover_info:
             lines = [line for line in self.rollover_info.values() if line]
             self.stream.write("\n".join(lines) + "\n")
+
+    def _write_structured_header(self) -> None:
+        msg_parts = [f"platform: {platform.platform(terse=True)}"]
+        msg_parts.extend([f"{k}: {v}" for k, v in self.app_args.items()])
+        if self.rollover_info:
+            msg_parts.extend([line for line in self.rollover_info.values() if line])
+        msg = "\n".join(msg_parts)
+        record = logging.LogRecord(
+            "root", logging.INFO, __file__, 93, msg, None, None,
+            func="write_header"
+        )
+        self.emit(record)
 
 class LogManager:
     def __init__(
@@ -94,8 +138,12 @@ class LogManager:
             try:
                 self.file_hdlr = MoonrakerLoggingHandler(
                     app_args, when='midnight', backupCount=2)
-                formatter = logging.Formatter(
-                    '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s')
+                if app_args["structured_logging"]:
+                    formatter: logging.Formatter = StructuredFormatter()
+                else:
+                    formatter = logging.Formatter(
+                        '%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s'
+                    )
                 self.file_hdlr.setFormatter(formatter)
                 self.listener = logging.handlers.QueueListener(
                     queue, self.file_hdlr, stdout_hdlr)
