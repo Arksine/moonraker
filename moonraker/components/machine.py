@@ -228,7 +228,7 @@ class Machine:
             if self.server.is_verbose_enabled():
                 logging.exception("Failed to import libcamera")
             self.server.add_log_rollover_item(
-                "libcamera", "Module libcamera unavailble, import failed"
+                "libcamera", "Module libcamera unavailable, import failed"
             )
             return None
 
