@@ -617,7 +617,7 @@ class KlipperDevice(PowerDevice):
         self.timer_handle: Optional[asyncio.TimerHandle] = None
         self.object_name = config.get('object_name')
         obj_parts = self.object_name.split()
-        self.gc_cmd = f"SET_PIN PIN={obj_parts[-1]} "
+        self.gc_cmd = f"SET_PIN PIN={obj_parts[-1]}"
         if obj_parts[0] == "gcode_macro":
             self.gc_cmd = obj_parts[-1]
         elif obj_parts[0] != "output_pin":
