@@ -402,7 +402,7 @@ class PowerDevice:
                 if req == cur_state:
                     # device is already in requested state, do nothing
                     if base_state != cur_state:
-                        self.notify_power_changed()
+                        await self.process_power_changed()
                     return cur_state
                 if not force:
                     kconn: KlippyConnection
