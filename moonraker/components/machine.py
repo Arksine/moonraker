@@ -1806,7 +1806,7 @@ class InstallValidator:
             raise ValidationError(
                 "Moonraker requires sudo permission to update the system "
                 "service. Please check your notifications for further "
-                "intructions."
+                "instructions."
             )
         self._sudo_requested = False
         svc_dest = pathlib.Path(props["FragmentPath"])
