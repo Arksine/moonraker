@@ -228,7 +228,7 @@ class Machine:
             if self.server.is_verbose_enabled():
                 logging.exception("Failed to import libcamera")
             self.server.add_log_rollover_item(
-                "libcamera", "Module libcamera unavailble, import failed"
+                "libcamera", "Module libcamera unavailable, import failed"
             )
             return None
 
@@ -1806,7 +1806,7 @@ class InstallValidator:
             raise ValidationError(
                 "Moonraker requires sudo permission to update the system "
                 "service. Please check your notifications for further "
-                "intructions."
+                "instructions."
             )
         self._sudo_requested = False
         svc_dest = pathlib.Path(props["FragmentPath"])
