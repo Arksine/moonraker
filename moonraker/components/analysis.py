@@ -350,7 +350,7 @@ class GcodeAnalysis:
         machine: Machine = self.server.lookup_component("machine")
         host_info = self.server.get_host_info()
         host_addr: str = host_info["address"]
-        if host_addr.lower() in ["all", "0.0.0.0"]:
+        if host_addr.lower() in ("all", "0.0.0.0", "localhost", "127.0.0.1"):
             address = "127.0.0.1"
         elif host_addr.lower() == "::":
             address = "::1"
