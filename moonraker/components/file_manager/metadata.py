@@ -257,7 +257,7 @@ class BaseSlicer(object):
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         for data in [self.header_data, self.footer_data]:
             thumb_matches: List[str] = re.findall(
-                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
+                r"; (thumbnail|png) begin[;/\+=\w\s]+?; (thumbnail|png) end", data)
             if thumb_matches:
                 break
         else:
