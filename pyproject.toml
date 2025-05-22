@@ -71,5 +71,5 @@ custom-hook = "pdm_build.py"
 moonraker = "moonraker.server:main"
 
 [build-system]
-requires = ["pdm-backend<=2.4.3"]
+requires = ["pdm-backend<=2.4.4"]
 build-backend = "pdm.backend"
