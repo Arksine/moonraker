@@ -55,6 +55,7 @@ class AppDeploy(BaseDeploy):
                 f"option 'channel'. Type '{self.type}' supports the following "
                 f"channels: {str_channels}.  Falling back to channel '{self.channel}'"
             )
+        self.report_anomalies = config.getboolean("report_anomalies", True)
         self._is_valid: bool = False
         self.virtualenv: Optional[pathlib.Path] = None
         self.py_exec: Optional[pathlib.Path] = None

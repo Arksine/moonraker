@@ -151,7 +151,7 @@ class GitDeploy(AppDeploy):
 
     def get_update_status(self) -> Dict[str, Any]:
         status = super().get_update_status()
-        status.update(self.repo.get_repo_status())
+        status.update(self.repo.get_repo_status(self.report_anomalies))
         status["name"] = self.name
         return status
 
@@ -1019,8 +1019,9 @@ class GitRepo:
             # Return tagged commits as SHA keys mapped to tag values
             return tagged_commits
 
-    def get_repo_status(self) -> Dict[str, Any]:
+    def get_repo_status(self, rpt_anomalies: bool) -> Dict[str, Any]:
         no_untrk_src = len(self.untracked_files) == 0
+        anomalies = self.repo_anomalies if rpt_anomalies else []
         return {
             'detected_type': "git_repo",
             'remote_alias': self.git_remote,
@@ -1043,7 +1044,7 @@ class GitRepo:
             'pristine': no_untrk_src and not self.current_version.dirty,
             'corrupt': self.repo_corrupt,
             'warnings': self.repo_warnings,
-            'anomalies': self.repo_anomalies
+            'anomalies': anomalies
         }
 
     def get_version(self, upstream: bool = False) -> GitVersion:
