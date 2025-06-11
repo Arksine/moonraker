@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .update_manager.update_manager import UpdateManager
+    from .application import MoonrakerApp
     from .klippy_connection import KlippyConnection
     from .authorization import Authorization
     from .file_manager.file_manager import FileManager
@@ -348,6 +349,7 @@ class GcodeAnalysis:
 
     def _get_moonraker_url(self) -> str:
         machine: Machine = self.server.lookup_component("machine")
+        app: MoonrakerApp = self.server.lookup_component("application")
         host_info = self.server.get_host_info()
         host_addr: str = host_info["address"]
         if host_addr.lower() in ("all", "0.0.0.0", "localhost", "127.0.0.1"):
@@ -362,7 +364,7 @@ class GcodeAnalysis:
             # ipv6 address
             address = f"[{address}]"
         port = host_info["port"]
-        return f"http://{address}:{port}/"
+        return f"http://{address}:{port}{app.route_prefix}/"
 
     def _gen_estimator_cmd(
         self,
