@@ -1224,8 +1224,10 @@ class MQTTDevice(PowerDevice):
         self.query_topic: Optional[str] = config.get('query_topic', None)
         self.query_payload = config.gettemplate('query_payload', None)
         self.must_query = config.getboolean('query_after_command', False)
-        if self.query_topic is not None:
+        if self.query_topic is None:
             self.must_query = False
+        self.last_request: str = ""
+        self.response_count: int = 0
 
         self.state_topic: str = config.get('state_topic')
         self.state_timeout = config.getfloat('state_timeout', 2.)
@@ -1243,9 +1245,12 @@ class MQTTDevice(PowerDevice):
     def _on_state_update(self, payload: bytes) -> None:
         last_state = self.state
         in_request = self.request_lock.locked()
+        self.response_count += 1
         err: Optional[Exception] = None
         context = {
-            'payload': payload.decode()
+            "payload": payload.decode(),
+            "last_request": self.last_request,
+            "response_count": self.response_count
         }
         response: str = ""
         try:
@@ -1255,7 +1260,9 @@ class MQTTDevice(PowerDevice):
             self.state = "error"
         else:
             response = response.lower()
-            if response not in ["on", "off"]:
+            if response == "discard":
+                return
+            elif response not in ["on", "off"]:
                 err_msg = "Invalid State Received. " \
                     f"Raw Payload: '{payload.decode()}', Rendered: '{response}"
                 logging.info(f"MQTT Power Device {self.name}: {err_msg}")
@@ -1346,6 +1353,8 @@ class MQTTDevice(PowerDevice):
                 raise self.server.error(
                     f"MQTT Power Device {self.name}: "
                     "MQTT Not Connected", 503)
+            self.last_request = "refresh"
+            self.response_count = 0
             self.query_response = self.eventloop.create_future()
             try:
                 assert self.query_response is not None
@@ -1355,6 +1364,8 @@ class MQTTDevice(PowerDevice):
                                   "Failed to refresh state")
                 self.state = "error"
             self.query_response = None
+            self.last_request = ""
+            self.response_count = 0
 
     async def _wait_for_update(self, fut: asyncio.Future,
                                do_query: bool = True
@@ -1373,6 +1384,8 @@ class MQTTDevice(PowerDevice):
                 f"MQTT Power Device {self.name}: "
                 "MQTT Not Connected", 503)
         self.query_response = self.eventloop.create_future()
+        self.last_request = f"power_{state}"
+        self.response_count = 0
         new_state = "error"
         try:
             assert self.query_response is not None
@@ -1387,6 +1400,8 @@ class MQTTDevice(PowerDevice):
                 f"MQTT Power Device {self.name}: Failed to set state")
             new_state = "error"
         self.query_response = None
+        self.last_request = ""
+        self.response_count = 0
         self.state = new_state
         if self.state == "error":
             raise self.server.error(
