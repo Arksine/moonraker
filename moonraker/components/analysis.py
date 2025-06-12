@@ -323,7 +323,7 @@ class GcodeAnalysis:
         req_perms = stat.S_IXUSR | stat.S_IXGRP
         kest_perms = stat.S_IMODE(estimator_path.stat().st_mode)
         if req_perms & kest_perms != req_perms:
-            logging.info("Setting excutable permissions for Klipper Estimator...")
+            logging.info("Setting executable permissions for Klipper Estimator...")
             try:
                 estimator_path.chmod(kest_perms | req_perms)
             except OSError:
@@ -364,7 +364,7 @@ class GcodeAnalysis:
             # ipv6 address
             address = f"[{address}]"
         port = host_info["port"]
-        return f"http://{address}:{port}{app.route_prefix}/"
+        return f"http://{address}:{port}{app.route_prefix}"
 
     def _gen_estimator_cmd(
         self,
