@@ -1367,26 +1367,34 @@ class MQTTDevice(PowerDevice):
                                           self.qos)
         return await asyncio.wait_for(fut, timeout=self.state_timeout)
 
+    async def _wait_for_state(self, desired_state: str) -> str:
+        new_state = "error"
+        while new_state != desired_state:
+            self.query_response = self.eventloop.create_future()
+            assert self.query_response is not None
+            new_state = await self._wait_for_update(
+                self.query_response, do_query=self.must_query)
+            self.query_response = None
+        return new_state
+
     async def set_power(self, state: str) -> None:
         if not self.mqtt.is_connected():
             raise self.server.error(
                 f"MQTT Power Device {self.name}: "
                 "MQTT Not Connected", 503)
-        self.query_response = self.eventloop.create_future()
         new_state = "error"
         try:
-            assert self.query_response is not None
             payload = self.cmd_payload.render({'command': state})
             await self.mqtt.publish_topic(
                 self.cmd_topic, payload, self.qos,
                 retain=self.retain_cmd_state)
-            new_state = await self._wait_for_update(
-                self.query_response, do_query=self.must_query)
+            new_state = await asyncio.wait_for(
+                self._wait_for_state(state), timeout=self.state_timeout)
         except Exception:
             logging.exception(
                 f"MQTT Power Device {self.name}: Failed to set state")
             new_state = "error"
-        self.query_response = None
+            self.query_response = None
         self.state = new_state
         if self.state == "error":
             raise self.server.error(
