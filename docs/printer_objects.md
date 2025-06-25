@@ -4,7 +4,7 @@
 For the most complete and up to date list of Klipper printer objects
 available for query please see
 [Klipper's Status Reference](https://www.klipper3d.org/Status_Reference.html).
-The objects outlined in this document are subset of all objects available.  In
+The objects outlined in this document are a subset of all objects available.  In
 addition it is possible that the object specifications here are out of date
 relative to the latest commit pushed to Klipper's GitHub repo.
 
@@ -88,7 +88,7 @@ after Klippy exits the `startup` phase.
 | ------------------------ | :------: | --------------------------------------------- |
 | `live_position`          | [float]  | The estimated real world position of the tool |
 |                          |          | at the time of the query.                     |^
-| `love_velocity`          |  float   | The estimated real world velocity of the tool |
+| `live_velocity`          |  float   | The estimated real world velocity of the tool |
 |                          |          | at the time of the query.                     |^
 | `live_extruder_velocity` |  float   | The estimated real world velocity of the      |
 |                          |          | active extruder at the time of the query.     |^
@@ -164,6 +164,9 @@ coordinates due to lookahead.
 |                          |         | the maximum z height at the maximum radius.      |^
 | `print_time`             |  float  | An internal value Klipper uses for scheduling    |
 |                          |         | commands.                                        |^
+| `stalls`                 |   int   | The total number of times since the last restart |
+|                          |         | that the printer had to pause because it ran out |^
+|                          |         | of buffered G-Code.                              |^
 | `estimated_print_time`   |  float  | An internal value Klipper uses for scheduling    |
 |                          |         | commands.                                        |^
 | `extruder`               | string  | The name of the currently selected extruder.     |
@@ -182,7 +185,7 @@ coordinates due to lookahead.
 /// tip
 The `max_velocity`, `max_accel`, `minimum_cruise_ratio`, and
 `square_corner_velocity` can be changed by the `SET_VELOCITY_LIMIT`
-gcode command. Their default values may be configured the `[printer]`
+gcode command. Their default values may be configured in the `[printer]`
 section of Klipper's `printer.cfg`.
 ///
 
@@ -800,14 +803,14 @@ If multiple extruders are configured, extruder 0 is available as
 | ---------- | ------------------------------------------------------------- |
 | `Printing` | The printer is busy.  This indicates that some action has     |
 |            | been scheduled, such as a move command.                       |^
-| `Ready`    | The printer is no longer active and waiting for more activity |
-|            | or for the idle timeout to expire.                            |^
+| `Ready`    | The printer is no longer active and is waiting for more       |
+|            | activity or for the idle timeout to expire.                   |^
 | `Idle`     | The printer has been inactive for a period of time longer     |
 |            | than the configured idle timeout.                             |^
 { #idle-timeout-state-desc} Idle Timeout State
 
 /// Tip
-The `idle_timeout` state field should not be used to determine if Klipper
+The `idle_timeout` `state` field should not be used to determine if Klipper
 is "printing" a file, as the state will report `Printing` when executing
 manual commands.
 ///
@@ -843,7 +846,7 @@ manual commands.
 /// Note
 The value for most fields will persist after a print has
 paused, completed, or errored.  They are cleared when the user issues
-a `SDCARD_RESET_FILE` gcode or when a new print has started.
+an `SDCARD_RESET_FILE` gcode or when a new print has started.
 ///
 
 ## print_stats
@@ -914,8 +917,8 @@ a `SDCARD_RESET_FILE` gcode or when a new print has started.
   ///
 
 /// note
-After a print has started all of the values reported by `print_stats will
-persist until the user issues a `SDCARD_RESET_FILE` gcode command or a new print
+After a print has started all of the values reported by `print_stats` will
+persist until the user issues an `SDCARD_RESET_FILE` gcode command or a new print
 has started.
 ///
 
@@ -932,10 +935,10 @@ has started.
 
 | Field      |  Type  | Description                                         |
 | ---------- | :----: | --------------------------------------------------- |
-| `message`  | string | The message set by a M117 gcode.  If no message     |
+| `message`  | string | The message set by an M117 gcode.  If no message    |
 |            |        | is set this will be an empty string.                |^
 | `progress` | float  | Current print progress as reported by the M73       |
-|            |        | gcode command.  If M73 has not been issued this     |^
+|            |        | gcode command.  If M73 has not been issued, this    |^
 |            |        | value will fall back on `virtual_sdcard.progress`.  |^
 |            |        | This value is expressed as a percentage of progress |^
 |            |        | complete with a range from 0.0 to 1.0.              |^
@@ -2198,7 +2201,7 @@ coordinates.
 | `polygon` | [[float]] | A 2D array indicating the (X,Y) coordinates         |
 |           |           | that form the boundary of the object's location.    |^
 |           |           | This field is only available if the `polygon`       |^
-|           |           | is included when the objected is defined by the     |^
+|           |           | is included when the object is defined by the       |^
 |           |           | `EXCLUDE_OBJECT_DEFINE` gcode command.              |^
 | `center`  |  [float]  | An (X,Y) coordinate indicating the center point     |
 |           |           | of the object.  This field is only available if     |^
@@ -2282,7 +2285,7 @@ coordinates.
 | ---------- | :----: | -------------------------------------------- |
 | `steppers` | object | An object containing the enabled state for   |
 |            |        | all registered steppers.  The keys are       |^
-|            |        | stepper names, the values are boolean's      |^
+|            |        | stepper names, the values are booleans       |^
 |            |        | reflecting the stepper driver enabled state. |^
 { #stepper-enable-object-spec } Stepper Enable Object
 
