@@ -77,10 +77,10 @@ class ExtPahoClient(paho_mqtt.Client):
                 "to_process": 0,
                 "pos": 0
             }
-            with self._out_packet_mutex:
+            with self._out_packet_mutex:    # type: ignore
                 self._out_packet = deque()  # type: ignore
 
-            with self._current_out_packet_mutex:
+            with self._current_out_packet_mutex:  # type: ignore
                 self._current_out_packet = None
         else:
             self._in_packet = {
@@ -118,7 +118,7 @@ class ExtPahoClient(paho_mqtt.Client):
             try:
                 # Try with server_hostname, even it's not supported in
                 # certain scenarios
-                sock = self._ssl_context.wrap_socket(
+                sock = self._ssl_context.wrap_socket(  # type: ignore
                     sock,
                     server_hostname=self._host,
                     do_handshake_on_connect=False,
@@ -129,7 +129,7 @@ class ExtPahoClient(paho_mqtt.Client):
             except ValueError:
                 # Python version requires SNI in order to handle
                 # server_hostname, but SNI is not available
-                sock = self._ssl_context.wrap_socket(
+                sock = self._ssl_context.wrap_socket(  # type: ignore
                     sock,
                     do_handshake_on_connect=False,
                 )
@@ -137,7 +137,7 @@ class ExtPahoClient(paho_mqtt.Client):
                 # If SSL context has already checked hostname, then don't need
                 #  to do it again
                 if (hasattr(self._ssl_context, 'check_hostname') and
-                        self._ssl_context.check_hostname):
+                        self._ssl_context.check_hostname):  # type: ignore
                     verify_host = False
 
             assert isinstance(sock, ssl.SSLSocket)
@@ -152,7 +152,7 @@ class ExtPahoClient(paho_mqtt.Client):
             sock = paho_mqtt.WebsocketWrapper(
                 sock, self._host, self._port, self._ssl,
                 self._websocket_path, self._websocket_extra_headers
-            )
+            )  # type: ignore
 
         self._sock = sock
         assert self._sock is not None
@@ -175,7 +175,7 @@ class ExtPahoClient(paho_mqtt.Client):
         }
 
         self._ping_t = 0.0  # type: ignore
-        self._state = paho_mqtt._ConnectionState.MQTT_CS_CONNECTING
+        self._state = paho_mqtt._ConnectionState.MQTT_CS_CONNECTING  # type: ignore
 
         self._sock_close()
 
@@ -199,7 +199,7 @@ class ExtPahoClient(paho_mqtt.Client):
         self._messages_reconnect_reset()
 
         with self._callback_mutex:
-            on_pre_connect = self.on_pre_connect
+            on_pre_connect = self.on_pre_connect  # type: ignore
 
         if on_pre_connect:
             try:
@@ -212,11 +212,11 @@ class ExtPahoClient(paho_mqtt.Client):
                 if not self.suppress_exceptions:
                     raise
 
-        self._sock = sock or self._create_socket()
+        self._sock = sock or self._create_socket()  # type: ignore
 
         self._sock.setblocking(False)  # type: ignore[attr-defined]
         self._registered_write = False
-        self._call_socket_open(self._sock)
+        self._call_socket_open(self._sock)  # type: ignore
 
         return self._send_connect(self._keepalive)
 
@@ -352,12 +352,12 @@ class MQTTClient(APITransport):
                 "between 0 and 2")
         self.publish_split_status = \
             config.getboolean("publish_split_status", False)
-        client_id: Optional[str] = config.get("client_id", None)
+        client_id: str = config.get("client_id", "")
         if PAHO_MQTT_VERSION < (2, 0):
             self.client = ExtPahoClient(client_id, protocol=self.protocol)
         else:
             self.client = ExtPahoClient(
-                paho_mqtt.CallbackAPIVersion.VERSION1, client_id,
+                paho_mqtt.CallbackAPIVersion.VERSION1, client_id,  # type: ignore
                 protocol=self.protocol
             )
         self.client.on_connect = self._on_connect
@@ -530,7 +530,7 @@ class MQTTClient(APITransport):
             logging.info("MQTT Server Disconnected, reason: "
                          f"{paho_mqtt.error_string(reason_code)}")
             if self.connect_task is None:
-                self.connect_task = asyncio.create_task(self._do_reconnect())
+                self.connect_task = self.eventloop.create_task(self._do_reconnect())
             self.server.send_event("mqtt:disconnected")
         self.connect_evt.clear()
 
@@ -587,8 +587,7 @@ class MQTTClient(APITransport):
                     logging.exception("MQTT Connection Error")
                     last_err = e
                 continue
-            self.client.socket().setsockopt(
-                socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
             break
         self.connect_task = None
 

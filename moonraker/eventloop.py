@@ -20,7 +20,8 @@ from typing import (
     Optional,
     Tuple,
     TypeVar,
-    Union
+    Union,
+    Set
 )
 
 _uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
@@ -49,6 +50,7 @@ class EventLoop:
 
     def reset(self) -> None:
         self.aioloop = asyncio.get_running_loop()
+        self.bg_tasks: Set[asyncio.Task] = set()
         self.add_signal_handler = self.aioloop.add_signal_handler
         self.remove_signal_handler = self.aioloop.remove_signal_handler
         self.add_reader = self.aioloop.add_reader
@@ -57,10 +59,15 @@ class EventLoop:
         self.remove_writer = self.aioloop.remove_writer
         self.get_loop_time = self.aioloop.time
         self.create_future = self.aioloop.create_future
-        self.create_task = self.aioloop.create_task
         self.call_at = self.aioloop.call_at
         self.set_debug = self.aioloop.set_debug
         self.is_running = self.aioloop.is_running
+
+    def create_task(self, coro: asyncio._CoroutineLike[_T]) -> asyncio.Task[_T]:
+        tsk = self.aioloop.create_task(coro)
+        self.bg_tasks.add(tsk)
+        tsk.add_done_callback(self.bg_tasks.discard)
+        return tsk
 
     def _create_new_loop(self) -> asyncio.AbstractEventLoop:
         for _ in range(5):
@@ -91,7 +98,7 @@ class EventLoop:
                 raise
             except Exception:
                 logging.exception("Error Running Callback")
-        self.aioloop.create_task(_wrapper())
+        self.create_task(_wrapper())
 
     def delay_callback(self,
                        delay: float,
