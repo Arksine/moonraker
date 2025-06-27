@@ -1215,14 +1215,17 @@ state_topic:
 #  The mqtt topic to subscribe to for state updates.  This parameter must be
 #  provided.
 state_response_template:
-#  A template used to parse the payload received with the state topic.  A
-#  "payload" variable is provided the template's context.  This template
-#  must resolve to "on" or "off".  For example:
+#  A template used to parse the payload received with the state topic.  The
+#  template's context will include  "payload", "last_request", and
+#  "response_count" variables. This template must resolve to "on", "off" or
+#  "discard".  For example:
 #    {% set resp = payload|fromjson %}
 #    {resp["POWER"]}
 #  The above example assumes a json response is received, with a "POWER" field
 #  that set to either "ON" or "OFF".  The resolved response will always be
-#  trimmed of whitespace and converted to lowercase. The default is the payload.
+#  trimmed of whitespace and converted to lowercase.  See the "Discarding
+#  Responses" section below for details on how to discard unwanted responses.
+#  The default is to render the contents the payload directly.
 state_timeout:
 #  The amount of time (in seconds) to wait for the state topic to receive an
 #  update. If the timeout expires the device revert to an "error" state.  This
@@ -1284,6 +1287,41 @@ state_response_template:
 # not necessary to query after a command
 query_after_command: False
 ```
+
+##### Discarding Responses
+
+Some devices may publish a response prior executing a power request, then
+publish an additional response after.  The context provided to the
+`state_response_template` includes two variables in addition to the `payload`
+that can be used to discard undesirable responses:
+
+- `last_request`: The name of the last requested action, will be `refresh`,
+  `power_on`, `power_off`.  Will be an empty string in the scenario where an
+  update is published outside of a request from Moonraker.
+- `response_count`: The number of responses received since Moonraker last
+  requested an action from the MQTT device.
+
+An example using the above variables to discard a response may look like the
+following:
+
+```ini {title="Moonraker Config Example"}
+# moonraker.conf
+
+# Example configuration for ing with Tasmota firmware over mqtt
+[power mqtt_plug]
+type: mqtt
+state_response_template:
+  # Discard the first response for power on and power off requests
+  {% if response_count == 1 and last_request.startswith("power_") %}
+    discard
+  {% else %}
+    # render the payload of the second response for power requests, and the
+    # first response for refresh requests or updates published as a result
+    # of actions taken outside of Moonraker.
+    {payload|lower}
+  {% endif %}
+```
+
 ####  SmartThings (HTTP)
 
 /// attention | Important
@@ -2034,6 +2072,11 @@ info_tags:
 #   Frontends may use these tags to perform additional actions or display
 #   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
+report_anomalies: True
+#   When set to True all detected anomalies are reported to front-ends.  When
+#   set to False anomalies are logged but not reported. For a typical frontend
+#   this can be used to silence messages when it anomalies are expected. The
+#   default is True.
 ```
 
 #### Git Repo Configuration
@@ -2172,6 +2215,11 @@ pinned_commit:
 #   specify the complete hash, however abbreviated hashes with a minimum of
 #   8 characters are accepted.  The "pinned_commit" overrides the update
 #   behavior set by the "channel" option.  The default is no pinned commit.
+report_anomalies: True
+#   When set to True all detected anomalies are reported to front-ends.  When
+#   set to False anomalies are logged but not reported. For a typical frontend
+#   this can be used to silence messages when it anomalies are expected. The
+#   default is True.
 ```
 
 /// Note
@@ -2233,6 +2281,7 @@ enable_node_updates:
 is_system_service: True
 managed_services:
 info_tags:
+report_anomalies: True
 #   See the git_repo type documentation for detailed descriptions of the above
 #   options.
 ```
