@@ -37,8 +37,9 @@ class TemplateFactory:
         self.async_env.filters['fromjson'] = jsonw.loads
         self.ui_env.add_extension("jinja2.ext.do")
         self.ui_env.filters['fromjson'] = jsonw.loads
-        self.add_environment_global('raise_error', self._raise_error)
-        self.add_environment_global('secrets', secrets)
+        self.add_environment_global("raise_error", self._raise_error)
+        self.add_environment_global("secrets", secrets)
+        self.add_environment_global("log_debug", logging.debug)
 
     def add_environment_global(self, name: str, value: Any):
         if name in self.jenv.globals:

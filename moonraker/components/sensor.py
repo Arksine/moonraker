@@ -178,8 +178,7 @@ class MQTTSensor(BaseSensor):
         measurements: Dict[str, Union[int, float]] = {}
         context = {
             "payload": payload.decode(),
-            "set_result": partial(_set_result, store=measurements),
-            "log_debug": logging.debug
+            "set_result": partial(_set_result, store=measurements)
         }
 
         try:

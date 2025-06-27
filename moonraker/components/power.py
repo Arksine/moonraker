@@ -1475,7 +1475,6 @@ class GenericHTTP(HTTPDevice):
             "command": command,
             "http_request": request,
             "async_sleep": asyncio.sleep,
-            "log_debug": logging.debug,
             "urls": dict(self.urls)
         }
         if self.request_template is not None:
