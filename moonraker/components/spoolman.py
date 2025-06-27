@@ -133,7 +133,7 @@ class SpoolManager:
                     self.ws_url,
                     connect_timeout=5.,
                     ping_interval=20.,
-                    ping_timeout=60.
+                    ping_timeout=15.
                 )
                 setattr(self.spoolman_ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
