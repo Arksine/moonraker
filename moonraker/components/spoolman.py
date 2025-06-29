@@ -1,6 +1,7 @@
 # Integration with Spoolman
 #
 # Copyright (C) 2023 Daniel Hultgren <daniel.cf.hultgren@gmail.com>
+# Copyright (C) 2024 Damian Łoboda <kontakt.lobod@o2.pl>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -10,6 +11,7 @@ import logging
 import re
 import contextlib
 import tornado.websocket as tornado_ws
+from tornado import httpclient as tornado_httpclient
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
 from typing import (
@@ -38,6 +40,9 @@ ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
+        self.additional_headers: Dict[str, str] = config.getdict(
+            "additional_headers", default={}
+        )
         self.eventloop = self.server.get_event_loop()
         self._get_spoolman_urls(config)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
@@ -129,9 +134,13 @@ class SpoolManager:
                 logging.info(f"Connecting To Spoolman: {self.ws_url}")
                 log_connect = False
             try:
-                self.spoolman_ws = await tornado_ws.websocket_connect(
+                ws_request = tornado_httpclient.HTTPRequest(
                     self.ws_url,
+                    headers=self.additional_headers,
                     connect_timeout=5.,
+                )
+                self.spoolman_ws = await tornado_ws.websocket_connect(
+                    ws_request,
                     ping_interval=20.,
                     ping_timeout=15.
                 )
@@ -216,7 +225,8 @@ class SpoolManager:
         if self.spool_id is not None:
             response = await self.http_client.get(
                 f"{self.spoolman_url}/v1/spool/{self.spool_id}",
-                connect_timeout=1., request_timeout=2.
+                connect_timeout=1., request_timeout=2.,
+                headers=self.additional_headers,
             )
             if response.status_code == 404:
                 logging.info(f"Spool ID {self.spool_id} not found, setting to None")
@@ -305,7 +315,8 @@ class SpoolManager:
             response = await self.http_client.request(
                 method="PUT",
                 url=f"{self.spoolman_url}/v1/spool/{spool_id}/use",
-                body={"use_length": used_length}
+                body={"use_length": used_length},
+                headers=self.additional_headers,
             )
             if response.has_error():
                 if response.status_code == 404:
@@ -367,6 +378,7 @@ class SpoolManager:
             method=method,
             url=full_url,
             body=body,
+            headers=self.additional_headers,
         )
         if not use_v2_response:
             response.raise_for_status()
