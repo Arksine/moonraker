@@ -535,6 +535,7 @@ class SimplyPrint(APITransport):
         query = await self.klippy_apis.query_objects({"heaters": None}, None)
         sub_objs = {
             "display_status": ["progress"],
+            "virtual_sdcard": ["file_position", "progress"],
             "bed_mesh": ["mesh_matrix", "mesh_min", "mesh_max"],
             "toolhead": ["extruder"],
             "gcode_move": ["gcode_position"]
@@ -850,11 +851,31 @@ class SimplyPrint(APITransport):
                 time_left != last_time_left
             ):
                 job_info["time"] = time_left
+
+        progress = None
+
         if "display_status" in self.printer_status:
-            progress = self.printer_status["display_status"]["progress"]
+            if "progress" in self.printer_status["display_status"]:
+                if self.printer_status["display_status"]["progress"]:
+                    progress = self.printer_status["display_status"]["progress"]
+
+        if not progress and "virtual_sdcard" in self.printer_status:
+            if "file_position" in self.printer_status["virtual_sdcard"]:
+                file_position = self.printer_status["virtual_sdcard"]["file_position"]
+                gcode_start_byte = self.cache.metadata.get('gcode_start_byte', 0)
+                gcode_end_byte = self.cache.metadata.get('gcode_end_byte', 0)
+                gcode_length = gcode_end_byte - gcode_start_byte
+                if gcode_start_byte and gcode_end_byte and gcode_length > 0:
+                    progress = (file_position - gcode_start_byte) / gcode_length
+                    progress = max(0, min(progress, 1))
+            if not progress and "progress" in self.printer_status["virtual_sdcard"]:
+                progress = self.printer_status["virtual_sdcard"]["progress"]
+
+        if progress:
             pct_prog = int(progress * 100 + .5)
             if pct_prog != self.cache.job_info.get("progress", 0):
-                job_info["progress"] = int(progress * 100 + .5)
+                job_info["progress"] = pct_prog
+
         layer: Optional[int] = last_stats.get("info", {}).get("current_layer")
         if layer is None:
             layer = self.layer_detect.layer
