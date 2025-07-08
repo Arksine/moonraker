@@ -10,6 +10,7 @@ import logging
 import re
 import contextlib
 import tornado.websocket as tornado_ws
+from tornado import version_info as tornado_version
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
 from typing import (
@@ -132,8 +133,7 @@ class SpoolManager:
                 self.spoolman_ws = await tornado_ws.websocket_connect(
                     self.ws_url,
                     connect_timeout=5.,
-                    ping_interval=20.,
-                    ping_timeout=15.
+                    ping_interval=None if tornado_version < (6, 5) else 20.
                 )
                 setattr(self.spoolman_ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
