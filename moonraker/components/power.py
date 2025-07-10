@@ -611,13 +611,6 @@ class KlipperDevice(PowerDevice):
             raise config.error(
                 "Option 'restart_klipper_when_powered' in section "
                 f"[{config.get_name()}] is unsupported for 'klipper_device'")
-        for svc in self.bound_services:
-            if svc.startswith("klipper"):
-                # Klipper devices cannot be bound to an instance of klipper or
-                # klipper_mcu
-                raise config.error(
-                    f"Option 'bound_services' must not contain service '{svc}'"
-                    f" for 'klipper_device' [{config.get_name()}]")
         self.is_shutdown: bool = False
         self.update_fut: Optional[asyncio.Future] = None
         self.timer: Optional[float] = config.getfloat(
@@ -647,6 +640,16 @@ class KlipperDevice(PowerDevice):
         return dev_info
 
     async def _handle_ready(self) -> None:
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        if kconn.unit_name:
+            if kconn.unit_name in self.bound_services:
+                self.server.add_warning(
+                    f"Power: Klipper Device {self.name} contains invalid "
+                    f"bound service {kconn.unit_name}.  Remove this service "
+                    "from the configuration and restart Moonraker.",
+                    f"kpd_{self.name}"
+                )
+                self.bound_services.remove(kconn.unit_name)
         kapis: APIComp = self.server.lookup_component('klippy_apis')
         sub: Dict[str, Optional[List[str]]] = {self.object_name: None}
         data = await kapis.subscribe_objects(sub, self._status_update, None)
@@ -748,10 +751,10 @@ class KlipperDevice(PowerDevice):
                 self.update_fut.set_result(state)
 
     def _set_state(self, state: str) -> None:
-        in_event = self.update_fut is not None
+        in_request = self.request_lock.locked()
         last_state = self.state
         self.state = state
-        if last_state not in [state, "init"] and not in_event:
+        if last_state not in [state, "init"] and not in_request:
             if self.restrict_actions:
                 self.notify_power_changed()
             else:
