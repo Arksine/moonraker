@@ -653,20 +653,22 @@ class KlipperDevice(PowerDevice):
         if not self._validate_data(data):
             self.state = "error"
         else:
-            assert data is not None
-            self._set_state_from_data(data)
-            if (
-                self.initial_state is not None and
-                self.state in ["on", "off"]
-            ):
-                new_state = "on" if self.initial_state else "off"
-                if new_state != self.state:
-                    logging.info(
-                        f"Power Device {self.name}: setting initial "
-                        f"state to {new_state}"
-                    )
-                    await self.set_power(new_state)
-            self.notify_power_changed()
+            async with self.request_lock:
+                assert data is not None
+                self._set_state_from_data(data)
+                if (
+                    self.initial_state is not None and
+                    self.state in ["on", "off"]
+                ):
+                    new_state = "on" if self.initial_state else "off"
+                    if new_state != self.state:
+                        logging.info(
+                            f"Power Device {self.name}: setting initial "
+                            f"state to {new_state}"
+                        )
+                        await self.set_power(new_state)
+                    await self.process_bound_services()
+                self.notify_power_changed()
 
     async def _handle_disconnect(self) -> None:
         self.is_shutdown = False
@@ -1547,8 +1549,10 @@ class UHubCtl(PowerDevice):
         async with self.request_lock:
             await self.refresh_status()
             cur_state = True if self.state == "on" else False
-            if self.initial_state is not None and cur_state != self.initial_state:
-                await self.set_power("on" if self.initial_state else "off")
+            if self.initial_state is not None:
+                if cur_state != self.initial_state:
+                    await self.set_power("on" if self.initial_state else "off")
+                await self.process_bound_services()
 
     async def refresh_status(self) -> None:
         try:
