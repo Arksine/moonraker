@@ -265,6 +265,7 @@ class PowerDevice:
         self.initial_state: Optional[bool] = config.getboolean(
             'initial_state', None
         )
+        self.restrict_actions = config.getboolean("restrict_action_processing", True)
 
     def _schedule_firmware_restart(self, state: KlippyState) -> None:
         if not self.need_scheduled_restart:
@@ -402,7 +403,10 @@ class PowerDevice:
                 if req == cur_state:
                     # device is already in requested state, do nothing
                     if base_state != cur_state:
-                        self.notify_power_changed()
+                        if self.restrict_actions:
+                            self.notify_power_changed()
+                        else:
+                            await self.process_power_changed()
                     return cur_state
                 if not force:
                     kconn: KlippyConnection
@@ -419,7 +423,10 @@ class PowerDevice:
             elif req != "status":
                 raise self.server.error(f"Unsupported power request: {req}")
             elif base_state != cur_state:
-                self.notify_power_changed()
+                if self.restrict_actions:
+                    self.notify_power_changed()
+                else:
+                    await self.process_power_changed()
             return cur_state
 
     def refresh_status(self) -> Optional[Coroutine]:
@@ -557,11 +564,12 @@ class GpioDevice(PowerDevice):
         self.gpio_out = config.getgpioout('pin', initial_value=initial_val)
 
     async def init_state(self) -> None:
-        if self.initial_state is None:
-            self.set_power("off")
-        else:
-            self.set_power("on" if self.initial_state else "off")
-            await self.process_bound_services()
+        async with self.request_lock:
+            if self.initial_state is None:
+                self.set_power("off")
+            else:
+                self.set_power("on" if self.initial_state else "off")
+                await self.process_bound_services()
 
     def refresh_status(self) -> None:
         pass
@@ -742,7 +750,14 @@ class KlipperDevice(PowerDevice):
         last_state = self.state
         self.state = state
         if last_state not in [state, "init"] and not in_event:
-            self.notify_power_changed()
+            if self.restrict_actions:
+                self.notify_power_changed()
+            else:
+                async def _proc_wrapper():
+                    async with self.request_lock:
+                        await self.process_power_changed()
+                eventloop = self.server.get_event_loop()
+                eventloop.create_task(_proc_wrapper())
 
     def _check_timer(self) -> None:
         if self.state == "on" and self.timer is not None:
@@ -1273,7 +1288,13 @@ class MQTTDevice(PowerDevice):
         if not in_request and last_state != self.state:
             logging.info(f"MQTT Power Device {self.name}: External Power "
                          f"event detected, new state: {self.state}")
-            self.notify_power_changed()
+            if self.restrict_actions:
+                self.notify_power_changed()
+            else:
+                async def _proc_wrapper():
+                    async with self.request_lock:
+                        await self.process_power_changed()
+                self.eventloop.create_task(_proc_wrapper())
         if (
             self.query_response is not None and
             not self.query_response.done()
