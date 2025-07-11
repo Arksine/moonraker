@@ -210,14 +210,16 @@ class PrinterPower:
         self.devices[name] = device
 
     async def close(self) -> None:
+        coros: List[Coroutine] = []
         for device in self.devices.values():
             ret = device.close()
             if ret is not None:
-                await ret
-
+                coros.append(ret)
+        if coros:
+            await asyncio.gather(*coros, return_exceptions=True)
 
 class PowerDevice:
-    def __init__(self, config: ConfigHelper) -> None:
+    def __init__(self, config: ConfigHelper, can_poll: bool = True) -> None:
         name_parts = config.get_name().split(maxsplit=1)
         if len(name_parts) != 2:
             raise config.error(f"Invalid Section Name: {config.get_name()}")
@@ -266,6 +268,11 @@ class PowerDevice:
             'initial_state', None
         )
         self.restrict_actions = config.getboolean("restrict_action_processing", True)
+        self._poll_task: asyncio.Task | None = None
+        self._poll_interval = None
+        if can_poll:
+            self._poll_interval = config.getfloat("poll_interval", None, minval=1.0)
+        self._last_update_time = 0.
 
     def _schedule_firmware_restart(self, state: KlippyState) -> None:
         if not self.need_scheduled_restart:
@@ -319,7 +326,7 @@ class PowerDevice:
             self._schedule_firmware_restart(klippy_state)
 
     async def process_bound_services(self) -> None:
-        if not self.bound_services:
+        if not self.bound_services or self.state not in ("on", "off"):
             return
         machine_cmp: Machine = self.server.lookup_component("machine")
         action = "start" if self.state == "on" else "stop"
@@ -392,41 +399,45 @@ class PowerDevice:
             # while the device holds the lock
             return self.state
         async with self.request_lock:
-            base_state: str = self.state
-            ret = self.refresh_status()
-            if ret is not None:
-                await ret
-            cur_state: str = self.state
-            if req == "toggle":
-                req = "on" if cur_state == "off" else "off"
-            if req in ["on", "off"]:
-                if req == cur_state:
-                    # device is already in requested state, do nothing
-                    if base_state != cur_state:
-                        if self.restrict_actions:
-                            self.notify_power_changed()
-                        else:
-                            await self.process_power_changed()
-                    return cur_state
-                if not force:
-                    kconn: KlippyConnection
-                    kconn = self.server.lookup_component("klippy_connection")
-                    if self.locked_while_printing and kconn.is_printing():
-                        raise self.server.error(
-                            f"Unable to change power for {self.name} "
-                            "while printing")
-                ret = self.set_power(req)
+            try:
+                base_state: str = self.state
+                ret = self.refresh_status()
                 if ret is not None:
                     await ret
-                cur_state = self.state
-                await self.process_power_changed()
-            elif req != "status":
-                raise self.server.error(f"Unsupported power request: {req}")
-            elif base_state != cur_state:
-                if self.restrict_actions:
-                    self.notify_power_changed()
-                else:
+                cur_state: str = self.state
+                if req == "toggle":
+                    req = "on" if cur_state == "off" else "off"
+                if req in ["on", "off"]:
+                    if req == cur_state:
+                        # device is already in requested state, do nothing
+                        if base_state != cur_state:
+                            if self.restrict_actions:
+                                self.notify_power_changed()
+                            else:
+                                await self.process_power_changed()
+                        return cur_state
+                    if not force:
+                        kconn: KlippyConnection
+                        kconn = self.server.lookup_component("klippy_connection")
+                        if self.locked_while_printing and kconn.is_printing():
+                            raise self.server.error(
+                                f"Unable to change power for {self.name} "
+                                "while printing")
+                    ret = self.set_power(req)
+                    if ret is not None:
+                        await ret
+                    cur_state = self.state
                     await self.process_power_changed()
+                elif req != "status":
+                    raise self.server.error(f"Unsupported power request: {req}")
+                elif base_state != cur_state:
+                    if self.restrict_actions:
+                        self.notify_power_changed()
+                    else:
+                        await self.process_power_changed()
+            finally:
+                eventloop = self.server.get_event_loop()
+                self._last_update_time = eventloop.get_loop_time()
             return cur_state
 
     def refresh_status(self) -> Optional[Coroutine]:
@@ -435,11 +446,53 @@ class PowerDevice:
     def set_power(self, state: str) -> Optional[Coroutine]:
         raise NotImplementedError
 
+    async def _notify_external_change(self) -> None:
+        async with self.request_lock:
+            if self.restrict_actions:
+                self.notify_power_changed()
+            else:
+                await self.process_power_changed()
+            eventloop = self.server.get_event_loop()
+            self._last_update_time = eventloop.get_loop_time()
+
+    async def _poll_device(self) -> None:
+        eventloop = self.server.get_event_loop()
+        while self._poll_interval is not None:
+            time_diff = eventloop.get_loop_time() - self._last_update_time
+            if time_diff >= self._poll_interval:
+                try:
+                    await self.process_request("status")
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    pass
+                time_diff = self._poll_interval or 0.
+            await asyncio.sleep(time_diff)
+
+    def start_polling(self) -> bool:
+        if self._poll_interval is None or self._poll_task is not None:
+            return False
+        eventloop = self.server.get_event_loop()
+        self._poll_task = eventloop.create_task(self._poll_device())
+        return True
+
+    def stop_polling(self) -> Optional[Coroutine]:
+        if self._poll_task is None:
+            return None
+        poll_task = self._poll_task
+        self._poll_task = None
+        # If not sleeping, attempt to abort after status request is complete
+        if self.request_lock.locked():
+            self._poll_interval = None
+            return asyncio.wait_for(poll_task, 1.)
+        poll_task.cancel()
+        return None
+
     def close(self) -> Optional[Coroutine]:
         if self.init_task is not None:
             self.init_task.cancel()
             self.init_task = None
-        return None
+        return self.stop_polling()
 
 class HTTPDevice(PowerDevice):
     def __init__(
@@ -499,6 +552,9 @@ class HTTPDevice(PowerDevice):
                             await self.set_power(new_state)
                         await self.process_bound_services()
                     self.notify_power_changed()
+                    eventloop = self.server.get_event_loop()
+                    self._last_update_time = eventloop.get_loop_time()
+                    self.start_polling()
                     return
 
     async def _send_http_command(
@@ -529,12 +585,13 @@ class HTTPDevice(PowerDevice):
     async def refresh_status(self) -> None:
         try:
             state = await self._send_status_request()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = state
+            logging.exception(f"Error Refeshing Device Status: {self.name}")
+        else:
+            self.state = state
 
     async def set_power(self, state):
         try:
@@ -552,7 +609,7 @@ class GpioDevice(PowerDevice):
                  config: ConfigHelper,
                  initial_val: Optional[int] = None
                  ) -> None:
-        super().__init__(config)
+        super().__init__(config, False)
         self.timer: Optional[float] = config.getfloat('timer', None)
         if self.timer is not None and self.timer < 0.000001:
             raise config.error(
@@ -570,6 +627,8 @@ class GpioDevice(PowerDevice):
             else:
                 self.set_power("on" if self.initial_state else "off")
                 await self.process_bound_services()
+            eventloop = self.server.get_event_loop()
+            self._last_update_time = eventloop.get_loop_time()
 
     def refresh_status(self) -> None:
         pass
@@ -602,7 +661,7 @@ class GpioDevice(PowerDevice):
 
 class KlipperDevice(PowerDevice):
     def __init__(self, config: ConfigHelper) -> None:
-        super().__init__(config)
+        super().__init__(config, False)
         if self.off_when_shutdown:
             raise config.error(
                 "Option 'off_when_shutdown' in section "
@@ -754,15 +813,10 @@ class KlipperDevice(PowerDevice):
         in_request = self.request_lock.locked()
         last_state = self.state
         self.state = state
+        eventloop = self.server.get_event_loop()
+        self._last_update_time = eventloop.get_loop_time()
         if last_state not in [state, "init"] and not in_request:
-            if self.restrict_actions:
-                self.notify_power_changed()
-            else:
-                async def _proc_wrapper():
-                    async with self.request_lock:
-                        await self.process_power_changed()
-                eventloop = self.server.get_event_loop()
-                eventloop.create_task(_proc_wrapper())
+            eventloop.create_task(self._notify_external_change())
 
     def _check_timer(self) -> None:
         if self.state == "on" and self.timer is not None:
@@ -959,17 +1013,21 @@ class TPLinkSmartPlug(PowerDevice):
                             await self.set_power(new_state)
                         await self.process_bound_services()
                     self.notify_power_changed()
+                    eventloop = self.server.get_event_loop()
+                    self._last_update_time = eventloop.get_loop_time()
+                    self.start_polling()
                     return
 
     async def refresh_status(self) -> None:
         try:
             state: int = await self._send_info_request()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             self.state = "error"
-            msg = f"Error Refeshing Device Status: {self.name}"
-            logging.exception(msg)
-            raise self.server.error(msg) from None
-        self.state = "on" if state else "off"
+            logging.exception(f"Error Refeshing Device Status: {self.name}")
+        else:
+            self.state = "on" if state else "off"
 
     async def set_power(self, state) -> None:
         err: int
@@ -1235,7 +1293,7 @@ class Loxonev1(HTTPDevice):
 
 class MQTTDevice(PowerDevice):
     def __init__(self, config: ConfigHelper) -> None:
-        super().__init__(config)
+        super().__init__(config, False)
         self.mqtt: MQTTClient = self.server.load_component(config, 'mqtt')
         self.eventloop = self.server.get_event_loop()
         self.cmd_topic: str = config.get('command_topic')
@@ -1290,16 +1348,11 @@ class MQTTDevice(PowerDevice):
                 self.state = "error"
             else:
                 self.state = response
+        self._last_update_time = self.eventloop.get_loop_time()
         if not in_request and last_state != self.state:
             logging.info(f"MQTT Power Device {self.name}: External Power "
-                         f"event detected, new state: {self.state}")
-            if self.restrict_actions:
-                self.notify_power_changed()
-            else:
-                async def _proc_wrapper():
-                    async with self.request_lock:
-                        await self.process_power_changed()
-                self.eventloop.create_task(_proc_wrapper())
+                        f"event detected, new state: {self.state}")
+            self.eventloop.create_task(self._notify_external_change())
         if (
             self.query_response is not None and
             not self.query_response.done()
@@ -1556,6 +1609,9 @@ class UHubCtl(PowerDevice):
                 if cur_state != self.initial_state:
                     await self.set_power("on" if self.initial_state else "off")
                 await self.process_bound_services()
+            eventloop = self.server.get_event_loop()
+            self._last_update_time = eventloop.get_loop_time()
+            self.start_polling()
 
     async def refresh_status(self) -> None:
         try:
