@@ -335,7 +335,15 @@ class PowerDevice:
                 f"Power Device {self.name}: Performing {action} action "
                 f"on bound service {svc}"
             )
-            await machine_cmp.do_service_action(action, svc)
+            try:
+                await machine_cmp.do_service_action(action, svc)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception(
+                    f"Power Device {self.name}: Error processing {action} action "
+                    f"for bound service {svc}"
+                )
 
     def process_klippy_shutdown(self) -> None:
         if not self.off_when_shutdown:
@@ -391,6 +399,25 @@ class PowerDevice:
             eventloop = self.server.get_event_loop()
             self.init_task = eventloop.create_task(ret)
         return self.state != "error"
+
+    async def _set_initial_state(self) -> None:
+        if self.initial_state is not None and self.state in ("on", "off"):
+            new_state = "on" if self.initial_state else "off"
+            try:
+                if new_state != self.state:
+                    logging.info(
+                        f"Power Device {self.name}: setting "
+                        f"initial state to {new_state}"
+                    )
+                    ret = self.set_power(new_state)
+                    if ret is not None:
+                        await ret
+                if self.bound_services:
+                    await self.process_bound_services()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.info(f"Power Device {self.name}: Error setting intitial state")
 
     async def process_request(self, req: str, force: bool = False) -> str:
         if self.state == "init" and self.request_lock.locked():
@@ -539,18 +566,7 @@ class HTTPDevice(PowerDevice):
                 else:
                     self.init_task = None
                     self.state = state
-                    if (
-                        self.initial_state is not None and
-                        state in ["on", "off"]
-                    ):
-                        new_state = "on" if self.initial_state else "off"
-                        if new_state != state:
-                            logging.info(
-                                f"Power Device {self.name}: setting initial "
-                                f"state to {new_state}"
-                            )
-                            await self.set_power(new_state)
-                        await self.process_bound_services()
+                    await self._set_initial_state()
                     self.notify_power_changed()
                     eventloop = self.server.get_event_loop()
                     self._last_update_time = eventloop.get_loop_time()
@@ -622,13 +638,20 @@ class GpioDevice(PowerDevice):
 
     async def init_state(self) -> None:
         async with self.request_lock:
-            if self.initial_state is None:
-                self.set_power("off")
-            else:
-                self.set_power("on" if self.initial_state else "off")
-                await self.process_bound_services()
-            eventloop = self.server.get_event_loop()
-            self._last_update_time = eventloop.get_loop_time()
+            try:
+                if self.initial_state is None:
+                    self.set_power("off")
+                else:
+                    self.set_power("on" if self.initial_state else "off")
+                    if self.bound_services:
+                        await self.process_bound_services()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception(f"Power Device {self.name}: Initialization failed")
+            finally:
+                eventloop = self.server.get_event_loop()
+                self._last_update_time = eventloop.get_loop_time()
 
     def refresh_status(self) -> None:
         pass
@@ -718,18 +741,7 @@ class KlipperDevice(PowerDevice):
             async with self.request_lock:
                 assert data is not None
                 self._set_state_from_data(data)
-                if (
-                    self.initial_state is not None and
-                    self.state in ["on", "off"]
-                ):
-                    new_state = "on" if self.initial_state else "off"
-                    if new_state != self.state:
-                        logging.info(
-                            f"Power Device {self.name}: setting initial "
-                            f"state to {new_state}"
-                        )
-                        await self.set_power(new_state)
-                    await self.process_bound_services()
+                await self._set_initial_state()
                 self.notify_power_changed()
 
     async def _handle_disconnect(self) -> None:
@@ -1000,18 +1012,7 @@ class TPLinkSmartPlug(PowerDevice):
                 else:
                     self.init_task = None
                     self.state = "on" if state else "off"
-                    if (
-                        self.initial_state is not None and
-                        self.state in ["on", "off"]
-                    ):
-                        new_state = "on" if self.initial_state else "off"
-                        if new_state != self.state:
-                            logging.info(
-                                f"Power Device {self.name}: setting initial "
-                                f"state to {new_state}"
-                            )
-                            await self.set_power(new_state)
-                        await self.process_bound_services()
+                    await self._set_initial_state()
                     self.notify_power_changed()
                     eventloop = self.server.get_event_loop()
                     self._last_update_time = eventloop.get_loop_time()
@@ -1373,6 +1374,8 @@ class MQTTDevice(PowerDevice):
                 try:
                     assert self.query_response is not None
                     await self._wait_for_update(self.query_response)
+                except asyncio.CancelledError:
+                    raise
                 except asyncio.TimeoutError:
                     # Only wait once if no query topic is set.
                     # Assume that the MQTT device has set the retain
@@ -1383,8 +1386,7 @@ class MQTTDevice(PowerDevice):
                                      "Initialization Timed Out")
                         break
                 except Exception:
-                    logging.exception(f"MQTT Power Device {self.name}: "
-                                      "Init Failed")
+                    logging.exception(f"MQTT Power Device {self.name}: Init Failed")
                     break
                 else:
                     success = True
@@ -1394,22 +1396,10 @@ class MQTTDevice(PowerDevice):
             if not success:
                 self.state = "error"
             else:
-                logging.info(
-                    f"MQTT Power Device {self.name} initialized")
-            if (
-                self.initial_state is not None and
-                self.state in ["on", "off"]
-            ):
-                new_state = "on" if self.initial_state else "off"
-                if new_state != self.state:
-                    logging.info(
-                        f"Power Device {self.name}: setting initial "
-                        f"state to {new_state}"
-                    )
-                    await self.set_power(new_state)
-                await self.process_bound_services()
-                # Don't reset on next connection
-                self.initial_state = None
+                logging.info(f"MQTT Power Device {self.name} initialized")
+            await self._set_initial_state()
+            # Don't reset on next connection
+            self.initial_state = None
             self.notify_power_changed()
 
     async def _on_mqtt_disconnected(self):
@@ -1430,8 +1420,8 @@ class MQTTDevice(PowerDevice):
         ):
             if not self.mqtt.is_connected():
                 raise self.server.error(
-                    f"MQTT Power Device {self.name}: "
-                    "MQTT Not Connected", 503)
+                    f"MQTT Power Device {self.name}: MQTT Not Connected", 503
+                )
             self.last_request = "refresh"
             self.response_count = 0
             self.query_response = self.eventloop.create_future()
@@ -1439,8 +1429,9 @@ class MQTTDevice(PowerDevice):
                 assert self.query_response is not None
                 await self._wait_for_update(self.query_response)
             except Exception:
-                logging.exception(f"MQTT Power Device {self.name}: "
-                                  "Failed to refresh state")
+                logging.exception(
+                    f"MQTT Power Device {self.name}: Failed to refresh state"
+                )
                 self.state = "error"
             self.query_response = None
             self.last_request = ""
@@ -1603,17 +1594,13 @@ class UHubCtl(PowerDevice):
 
     async def init_state(self) -> None:
         async with self.request_lock:
-            await self.refresh_status()
-            cur_state = True if self.state == "on" else False
-            if self.initial_state is not None:
-                if cur_state != self.initial_state:
-                    await self.set_power("on" if self.initial_state else "off")
-                await self.process_bound_services()
+            await self.refresh_status(is_init=True)
+            await self._set_initial_state()
             eventloop = self.server.get_event_loop()
             self._last_update_time = eventloop.get_loop_time()
             self.start_polling()
 
-    async def refresh_status(self) -> None:
+    async def refresh_status(self, is_init: bool = False) -> None:
         try:
             result = await self._run_uhubctl("info")
         except self.server.error as e:
@@ -1621,10 +1608,11 @@ class UHubCtl(PowerDevice):
             output = f"\n{e}"
             if isinstance(e, self.scmd.error):
                 output += f"\nuhubctrl output: {e.stderr.decode(errors='ignore')}"
-            logging.info(f"Power Device {self.name}: Refresh Error{output}")
-            return
-        logging.debug(f"Power Device {self.name}: uhubctl device info: {result}")
-        self.state = result["state"]
+            ename = "Refresh" if is_init else "Initialization"
+            logging.info(f"Power Device {self.name}: {ename} Error{output}")
+        else:
+            logging.debug(f"Power Device {self.name}: uhubctl device info: {result}")
+            self.state = result["state"]
 
     async def set_power(self, state: str) -> None:
         try:
