@@ -496,6 +496,13 @@ class PowerDevice:
                 time_diff = self._poll_interval or 0.
             await asyncio.sleep(time_diff)
 
+    def _should_log_error(self) -> bool:
+        # Avoid logging refresh errors when polling devices
+        # unless verbose logging is enabled
+        if self.server.is_verbose_enabled():
+            return True
+        return asyncio.current_task() is not self._poll_task
+
     def start_polling(self) -> bool:
         if self._poll_interval is None or self._poll_task is not None:
             return False
@@ -605,7 +612,8 @@ class HTTPDevice(PowerDevice):
             raise
         except Exception:
             self.state = "error"
-            logging.exception(f"Error Refeshing Device Status: {self.name}")
+            if self._should_log_error():
+                logging.exception(f"Error Refeshing Device Status: {self.name}")
         else:
             self.state = state
 
@@ -1026,7 +1034,8 @@ class TPLinkSmartPlug(PowerDevice):
             raise
         except Exception:
             self.state = "error"
-            logging.exception(f"Error Refeshing Device Status: {self.name}")
+            if self._should_log_error():
+                logging.exception(f"Error Refeshing Device Status: {self.name}")
         else:
             self.state = "on" if state else "off"
 
@@ -1605,13 +1614,18 @@ class UHubCtl(PowerDevice):
             result = await self._run_uhubctl("info")
         except self.server.error as e:
             self.state = "error"
+            if not self._should_log_error():
+                return
             output = f"\n{e}"
             if isinstance(e, self.scmd.error):
                 output += f"\nuhubctrl output: {e.stderr.decode(errors='ignore')}"
             ename = "Refresh" if is_init else "Initialization"
             logging.info(f"Power Device {self.name}: {ename} Error{output}")
         else:
-            logging.debug(f"Power Device {self.name}: uhubctl device info: {result}")
+            if asyncio.current_task() is not self._poll_task:
+                logging.debug(
+                    f"Power Device {self.name}: uhubctl device info: {result}"
+                )
             self.state = result["state"]
 
     async def set_power(self, state: str) -> None:
