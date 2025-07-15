@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog].
   should use the new endpoint, however it may be desirable to also
   support the deprecated `full` and `client` endpoints for compatibility
   with older API versions.
+- **simplyprint**: Improve job progress calculation.
 - **build**: Bump PDM-Backend to 2.4.3.
 - **build**: Bump Apprise to 1.9.2
 - **build**: Bump Tornado to 6.5.1
@@ -46,8 +47,9 @@ The format is based on [Keep a Changelog].
   after Klippy restarts.
 - **eventloop**:  Fixed a condition where the garbage collector may
   prematurely cancel background tasks.
-- **spoolman**: Set a `ping_timeout` less than the `ping_interval` for
-  the websocket connection.
+- **spoolman**: Use the default websocket ping timeout.  Disable pinging for
+  versions of Tornado prior to 6.5.0.
+- **application**: Disable pinging for versions of Tornado prior to 6.5.0.
 
 
 ### Added
@@ -75,6 +77,12 @@ The format is based on [Keep a Changelog].
   [Klipper Estimator](https://github.com/Annex-Engineering/klipper_estimator).
 - **power**: Added the ability to discard unwanted responses for MQTT
   power devices.
+- **power**: Added `poll_interval` option for HTTP (and all derivatives),
+  TPLink Smartplug, and uhubctl devices.  When set Moonraker will poll device
+  status.
+- **power**: Added `restrict_action_processing` option.  When set to `False`,
+  post toggle actions such as restarting Klippy and controlling bound services
+  are run when an external power event is detected.
 
 ## [0.9.3] - 2024-09-05
 

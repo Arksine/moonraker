@@ -773,6 +773,15 @@ bound_services:
 #   is "off", all bound services will be stopped after device initialization.
 #
 #   The default is no services are bound to the device.
+restrict_action_processing: True
+#   When set to True, this option will skip "action" processing when Moonraker
+#   detects a change in state triggered by an external source (ie: toggled
+#   by pressing a switch on the device or through another application).  Actions
+#   are post trigger events, such as restarting Klippy and controlling a bound
+#   service. When set to False actions are processed for all detected changes in
+#   state.  Note that Moonraker can only detect external changes for devices
+#   that receive asynchronous updates (Klipper and MQTT) or devices that support
+#   polling and have the 'poll_interval' option set. The default is True.
 ```
 
 /// Note
@@ -992,6 +1001,10 @@ port:
 output_id:
 #   For power strips, the socket index to use. Default is 0 which indicates the
 #   device is not a power strip.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1023,6 +1036,10 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Tasmota device supports
 #   more than one output.  Default is 1.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Note
@@ -1067,6 +1084,10 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Shelly device supports
 #   more than one output.  Default is 1.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Note
@@ -1112,7 +1133,10 @@ password:
 #   The password for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. The
 #   default is no password.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 ####  Home Assistant Configuration (HTTP)
@@ -1142,7 +1166,10 @@ status_delay: 1.0
 #   on/off and requesting its current status.  This is a workaround used
 #   to validate that Home Assistant has successfully toggled the device,
 #   as the API is currently broken on their end.  Default is 1 second.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1180,7 +1207,10 @@ password:
 output_id:
 #   The name of a programmed output, virtual input or virtual
 #   output in the loxone configuration.  The default is no output id.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 #### MQTT Device Configuration
@@ -1345,6 +1375,10 @@ token:
 #   must be provided.
 device:
 #   The Device guid of the switch to control. This parameter must be provided.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1440,7 +1474,10 @@ device_type: light
 #   If device_type is set to light, the device_id should be the light id,
 #   and if the device_type is group, the device_id should be the group id.
 #   The default is "light".
-
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 #### USB (uhubctl) devices
@@ -1463,6 +1500,10 @@ port:
 #  Port of the USB device to control.  The port corresponds to the "-p"
 #  option of "ububctl".  When omitted no port is provided to the uhubctl
 #  command.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Tip
@@ -1521,7 +1562,10 @@ response_template:
 #   template should always render to "on" or "off" based on the response.  See
 #   the following section for details on the fields provided to the Jinja2
 #   context.  This parameter must be provided.
-
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 ###### The template context
@@ -1891,6 +1935,28 @@ empty, if any jobs exist in the queue then the next job on the
 queue will be loaded.
 ///
 
+#### External Power Events
+
+Many switches are capable of operation outside of Moonraker's scope. When these
+devices are toggled by an external source their state may become inconsistent
+with Moonraker's internal state.  Some device types, such as `mqtt` and
+`klipper_device`, receive status updates asynchronously, avoiding consistency
+issues.  Consistency with other devices may be resolved by configuring the
+`poll_interval` option, which enables device status polling.
+
+When an external state change is detected, Moonraker updates its internal state and
+notifies all connected clients.  By default Moonraker will not run any post
+event actions, such as restarting Klippy or managing bound services, when devices
+are toggled outside of Moonraker.  This behavior may be overridden per device by
+setting the `restrict_action_processing` option to `False`.
+
+/// Note
+
+External events do not apply to `gpio` and `rf` devices.  When a gpio
+is configured Moonraker retains exclusive control over it.  RF devices
+are not capable of receiving status updates.
+
+///
 
 ### `[update_manager]`
 This enables moonraker's update manager.  Note that updates can only be
