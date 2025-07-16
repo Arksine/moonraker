@@ -1360,8 +1360,10 @@ class MQTTDevice(PowerDevice):
                 self.state = response
         self._last_update_time = self.eventloop.get_loop_time()
         if not in_request and last_state != self.state:
-            logging.info(f"MQTT Power Device {self.name}: External Power "
-                        f"event detected, new state: {self.state}")
+            logging.info(
+                f"MQTT Power Device {self.name}: External Power "
+                f"event detected, new state: {self.state}"
+            )
             self.eventloop.create_task(self._notify_external_change())
         if (
             self.query_response is not None and
