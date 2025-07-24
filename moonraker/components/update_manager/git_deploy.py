@@ -720,7 +720,7 @@ class GitRepo:
             self.repo_anomalies.append(f"Unofficial remote url: {self.upstream_url}")
         if self.git_branch != self.primary_branch or self.git_remote != "origin":
             self.repo_anomalies.append(
-                "Repo not on offical remote/branch, expected: "
+                "Repo not on official remote/branch, expected: "
                 f"origin/{self.primary_branch}, detected: "
                 f"{self.git_remote}/{self.git_branch}")
         if self.untracked_files:
@@ -893,7 +893,7 @@ class GitRepo:
         reset_commit: Optional[str] = None
         async with self.git_operation_lock:
             if branch is None:
-                # No branch is specifed so we are checking out detached
+                # No branch is specified so we are checking out detached
                 if self.channel != Channel.DEV or self.pinned_commit is not None:
                     reset_commit = self.upstream_commit
                 branch = f"{self.git_remote}/{self.git_branch}"
@@ -1219,7 +1219,7 @@ class GitRepo:
                     fix_loose = False
                     attempts = 2
                 else:
-                    # since the attept to repair failed, bypass attempts
+                    # since the attempt to repair failed, bypass attempts
                     # and immediately raise an exception
                     raise self.server.error(
                         "Unable to repair loose objects, use hard recovery"
