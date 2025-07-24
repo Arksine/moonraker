@@ -737,7 +737,7 @@ class GitRepo:
                 self.repo_warnings.append(msg)
         if self.is_dirty():
             self.repo_warnings.append(
-                "Repo is dirty.  Detected the following modifed files: "
+                "Repo is dirty.  Detected the following modified files: "
                 f"{self.modified_files}"
             )
         self._generate_warn_msg()
