@@ -480,7 +480,7 @@ class UpdateManager:
         if updater is None:
             raise self.server.error(f"Updater {app} not available", 404)
         elif not isinstance(updater, GitDeploy):
-            raise self.server.error(f"Upater {app} is not a Git Repo Type")
+            raise self.server.error(f"Updater {app} is not a Git Repo Type")
         async with self.cmd_request_lock:
             self.cmd_helper.set_update_info(f"recover_{app}", id(web_request))
             try:
@@ -544,9 +544,9 @@ class CommandHelper:
         self.umdb = db.wrap_namespace("update_manager")
 
         # Refresh Time Tracking (default is to refresh every 7 days)
-        reresh_interval = config.getint('refresh_interval', 168)
+        refresh_interval = config.getint('refresh_interval', 168)
         # Convert to seconds
-        self.refresh_interval = reresh_interval * 60 * 60
+        self.refresh_interval = refresh_interval * 60 * 60
 
         # GitHub API Rate Limit Tracking
         self.gh_rate_limit: Optional[int] = None

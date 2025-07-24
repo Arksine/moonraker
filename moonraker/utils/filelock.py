@@ -74,7 +74,7 @@ class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
                 self.locked = await loop.run_in_executor(None, self._get_lock)
             except OSError as err:
                 logging.info(
-                    "Failed to aquire advisory lock, allowing unlocked entry."
+                    "Failed to acquire advisory lock, allowing unlocked entry."
                     f"Error: {err}"
                 )
                 self.locked = False

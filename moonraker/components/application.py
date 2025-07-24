@@ -764,7 +764,7 @@ class RPCHandler(AuthorizedRequestHandler, APITransport):
 
 class FileRequestHandler(AuthorizedFileHandler):
     def set_extra_headers(self, path: str) -> None:
-        # The call below shold never return an empty string,
+        # The call below should never return an empty string,
         # as the path should have already been validated to be
         # a file
         assert isinstance(self.absolute_path, str)

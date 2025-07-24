@@ -77,7 +77,7 @@ class EventLoop:
             if not new_loop.is_closed():
                 break
             logging.info("Failed to create open eventloop, "
-                         "retyring in .5 seconds...")
+                         "retrying in .5 seconds...")
             time.sleep(.5)
         else:
             raise RuntimeError("Unable to create new open eventloop")

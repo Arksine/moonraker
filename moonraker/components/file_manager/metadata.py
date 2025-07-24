@@ -1316,7 +1316,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-o", "--check-objects", dest='check_objects', action='store_true',
-        help="process gcode file for exclude opbject functionality")
+        help="process gcode file for exclude object functionality")
     args = parser.parse_args()
     config: Dict[str, Any] = {}
     if args.config is None:

@@ -411,8 +411,8 @@ def find_video_devices() -> List[Dict[str, Any]]:
     for v4ldev_path in v4lpath.iterdir():
         devfs_name = v4ldev_path.name
         devfs_path = dev_root_folder.joinpath(devfs_name)
-        # The video4linux sysfs implmentation provides limited device
-        # info.  Use the VIDEOC_QUERYCAPS ioctl to retreive extended
+        # The video4linux sysfs implementation provides limited device
+        # info.  Use the VIDEOC_QUERYCAPS ioctl to retrieve extended
         # information about the v4l2 device.
         fd: int = -1
         try:

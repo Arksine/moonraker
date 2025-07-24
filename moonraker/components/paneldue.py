@@ -110,7 +110,7 @@ class PanelDue:
         )
         self.server.register_remote_method("paneldue_beep", self.paneldue_beep)
 
-        # These commands are directly executued on the server and do not to
+        # These commands are directly executed on the server and do not to
         # make a request to Klippy
         self.direct_gcodes: Dict[str, FlexCallback] = {
             'M20': self._run_paneldue_M20,

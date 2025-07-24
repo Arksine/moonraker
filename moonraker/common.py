@@ -588,7 +588,7 @@ class WebRequest:
         except Exception:
             raise ServerError(
                 f"Unable to convert argument [{key}] to {dtype}: "
-                f"value recieved: {val}")
+                f"value received: {val}")
 
     def get(self,
             key: str,
@@ -892,7 +892,7 @@ class JsonRPC:
         }
 
 
-# *** Job History Common Clases ***
+# *** Job History Common Classes ***
 
 class FieldTracker(Generic[_T]):
     history: History = None  # type: ignore
