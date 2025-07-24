@@ -101,6 +101,9 @@ class SysDepsParser:
         version = distro_info.get("distro_version")
         if version:
             self.distro_version = _convert_version(version)
+        self.vendor: str = ""
+        if pathlib.Path("/etc/rpi-issue").is_file():
+            self.vendor = "raspberry-pi"
 
     def _parse_spec(self, full_spec: str) -> str | None:
         parts = full_spec.split(";", maxsplit=1)
@@ -144,6 +147,9 @@ class SysDepsParser:
                 return None
             elif req_var == "distro_id":
                 left_op: str | Tuple[int | str, ...] = self.distro_id
+                right_op = dep_parts[2].strip().strip("\"'")
+            elif req_var == "vendor":
+                left_op = self.vendor
                 right_op = dep_parts[2].strip().strip("\"'")
             elif req_var == "distro_version":
                 if not self.distro_version:
@@ -213,8 +219,9 @@ system_deps = {
         "python3-virtualenv", "python3-dev", "libopenjp2-7", "libsodium-dev",
         "zlib1g-dev", "libjpeg-dev", "packagekit",
         "wireless-tools; distro_id != 'ubuntu' or distro_version <= '24.04'",
-        "iw; distro_id == 'ubuntu' and distro_version >= '24.10'", "curl",
-        "build-essential"
+        "iw; distro_id == 'ubuntu' and distro_version >= '24.10'",
+        "python3-libcamera; vendor == 'raspberry-pi' and distro_version >= '11'",
+        "curl", "build-essential"
     ],
 }
 # *** SYSTEM DEPENDENCIES END ***
