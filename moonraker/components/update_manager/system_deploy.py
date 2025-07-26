@@ -245,7 +245,7 @@ class PackageKitProvider(BasePackageProvider):
             "org.freedesktop.packagekit.system-update",
             "The Update Manager will fail to update packages"
         )
-        # Fetch the PackageKit DBus Inteface
+        # Fetch the PackageKit DBus Interface
         self.pkgkit = await self.dbus_mgr.get_interface(
             "org.freedesktop.PackageKit",
             "/org/freedesktop/PackageKit",

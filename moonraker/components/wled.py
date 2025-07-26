@@ -335,7 +335,7 @@ class StripSerial(Strip):
                 try:
                     data = jsonw.loads(line.strip())
                 except jsonw.JSONDecodeError:
-                    logging.debug(f"Recieved Serial Data: {line!r}")
+                    logging.debug(f"Received Serial Data: {line!r}")
                 else:
                     if (
                         self.pending_response is not None and

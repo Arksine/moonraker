@@ -136,7 +136,7 @@ def get_repo_info(source_path: str) -> Dict[str, Any]:
                 comp = parts[1].split("/", maxsplit=1)[-1]
                 repo_info["unofficial_components"].append(comp)
     except Exception:
-        logging.exception("Error Retreiving Git Repo Info")
+        logging.exception("Error Retrieving Git Repo Info")
     return repo_info
 
 def get_software_info() -> Dict[str, Any]:

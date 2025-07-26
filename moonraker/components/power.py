@@ -417,7 +417,7 @@ class PowerDevice:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logging.info(f"Power Device {self.name}: Error setting intitial state")
+                logging.info(f"Power Device {self.name}: Error setting initial state")
 
     async def process_request(self, req: str, force: bool = False) -> str:
         if self.state == "init" and self.request_lock.locked():
@@ -613,7 +613,7 @@ class HTTPDevice(PowerDevice):
         except Exception:
             self.state = "error"
             if self._should_log_error():
-                logging.exception(f"Error Refeshing Device Status: {self.name}")
+                logging.exception(f"Error Refreshing Device Status: {self.name}")
         else:
             self.state = state
 
@@ -1035,7 +1035,7 @@ class TPLinkSmartPlug(PowerDevice):
         except Exception:
             self.state = "error"
             if self._should_log_error():
-                logging.exception(f"Error Refeshing Device Status: {self.name}")
+                logging.exception(f"Error Refreshing Device Status: {self.name}")
         else:
             self.state = "on" if state else "off"
 

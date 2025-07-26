@@ -668,7 +668,7 @@ class SimplyPrint(APITransport):
         new_stats: Dict[str, Any],
         need_start_event: bool = True
     ) -> None:
-        # inlcludes started and resumed events
+        # includes started and resumed events
         self._update_state("printing")
         filename = new_stats["filename"]
         job_info: Dict[str, Any] = {"filename": filename}
@@ -1362,7 +1362,7 @@ class WebcamStream:
         try:
             url = await cam.get_snapshot_url(True)
         except Exception:
-            logging.exception("Failed to retrive webcam url")
+            logging.exception("Failed to retrieve webcam url")
             return
         self.cam = cam
         logging.info(f"SimplyPrint Webcam URL assigned: {url}")
@@ -1481,7 +1481,7 @@ class PrintHandler:
         filename = pathlib.PurePath(tmp_path.name)
         fpath = gc_path.joinpath(filename.name)
         if self.cache.job_info.get("filename", "") == str(fpath):
-            # This is an attempt to overwite a print in progress, make a copy
+            # This is an attempt to overwrite a print in progress, make a copy
             count = 0
             while fpath.exists():
                 name = f"{filename.stem}_copy_{count}.{filename.suffix}"

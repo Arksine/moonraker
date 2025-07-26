@@ -158,7 +158,7 @@ class ConfigHelper:
             if deprecate:
                 self.server.add_warning(
                     f"[{self.section}]: Option '{option}' is "
-                    "deprecated, see the configuration documention "
+                    "deprecated, see the configuration documentation "
                     f"at {DOCS_URL}/configuration/")
             if warn_fallback:
                 help = f"{DOCS_URL}/configuration/#option-moved-deprecations"

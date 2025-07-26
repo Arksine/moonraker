@@ -247,7 +247,7 @@ class History:
                 item = dict(row)
                 item.pop("instance_id", None)
                 self.aux_totals.append(item)
-        # Check for interupted jobs
+        # Check for interrupted jobs
         cursor = await self.history_table.execute(
             f"SELECT job_id FROM {HIST_TABLE} WHERE status = 'in_progress'"
         )

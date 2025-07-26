@@ -1195,7 +1195,7 @@ class SystemdDbusProvider(BaseProvider):
                 "sessions are open."
             )
         try:
-            # Get the login manaager interface
+            # Get the login manager interface
             self.login_mgr = await self.dbus_mgr.get_interface(
                 "org.freedesktop.login1",
                 "/org/freedesktop/login1",

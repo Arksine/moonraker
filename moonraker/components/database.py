@@ -1312,7 +1312,7 @@ class SqliteProvider(Thread):
             )
         elif detected_proto != table_def.prototype:
             self.server.add_warning(
-                f"Table '{table_def.name}' defintion does not match stored "
+                f"Table '{table_def.name}' definition does not match stored "
                 "definition.  See the log for details."
             )
             logging.info(

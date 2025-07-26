@@ -139,7 +139,7 @@ class FileManager:
             "/server/files/delete_file", RequestType.DELETE, self._handle_file_delete,
             transports=TransportType.WEBSOCKET
         )
-        # register client notificaitons
+        # register client notifications
         self.server.register_notification("file_manager:filelist_changed")
 
         self.server.register_event_handler(
@@ -846,7 +846,7 @@ class FileManager:
                            ) -> Dict[str, Any]:
         if 'filename' not in upload_args:
             raise self.server.error(
-                "No file name specifed in upload form")
+                "No file name specified in upload form")
         # check relative path
         root: str = upload_args.get('root', "gcodes").lower()
         if root not in self.file_paths:
@@ -993,8 +993,8 @@ class FileManager:
         visited_dirs = {(st.st_dev, st.st_ino)}
         for dir_path, dir_names, files in os.walk(path, followlinks=True):
             scan_dirs: List[str] = []
-            # Filter out directories that have already been visted. This
-            # prevents infinite recrusion "followlinks" is set to True
+            # Filter out directories that have already been visited. This
+            # prevents infinite recursion "followlinks" is set to True
             for dname in dir_names:
                 full_path = os.path.join(dir_path, dname)
                 if not os.path.exists(full_path):
@@ -1181,7 +1181,7 @@ class NotifySyncLock(asyncio.Lock):
             current_path = pathlib.Path(current_path)
         self.dest_path = current_path
         if current_path in self.acquired_paths:
-            # Notifcation has been recieved, no need to wait
+            # Notification has been received, no need to wait
             return
         self.move_copy_fut = self.server.get_event_loop().create_future()
         mcfut = self.move_copy_fut
@@ -1250,7 +1250,7 @@ class NotifySyncLock(asyncio.Lock):
         waiter: Optional[asyncio.Future] = None
         if self.check_pending:
             # The final path of move/copy requests aren't known until the request
-            # complete.  It may be the destination path recieved from the request
+            # complete.  It may be the destination path received from the request
             # or it may be a child as of that path.
             if self.move_copy_fut is not None:
                 # Request is complete, metadata analysis pending.  We can explicitly
@@ -1384,8 +1384,8 @@ class BaseFileSystemObserver:
         visited_dirs = {(st.st_dev, st.st_ino)}
         for parent, dirs, files in os.walk(start_path, followlinks=True):
             scan_dirs: List[str] = []
-            # Filter out directories that have already been visted. This
-            # prevents infinite recrusion "followlinks" is set to True
+            # Filter out directories that have already been visited. This
+            # prevents infinite recursion "followlinks" is set to True
             parent_dir = pathlib.Path(parent)
             for dname in dirs:
                 dir_path = parent_dir.joinpath(dname)
@@ -1516,7 +1516,7 @@ class InotifyNode:
     def _finish_delete_child(self) -> None:
         # Items deleted in a child (node or file) are batched.
         # Individual files get notifications if their parent
-        # node stil exists.  Otherwise notififications are
+        # node still exists.  Otherwise notififications are
         # bundled into the topmost deleted parent.
         if "delete_child" not in self.pending_node_events:
             self.pending_deleted_children.clear()
@@ -1858,7 +1858,7 @@ class InotifyObserver(BaseFileSystemObserver):
         return None
 
     def add_root_watch(self, root: str, root_path: str) -> None:
-        # remove all exisiting watches on root
+        # remove all existing watches on root
         if root in self.watched_roots:
             old_root = self.watched_roots.pop(root)
             old_root.clear_watches()
@@ -2582,7 +2582,7 @@ class MetadataStorage:
                     }
                     self.mddb[fname] = self.metadata[fname]
                 logging.info(
-                    f"Unable to extract medatadata from file: {fname}")
+                    f"Unable to extract metadata from file: {fname}")
             self.pending_requests.pop(fname, None)
             mevt.set()
         self.busy = False
