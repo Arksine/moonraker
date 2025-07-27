@@ -538,7 +538,8 @@ class SimplyPrint(APITransport):
             "virtual_sdcard": ["file_position", "progress"],
             "bed_mesh": ["mesh_matrix", "mesh_min", "mesh_max"],
             "toolhead": ["extruder"],
-            "gcode_move": ["gcode_position"]
+            "gcode_move": ["gcode_position"],
+            "exclude_object": None
         }
         # Add Heater Subscriptions
         has_amb_sensor: bool = False
@@ -594,6 +595,9 @@ class SimplyPrint(APITransport):
                 self.layer_detect.update(
                     status["gcode_move"]["gcode_position"]
                 )
+            if "exclude_object" in status:
+                self.cache.exclude_object_status = status["exclude_object"]
+                self.send_sp("exclude_object", status["exclude_object"])
             if self.filament_sensor and self.filament_sensor in status:
                 detected = status[self.filament_sensor]["filament_detected"]
                 fstate = "loaded" if detected else "runout"
@@ -830,12 +834,20 @@ class SimplyPrint(APITransport):
         # Job Info Timer handler
         if self.cache.state == "printing":
             self._update_job_progress()
+            self._update_excluded_objects()
         return eventtime + self.intervals["job"]
 
     def _handle_sp_ping(self, eventtime: float) -> float:
         self._last_sp_ping = eventtime
         self.send_sp("ping", None)
         return eventtime + self.intervals["ping"]
+
+    def _update_excluded_objects(self) -> None:
+        exclude_obj = self.printer_status.get("exclude_object", {})
+        diff = self._get_object_diff(exclude_obj, self.cache.exclude_object_status)
+        if diff:
+            self.cache.exclude_object_status = dict(exclude_obj)
+            self.send_sp("exclude_object", diff)
 
     def _update_job_progress(self) -> None:
         job_info: Dict[str, Any] = {}
@@ -1065,6 +1077,8 @@ class SimplyPrint(APITransport):
             self.send_sp(
                 "firmware",
                 {"fw": self.cache.firmware_info, "raw": False})
+        if self.cache.exclude_object_status:
+            self.send_sp("exclude_object", self.cache.exclude_object_status)
         curtime = self.eventloop.get_loop_time()
         for evt in self.missed_job_events:
             evt["delay"] = int((curtime - evt["delay"]) + .5)
@@ -1154,6 +1168,7 @@ class ReportCache:
         self.metadata: Dict[str, Any] = {}
         self.mesh: Dict[str, Any] = {}
         self.job_info: Dict[str, Any] = {}
+        self.exclude_object_status: Dict[str, Any] = {}
         self.active_extruder: str = ""
         # Persistent state across connections
         self.firmware_info: Dict[str, Any] = {}
@@ -1167,6 +1182,7 @@ class ReportCache:
         self.temps = {}
         self.mesh = {}
         self.job_info = {}
+        self.exclude_object_status = {}
 
 
 INITIAL_AMBIENT = 85
