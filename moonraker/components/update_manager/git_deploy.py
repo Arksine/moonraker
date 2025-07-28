@@ -454,9 +454,16 @@ class GitRepo:
             eventloop = self.server.get_event_loop()
             data = await eventloop.run_in_thread(self.git_folder_path.read_text)
             ident, _, gitdir = data.partition(":")
-            if ident.strip() != "gitdir" or not gitdir.strip():
+            gitdir = gitdir.strip()
+            if ident.strip() != "gitdir" or not gitdir:
+                logging.warning(f"not a .git file: '{ident}' '{gitdir}' in '{data}'")
                 return False
-            self.git_folder_path = pathlib.Path(gitdir).expanduser().resolve()
+            gitdir_path = pathlib.Path(gitdir).expanduser()
+            resolved_path = (self.git_folder_path.parent / gitdir_path).resolve()
+            logging.info(
+                f"detecting git folder path '{self.git_folder_path}'"
+                f" leads to '{gitdir}' resolves to '{resolved_path}'")
+            self.git_folder_path = resolved_path
         if self.git_folder_path.is_dir():
             self.is_shallow = self.git_folder_path.joinpath("shallow").is_file()
             return True
