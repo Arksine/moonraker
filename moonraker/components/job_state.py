@@ -48,6 +48,7 @@ class JobState:
             result = await kapis.subscribe_objects(sub, self._status_update)
         except self.server.error:
             logging.info("Error subscribing to print_stats")
+            return
         self.last_print_stats = result.get("print_stats", {})
         if "state" in self.last_print_stats:
             state = self.last_print_stats["state"]
@@ -63,32 +64,29 @@ class JobState:
             new_state: str = ps['state']
             new_ps = dict(self.last_print_stats)
             new_ps.update(ps)
-            if new_state is not old_state:
-                if new_state == "printing":
+            if new_state != old_state:
+                if self._check_idle(old_state):
+                    if new_state == "printing":
+                        new_state = "started"
+                    elif new_state != "standby":
+                        # send a started event prior to the detected event
+                        logging.info(
+                            f"Job started event inferred: transition from "
+                            f"{old_state} to {new_state} state"
+                        )
+                        self._send_job_event("started", prev_ps, new_ps)
+                elif new_state == "printing":
                     # The "printing" state needs some special handling
                     # to detect "resets" and a transition from pause to resume
                     if self._check_resumed(prev_ps, new_ps):
                         new_state = "resumed"
                     else:
-                        logging.info(
-                            f"Job Started: {new_ps['filename']}"
-                        )
                         new_state = "started"
                 logging.debug(
                     f"Job State Changed - Prev State: {old_state}, "
                     f"New State: {new_state}"
                 )
-                # NOTE: Individual job_state events are DEPRECATED.  New modules
-                # should register handlers for "job_state: status_changed" and
-                # match against the JobEvent object provided.
-                self.server.send_event(f"job_state:{new_state}", prev_ps, new_ps)
-                self.last_event = JobEvent.from_string(new_state)
-                self.server.send_event(
-                    "job_state:state_changed",
-                    self.last_event,
-                    prev_ps,
-                    new_ps
-                )
+                self._send_job_event(new_state, prev_ps, new_ps)
         if "info" in ps:
             cur_layer: Optional[int] = ps["info"].get("current_layer")
             if cur_layer is not None:
@@ -98,14 +96,33 @@ class JobState:
                 )
         self.last_print_stats.update(ps)
 
-    def _check_resumed(self,
-                       prev_ps: Dict[str, Any],
-                       new_ps: Dict[str, Any]
-                       ) -> bool:
+    def _check_resumed(
+        self, prev_ps: Dict[str, Any], new_ps: Dict[str, Any]
+    ) -> bool:
         return (
             prev_ps['state'] == "paused" and
             prev_ps['filename'] == new_ps['filename'] and
             prev_ps['total_duration'] < new_ps['total_duration']
+        )
+
+    def _check_idle(self, state: str) -> bool:
+        return state in ("standby", "complete", "cancelled", "error")
+
+    def _send_job_event(
+        self, state: str, prev_ps: Dict[str, Any], new_ps: Dict[str, Any]
+    ) -> None:
+        if state == "started":
+            logging.info(f"Job Started: {new_ps['filename']}")
+        # NOTE: Individual job_state events are DEPRECATED.  New modules
+        # should register handlers for "job_state: status_changed" and
+        # match against the JobEvent object provided.
+        self.server.send_event(f"job_state:{state}", prev_ps, new_ps)
+        self.last_event = JobEvent.from_string(state)
+        self.server.send_event(
+            "job_state:state_changed",
+            self.last_event,
+            prev_ps,
+            new_ps
         )
 
     def get_last_stats(self) -> Dict[str, Any]:
