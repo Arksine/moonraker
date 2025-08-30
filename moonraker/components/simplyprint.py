@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
 COMPONENT_VERSION = "0.0.1"
 SP_VERSION = "0.1"
-TEST_ENDPOINT = f"wss://testws.simplyprint.io/{SP_VERSION}/p"
+TEST_ENDPOINT = f"wss://testws3.simplyprint.io/{SP_VERSION}/p"
 PROD_ENDPOINT = f"wss://ws.simplyprint.io/{SP_VERSION}/p"
 # TODO: Increase this time to something greater, perhaps 30 minutes
 CONNECTION_ERROR_LOG_TIME = 60.
@@ -105,6 +105,7 @@ class SimplyPrint(APITransport):
         self.next_temp_update_time: float = 0.
         self._last_ping_received: float = 0.
         self.gcode_terminal_enabled: bool = False
+        self._current_job_id: Optional[int] = None
         self.connected = False
         self.is_set_up = False
         self.test = config.get("use_test_endpoint", False)
@@ -360,6 +361,9 @@ class SimplyPrint(APITransport):
                 logging.debug("Invalid url in message")
                 return
             start = bool(args.get("auto_start", 0))
+            # Keep track of current job
+            # Consider whether to persists this across restarts
+            self._current_job_id = int(args.get("job_id", 0)) or None
             self.print_handler.download_file(url, start)
         elif demand == "start_print":
             if (
@@ -539,7 +543,7 @@ class SimplyPrint(APITransport):
             "bed_mesh": ["mesh_matrix", "mesh_min", "mesh_max"],
             "toolhead": ["extruder"],
             "gcode_move": ["gcode_position"],
-            "exclude_object": None
+            "exclude_object": ["objects", "excluded_objects", "current_object"],
         }
         # Add Heater Subscriptions
         has_amb_sensor: bool = False
@@ -596,8 +600,7 @@ class SimplyPrint(APITransport):
                     status["gcode_move"]["gcode_position"]
                 )
             if "exclude_object" in status:
-                self.cache.exclude_object_status = status["exclude_object"]
-                self.send_sp("exclude_object", status["exclude_object"])
+                self._handle_exclude_object(status["exclude_object"])
             if self.filament_sensor and self.filament_sensor in status:
                 detected = status[self.filament_sensor]["filament_detected"]
                 fstate = "loaded" if detected else "runout"
@@ -824,6 +827,8 @@ class SimplyPrint(APITransport):
             self._send_active_extruder(status["toolhead"]["extruder"])
         if "gcode_move" in status:
             self.layer_detect.update(status["gcode_move"]["gcode_position"])
+        if "exclude_object" in status:
+            self._handle_exclude_object(status["exclude_object"])
         if self.filament_sensor and self.filament_sensor in status:
             detected = status[self.filament_sensor]["filament_detected"]
             fstate = "loaded" if detected else "runout"
@@ -834,7 +839,6 @@ class SimplyPrint(APITransport):
         # Job Info Timer handler
         if self.cache.state == "printing":
             self._update_job_progress()
-            self._update_excluded_objects()
         return eventtime + self.intervals["job"]
 
     def _handle_sp_ping(self, eventtime: float) -> float:
@@ -842,12 +846,25 @@ class SimplyPrint(APITransport):
         self.send_sp("ping", None)
         return eventtime + self.intervals["ping"]
 
-    def _update_excluded_objects(self) -> None:
-        exclude_obj = self.printer_status.get("exclude_object", {})
+    def _handle_exclude_object(self, exclude_obj=None) -> None:
+        exclude_obj = exclude_obj or self.printer_status.get("exclude_object", {})
         diff = self._get_object_diff(exclude_obj, self.cache.exclude_object_status)
-        if diff:
-            self.cache.exclude_object_status = dict(exclude_obj)
-            self.send_sp("exclude_object", diff)
+        if not diff:
+            return
+        self.cache.exclude_object_status = dict(exclude_obj)
+        objects = diff.get("objects", [])
+        if objects:
+            self.send_sp("objects", objects)
+        job_data = {}
+        current_object = diff.get("current_object")
+        if "current_object" in diff:
+            job_data.update({"object": current_object})
+        skipped_objects = diff.get("excluded_objects", [])
+        if skipped_objects:
+            job_data.update({"skipped_objects": skipped_objects})
+        if job_data:
+            self.send_sp("job_info", job_data)
+
 
     def _update_job_progress(self) -> None:
         job_info: Dict[str, Any] = {}
@@ -1077,8 +1094,6 @@ class SimplyPrint(APITransport):
             self.send_sp(
                 "firmware",
                 {"fw": self.cache.firmware_info, "raw": False})
-        if self.cache.exclude_object_status:
-            self.send_sp("exclude_object", self.cache.exclude_object_status)
         curtime = self.eventloop.get_loop_time()
         for evt in self.missed_job_events:
             evt["delay"] = int((curtime - evt["delay"]) + .5)
@@ -1114,6 +1129,13 @@ class SimplyPrint(APITransport):
             fut = self.eventloop.create_future()
             fut.set_result(False)
             return fut
+        # Include tracked job_id with some message types.
+        if (
+            evt_name in ("file_progress", "job_info")
+            and self._current_job_id is not None
+            and isinstance(data, dict)
+        ):
+            data.update({"job_id": self._current_job_id})
         packet = {"type": evt_name, "data": data}
         return self.eventloop.create_task(self._send_wrapper(packet))
 
