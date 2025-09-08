@@ -22,12 +22,16 @@ if _msgspc_var in ["y", "yes", "true"]:
         encoder = msgspec.json.Encoder()
         decoder = msgspec.json.Decoder()
         dumps = encoder.encode  # noqa: F811
-        loads = decoder.decode  # noqa: F811
+
+        def loads(data: str | bytes | bytearray) -> Any:  # noqa: F811
+            return decoder.decode(data, strict=False)
+
         MSGSPEC_ENABLED = True
+
 if not MSGSPEC_ENABLED:
     import json
     from json import JSONDecodeError  # type: ignore # noqa: F401,F811
-    loads = json.loads  # type: ignore
+    loads = json.loads  # type: ignore # noqa: F811
 
     def dumps(obj) -> bytes:  # type: ignore # noqa: F811
         return json.dumps(obj).encode("utf-8")
