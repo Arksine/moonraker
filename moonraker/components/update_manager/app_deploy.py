@@ -394,6 +394,7 @@ class AppDeploy(BaseDeploy):
                 self.pip_version = pip_utils.MIN_PIP_VERSION
             else:
                 self.notify_status("Pip version up to date")
+                self.pip_version = pip_ver.pip_version
         except asyncio.CancelledError:
             raise
         except Exception as e:
