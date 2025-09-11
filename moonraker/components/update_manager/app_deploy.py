@@ -12,6 +12,7 @@ import logging
 import re
 import asyncio
 import importlib
+from datetime import datetime, timezone
 from .common import AppType, Channel
 from .base_deploy import BaseDeploy
 from ...utils import pip_utils
@@ -25,14 +26,15 @@ from typing import (
     Optional,
     Union,
     Dict,
-    List,
-    Tuple
+    List
 )
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection as Klippy
     from ..machine import Machine
     from ..file_manager.file_manager import FileManager
+
+PIPVER_CHECK_DAYS = 30
 
 class AppDeploy(BaseDeploy):
     def __init__(self, config: ConfigHelper, prefix: str) -> None:
@@ -60,7 +62,8 @@ class AppDeploy(BaseDeploy):
         self.virtualenv: Optional[pathlib.Path] = None
         self.py_exec: Optional[pathlib.Path] = None
         self.pip_cmd: Optional[str] = None
-        self.pip_version: Tuple[int, ...] = tuple()
+        self.pip_version_info: pip_utils.PipVersionInfo | None = None
+        self.pip_ver_date: datetime = datetime.fromtimestamp(0., timezone.utc)
         self.venv_args: Optional[str] = None
         self.npm_pkg_json: Optional[pathlib.Path] = None
         self.python_reqs: Optional[pathlib.Path] = None
@@ -204,10 +207,14 @@ class AppDeploy(BaseDeploy):
 
     async def initialize(self) -> Dict[str, Any]:
         storage = await super().initialize()
-        self.pip_version = tuple(storage.get("pip_version", []))
-        if self.pip_version:
-            ver_str = ".".join([str(part) for part in self.pip_version])
-            self.log_info(f"Stored pip version: {ver_str}")
+        pv_info: List[Any] | None = storage.get("pip_version_info", None)
+        if pv_info is not None:
+            self.pip_version_info = pip_utils.PipVersionInfo(*pv_info[:2])
+            self.pip_ver_date = datetime.fromtimestamp(pv_info[2], timezone.utc)
+            self.log_info(
+                f"Pip Version: {pv_info[0]}, Python Version: {pv_info[1]}\n"
+                f"Last checked on {self.pip_ver_date}"
+            )
         return storage
 
     def get_configured_type(self) -> AppType:
@@ -324,7 +331,14 @@ class AppDeploy(BaseDeploy):
     def get_persistent_data(self) -> Dict[str, Any]:
         storage = super().get_persistent_data()
         storage['is_valid'] = self._is_valid
-        storage['pip_version'] = list(self.pip_version)
+        pv_info = None
+        if self.pip_version_info is not None:
+            pv_info = [
+                self.pip_version_info.pip_version_string,
+                self.pip_version_info.python_version_string,
+                self.pip_ver_date.timestamp()
+            ]
+        storage['pip_version_info'] = pv_info
         return storage
 
     async def _get_file_hash(self,
@@ -382,19 +396,22 @@ class AppDeploy(BaseDeploy):
 
     async def _update_pip(self, pip_exec: pip_utils.AsyncPipExecutor) -> None:
         self.notify_status("Checking pip version...")
+        check_time = datetime.now(timezone.utc) - self.pip_ver_date
+        if self.pip_version_info is None or check_time.days > PIPVER_CHECK_DAYS:
+            self.pip_version_info = await pip_exec.get_pip_version()
+            self.pip_ver_date = datetime.now(timezone.utc)
         try:
-            pip_ver = await pip_exec.get_pip_version()
-            if pip_utils.check_pip_needs_update(pip_ver):
-                cur_ver = pip_ver.pip_version_string
+            if pip_utils.check_pip_needs_update(self.pip_version_info):
+                cur_ver = self.pip_version_info.pip_version_string
                 update_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
                 self.notify_status(
                     f"Updating pip from version {cur_ver} to {update_ver}..."
                 )
                 await pip_exec.update_pip()
-                self.pip_version = pip_utils.MIN_PIP_VERSION
+                self.pip_version_info = await pip_exec.get_pip_version()
+                self.pip_ver_date = datetime.now(timezone.utc)
             else:
                 self.notify_status("Pip version up to date")
-                self.pip_version = pip_ver.pip_version
         except asyncio.CancelledError:
             raise
         except Exception as e:
