@@ -15,5 +15,6 @@ dbus-fast>=2.21.3, <=2.44.1
 apprise==1.9.2
 ldap3==2.9.1
 python-periphery==2.4.1
+qoi==0.7.2
 importlib_metadata==6.7.0 ; python_version=='3.7'
 importlib_metadata==8.2.0 ; python_version>='3.8'

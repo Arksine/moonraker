@@ -20,6 +20,7 @@ import uuid
 import logging
 import shlex
 import subprocess
+import qoi
 from PIL import Image
 
 # Annotation imports
@@ -257,7 +258,8 @@ class BaseSlicer(object):
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         for data in [self.header_data, self.footer_data]:
             thumb_matches: List[str] = re.findall(
-                r"; thumbnail begin[;/\+=\w\s]+?; thumbnail end", data)
+                r"; thumbnail(_JPG|_QOI|) begin([;/\+=\w\s]+?)"
+                r"; thumbnail\1 end", data)
             if thumb_matches:
                 break
         else:
@@ -273,7 +275,7 @@ class BaseSlicer(object):
         parsed_matches: List[Dict[str, Any]] = []
         has_miniature: bool = False
         for match in thumb_matches:
-            lines = re.split(r"\r?\n", match.replace('; ', ''))
+            lines = re.split(r"\r?\n", match[1].replace('; ', ''))
             info = regex_find_ints(r"(%D)", lines[0])
             data = "".join(lines[1:-1])
             if len(info) != 3:
@@ -286,11 +288,26 @@ class BaseSlicer(object):
                     f"MetadataError: Thumbnail Size Mismatch: "
                     f"detected {info[2]}, actual {len(data)}")
                 continue
-            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.png"
+            thumb_extension = "jpg" if match[0] == "_JPG" else "png"
+            thumb_name = f"{thumb_base}-{info[0]}x{info[1]}.{thumb_extension}"
             thumb_path = os.path.join(thumb_dir, thumb_name)
             rel_thumb_path = os.path.join(".thumbs", thumb_name)
-            with open(thumb_path, "wb") as f:
-                f.write(base64.b64decode(data.encode()))
+            if match[0] == "_QOI":
+                # handle QOI to PNG conversion
+                try:
+                    # Decode QOI format
+                    qoi_image = qoi.decode(base64.b64decode(data.encode()))
+                    # Convert to PIL Image
+                    pil_image = Image.fromarray(qoi_image)
+                    # Save as PNG
+                    pil_image.save(thumb_path, format="PNG")
+                except Exception as e:
+                    logger.info(f"Failed to convert QOI thumbnail: {e}")
+                    continue
+            else:
+                # handle regular PNG and JPG thumbnails
+                with open(thumb_path, "wb") as f:
+                    f.write(base64.b64decode(data.encode()))
             parsed_matches.append({
                 'width': info[0], 'height': info[1],
                 'size': os.path.getsize(thumb_path),
