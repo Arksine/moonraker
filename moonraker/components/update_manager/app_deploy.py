@@ -401,9 +401,9 @@ class AppDeploy(BaseDeploy):
             self.pip_version_info = await pip_exec.get_pip_version()
             self.pip_ver_date = datetime.now(timezone.utc)
         try:
-            if pip_utils.check_pip_needs_update(self.pip_version_info):
+            if self.pip_version_info.needs_pip_update:
                 cur_ver = self.pip_version_info.pip_version_string
-                update_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                update_ver = self.pip_version_info.max_pip_version_string
                 self.notify_status(
                     f"Updating pip from version {cur_ver} to {update_ver}..."
                 )

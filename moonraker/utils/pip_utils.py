@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from ..server import Server
     from ..components.shell_command import ShellCommandFactory
 
-MIN_PIP_VERSION = (24, 0)
+MAX_PIP_VERSION = (25, 2)
 MIN_PYTHON_VERSION = (3, 7)
 
 class PipException(Exception):
@@ -99,6 +99,26 @@ class PipVersionInfo:
     def python_version(self) -> Tuple[int, ...]:
         return tuple(int(part) for part in self.python_version_string.split("."))
 
+    @property
+    def needs_pip_update(self) -> bool:
+        return self.pip_version < self.max_pip_version
+
+    @property
+    def max_pip_version(self) -> Tuple[int, ...]:
+        python_version = self.python_version
+        if python_version < (3, 7):
+            return (20, 3, 4)
+        if python_version < (3, 8):
+            return (24, 0)
+        elif python_version < (3, 9):
+            return (25, 0, 1)
+        else:
+            return MAX_PIP_VERSION
+
+    @property
+    def max_pip_version_string(self) -> str:
+        return ".".join(str(p) for p in self.max_pip_version)
+
 class PipExecutor:
     def __init__(
         self, pip_cmd: str, response_handler: Optional[Callable[[str], None]] = None
@@ -126,10 +146,11 @@ class PipExecutor:
         resp = self.call_pip_with_response("--version", 10.)
         return parse_pip_version(resp)
 
-    def update_pip(self) -> None:
-        pip_ver = ".".join([str(part) for part in MIN_PIP_VERSION])
+    def update_pip(self, version: str | None = None) -> None:
+        if version is None:
+            version = ".".join([str(part) for part in MAX_PIP_VERSION])
         try:
-            self.call_pip(f"install pip=={pip_ver}", 120.)
+            self.call_pip(f"install -U pip<={version}", 120.)
         except PipException:
             logging.exception("Failed to update pip")
 
@@ -213,12 +234,13 @@ class AsyncPipExecutor:
         )
         return parse_pip_version(resp)
 
-    async def update_pip(self) -> None:
-        pip_ver = ".".join([str(part) for part in MIN_PIP_VERSION])
+    async def update_pip(self, version: str | None = None) -> None:
+        if version is None:
+            version = ".".join([str(part) for part in MAX_PIP_VERSION])
         shell_cmd = self.get_shell_cmd()
         try:
             await shell_cmd.run_cmd_async(
-                f"{self.pip_cmd} install pip=={pip_ver}",
+                f"{self.pip_cmd} install -U pip<={version}",
                 self.notify_callback, timeout=1200., attempts=1, log_stderr=True
             )
         except shell_cmd.error:
@@ -275,11 +297,6 @@ def parse_pip_version(pip_response: str) -> PipVersionInfo:
     pipver_str: str = match.group(1).strip()
     pyver_str: str = match.group(2).strip()
     return PipVersionInfo(pipver_str, pyver_str)
-
-def check_pip_needs_update(version_info: PipVersionInfo) -> bool:
-    if version_info.python_version < MIN_PYTHON_VERSION:
-        return False
-    return version_info.pip_version < MIN_PIP_VERSION
 
 def prepare_install_args(packages: Union[pathlib.Path, List[str]]) -> str:
     if isinstance(packages, pathlib.Path):

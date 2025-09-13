@@ -346,9 +346,9 @@ class Server:
         logging.info("Checking Pip Version...")
         try:
             pipver = pip_exec.get_pip_version()
-            if pip_utils.check_pip_needs_update(pipver):
+            if pipver.needs_pip_update:
                 cur_ver = pipver.pip_version_string
-                new_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                new_ver = pipver.max_pip_version_string
                 logging.info(f"Updating Pip from {cur_ver} to {new_ver}...")
                 pip_exec.update_pip()
         except Exception:
