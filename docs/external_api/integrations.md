@@ -169,11 +169,11 @@ Content-Type: application/json
 /// api-response-spec
     open: True
 
-| Field    |  Type  | Description                               |
-| -------- | :----: | ----------------------------------------- |
-| `status` | string | The status of the test result.  Currently |
-|          |        | will always be `success`.                 |^
-| `stats`  | object | A [Print Stats](#print-stats-spec) object.|                                          |
+| Field    |  Type  | Description                                |
+| -------- | :----: | ------------------------------------------ |
+| `status` | string | The status of the test result.  Currently  |
+|          |        | will always be `success`.                  |^
+| `stats`  | object | A [Print Stats](#print-stats-spec) object. |
 
 | Field            |  Type  | Description                                        |
 | ---------------- | :----: | -------------------------------------------------- |
@@ -1697,4 +1697,121 @@ Not Available
     }
 }
 ```
+///
+
+
+## TD-1
+[TD-1](https://ajax-3d.com) is a device designed to capture transmission distance(TD) and color from filament making it easier to add new material directly to your [HueForge](https://shop.thehueforge.com/) filament library. Moonraker has support for interfacing with multiple TD-1 devices(when using a filament changer) that are inline with your filament path to capture this data.
+
+The following endpoints are available when the `[td1]` component has been configured.
+
+### Get TD-1 Data
+Returns TD-1 data for all devices that are connected.
+```{.http .apirequest title="HTTP Request"}
+GET /machine/td1/data
+```
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "machine.td1.data",
+    "id": 4654
+}
+```
+/// collapse-code
+```{.json .apiresponse title="Example Response"}
+{
+    "devices": {
+        "E6625877D318C430": {
+            "td": 4.0
+            "color": "122B44"
+            "scan_time": "2025-09-14T03:13:27.189383Z"
+            "error": <only shows up when errors exist>
+        }
+    }
+}
+```
+///
+
+/// api-response-spec
+    open: True
+//// note
+All TD-1 data fields return null after successful power on until first filament
+is scanned.
+////
+| Field     |   Type   | Description                        |
+| --------- | :------: | ---------------------------------- |
+| `devices` | [object] | An array of `TD-1 Serial` objects. |
+|           |          | #td1-serial-spec                   |+
+
+| Field           |   Type   | Description                                     |
+| --------------- | :------: | ----------------------------------------------- |
+| `<td-1 serial>` | [object] | Serial number for `TD-1 data` object containing |
+|                 |          | scan data.                                      |^
+|                 |          | #td1-data-spec                                  |+
+{ #td1-serial-spec} TD-1 Serial
+
+
+
+| Field       |      Type       | Description                                     |
+| ----------- | :-------------: | ----------------------------------------------- |
+| `td`        |      float      | Transmission distance(TD) value for scanned     |
+|             |                 | filament.                                       |^
+| `color`     |     string      | Color of scanned filament in Hex format.        |
+| `scan_time` | datetime string | Current time that filament was scanned          |
+| `error`     |     string      | Script checks for error upon first connecting   |
+|             |                 | to TD-1 device. If an error exists the error is |^
+|             |                 | displayed, if no error exists this field will   |^
+|             |                 | be null.
+{ #td1-data-spec} TD-1 Data
+
+///
+
+### Reset TD-1
+Gives ability to reboot TD-1 device remotely if an error exists when first powering on device.
+
+Example: User has filament inserted before power on TD-1 device, the following error occurs if
+this happens.
+```
+Measured Lux (6) less than 90% stored Lux (52868). If this error is triggered
+without a filament path obstruction, recalibrate the LEDs.
+```
+User can correct error by removing filament and then call this endpoint with provided serial to reboot TD-1 device.
+```{.http .apirequest title="HTTP Request"}
+POST /machine/td1/reboot
+Content-Type: application/json
+
+{
+    "serial": "E6625877D318C430"
+}
+```
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "machine.td1.reboot",
+    "params": {
+        "serial": "E6625877D318C430"
+    },
+    "id": 4654
+}
+```
+/// api-parameters
+    open: True
+
+| Name     |  Type  | Default  | Description               |
+| -------- | :----: | -------- | ------------------------- |
+| `serial` | string | REQUIRED | The TD-1 serial to reboot |
+
+///
+
+```{.json .apiresponse title="Example Response"}
+{
+    "status": "ok"
+}
+```
+/// api-response-spec
+    open: True
+| Field    |  Type  | Description                                    |
+| -------- | :----: | ---------------------------------------------- |
+| `status` | string | Returns "ok" if reboot was initiated. Returns  |
+|          |        | "key_error" if provided serial ID is not valid |^
 ///
