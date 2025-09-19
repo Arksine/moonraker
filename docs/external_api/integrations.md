@@ -1698,3 +1698,167 @@ Not Available
 }
 ```
 ///
+
+## Lane Data
+Lane data component can be used by third-parties(slicers) to grab information about what filament is loaded into filament changers lanes.
+
+The following endpoints are available when the `[lane_data]` component has been configured.
+
+### Set Lane Data
+Allows klipper add-ons to populate filament information for what kinda of filament is loaded into filament changers lanes(aka tools, T0, T1, etc).
+```{.http .apirequest title="HTTP Request"}
+POST /machine/set_lane_data
+Content-Type: application/json
+
+{
+    "lane1": {
+        "color": "#122B44",
+        "td": 4.0,
+        "material": "ASA",
+        "bed_temp": 105,
+        "nozzle_temp":245,
+        "scan_time": "2025-09-14T03:13:27.189383Z",
+        "lane": "1"
+    },
+    "lane2": {
+        "color": "#122B44",
+        "td": 4.0,
+        "material": "ASA",
+        "bed_temp": 105,
+        "nozzle_temp":245,
+        "scan_time": "2025-09-14T03:13:27.189383Z",
+        "lane": "0"
+    }
+
+}
+```
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "machine.set_lane_data",
+    "params": {
+        "lane1": {
+            "color": "#122B44",
+            "td": 4.0,
+            "material": "ASA",
+            "bed_temp": 105,
+            "nozzle_temp":245,
+            "scan_time": "2025-09-14T03:13:27.189383Z",
+            "lane": "1"
+        },
+        "lane2": {
+            "color": "#122B44",
+            "td": 4.0,
+            "material": "ASA",
+            "bed_temp": 105,
+            "nozzle_temp":245,
+            "scan_time": "2025-09-14T03:13:27.189383Z",
+            "lane": "0"
+        }
+    },
+    "id": 4654
+}
+```
+/// api-parameters
+    open: True
+| Name          |  Type  | Default  | Description                                       |
+| ------------- | :----: | -------- | ------------------------------------------------- |
+| `<lane_name>` | string | REQUIRED | Object of `Lane Data` information, name should be |
+|               |        |          | unique for each lane/slot. Multiple lanes can be  |^
+|               |        |          | provided at once when passed in as an array.      |^
+|               |        |          | #post-lane-data-spec                              |+
+
+| Name          |      Type       | Default  | Description                                           |
+| ------------- | :-------------: | -------- | ----------------------------------------------------- |
+| `color `      |     string      | REQUIRED | Current color filament loaded in lane/slot.           |
+| `td`          |  float \| int   | null     | Current transmission distance(TD) of filament         |
+|               |                 |          | loaded in lane/slot.                                  |^
+| `material`    |     string      | REQUIRED | Current filament material type loaded into lane/slot. |
+| `bed_temp`    |       int       | REQUIRED | Bed temperature for filament loaded.                  |
+| `nozzle_temp` |       int       | REQUIRED | Nozzle temperature to set for filament loaded.        |
+| `scan_time`   | datetime string | null     | Last scan time if filament color and TD was scanned   |
+|               |                 |          | with a TD-1 device                                    |^
+| `lane`        |     string      | REQUIRED | Current tool mapping for lane/slot. eg. T0/T1/T2/etc. |
+{ #post-lane-data-spec} Lane Data
+
+///
+
+```{.json .apiresponse title="Example Response"}
+{
+    "status": "ok"
+}
+```
+/// api-response-spec
+    open: True
+| Field    |  Type  | Description                               |
+| -------- | :----: | ----------------------------------------- |
+| `status` | string | Returns "ok" if valid data was provided.  |
+|          |        | Returns "error" if provided is not valid. |^
+///
+### Get Lane Data
+Returns an array of all lane data information that has been posted to `/machine/set_lane_data` endpoint. 
+
+```{.http .apirequest title="HTTP Request"}
+GET /machine/lane_data
+```
+```{.json .apirequest title="JSON-RPC Request"}
+{
+    "jsonrpc": "2.0",
+    "method": "machine.lane_data",
+    "id": 4654
+}
+```
+/// collapse-code
+```{.json .apiresponse title="Example Response"}
+{
+    "lanes": {
+        "lane1": {
+            "color": "#122B44",
+            "td": 4.0,
+            "material": "ASA",
+            "bed_temp": 105,
+            "nozzle_temp":245,
+            "scan_time": "2025-09-14T03:13:27.189383Z",
+            "lane": "0"
+        },
+        "lane2": {
+            "color": "#122B44",
+            "td": 4.0,
+            "material": "ASA",
+            "bed_temp": 105,
+            "nozzle_temp":245,
+            "scan_time": "2025-09-14T03:13:27.189383Z",
+            "lane": "0"
+        }
+    }
+}
+```
+///
+
+/// api-response-spec
+    open: True
+| Field   |   Type   | Description                      |
+| ------- | :------: | -------------------------------- |
+| `lanes` | [object] | An array of `Lane Name` objects. |
+|         |          | #get-lane-name-spec              |+
+
+| Field         |  Type  | Description                           |
+| ------------- | :----: | ------------------------------------- |
+| `<lane_name>` | string | Object of `Lane` information, name is |
+|               |        | unique for each object.               |^
+|               |        | #get-lane-data-spec                   |+
+{ #get-lane-name-spec} Lane Name
+
+
+| Field         |      Type       | Description                                           |
+| ------------- | :-------------: | ----------------------------------------------------- |
+| `color `      |     string      | Current color filament loaded in lane/slot.           |
+| `td`          |  float \| int   | Current transmission distance(TD) of filament         |
+|               |                 | loaded in lane/slot. Could also return null.          |^
+| `material`    |     string      | Current filament material type loaded into lane/slot. |
+| `bed_temp`    |       int       | Bed temperature for filament loaded.                  |
+| `nozzle_temp` |       int       | Nozzle temperature to set for filament loaded.        |
+| `scan_time`   | datetime string | Last scan time if filament color and TD was scanned   |
+|               |                 | with a TD-1 device. Could also return null.           |^
+| `lane`        |     string      | Current tool mapping for lane/slot. eg. T0/T1/T2/etc. |
+{ #get-lane-data-spec} Lane Data
