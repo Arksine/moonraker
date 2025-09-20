@@ -92,7 +92,7 @@ class PanelDue:
             self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
         self.non_trivial_keys = config.getlist('non_trivial_keys', ["Klipper state"])
-        self.ser_conn = async_serial.AsyncSerialConnection(config)
+        self.ser_conn = async_serial.AsyncSerialConnection.from_config(config)
         logging.info("PanelDue Configured")
 
         # Register server events

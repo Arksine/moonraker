@@ -14,6 +14,7 @@ from serial import Serial, SerialException
 from typing import TYPE_CHECKING, Optional, List, Tuple, Awaitable
 
 if TYPE_CHECKING:
+    from ..server import Server
     from ..confighelper import ConfigHelper
 
 READER_LIMIT = 4*1024*1024
@@ -21,11 +22,11 @@ READER_LIMIT = 4*1024*1024
 
 class AsyncSerialConnection:
     error = SerialException
-    def __init__(self, config: ConfigHelper, default_baud: int = 57600) -> None:
-        self.name = config.get_name()
-        self.eventloop = config.get_server().get_event_loop()
-        self.port: str = config.get("serial")
-        self.baud = config.getint("baud", default_baud)
+    def __init__(self, server: Server, name: str, port: str, baud: int) -> None:
+        self.name = name
+        self.eventloop = server.get_event_loop()
+        self.port = port
+        self.baud = baud
         self.ser: Optional[Serial] = None
         self.send_task: Optional[asyncio.Task] = None
         self.send_buffer: List[Tuple[asyncio.Future, bytes]] = []
@@ -38,6 +39,16 @@ class AsyncSerialConnection:
     @property
     def reader(self) -> asyncio.StreamReader:
         return self._reader
+
+    @staticmethod
+    def from_config(
+        config: ConfigHelper, default_baud: int = 57600
+    ) -> AsyncSerialConnection:
+        port: str = config.get("serial")
+        name = config.get_name()
+        baud = config.getint("baud", default_baud)
+        server = config.get_server()
+        return AsyncSerialConnection(server, name, port, baud)
 
     def close(self) -> Awaitable:
         if self.ser is not None:
