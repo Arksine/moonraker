@@ -31,7 +31,7 @@ class AsyncSerialConnection:
         self.send_task: Optional[asyncio.Task] = None
         self.send_buffer: List[Tuple[asyncio.Future, bytes]] = []
         self._reader = asyncio.StreamReader(limit=READER_LIMIT)
-        self._read_callback: Callable[[bytes], None]  = self._reader.feed_data
+        self._read_callback: Callable[[bytes], None] = self._reader.feed_data
 
     @property
     def connected(self) -> bool:
