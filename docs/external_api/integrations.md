@@ -1708,12 +1708,12 @@ The following endpoints are available when the `[td1]` component has been config
 ### Get TD-1 Data
 Returns TD-1 data for all devices that are connected.
 ```{.http .apirequest title="HTTP Request"}
-GET /machine/td1_data
+GET /machine/td1/data
 ```
 ```{.json .apirequest title="JSON-RPC Request"}
 {
     "jsonrpc": "2.0",
-    "method": "machine.td1_data",
+    "method": "machine.td1.data",
     "id": 4654
 }
 ```
@@ -1777,7 +1777,7 @@ without a filament path obstruction, recalibrate the LEDs.
 ```
 User can correct error by removing filament and then call this endpoint with provided serial to reboot TD-1 device.
 ```{.http .apirequest title="HTTP Request"}
-POST /machine/td1_reboot
+POST /machine/td1/reboot
 Content-Type: application/json
 
 {
@@ -1787,7 +1787,7 @@ Content-Type: application/json
 ```{.json .apirequest title="JSON-RPC Request"}
 {
     "jsonrpc": "2.0",
-    "method": "machine.td1_reboot",
+    "method": "machine.td1.reboot",
     "params": {
         "serial": "E6625877D318C430"
     },
