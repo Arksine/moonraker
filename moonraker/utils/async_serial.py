@@ -55,9 +55,11 @@ class AsyncSerialConnection:
         server = config.get_server()
         return AsyncSerialConnection(server, name, port, baud)
 
-    def set_read_callback(self, callback: Callable[[bytes], None] | None) -> None:
+    def set_read_callback(
+        self, callback: Callable[[bytes], None] | None, force: bool = False
+    ) -> None:
         if callback is None:
-            if self.reader_active:
+            if not force and self.reader_active:
                 return
             self._reader.feed_eof()
             self._reader = asyncio.StreamReader(limit=READER_LIMIT)
