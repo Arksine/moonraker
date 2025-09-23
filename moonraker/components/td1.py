@@ -20,7 +20,7 @@ from typing import Optional, Dict, Any
 from logging import Logger
 
 
-class TD1Protocol():
+class TD1Protocol:
     def __init__(self, config: ConfigHelper, serial_number: str,
                  port: str, logger: Logger) -> None:
         self.config = config
@@ -150,15 +150,19 @@ class TD1Protocol():
         self.enabled = False
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(self.serial.close(), 1)
+
         if self.serial_task is not None or not self.serial_task.done():
-            with contextlib.suppress(asyncio.CancelledError):
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(self.serial_task, 1)
+            with contextlib.suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                await asyncio.wait_for(self.serial_task, 1)
 
     async def reboot(self) -> None:
         self.logger.info(f"Rebooting {self.serial_number}")
         self.enabled = False
-        self.serial_task.cancel()
+
+        self.serial.set_read_callback(None, force=True)
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(self.serial_task, 1.)
+
         await self.serial.send('change settings\n'.encode('utf-8'))
 
         ack = await self.serial.reader.readuntil(b'\n')
@@ -253,10 +257,10 @@ class TD1:
                     self.logger.info(f"Hot-plugged TD1 detected: {serial_number}")
                     try:
                         await self._start_serial_task(port, serial_number)
-                    except serial.serialutil.SerialException:
-                        raise serial.serialutil.SerialException
                     except asyncio.CancelledError:
-                        raise asyncio.CancelledError
+                        raise
+                    except Exception:
+                        continue
 
             # Detect disconnected devices
             disconnected_serials = self._known_serials - current_serials
@@ -294,10 +298,10 @@ class TD1:
 
         except serial.serialutil.SerialException as e:
             self.logger.error(f"Failed to open serial port {port}: {e}")
-            raise serial.serialutil.SerialException
+            raise
         except asyncio.CancelledError as e:
             self.logger.error(f"Task canceled error {e}")
-            raise asyncio.CancelledError
+            raise
 
     async def _handle_get_data(self, web_request: WebRequest) -> Dict[str, Any]:
         latest_data = {}
