@@ -296,7 +296,7 @@ class TD1:
                 self.logger.error(
                     f"Failed to open port:{port} for TD1 serial {serial_number}")
 
-        except serial.serialutil.SerialException as e:
+        except serial.SerialException as e:
             self.logger.error(f"Failed to open serial port {port}: {e}")
             raise
         except asyncio.CancelledError as e:
