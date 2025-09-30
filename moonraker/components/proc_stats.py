@@ -39,8 +39,11 @@ VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 VCIO_PATH = "/dev/vcio"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
-HWMON_ROOT_PATH = "/sys/class/hwmon/"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
+HWMON_ROOT_PATH = "/sys/class/hwmon/"
+HWMON_INTEL_NAME = "coretemp"
+HWMON_AMD_NAME = "k10temp"
+HWMON_RPI_NAME = "cpu_thermal"
 CPU_STAT_PATH = "/proc/stat"
 MEM_AVAIL_PATH = "/proc/meminfo"
 STAT_UPDATE_TIME = 1.
@@ -304,11 +307,9 @@ class ProcStats:
                 hwmon_name = pathlib.Path(hwmon.path + "/name")
                 try:
                     name = hwmon_name.read_text().strip()
-                    # k10temp     : AMD CPU
-                    # coretemp    : intel cpu
-                    # cpu_thermal : raspberry pi
-                    if name == 'k10temp' or name == 'coretemp' or name == \
-                            'cpu_thermal':
+                    if name == HWMON_AMD_NAME \
+                            or name == HWMON_INTEL_NAME \
+                            or name == HWMON_RPI_NAME:
                         return hwmon.path + "/temp1_input"
                 except Exception:
                     pass
