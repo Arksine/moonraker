@@ -358,9 +358,6 @@ class UnknownSlicer(BaseSlicer):
     def parse_chamber_temp(self) -> Optional[float]:
         return regex_find_float(r"M191 S(%F)", self.header_data)
 
-    def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
-        return None
-
 class PrusaSlicer(BaseSlicer):
     def check_identity(self, data: str) -> bool:
         aliases = {
