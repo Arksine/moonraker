@@ -308,7 +308,7 @@ class ProcStats:
                     # coretemp    : intel cpu
                     # cpu_thermal : raspberry pi
                     if name == 'k10temp' or name == 'coretemp' or name == \
-                        'cpu_thermal':
+                            'cpu_thermal':
                         return hwmon.path + "/temp1_input"
                 except Exception:
                     pass
