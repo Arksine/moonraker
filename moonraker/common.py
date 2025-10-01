@@ -14,8 +14,9 @@ import dataclasses
 import time
 from enum import Enum, Flag, auto
 from abc import ABCMeta, abstractmethod
-from .utils import ServerError, Sentinel
+from .utils import Sentinel
 from .utils import json_wrapper as jsonw
+from .utils.exceptions import ServerError, AgentError
 
 # Annotation imports
 from typing import (
@@ -818,14 +819,8 @@ class JsonRPC:
         result = obj.get("result")
         if result is None:
             name = conn.client_data["name"]
-            error = obj.get("error")
-            msg = f"Invalid Response: {obj}"
-            code = -32600
-            if isinstance(error, dict):
-                msg = error.get("message", msg)
-                code = error.get("code", code)
-            msg = f"{name} rpc error: {code} {msg}"
-            ret = ServerError(msg, 418)
+            msg = f"Agent {name} RPC error"
+            ret = AgentError(msg, obj.get("error"))
         else:
             ret = result
         conn.resolve_pending_response(response_id, ret)
@@ -846,7 +841,7 @@ class JsonRPC:
             )
         except TypeError as e:
             return self.build_error(
-                -32602, f"Invalid params:\n{e}", req_id, True, method_name
+                -32602, f"Invalid params:\n{e}", req_id, e, method_name
             )
         except ServerError as e:
             code = e.status_code
@@ -854,9 +849,9 @@ class JsonRPC:
                 code = -32601
             elif code == 401:
                 code = -32602
-            return self.build_error(code, str(e), req_id, True, method_name)
+            return self.build_error(code, str(e), req_id, e, method_name)
         except Exception as e:
-            return self.build_error(-31000, str(e), req_id, True, method_name)
+            return self.build_error(500, str(e), req_id, e, method_name)
 
         if req_id is None:
             return None
@@ -875,19 +870,21 @@ class JsonRPC:
         code: int,
         msg: str,
         req_id: Optional[int] = None,
-        is_exc: bool = False,
+        exc: Exception | None = None,
         method_name: str = ""
     ) -> Dict[str, Any]:
         if method_name:
             method_name = f"Requested Method: {method_name}, "
         log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}, Message: {msg}"
-        if is_exc and self.verbose:
-            logging.exception(log_msg)
-        else:
-            logging.info(log_msg)
+        err = {'code': code, 'message': msg}
+        if isinstance(exc, AgentError):
+            err["extra"] = exc.error_data
+            if self.verbose:
+                log_msg += f"\nExtra: {exc.error_data}"
+        logging.info(log_msg, exc_info=(exc is not None and self.verbose))
         return {
             'jsonrpc': "2.0",
-            'error': {'code': code, 'message': msg},
+            'error': err,
             'id': req_id
         }
 
