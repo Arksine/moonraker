@@ -41,9 +41,11 @@ STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 HWMON_ROOT_PATH = "/sys/class/hwmon/"
-HWMON_INTEL_NAME = "coretemp"
-HWMON_AMD_NAME = "k10temp"
-HWMON_RPI_NAME = "cpu_thermal"
+HWMON_PLATFORMS = {
+    "coretemp": "Intel",
+    "k10temp": "AMD",
+    "cpu_thermal": "Raspberry Pi"
+}
 CPU_STAT_PATH = "/proc/stat"
 MEM_AVAIL_PATH = "/proc/meminfo"
 STAT_UPDATE_TIME = 1.
@@ -307,13 +309,14 @@ class ProcStats:
                 hwmon_name = pathlib.Path(hwmon.path + "/name")
                 try:
                     name = hwmon_name.read_text().strip()
-                    if name == HWMON_AMD_NAME \
-                            or name == HWMON_INTEL_NAME \
-                            or name == HWMON_RPI_NAME:
+                    if name in HWMON_PLATFORMS:
+                        pf = HWMON_PLATFORMS[name]
+                        logging.info(f"Monitoring temperature for {pf} CPU")
                         return hwmon.path + "/temp1_input"
                 except Exception:
                     pass
 
+        logging.info("Monitoring temperature using default thermal zone")
         return TEMPERATURE_PATH
 
     def _format_stats(self, stats: Dict[str, Any]) -> str:
