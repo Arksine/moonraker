@@ -878,9 +878,9 @@ class JsonRPC:
         log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}, Message: {msg}"
         err = {'code': code, 'message': msg}
         if isinstance(exc, AgentError):
-            err["extra"] = exc.error_data
+            err["data"] = exc.error_data
             if self.verbose:
-                log_msg += f"\nExtra: {exc.error_data}"
+                log_msg += f"\nExtra data: {exc.error_data}"
         logging.info(log_msg, exc_info=(exc is not None and self.verbose))
         return {
             'jsonrpc': "2.0",
