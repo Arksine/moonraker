@@ -4,6 +4,7 @@
 # Copyright (C) 2025 AJAX3D and Jim Madill <jcmadill1@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
+from __future__ import annotations
 
 import asyncio
 import serial
@@ -12,11 +13,12 @@ import logging
 import datetime
 import contextlib
 from ..utils import async_serial
+from ..common import RequestType
 from typing import Optional, Dict, List, Tuple, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
-    from ..common import RequestType, WebRequest
+    from ..common import WebRequest
 
 
 class TD1Connection:
