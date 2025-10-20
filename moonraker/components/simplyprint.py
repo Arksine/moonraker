@@ -1319,7 +1319,11 @@ class LayerDetect:
         return self._layer
 
     def update(self, new_pos: List[float]) -> None:
-        if not self._active or self._layer_z == new_pos[2]:
+        if (
+            not self._active or
+            self._layer_z == new_pos[2] or
+            self._layer_height == 0
+        ):
             self._check_next = False
             return
         if not self._check_next:
@@ -1349,7 +1353,8 @@ class LayerDetect:
                 self._layer_count = int((obj_height - flh) / lh + .5)
 
     def resume(self) -> None:
-        self._active = True
+        if self._layer_height > 0.:
+            self._active = True
 
     def stop(self) -> None:
         self._active = False
