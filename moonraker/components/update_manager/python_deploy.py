@@ -256,7 +256,10 @@ class PythonDeploy(AppDeploy):
         self.log_info("Requesting package info via PIP...")
         norm_name = normalize_project_name(self.project_name)
         assert self.pip_cmd is not None
-        pip_args = f"install -U --quiet --dry-run --no-deps --report - {norm_name}"
+        pip_args = "install -U --quiet"
+        if self.channel == Channel.BETA:
+            pip_args = f"{pip_args} --pre"
+        pip_args = f"{pip_args} --dry-run --no-deps --report - {norm_name}"
         pip_exec = pip_utils.AsyncPipExecutor(self.pip_cmd, self.server)
         await self._update_pip(pip_exec)
         resp = await pip_exec.call_pip_with_response(pip_args, timeout=1200.)
@@ -355,6 +358,8 @@ class PythonDeploy(AppDeploy):
         if self.source == PackageSource.PIP:
             # We can't depend on the SHA being available for PyPI packages,
             # so we must compare versions
+            if self.channel == Channel.BETA:
+                pip_args = f"{pip_args} --pre"
             pip_args = f"{pip_args} {project_name}"
             if rollback:
                 pip_args += f"=={self.rollback_ref}"
