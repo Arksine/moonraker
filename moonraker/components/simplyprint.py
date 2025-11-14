@@ -200,7 +200,7 @@ class SimplyPrint(APITransport):
                 log_connect = False
             try:
                 self.ws = await tornado.websocket.websocket_connect(
-                    url, connect_timeout=5.,
+                    url, connect_timeout=15.,
                 )
                 setattr(self.ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
@@ -1507,7 +1507,8 @@ class PrintHandler:
             logging.debug(f"Downloading URL: {url}")
             tmp_path = await client.download_file(
                 url, accept, progress_callback=self._on_download_progress,
-                request_timeout=3600.
+                connect_timeout=15.,
+                request_timeout=3600.,
             )
         except asyncio.TimeoutError:
             raise
