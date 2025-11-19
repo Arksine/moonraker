@@ -196,6 +196,16 @@ class UserInfo:
     def as_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
 
+class Redirect:
+    def __init__(
+        self,
+        url: str
+    ) -> None:
+        self.url = url
+
+    def get_url(self) -> str:
+        return self.url
+
 @dataclasses.dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
