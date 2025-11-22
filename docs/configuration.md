@@ -1073,6 +1073,10 @@ Currently only Gen 1 Shelly devices support Authentication
 address:
 #   A valid ip address or hostname for the shelly device.  This parameter
 #   must be provided.
+auth_type:
+#   The type of HTTP authentication to use (if username and password are specified).
+#   Defaults to "basic" (for Gen 1 Shelly devices). For Gen 2 and later, "digest"
+#   has to be used.
 user:
 #   A user name to use for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details.  If no password
