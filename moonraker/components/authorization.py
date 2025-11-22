@@ -20,7 +20,13 @@ import logging
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 from ..utils import json_wrapper as jsonw
-from ..common import RequestType, TransportType, SqlTableDefinition, UserInfo
+from ..common import (
+    RequestType,
+    TransportType,
+    SqlTableDefinition,
+    UserInfo,
+    Redirect
+)
 
 # Annotation imports
 from typing import (
@@ -41,6 +47,7 @@ if TYPE_CHECKING:
     from .database import MoonrakerDatabase as DBComp
     from .database import DBProviderWrapper
     from .ldap import MoonrakerLDAP
+    from .oidc import MoonrakerOIDC
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
     OneshotToken = Tuple[IPAddr, Optional[UserInfo], asyncio.Handle]
@@ -146,6 +153,9 @@ class Authorization:
                 "[authorization]: Option 'default_source' set to 'ldap',"
                 " however [ldap] section failed to load or not configured"
             )
+        self.oidc: Optional[MoonrakerOIDC] = None
+        if config.get_prefix_sections('oidc '):
+            self.oidc = self.server.load_component(config, "oidc", None)
         database: DBComp = self.server.lookup_component('database')
         self.user_table = database.register_table(UserSqlDefinition())
         self.users: Dict[str, UserInfo] = {}
@@ -266,6 +276,21 @@ class Authorization:
         self.server.register_endpoint(
             "/access/info", RequestType.GET, self._handle_info_request,
             transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
+        self.server.register_endpoint(
+            "/access/oidc/login", RequestType.POST, self._handle_oidc_login,
+            transports=TransportType.HTTP,
+            auth_required=False
+        )
+        self.server.register_endpoint(
+            "/access/oidc/callback", RequestType.GET, self._handle_oidc_callback,
+            transports=TransportType.HTTP,
+            auth_required=False
+        )
+        self.server.register_endpoint(
+            "/access/oidc/complete", RequestType.POST, self._handle_oidc_complete,
+            transports=TransportType.HTTP,
             auth_required=False
         )
         wsm: WebsocketManager = self.server.lookup_component("websockets")
@@ -394,6 +419,8 @@ class Authorization:
         sources = ["moonraker"]
         if self.ldap is not None:
             sources.append("ldap")
+        if self.oidc is not None and self.oidc.has_providers():
+            sources.append("oidc")
         login_req = self.force_logins and len(self.users) > 1
         request_trusted: Optional[bool] = None
         user = web_request.get_current_user()
@@ -402,9 +429,15 @@ class Authorization:
             request_trusted = True
         elif req_ip is not None:
             request_trusted = await self._check_authorized_ip(req_ip)
+
+        oidc_providers = []
+        if self.oidc is not None:
+            oidc_providers = self.oidc.get_provider_names()
+
         return {
             "default_source": self.default_source,
             "available_sources": sources,
+            "oidc_providers": oidc_providers,
             "login_required": login_req,
             "trusted": request_trusted
         }
@@ -560,24 +593,10 @@ class Authorization:
             action = "user_logged_in"
             if hashed_pass != user_info.password:
                 raise self.server.error("Invalid Password")
-        jwt_secret_hex: Optional[str] = user_info.jwt_secret
-        if jwt_secret_hex is None:
-            private_key = Signer()
-            jwk_id = base64url_encode(secrets.token_bytes()).decode()
-            user_info.jwt_secret = private_key.hex_seed().decode()  # type: ignore
-            user_info.jwk_id = jwk_id
-            self.users[username] = user_info
-            await self._sync_user(username)
-            self.public_jwks[jwk_id] = self._generate_public_jwk(private_key)
-        else:
-            private_key = self._load_private_key(jwt_secret_hex)
-            if user_info.jwk_id is None:
-                user_info.jwk_id = base64url_encode(secrets.token_bytes()).decode()
-            jwk_id = user_info.jwk_id
-        token = self._generate_jwt(username, jwk_id, private_key)
-        refresh_token = self._generate_jwt(
-            username, jwk_id, private_key, token_type="refresh",
-            exp_time=datetime.timedelta(days=self.login_timeout))
+
+        token, refresh_token = await self._generate_user_tokens(
+            user_info
+        )
         conn = web_request.get_client_connection()
         if create:
             event_loop = self.server.get_event_loop()
@@ -623,6 +642,109 @@ class Authorization:
         return {
             "username": username,
             "action": "user_deleted"
+        }
+
+    async def _generate_user_tokens(
+        self, user_info: UserInfo
+    ) -> Tuple[str, str]:
+        username: str = user_info.username
+        jwt_secret_hex: Optional[str] = user_info.jwt_secret
+        if jwt_secret_hex is None:
+            private_key = Signer()
+            jwk_id = base64url_encode(secrets.token_bytes()).decode()
+            user_info.jwt_secret = private_key.hex_seed().decode()  # type: ignore
+            user_info.jwk_id = jwk_id
+            self.users[username] = user_info
+            await self._sync_user(username)
+            self.public_jwks[jwk_id] = self._generate_public_jwk(private_key)
+        else:
+            private_key = self._load_private_key(jwt_secret_hex)
+            if user_info.jwk_id is None:
+                user_info.jwk_id = base64url_encode(secrets.token_bytes()).decode()
+            jwk_id = user_info.jwk_id
+        token = self._generate_jwt(username, jwk_id, private_key)
+        refresh_token = self._generate_jwt(
+            username, jwk_id, private_key, token_type="refresh",
+            exp_time=datetime.timedelta(days=self.login_timeout))
+        return token, refresh_token
+
+    async def _handle_oidc_login(
+        self, web_request: WebRequest
+    ) -> Dict[str, str]:
+        if self.oidc is None:
+            raise self.server.error("OIDC not configured", 400)
+
+        provider_name = web_request.get_str('provider')
+        next_url = web_request.get_str('next', None)
+
+        return await self.oidc.initiate_oidc_login(provider_name, next_url)
+
+    async def _handle_oidc_callback(self, web_request: WebRequest) -> Redirect:
+        if self.oidc is None:
+            raise self.server.error("OIDC not configured", 400)
+
+        error = web_request.get_str('error', None)
+
+        if error:
+            raise self.server.error(f"OIDC error: {error}", 400)
+
+        code = web_request.get_str('code', None)
+        state = web_request.get_str('state', None)
+
+        login_id, username, provider, next_url, user_info_data = (
+            await self.oidc.handle_oidc_callback(code, state)
+        )
+
+        if username not in self.users:
+            user_info = UserInfo(
+                username=username,
+                # Random password for OIDC users
+                password=secrets.token_hex(32),
+                source=f"oidc:{provider}"
+            )
+            self.users[username] = user_info
+            await self._sync_user(username)
+        else:
+            user_info = self.users[username]
+
+        access_token, refresh_token = await self._generate_user_tokens(
+            user_info
+        )
+        conn = web_request.get_client_connection()
+        if conn is not None:
+            conn.user_info = user_info
+
+        self.oidc.store_oidc_tokens(
+            login_id, username, access_token, refresh_token,
+            user_info.source
+        )
+
+        if next_url:
+            separator = '&' if '?' in next_url else '?'
+            redirect_url = f"{next_url}{separator}login_id={login_id}&ok=1"
+        else:
+            redirect_url = f"/?login_id={login_id}&ok=1"
+        return Redirect(redirect_url)
+
+    async def _handle_oidc_complete(
+        self, web_request: WebRequest
+    ) -> Dict[str, str]:
+        if self.oidc is None:
+            raise self.server.error("OIDC not configured", 400)
+
+        login_id = web_request.get_str('login_id')
+
+        # Get stored tokens
+        token_record = self.oidc.get_stored_token_record(login_id)
+
+        if not token_record:
+            raise self.server.error("Invalid or expired login_id", 400)
+
+        return {
+            'token': token_record.access_token,
+            'refresh_token': token_record.refresh_token,
+            'source': token_record.source,
+            'action': 'user_logged_in'
         }
 
     def _generate_jwt(self,
@@ -748,6 +870,11 @@ class Authorization:
                 domain: str = fqdn_info["domain"]
                 self.fqdn_cache.pop(ip, None)
                 logging.info(f"Cached FQDN Expired, IP: {ip}, domain: {domain}")
+
+        # Clean up expired OIDC records
+        if self.oidc is not None:
+            self.oidc.cleanup_expired_records(cur_time)
+
         return eventtime + PRUNE_CHECK_TIME
 
     def _oneshot_token_expire_handler(self, token):

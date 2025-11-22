@@ -196,6 +196,39 @@ class UserInfo:
     def as_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
 
+@dataclasses.dataclass
+class OIDCLoginRecord:
+    login_id: str
+    state: str
+    provider: str
+    next_url: Optional[str]
+    expires_at: float
+
+    def as_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+@dataclasses.dataclass
+class OIDCTokenRecord:
+    login_id: str
+    username: str
+    access_token: str
+    refresh_token: str
+    source: str
+    expires_at: float
+
+    def as_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+class Redirect:
+    def __init__(
+        self,
+        url: str
+    ) -> None:
+        self.url = url
+
+    def get_url(self) -> str:
+        return self.url
+
 @dataclasses.dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
