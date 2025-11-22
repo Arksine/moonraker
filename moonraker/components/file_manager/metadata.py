@@ -227,6 +227,19 @@ class BaseSlicer(metaclass=SlicerType):
     def identify(data: str) -> Tuple[str, str] | None:
         return None
 
+    def run_parsers(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for name in vars(BaseSlicer).keys():
+            if name.startswith("parse_"):
+                func = getattr(self, name)
+                if not callable(func):
+                    continue
+                val = func()
+                if val is not None:
+                    field = name[6:]
+                    result[field] = val
+        return result
+
     def check_gcode_processor(self, regex: str, location: str) -> Dict[str, Any] | None:
         data = self.header_data if location == "header" else self.footer_data
         proc_match = re.search(regex, data, re.MULTILINE)
@@ -250,22 +263,31 @@ class BaseSlicer(metaclass=SlicerType):
             return None
         return self.size - len(rev_data[:m.start()].encode())
 
-    def parse_first_layer_height(self) -> Optional[float]:
-        return None
-
-    def parse_layer_height(self) -> Optional[float]:
+    def parse_layer_count(self) -> Optional[int]:
         return None
 
     def parse_object_height(self) -> Optional[float]:
         return None
 
-    def parse_filament_total(self) -> Optional[float]:
+    def parse_estimated_time(self) -> Optional[float]:
         return None
 
-    def parse_filament_weight_total(self) -> Optional[float]:
+    def parse_nozzle_diameter(self) -> Optional[float]:
         return None
 
-    def parse_filament_weights(self) -> Optional[List[float]]:
+    def parse_layer_height(self) -> Optional[float]:
+        return None
+
+    def parse_first_layer_height(self) -> Optional[float]:
+        return None
+
+    def parse_first_layer_extr_temp(self) -> Optional[float]:
+        return None
+
+    def parse_first_layer_bed_temp(self) -> Optional[float]:
+        return None
+
+    def parse_chamber_temp(self) -> Optional[float]:
         return None
 
     def parse_filament_name(self) -> Optional[str]:
@@ -275,6 +297,9 @@ class BaseSlicer(metaclass=SlicerType):
         return None
 
     def parse_filament_colors(self) -> Optional[List[str]]:
+        return None
+
+    def parse_filament_change_count(self) -> Optional[int]:
         return None
 
     def parse_extruder_colors(self) -> Optional[List[str]]:
@@ -289,19 +314,13 @@ class BaseSlicer(metaclass=SlicerType):
     def parse_mmu_print(self) -> Optional[int]:
         return None
 
-    def parse_estimated_time(self) -> Optional[float]:
+    def parse_filament_total(self) -> Optional[float]:
         return None
 
-    def parse_first_layer_bed_temp(self) -> Optional[float]:
+    def parse_filament_weight_total(self) -> Optional[float]:
         return None
 
-    def parse_chamber_temp(self) -> Optional[float]:
-        return None
-
-    def parse_first_layer_extr_temp(self) -> Optional[float]:
-        return None
-
-    def parse_filament_change_count(self) -> Optional[int]:
+    def parse_filament_weights(self) -> Optional[List[float]]:
         return None
 
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
@@ -380,12 +399,6 @@ class BaseSlicer(metaclass=SlicerType):
             except Exception as e:
                 logger.info(str(e))
         return parsed_matches
-
-    def parse_layer_count(self) -> Optional[int]:
-        return None
-
-    def parse_nozzle_diameter(self) -> Optional[float]:
-        return None
 
 class UnknownSlicer(BaseSlicer):
     def parse_first_layer_height(self) -> Optional[float]:
@@ -1155,32 +1168,6 @@ class KiriMoto(BaseSlicer):
         )
 
 
-SUPPORTED_DATA = [
-    'gcode_start_byte',
-    'gcode_end_byte',
-    'layer_count',
-    'object_height',
-    'estimated_time',
-    'nozzle_diameter',
-    'layer_height',
-    'first_layer_height',
-    'first_layer_extr_temp',
-    'first_layer_bed_temp',
-    'chamber_temp',
-    'filament_name',
-    'filament_type',
-    'filament_colors',
-    'filament_change_count',
-    'extruder_colors',
-    'filament_temps',
-    'referenced_tools',
-    'mmu_print',
-    'filament_total',
-    'filament_weight_total',
-    'filament_weights',
-    'thumbnails'
-]
-
 PPC_REGEX = (
     r"^; Pre-Processed for Cancel-Object support "
     r"by preprocess_cancellation (?P<version>v?\d+(?:\.\d+)*)"
@@ -1316,11 +1303,7 @@ def extract_metadata(
     metadata["file_processors"] = proc_list
     metadata["slicer"] = slicer.slicer_name
     metadata["slicer_version"] = slicer.slicer_version
-    for key in SUPPORTED_DATA:
-        func = getattr(slicer, "parse_" + key)
-        result = func()
-        if result is not None:
-            metadata[key] = result
+    metadata.update(slicer.run_parsers())
     return metadata
 
 def extract_ufp(ufp_path: str, dest_path: str) -> None:
