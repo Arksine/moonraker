@@ -535,6 +535,7 @@ class HTTPDevice(PowerDevice):
         default_port: int = -1,
         default_user: str = "",
         default_password: str = "",
+        default_auth_type: str = "basic",
         default_protocol: str = "http",
         is_generic: bool = False
     ) -> None:
@@ -542,7 +543,8 @@ class HTTPDevice(PowerDevice):
         self.client: HttpClient = self.server.lookup_component("http_client")
         self.user = config.load_template("user", default_user).render()
         self.password = config.load_template("password", default_password).render()
-        self.has_basic_auth: bool = False
+        self.auth_type = config.load_template("auth_type", default_auth_type).render()
+        self.has_auth = False
         if is_generic:
             return
         addr_parts = config.get("address").strip("/").split("/")
@@ -552,9 +554,9 @@ class HTTPDevice(PowerDevice):
         if self.port == -1:
             self.port = 443 if self.protocol.lower() == "https" else 80
 
-    def enable_basic_authentication(self) -> None:
+    def enable_authentication(self) -> None:
         if self.user and self.password:
-            self.has_basic_auth = True
+            self.has_auth = True
 
     async def init_state(self) -> None:
         async with self.request_lock:
@@ -580,17 +582,24 @@ class HTTPDevice(PowerDevice):
                     self.start_polling()
                     return
 
+    def _auth_args(self) -> Dict[str, Any]:
+        auth_args: Dict[str, str] = {}
+        if self.has_auth:
+            if self.auth_type == "basic":
+                auth_args["basic_auth_user"] = self.user
+                auth_args["basic_auth_pass"] = self.password
+            elif self.auth_type == "digest":
+                auth_args["digest_auth_user"] = self.user
+                auth_args["digest_auth_pass"] = self.password
+        return auth_args
+
     async def _send_http_command(
         self, url: str, command: str, retries: int = 3
     ) -> Dict[str, Any]:
-        ba_user: Optional[str] = None
-        ba_pass: Optional[str] = None
-        if self.has_basic_auth:
-            ba_user = self.user
-            ba_pass = self.password
+
         response = await self.client.get(
             url, request_timeout=20., attempts=retries, retry_pause_time=1.,
-            enable_cache=False, basic_auth_user=ba_user, basic_auth_pass=ba_pass
+            enable_cache=False, **self._auth_args()
         )
         response.raise_for_status(
             f"Error sending '{self.type}' command: {command}")
@@ -1111,7 +1120,7 @@ class Shelly(HTTPDevice):
         super().__init__(config, default_user="admin", default_password="")
         self.output_id = config.getint("output_id", 0)
         self.timer = config.get("timer", "")
-        self.enable_basic_authentication()
+        self.enable_authentication()
 
     async def _send_shelly_command(self, command: str) -> Dict[str, Any]:
         query_args: Dict[str, Any] = {}
@@ -1198,7 +1207,7 @@ class HomeSeer(HTTPDevice):
     def __init__(self, config: ConfigHelper) -> None:
         super().__init__(config, default_user="admin", default_password="")
         self.device = config.getint("device")
-        self.enable_basic_authentication()
+        self.enable_authentication()
 
     async def _send_homeseer(
         self, request: str, state: str = ""
@@ -1278,7 +1287,7 @@ class Loxonev1(HTTPDevice):
         super().__init__(config, default_user="admin",
                          default_password="admin")
         self.output_id = config.get("output_id", "")
-        self.enable_basic_authentication()
+        self.enable_authentication()
 
     async def _send_loxonev1_command(self, command: str) -> Dict[str, Any]:
         if command in ["on", "off"]:
@@ -1540,17 +1549,12 @@ class GenericHTTP(HTTPDevice):
             "request_template", None, is_async=True
         )
         self.response_template = config.gettemplate("response_template", is_async=True)
-        self.enable_basic_authentication()
+        self.enable_authentication()
 
     async def _send_generic_request(self, command: str) -> str:
-        ba_user: Optional[str] = None
-        ba_pass: Optional[str] = None
-        if self.has_basic_auth:
-            ba_user = self.user
-            ba_pass = self.password
         request = self.client.wrap_request(
             self.urls[command], request_timeout=20., attempts=3, retry_pause_time=1.,
-            basic_auth_user=ba_user, basic_auth_pass=ba_pass
+            **self._auth_args()
         )
         context: Dict[str, Any] = {
             "command": command,
