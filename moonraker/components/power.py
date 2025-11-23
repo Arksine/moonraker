@@ -1464,23 +1464,60 @@ class MQTTDevice(PowerDevice):
             raise self.server.error(
                 f"MQTT Power Device {self.name}: "
                 "MQTT Not Connected", 503)
-        self.query_response = self.eventloop.create_future()
+        # Prepare to wait for state updates that correspond to our
+        # requested action. Some brokers/devices publish retained state
+        # messages which can arrive before the device actually changes
+        # its state. To avoid acting on stale retained values, wait for
+        # a response that matches the requested `state` within the
+        # configured timeout window.
         self.last_request = f"power_{state}"
         self.response_count = 0
         new_state = "error"
         try:
-            assert self.query_response is not None
             payload = self.cmd_payload.render({'command': state})
+            # Publish the command
             await self.mqtt.publish_topic(
                 self.cmd_topic, payload, self.qos,
                 retain=self.retain_cmd_state)
-            new_state = await self._wait_for_update(
-                self.query_response, do_query=self.must_query)
+
+            # First wait: allow `_wait_for_update` to perform a query
+            # if configured (`must_query`). After that, keep awaiting
+            # incoming state updates until we observe the desired
+            # `state` or a timeout occurs.
+            deadline = self.eventloop.get_loop_time() + self.state_timeout
+            # First attempt may include a query
+            self.query_response = self.eventloop.create_future()
+            try:
+                attempt = await self._wait_for_update(
+                    self.query_response, do_query=self.must_query)
+            finally:
+                # Ensure query_response cleared between attempts
+                self.query_response = None
+
+            if attempt == state:
+                new_state = attempt
+            else:
+                # Keep waiting for matching updates until deadline
+                remaining = deadline - self.eventloop.get_loop_time()
+                while remaining > 0:
+                    self.query_response = self.eventloop.create_future()
+                    try:
+                        try:
+                            attempt = await asyncio.wait_for(
+                                self.query_response, timeout=remaining)
+                        except asyncio.TimeoutError:
+                            break
+                    finally:
+                        self.query_response = None
+                    if attempt == state:
+                        new_state = attempt
+                        break
+                    remaining = deadline - self.eventloop.get_loop_time()
         except Exception:
             logging.exception(
                 f"MQTT Power Device {self.name}: Failed to set state")
             new_state = "error"
-        self.query_response = None
+        logging.info(f"power:set_power: setting state to {new_state}")
         self.last_request = ""
         self.response_count = 0
         self.state = new_state
