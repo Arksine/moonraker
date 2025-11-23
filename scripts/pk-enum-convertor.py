@@ -183,8 +183,8 @@ for (desc_data, comments, data, name) in header_enum.findall(header):
         print(comment)
     print("")
     for (item, desc) in header_desc.findall(desc_data):
-        line = f"    * {name}.{item}: {desc}".rstrip()
-        if len(line) > 79:
+        line = f"    * {name}.{item}:  {desc.strip()}".rstrip()
+        if len(line) > 88:
             print(f"    * {name}.{item}:")
             print(f"        {desc}")
         else:
