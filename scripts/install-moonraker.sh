@@ -12,6 +12,7 @@ LOG_PATH="${MOONRAKER_LOG_PATH}"
 DATA_PATH="${MOONRAKER_DATA_PATH}"
 INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
+TAPO="${MOONRAKER_TAPO:-n}"
 SERVICE_VERSION="1"
 DISTRIBUTION=""
 DISTRO_VERSION=""
@@ -296,10 +297,19 @@ create_virtualenv()
             report_status "Installing Speedups..."
             ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-speedups.txt
         fi
+        if [ ${TAPO} = "y" ]; then
+            report_status "Installing Tapo..."
+            ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-tapo.txt
+        fi
     else
         report_status "Installing Moonraker package via Pip..."
         if [ ${SPEEDUPS} = "y" ]; then
             ${PYTHONDIR}/bin/pip install -U moonraker[speedups]
+        else
+            ${PYTHONDIR}/bin/pip install -U moonraker
+        fi
+        if [ ${TAPO} = "y" ]; then
+            ${PYTHONDIR}/bin/pip install -U moonraker[tapo]
         else
             ${PYTHONDIR}/bin/pip install -U moonraker
         fi
@@ -466,13 +476,14 @@ verify_ready()
 }
 
 # Parse command line arguments
-while getopts "rfzxsc:l:d:a:" arg; do
+while getopts "rfzxstc:l:d:a:" arg; do
     case $arg in
         r) REBUILD_ENV="y";;
         f) FORCE_SYSTEM_INSTALL="y";;
         z) DISABLE_SYSTEMCTL="y";;
         x) SKIP_POLKIT="y";;
         s) SPEEDUPS="y";;
+        t) TAPO="y";;
         c) CONFIG_PATH=$OPTARG;;
         l) LOG_PATH=$OPTARG;;
         d) DATA_PATH=$OPTARG;;

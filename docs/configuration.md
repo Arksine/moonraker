@@ -724,8 +724,8 @@ The following configuration options are available for all power device types:
 [power device_name]
 type:
 #   The type of device.  Can be either gpio, klipper_device, rf,
-#   tplink_smartplug, tasmota, shelly, homeseer, homeassistant, loxonev1,
-#   smartthings, mqtt, hue, http or uhubctl.
+#   tplink_smartplug, tplink_tapo, tasmota, shelly, homeseer, homeassistant,
+#   loxonev1, smartthings, mqtt, hue, http or uhubctl.
 #   This parameter must be provided.
 initial_state: off
 #    The state the power device should be initialized to.  May be on or
@@ -1015,6 +1015,70 @@ Example:
 [power printer_plug]
 type: tplink_smartplug
 address: 192.168.1.123
+```
+
+#### TP-Link Tapo Configuration
+
+/// Note
+This feature added in Dec. 2025 as a replacement for `tplink_smartplug`.
+This feature uses Unofficial Tapo API Client. For more information, see
+[GitHub](https://github.com/mihai-dinculescu/tapo)
+and [PyPI](https://pypi.org/project/tapo/).
+The library is licensed under the MIT license.
+Copyright (c) 2022-2025 Mihai Dinculescu
+///
+/// Note
+This feature requires Python 3.11 or later. moonraker must be running on
+Python 3.11 or later.
+To install:
+$ ~/moonraker-env/bin/pip install -r ~/moonraker/scripts/moonraker-tapo.txt
+$ sudo systemctl restart moonraker
+///
+
+The following options are available for `tplink_tapo` device types:
+
+```ini {title="Moonraker Config Specification"}
+# moonraker.conf
+
+address:
+#   A valid ip address or hostname for the tplink tapo device.  For example:
+#     192.168.1.127
+#   This parameter must be provided.
+user:
+#   The user name to use for request authentication. The user must be the
+#   same as the one specified when registering the device in the tplink tapo
+#   mobile application. This parameter accepts Jinja2 Templates, see the
+#   [secrets] section for details. This parameter must be provided.
+password:
+#   The password to use for request authentication. The password must be the
+#   same as the one specified when registering the device in the tplink tapo
+#   mobile application. This parameter accepts Jinja2 Templates, see the
+#   [secrets] section for details. This parameter must be provided.
+power_strip:
+#   For power strip which has multiple plugs, This option has to be True.
+#   Default is False which indicate the device is not a power strip.
+device_id:
+nickname:
+output_id:
+#   For power strips, at least one of the above three options must be provided.
+#   These options will be ignored when power_strip is False.
+#   device_id is a 40-digit hex value initialized with the tplink tapo mobile
+#   application.
+#   nickname is a string registrated within the tplink tapo mobile application.
+#   output_id is the socket index to use.
+#   Identify priority is 1:device_id, 2:nickname, and 3:output_id.
+```
+
+Example:
+
+```ini {title="Moonraker Config Example"}
+# moonraker.conf
+
+[power printer_plug]
+type: tplink_tapo
+address: 192.168.1.123
+user: youremailusedwhenyouregisteredtheplug
+password: yourpasswordusedwhenyouregisteredtheplug
 ```
 
 #### Tasmota Configuration

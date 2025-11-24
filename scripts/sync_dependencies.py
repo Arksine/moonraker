@@ -159,6 +159,17 @@ def sync_requirements() -> int:
                 req_file.write(f"{requirement}\n")
     else:
         print("Speedup sequirements match")
+    # sync tapo
+    tapo_path = SCRIPTS_PATH.joinpath("moonraker-tapo.txt")
+    tapo_deps = optional_deps["tapo"]
+    if check_reqs_changed(tapo_path, tapo_deps):
+        print("Syncing tapo requirement...")
+        ret = 1
+        with tapo_path.open("w+") as req_file:
+            for requirement in tapo_deps:
+                req_file.write(f"{requirement}\n")
+    else:
+        print("Tapo requirement match")
     # sync dev dependencies
     dev_reqs_path = SCRIPTS_PATH.joinpath("moonraker-dev-reqs.txt")
     dev_deps = optional_deps["dev"]

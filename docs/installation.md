@@ -187,6 +187,9 @@ particularly for those upgrading:
 - `-s`:
   Installs Moonraker's [speedup](#optional-speedups) Python packages in the
   Python environment.
+- `-t`:
+  Installs Moonraker's [tapo](#optional-tapo) Python package in the Python
+  environment.
 
 Additionally, installation may be customized with the following environment
 variables:
@@ -200,6 +203,7 @@ variables:
 - `MOONRAKER_LOG_PATH`
 - `MOONRAKER_DATA_PATH`
 - `MOONRAKER_SPEEDUPS`
+- `MOONRAKER_TAPO`
 
 When the script completes it should start the Moonraker system service. If Klipper
 is running and Moonraker is able to establish a connection the following log entry
@@ -478,6 +482,26 @@ environment variables in [moonraker.env](#the-environment-file):
 
 - `MOONRAKER_ENABLE_MSGSPEC="n"`
 - `MOONRAKER_ENABLE_UVLOOP="n"`
+
+
+## Optional Tapo
+
+Moonraker supports an optional Python package that can be used to control
+TP-Link Tapo smart plug and power strip:
+
+- [tapo](https://github.com/mihai-dinculescu/tapo): Unofficial Tapo API Client.
+  Requires Python >= 3.11.
+
+If this package is installed in Moonraker's python environment, Moonraker power
+management component will load it.  For existing installations this can be done
+manually with a command
+like:
+
+```
+~/moonraker-env/bin/pip install -r ~/moonraker/scripts/moonraker-tapo.txt
+```
+
+Please see [configuration documentation](./configuration.md) for details.
 
 
 ## PolicyKit Permissions

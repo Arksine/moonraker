@@ -53,6 +53,7 @@ speedups = [
     "msgspec>=0.18.4 ; python_version>='3.8'",
     "uvloop>=0.17.0"
 ]
+tapo = ["tapo>=0.8.8 ; python_version>='3.11'"]
 dev = ["pre-commit"]
 
 [tool.pdm.version]
