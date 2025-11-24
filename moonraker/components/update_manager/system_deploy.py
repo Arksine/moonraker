@@ -392,6 +392,9 @@ class PackageKitTransaction:
                            summary: str
                            ) -> None:
         info = PkEnum.Info.from_index(info_code & 0xFFFF)
+        severity = PkEnum.Info.from_index((info_code >> 16) & 0xFFFF)
+        if info == PkEnum.Info.UNKNOWN:
+            info = severity
         if self._role in self.GET_PKG_ROLES:
             pkg_data = {
                 'package_id': package_id,
