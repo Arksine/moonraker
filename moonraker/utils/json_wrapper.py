@@ -30,4 +30,4 @@ if not MSGSPEC_ENABLED:
     loads = json.loads  # type: ignore
 
     def dumps(obj) -> bytes:  # type: ignore # noqa: F811
-        return json.dumps(obj).encode("utf-8")
+        return json.dumps(obj, separators=(",", ":")).encode("utf-8")
