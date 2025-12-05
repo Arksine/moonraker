@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from .database import MoonrakerDatabase as DBComp
     from .database import DBProviderWrapper
     from .ldap import MoonrakerLDAP
+    from .oauth2 import MoonrakerOAuth2
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
     OneshotToken = Tuple[IPAddr, Optional[UserInfo], asyncio.Handle]
@@ -145,6 +146,11 @@ class Authorization:
             self.server.add_warning(
                 "[authorization]: Option 'default_source' set to 'ldap',"
                 " however [ldap] section failed to load or not configured"
+            )
+        self.oauth2: Optional[MoonrakerOAuth2] = None
+        if config.get_prefix_sections('oauth2 '):
+            self.oauth2 = self.server.load_component(
+                config, "oauth2", None
             )
         database: DBComp = self.server.lookup_component('database')
         self.user_table = database.register_table(UserSqlDefinition())
@@ -265,6 +271,18 @@ class Authorization:
         )
         self.server.register_endpoint(
             "/access/info", RequestType.GET, self._handle_info_request,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
+        self.server.register_endpoint(
+            "/access/oauth2/device/start", RequestType.POST,
+            self._handle_oauth2_start,
+            transports=TransportType.HTTP | TransportType.WEBSOCKET,
+            auth_required=False
+        )
+        self.server.register_endpoint(
+            "/access/oauth2/device/poll", RequestType.POST,
+            self._handle_oauth2_poll,
             transports=TransportType.HTTP | TransportType.WEBSOCKET,
             auth_required=False
         )
@@ -402,9 +420,13 @@ class Authorization:
             request_trusted = True
         elif req_ip is not None:
             request_trusted = await self._check_authorized_ip(req_ip)
+        oauth2_providers: List[str] = []
+        if self.oauth2 is not None:
+            oauth2_providers = self.oauth2.get_provider_names()
         return {
             "default_source": self.default_source,
             "available_sources": sources,
+            "oauth2_providers": oauth2_providers,
             "login_required": login_req,
             "trusted": request_trusted
         }
@@ -560,6 +582,30 @@ class Authorization:
             action = "user_logged_in"
             if hashed_pass != user_info.password:
                 raise self.server.error("Invalid Password")
+        token, refresh_token = await self._generate_user_tokens(
+            user_info
+        )
+        conn = web_request.get_client_connection()
+        if create:
+            event_loop = self.server.get_event_loop()
+            event_loop.delay_callback(
+                .005, self.server.send_event,
+                "authorization:user_created",
+                {'username': username})
+        elif conn is not None:
+            conn.user_info = user_info
+        return {
+            'username': username,
+            'token': token,
+            'source': user_info.source,
+            'refresh_token': refresh_token,
+            'action': action
+        }
+
+    async def _generate_user_tokens(
+        self, user_info: UserInfo
+    ) -> Tuple[str, str]:
+        username: str = user_info.username
         jwt_secret_hex: Optional[str] = user_info.jwt_secret
         if jwt_secret_hex is None:
             private_key = Signer()
@@ -578,22 +624,7 @@ class Authorization:
         refresh_token = self._generate_jwt(
             username, jwk_id, private_key, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
-        conn = web_request.get_client_connection()
-        if create:
-            event_loop = self.server.get_event_loop()
-            event_loop.delay_callback(
-                .005, self.server.send_event,
-                "authorization:user_created",
-                {'username': username})
-        elif conn is not None:
-            conn.user_info = user_info
-        return {
-            'username': username,
-            'token': token,
-            'source': user_info.source,
-            'refresh_token': refresh_token,
-            'action': action
-        }
+        return token, refresh_token
 
     async def _delete_jwt_user(self, web_request: WebRequest) -> Dict[str, str]:
         username: str = web_request.get_str('username')
@@ -932,6 +963,67 @@ class Authorization:
         if not self.enable_api_key:
             return None
         return self.api_key
+
+    async def _handle_oauth2_start(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        if self.oauth2 is None:
+            raise self.server.error("OAuth2 device flow not configured", 400)
+
+        provider_name: str = web_request.get_str('provider')
+        device_record = await self.oauth2.initiate_device_flow(provider_name)
+
+        return {
+            'device_code': device_record.device_code,
+            'user_code': device_record.user_code,
+            'verification_uri': device_record.verification_uri,
+            'verification_uri_complete': (
+                device_record.verification_uri_complete
+            ),
+            'expires_in': device_record.expires_in,
+            'interval': device_record.interval
+        }
+
+    async def _handle_oauth2_poll(
+        self, web_request: WebRequest
+    ) -> Dict[str, Any]:
+        if self.oauth2 is None:
+            raise self.server.error("OAuth2 device flow not configured", 400)
+
+        device_code: str = web_request.get_str('device_code')
+        error, provider, username = await self.oauth2.poll_token(device_code)
+
+        if error:
+            return {
+                'error': error
+            }
+
+        if username not in self.users:
+            user_info = UserInfo(
+                username=username,
+                # Random password for OAuth2 Device users
+                password=secrets.token_hex(32),
+                source=f"oauth2:{provider}"
+            )
+            self.users[username] = user_info
+            await self._sync_user(username)
+        else:
+            user_info = self.users[username]
+
+        token, refresh_token = await self._generate_user_tokens(
+            user_info
+        )
+        conn = web_request.get_client_connection()
+        if conn is not None:
+            conn.user_info = user_info
+
+        return {
+            'username': username,
+            'token': token,
+            'source': user_info.source,
+            'refresh_token': refresh_token,
+            'action': 'user_logged_in'
+        }
 
     def close(self) -> None:
         self.prune_timer.stop()
