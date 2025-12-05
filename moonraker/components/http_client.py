@@ -33,10 +33,9 @@ if TYPE_CHECKING:
     from io import BufferedWriter
     StrOrPath = Union[str, pathlib.Path]
 
-MAX_BODY_SIZE = 512 * 1024 * 1024
 AsyncHTTPClient.configure(
-    None, defaults=dict(user_agent="Moonraker"),
-    max_body_size=MAX_BODY_SIZE
+    "tornado.curl_httpclient.CurlAsyncHTTPClient",
+    defaults=dict(user_agent="Moonraker")
 )
 
 GITHUB_PREFIX = "https://api.github.com/"
@@ -82,7 +81,9 @@ class HttpClient:
         send_etag: bool = True,
         send_if_modified_since: bool = True,
         basic_auth_user: Optional[str] = None,
-        basic_auth_pass: Optional[str] = None
+        basic_auth_pass: Optional[str] = None,
+        digest_auth_user: Optional[str] = None,
+        digest_auth_pass: Optional[str] = None
     ) -> HttpResponse:
         cache_key = url.split("?", 1)[0]
         method = method.upper()
@@ -115,6 +116,11 @@ class HttpClient:
             req_args["auth_username"] = basic_auth_user
             req_args["auth_password"] = basic_auth_pass
             req_args["auth_mode"] = "basic"
+        if digest_auth_user is not None:
+            assert digest_auth_pass is not None
+            req_args["auth_username"] = digest_auth_user
+            req_args["auth_password"] = digest_auth_pass
+            req_args["auth_mode"] = "digest"
         request = HTTPRequest(url, method, headers, **req_args)
         err: Optional[BaseException] = None
         for i in range(attempts):
