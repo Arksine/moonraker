@@ -31,7 +31,8 @@ from ..common import (
     APITransport,
     TransportType,
     RequestType,
-    KlippyState
+    KlippyState,
+    Redirect
 )
 from ..utils import json_wrapper as jsonw
 from streaming_form_data import StreamingFormDataParser, ParseFailedException
@@ -706,6 +707,9 @@ class DynamicRequestHandler(AuthorizedRequestHandler):
                 logging.exception("API Request Failure")
             raise tornado.web.HTTPError(
                 e.status_code, reason=str(e)) from e
+        if isinstance(result, Redirect):
+            self.redirect(result.url)
+            return
         if self.wrap_result:
             result = {'result': result}
         self._log_debug(f"HTTP Response::{req}", result)
