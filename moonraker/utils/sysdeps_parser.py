@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 from __future__ import annotations
+import os
 import shlex
 import re
 import pathlib
@@ -61,15 +62,22 @@ class SysDepsParser:
         version = distro_info.get("distro_version")
         if version:
             self.distro_version = _convert_version(version)
-        self.vendor: str = ""
-        if pathlib.Path("/etc/rpi-issue").is_file():
+        self.vendor: str = os.getenv("MOONRAKER_VENDOR", "")
+        if not self.vendor and pathlib.Path("/etc/rpi-issue").is_file():
             self.vendor = "raspberry-pi"
+        exclusions = os.getenv("MOONRAKER_EXCLUDED_PKGS", "")
+        self.exclusions: List[str] = [
+            excl.strip() for excl in exclusions.split() if excl.strip()
+        ]
 
     def _parse_spec(self, full_spec: str) -> str | None:
         parts = full_spec.split(";", maxsplit=1)
-        if len(parts) == 1:
-            return full_spec
         pkg_name = parts[0].strip()
+        if pkg_name in self.exclusions or not pkg_name:
+            logging.info(f"Package '{full_spec}' excluded by environment")
+            return None
+        if len(parts) == 1:
+            return pkg_name
         expressions = re.split(r"( and | or )", parts[1].strip())
         if not len(expressions) & 1:
             # There should always be an odd number of expressions.  Each
