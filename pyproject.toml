@@ -38,6 +38,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
 ]
 
 [project.urls]
@@ -53,7 +55,7 @@ speedups = [
     "msgspec>=0.18.4 ; python_version>='3.8'",
     "uvloop>=0.17.0"
 ]
-dev = ["pre-commit"]
+dev = ["pre-commit", "build", "mypy", "ruff", "twine"]
 
 [tool.pdm.version]
 source = "scm"
