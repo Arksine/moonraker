@@ -10,6 +10,7 @@ import asyncio
 import logging
 import ldap3
 from ldap3.core.exceptions import LDAPExceptionError
+from ldap3.utils.conv import escape_filter_chars
 
 # Annotation imports
 from typing import (
@@ -57,14 +58,14 @@ class MoonrakerLDAP:
                 )
         self.lock = asyncio.Lock()
 
-    async def authenticate_ldap_user(self, username, password) -> None:
+    async def authenticate_ldap_user(self, username: str, password: str) -> None:
         eventloop = self.server.get_event_loop()
         async with self.lock:
             await eventloop.run_in_thread(
                 self._perform_ldap_auth, username, password
             )
 
-    def _perform_ldap_auth(self, username, password) -> None:
+    def _perform_ldap_auth(self, username: str, password: str) -> None:
         server = ldap3.Server(
             self.ldap_host, self.ldap_port, use_ssl=self.ldap_secure,
             connect_timeout=10.
@@ -75,9 +76,10 @@ class MoonrakerLDAP:
             "auto_bind": ldap3.AUTO_BIND_NO_TLS,
         }
         attr_name = "sAMAccountName" if self.active_directory else "uid"
-        ldfilt = f"(&(objectClass=Person)({attr_name}={username}))"
+        escaped_user = escape_filter_chars(username)
+        ldfilt = f"(&(objectClass=Person)({attr_name}={escaped_user}))"
         if self.user_filter:
-            ldfilt = self.user_filter.replace("USERNAME", username)
+            ldfilt = self.user_filter.replace("USERNAME", escaped_user)
         try:
             with ldap3.Connection(server, **conn_args) as conn:
                 ret = conn.search(
