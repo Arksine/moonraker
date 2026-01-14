@@ -86,9 +86,8 @@ class MoonrakerLDAP:
                     self.base_dn, ldfilt, attributes=["memberOf"]
                 )
                 if not ret:
-                    raise self.server.error(
-                        f"LDAP User '{username}' Not Found", 401
-                    )
+                    logging.info(f"LDAP User '{username}' Not Found")
+                    raise self.server.error("Unauthorized", 401)
                 user: Entry = conn.entries[0]
                 rebind_success = conn.rebind(user.entry_dn, password)
             if not rebind_success:
@@ -106,10 +105,10 @@ class MoonrakerLDAP:
             elif self._validate_group(username, user):
                 return
         except LDAPExceptionError:
-            err_msg = "LDAP authentication failed"
+            logging.exception("LDAP authentication failed")
         else:
-            err_msg = "Invalid LDAP Username or Password"
-        raise self.server.error(err_msg, 401)
+            logging.info("Invalid LDAP Username or Password")
+        raise self.server.error("Unauthorized", 401)
 
     def _validate_group(self, username: str, user: Entry) -> bool:
         if self.group_dn is None:
