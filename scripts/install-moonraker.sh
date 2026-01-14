@@ -12,6 +12,8 @@ LOG_PATH="${MOONRAKER_LOG_PATH}"
 DATA_PATH="${MOONRAKER_DATA_PATH}"
 INSTANCE_ALIAS="${MOONRAKER_ALIAS:-moonraker}"
 SPEEDUPS="${MOONRAKER_SPEEDUPS:-n}"
+DEV_INSTALL="${MOONRAKER_DEV_INSTALL:-n}"
+PY_INST_TYPE="${MOONRAKER_PYTHON_INSTALL_TYPE:-venv}"
 SERVICE_VERSION="1"
 DISTRIBUTION=""
 DISTRO_VERSION=""
@@ -25,6 +27,14 @@ if [ ! -z "${MOONRAKER_FORCE_DEFAULTS}" ]; then
     FORCE_SYSTEM_INSTALL=$MOONRAKER_FORCE_DEFAULTS
 fi
 
+# Check if this is a dev container, apply dev defaults if not set by environment
+if [ "${MOONRAKER_VENDOR}" = "vscode-dev" ]; then
+    echo "VSCode Dev Container detected..."
+    [ -z "${MOONRAKER_DEV_INSTALL}" ] && DEV_INSTALL="y"
+    [ -z "${MOONRAKER_PYTHON_INSTALL_TYPE}" ] && PY_INST_TYPE="user"
+    [ -z "${MOONRAKER_DISABLE_SYSTEMCTL}" ] && DISABLE_SYSTEMCTL="y"
+fi
+
 # Force script to exit if an error occurs
 set -e
 
@@ -34,6 +44,7 @@ SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
 # Determine if Moonraker is to be installed from source
 if [ -f "${SRCDIR}/moonraker/__init__.py" ]; then
     echo "Installing from Moonraker source..."
+    cd $SRCDIR
     IS_SRC_DIST="y"
 fi
 
@@ -48,6 +59,7 @@ detect_distribution() {
     # *** AUTO GENERATED OS PACKAGE SCRIPT START ***
     get_pkgs_script=$(cat << EOF
 from __future__ import annotations
+import os
 import shlex
 import re
 import pathlib
@@ -101,15 +113,22 @@ class SysDepsParser:
         version = distro_info.get("distro_version")
         if version:
             self.distro_version = _convert_version(version)
-        self.vendor: str = ""
-        if pathlib.Path("/etc/rpi-issue").is_file():
+        self.vendor: str = os.getenv("MOONRAKER_VENDOR", "")
+        if not self.vendor and pathlib.Path("/etc/rpi-issue").is_file():
             self.vendor = "raspberry-pi"
+        exclusions = os.getenv("MOONRAKER_EXCLUDED_PKGS", "")
+        self.exclusions: List[str] = [
+            excl.strip() for excl in exclusions.split() if excl.strip()
+        ]
 
     def _parse_spec(self, full_spec: str) -> str | None:
         parts = full_spec.split(";", maxsplit=1)
-        if len(parts) == 1:
-            return full_spec
         pkg_name = parts[0].strip()
+        if pkg_name in self.exclusions or not pkg_name:
+            logging.info(f"Package '{full_spec}' excluded by environment")
+            return None
+        if len(parts) == 1:
+            return pkg_name
         expressions = re.split(r"( and | or )", parts[1].strip())
         if not len(expressions) & 1:
             logging.info(
@@ -137,7 +156,7 @@ class SysDepsParser:
                 continue
             elif last_logical_op is None:
                 logging.info(
-                    f"Requirement specifier contains two seqential expressions "
+                    f"Requirement specifier contains two sequential expressions "
                     f"without a logical operator: {full_spec}")
                 return None
             dep_parts = re.split(r"(==|!=|<=|>=|<|>)", exp.strip())
@@ -270,38 +289,52 @@ install_packages()
 # Step 4: Create python virtual environment
 create_virtualenv()
 {
-    report_status "Installing python virtual environment..."
+    if [ $PY_INST_TYPE = "system" ]; then
+        pip_inst="pip install"
+    elif [ $PY_INST_TYPE = "user" ]; then
+        pip_inst="pip install --user"
+    else
+        pip_inst="${PYTHONDIR}/bin/pip install"
+        report_status "Installing python virtual environment..."
 
-    # If venv exists and user prompts a rebuild, then do so
-    if [ -d ${PYTHONDIR} ] && [ $REBUILD_ENV = "y" ]; then
-        report_status "Removing old virtualenv"
-        rm -rf ${PYTHONDIR}
+        # If venv exists and user prompts a rebuild, then do so
+        if [ -d ${PYTHONDIR} ] && [ $REBUILD_ENV = "y" ]; then
+            report_status "Removing old virtualenv"
+            rm -rf ${PYTHONDIR}
+        fi
+
+        if [ ! -d ${PYTHONDIR} ]; then
+            virtualenv -p python3 ${PYTHONDIR}
+            #GET_PIP="${HOME}/get-pip.py"
+            #curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o ${GET_PIP}
+            #${PYTHONDIR}/bin/python ${GET_PIP}
+            #rm ${GET_PIP}
+        fi
     fi
-
-    if [ ! -d ${PYTHONDIR} ]; then
-        virtualenv -p /usr/bin/python3 ${PYTHONDIR}
-        #GET_PIP="${HOME}/get-pip.py"
-        #curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o ${GET_PIP}
-        #${PYTHONDIR}/bin/python ${GET_PIP}
-        #rm ${GET_PIP}
-    fi
-
+    echo "Using pip install command '${pip_inst}'..."
     # Install/update dependencies
     export SKIP_CYTHON=1
     if [ $IS_SRC_DIST = "y" ]; then
         report_status "Installing Moonraker python dependencies..."
-        ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-requirements.txt
+        $pip_inst -r ${SRCDIR}/scripts/moonraker-requirements.txt
 
-        if [ ${SPEEDUPS} = "y" ]; then
+        if [ $DEV_INSTALL = "y" ]; then
+            report_status "Installing dev requirements..."
+            $pip_inst -r ${SRCDIR}/scripts/moonraker-speedups.txt
+            $pip_inst -r ${SRCDIR}/scripts/moonraker-dev-reqs.txt
+            $pip_inst -r ${SRCDIR}/docs/doc-requirements.txt
+        elif [ $SPEEDUPS = "y" ]; then
             report_status "Installing Speedups..."
-            ${PYTHONDIR}/bin/pip install -r ${SRCDIR}/scripts/moonraker-speedups.txt
+            $pip_inst -r ${SRCDIR}/scripts/moonraker-speedups.txt
         fi
     else
         report_status "Installing Moonraker package via Pip..."
-        if [ ${SPEEDUPS} = "y" ]; then
-            ${PYTHONDIR}/bin/pip install -U moonraker[speedups]
+        if [ $DEV_INSTALL = "y" ]; then
+            $pip_inst -U moonraker[speedups,dev]
+        elif [ $SPEEDUPS = "y" ]; then
+            $pip_inst -U moonraker[speedups]
         else
-            ${PYTHONDIR}/bin/pip install -U moonraker
+            $pip_inst -U moonraker
         fi
     fi
 }
@@ -349,9 +382,13 @@ EOF
 # Step 6: Install startup script
 install_script()
 {
+    if [ ! -d $SYSTEMDDIR ]; then
+        report_status "Systemd not detected, aborting service installation"
+    fi
     # Create systemd service file
     ENV_FILE="${DATA_PATH}/systemd/moonraker.env"
     if [ ! -f $ENV_FILE ] || [ $FORCE_SYSTEM_INSTALL = "y" ]; then
+        report_status "Creating systemd environment file ${ENV_FILE}..."
         rm -f $ENV_FILE
         env_vars="MOONRAKER_DATA_PATH=\"${DATA_PATH}\""
         [ -n "${CONFIG_PATH}" ] && env_vars="${env_vars}\nMOONRAKER_CONFIG_PATH=\"${CONFIG_PATH}\""
@@ -361,7 +398,9 @@ install_script()
         echo -e $env_vars > $ENV_FILE
     fi
     [ -f $SERVICE_FILE ] && [ $FORCE_SYSTEM_INSTALL = "n" ] && return
-    report_status "Installing system start script..."
+    report_status "Installing systemd service unit..."
+    python_bin="${PYTHONDIR}/bin/python"
+    [ $PY_INST_TYPE != "venv" ] && python_bin="python3"
     sudo groupadd -f moonraker-admin
     sudo /bin/sh -c "cat > ${SERVICE_FILE}" << EOF
 # systemd service file for moonraker
@@ -379,7 +418,7 @@ User=$USER
 SupplementaryGroups=moonraker-admin
 RemainAfterExit=yes
 EnvironmentFile=${ENV_FILE}
-ExecStart=${PYTHONDIR}/bin/python \$MOONRAKER_ARGS
+ExecStart=${python_bin} \$MOONRAKER_ARGS
 Restart=always
 RestartSec=10
 EOF
