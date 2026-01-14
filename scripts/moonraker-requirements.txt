@@ -1,19 +1,18 @@
 # Python dependencies for Moonraker
 --find-links=python_wheels
-tornado>=6.2.0, <=6.5.1
+tornado>=6.2.0, <=6.5.4
 pyserial==3.4
-pillow>=9.5.0, <=11.1.0
+pillow>=9.5.0, <=12.1.0
 streaming-form-data>=1.11.0, <=1.19.1
 distro==1.9.0
-inotify-simple==1.3.5
+inotify-simple==2.0.1
 libnacl==2.1.0
-paho-mqtt==1.6.1
-zeroconf==0.131.0
+paho-mqtt==2.1.0
+zeroconf>=0.131.0, <=0.148.0
 preprocess-cancellation==0.2.1
-jinja2==3.1.5
-dbus-fast>=2.21.3, <=2.44.1
-apprise==1.9.2
+jinja2==3.1.6
+dbus-fast>=2.21.3, <=3.1.2
+apprise>=1.9.3, <=1.9.6
 ldap3==2.9.1
 python-periphery==2.4.1
-importlib_metadata==6.7.0 ; python_version=='3.7'
-importlib_metadata==8.2.0 ; python_version>='3.8'
+importlib_metadata>=6.7.0, <=8.7.1
