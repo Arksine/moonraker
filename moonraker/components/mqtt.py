@@ -21,6 +21,10 @@ from ..common import (
     KlippyState
 )
 from ..utils import json_wrapper as jsonw
+try:
+    from paho.mqtt.reasoncodes import ReasonCode
+except ImportError:
+    from paho.mqtt.reasoncodes import ReasonCodes as ReasonCode
 
 # Annotation imports
 from typing import (
@@ -41,6 +45,7 @@ if TYPE_CHECKING:
     from ..common import JsonRPC, APIDefinition
     from ..eventloop import FlexTimer
     from .klippy_apis import KlippyAPI
+    from paho.mqtt.properties import Properties
     FlexCallback = Callable[[bytes], Optional[Coroutine]]
     RPCCallback = Callable[..., Coroutine]
 
@@ -73,7 +78,7 @@ class ExtPahoClient(paho_mqtt.Client):
                 "remaining_count": [],
                 "remaining_mult": 1,
                 "remaining_length": 0,
-                "packet": b"",
+                "packet": b"",              # type: ignore
                 "to_process": 0,
                 "pos": 0
             }
@@ -100,7 +105,7 @@ class ExtPahoClient(paho_mqtt.Client):
             self._last_msg_out = paho_mqtt.time_func()
 
         self._ping_t = 0
-        self._state = paho_mqtt.mqtt_cs_new
+        self._state = paho_mqtt.mqtt_cs_new  # type: ignore
 
         self._sock_close()
 
@@ -149,16 +154,16 @@ class ExtPahoClient(paho_mqtt.Client):
 
         if self._transport == "websockets":
             sock.settimeout(self._keepalive)
-            sock = paho_mqtt.WebsocketWrapper(
+            sock = paho_mqtt.WebsocketWrapper(                      # type: ignore
                 sock, self._host, self._port, self._ssl,
                 self._websocket_path, self._websocket_extra_headers
             )  # type: ignore
 
-        self._sock = sock
+        self._sock = sock   # type: ignore
         assert self._sock is not None
         self._sock.setblocking(False)
         self._registered_write = False
-        self._call_socket_open()
+        self._call_socket_open()  # type: ignore
 
         return self._send_connect(self._keepalive)
 
@@ -233,7 +238,7 @@ class BrokerAckLogger:
 
     def __call__(self, fut: asyncio.Future) -> None:
         if self.action == "subscribe":
-            res: Union[List[int], List[paho_mqtt.ReasonCodes]]
+            res: Union[List[int], List[ReasonCode]]
             res = fut.result()
             log_msg = "MQTT Subscriptions Acknowledged"
             if len(res) != len(self.topics):
@@ -243,7 +248,7 @@ class BrokerAckLogger:
             else:
                 for topic, qos in zip(self.topics, res):
                     log_msg += f"\n Topic: {topic} | "
-                    if isinstance(qos, paho_mqtt.ReasonCodes):
+                    if isinstance(qos, ReasonCode):
                         log_msg += qos.getName()
                     else:
                         log_msg += f"Granted QoS {qos}"
@@ -265,41 +270,44 @@ class AIOHelper:
         self.client.on_socket_open = self._on_socket_open
         self.client.on_socket_close = self._on_socket_close
         self.client._on_socket_register_write = self._on_socket_register_write
-        self.client._on_socket_unregister_write = \
-            self._on_socket_unregister_write
+        self.client._on_socket_unregister_write = self._on_socket_unregister_write
         self.misc_task: Optional[asyncio.Task] = None
 
-    def _on_socket_open(self,
-                        client: paho_mqtt.Client,
-                        userdata: Any,
-                        sock: socket.socket
-                        ) -> None:
+    def _on_socket_open(
+        self,
+        client: paho_mqtt.Client,
+        userdata: Any,
+        sock: socket.socket | paho_mqtt.SocketLike
+    ) -> None:
         logging.info("MQTT Socket Opened")
         self.loop.add_reader(sock, client.loop_read)
         self.misc_task = self.loop.create_task(self.misc_loop())
 
-    def _on_socket_close(self,
-                         client: paho_mqtt.Client,
-                         userdata: Any,
-                         sock: socket.socket
-                         ) -> None:
+    def _on_socket_close(
+        self,
+        client: paho_mqtt.Client,
+        userdata: Any,
+        sock: socket.socket | paho_mqtt.SocketLike
+    ) -> None:
         logging.info("MQTT Socket Closed")
         self.loop.remove_reader(sock)
         if self.misc_task is not None:
             self.misc_task.cancel()
 
-    def _on_socket_register_write(self,
-                                  client: paho_mqtt.Client,
-                                  userdata: Any,
-                                  sock: socket.socket
-                                  ) -> None:
+    def _on_socket_register_write(
+        self,
+        client: paho_mqtt.Client,
+        userdata: Any,
+        sock: socket.socket | paho_mqtt.SocketLike
+    ) -> None:
         self.loop.add_writer(sock, client.loop_write)
 
-    def _on_socket_unregister_write(self,
-                                    client: paho_mqtt.Client,
-                                    userdata: Any,
-                                    sock: socket.socket
-                                    ) -> None:
+    def _on_socket_unregister_write(
+        self,
+        client: paho_mqtt.Client,
+        userdata: Any,
+        sock: socket.socket | paho_mqtt.SocketLike
+    ) -> None:
         self.loop.remove_writer(sock)
 
     async def misc_loop(self) -> None:
@@ -354,7 +362,9 @@ class MQTTClient(APITransport):
             config.getboolean("publish_split_status", False)
         client_id: str = config.get("client_id", "")
         if PAHO_MQTT_VERSION < (2, 0):
-            self.client = ExtPahoClient(client_id, protocol=self.protocol)
+            self.client = ExtPahoClient(
+                client_id, protocol=self.protocol  # type: ignore
+            )
         else:
             self.client = ExtPahoClient(
                 paho_mqtt.CallbackAPIVersion.VERSION1, client_id,  # type: ignore
@@ -472,7 +482,7 @@ class MQTTClient(APITransport):
             self._publish_status_update(payload, self.last_status_time)
 
     def _on_message(self,
-                    client: str,
+                    client: str | paho_mqtt.Client,
                     user_data: Any,
                     message: paho_mqtt.MQTTMessage
                     ) -> None:
@@ -491,8 +501,8 @@ class MQTTClient(APITransport):
                     client: paho_mqtt.Client,
                     user_data: Any,
                     flags: Dict[str, Any],
-                    reason_code: Union[int, paho_mqtt.ReasonCodes],
-                    properties: Optional[paho_mqtt.Properties] = None
+                    reason_code: Union[int, ReasonCode],
+                    properties: Optional[Properties] = None
                     ) -> None:
         logging.info("MQTT Client Connected")
         if reason_code == 0:
@@ -521,7 +531,7 @@ class MQTTClient(APITransport):
                        client: paho_mqtt.Client,
                        user_data: Any,
                        reason_code: int,
-                       properties: Optional[paho_mqtt.Properties] = None
+                       properties: Optional[Properties] = None
                        ) -> None:
         if self.disconnect_evt is not None:
             self.disconnect_evt.set()
@@ -547,8 +557,8 @@ class MQTTClient(APITransport):
                       client: paho_mqtt.Client,
                       user_data: Any,
                       msg_id: int,
-                      flex: Union[List[int], List[paho_mqtt.ReasonCodes]],
-                      properties: Optional[paho_mqtt.Properties] = None
+                      flex: Union[List[int], List[ReasonCode]],
+                      properties: Optional[Properties] = None
                       ) -> None:
         sub_fut = self.pending_acks.pop(msg_id, None)
         if sub_fut is not None and not sub_fut.done():
@@ -558,8 +568,8 @@ class MQTTClient(APITransport):
                         client: paho_mqtt.Client,
                         user_data: Any,
                         msg_id: int,
-                        properties: Optional[paho_mqtt.Properties] = None,
-                        reasoncodes: Optional[paho_mqtt.ReasonCodes] = None
+                        properties: Optional[Properties] = None,
+                        reasoncodes: Optional[ReasonCode] = None
                         ) -> None:
         unsub_fut = self.pending_acks.pop(msg_id, None)
         if unsub_fut is not None and not unsub_fut.done():
