@@ -22,12 +22,17 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ldap3.abstract.entry import Entry
 
+VALID_MEMBERSHIP_ATTRS = ["memberOf", "isMemberOf"]
+
 class MoonrakerLDAP:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.ldap_host = config.get('ldap_host')
         self.ldap_port = config.getint("ldap_port", None)
         self.ldap_secure = config.getboolean("ldap_secure", False)
+        self.membership_attr = config.getchoice(
+            "membership_attribute", VALID_MEMBERSHIP_ATTRS, "memberOf"
+        )
         base_dn_template = config.gettemplate('base_dn')
         self.base_dn = base_dn_template.render()
         self.group_dn: Optional[str] = None
@@ -82,8 +87,9 @@ class MoonrakerLDAP:
             ldfilt = self.user_filter.replace("USERNAME", escaped_user)
         try:
             with ldap3.Connection(server, **conn_args) as conn:
+                search_attrs = None if self.group_dn is None else [self.membership_attr]
                 ret = conn.search(
-                    self.base_dn, ldfilt, attributes=["memberOf"]
+                    self.base_dn, ldfilt, attributes=search_attrs
                 )
                 if not ret:
                     logging.info(f"LDAP User '{username}' Not Found")
@@ -114,15 +120,20 @@ class MoonrakerLDAP:
         if self.group_dn is None:
             logging.debug(f"LDAP User {username} login successful")
             return True
-        if not hasattr(user, "memberOf"):
+        member_attr = getattr(user, self.membership_attr, None)
+        if member_attr is None:
+            logging.info(
+                f"Membership attribute {self.membership_attr} not present "
+                "in user entry"
+            )
             return False
-        for group in user.memberOf.values:
-            if group == self.group_dn:
-                logging.debug(
-                    f"LDAP User {username} group match success, "
-                    "login successful"
-                )
-                return True
+        groups: list[str] = getattr(member_attr, "values", [])
+        if self.group_dn in groups:
+            logging.debug(
+                f"LDAP User {username} group match success, login successful"
+            )
+            return True
+        logging.info(f"User '{username}' is not a member of configured group_dn.")
         return False
 
 
