@@ -1659,8 +1659,7 @@ class OpenRCCliProvider(BaseProvider):
         try:
             resp: str = await self.shell_cmd.exec_cmd("rc-status -Cs")
             lines = resp.split('\n')
-            services = [line.split()[0].strip() for line in lines
-                        if ".service" in line.strip()]
+            services = [line.split()[0].strip() for line in lines]
         except Exception:
             services = []
         for svc in services:
