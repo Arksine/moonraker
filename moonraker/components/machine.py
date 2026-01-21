@@ -1628,7 +1628,6 @@ class OpenRCCliProvider:
     async def initialize(self) -> None:
         await self._detect_active_services()
         if self.available_services:
-            svcs = list(self.available_services.keys())
             await self._update_service_status(0, notify=True)
             pstats: ProcStats = self.server.lookup_component('proc_stats')
             pstats.register_stat_callback(self._update_service_status)
