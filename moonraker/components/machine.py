@@ -1682,7 +1682,7 @@ class OpenRCCliProvider:
         try:
             for svc in svcs:
                 resp: str = await self.shell_cmd.exec_cmd("rc-service -C {svc} status")
-                active_state = str[11:]
+                active_state = resp[11:]
                 new_state: Dict[str, str] = {
                     'active_state': active_state,
                     'sub_state': "unknown"
