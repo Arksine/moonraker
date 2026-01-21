@@ -1710,6 +1710,7 @@ class OpenRCCliProvider:
     ) -> Dict[str, Any]:
         return {}
 
+
 # Install validation
 INSTALL_VERSION = 1
 SERVICE_VERSION = 1
