@@ -1610,7 +1610,7 @@ class SupervisordCliProvider(BaseProvider):
         return service_info
 
 
-class OpenRCCliProvider:
+class OpenRCCliProvider(BaseProvider):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.shutdown_action = config.get("shutdown_action", "poweroff")
