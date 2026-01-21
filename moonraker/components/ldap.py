@@ -33,6 +33,7 @@ class MoonrakerLDAP:
         self.membership_attr = config.getchoice(
             "membership_attribute", VALID_MEMBERSHIP_ATTRS, "memberOf"
         )
+        self.check_dn_case = config.getboolean("check_dn_case", True)
         base_dn_template = config.gettemplate('base_dn')
         self.base_dn = base_dn_template.render()
         self.group_dn: Optional[str] = None
@@ -128,7 +129,12 @@ class MoonrakerLDAP:
             )
             return False
         groups: list[str] = getattr(member_attr, "values", [])
-        if self.group_dn in groups:
+        req_dn = self.group_dn
+        logging.debug(f"Required Group DN: {req_dn}, User Group DNs: {groups}")
+        if not self.check_dn_case:
+            groups = [grp.lower() for grp in groups]
+            req_dn = req_dn.lower()
+        if req_dn in groups:
             logging.debug(
                 f"LDAP User {username} group match success, login successful"
             )
