@@ -3000,9 +3000,7 @@ For a typical single instance installation this resolves to
 `$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
 ///
 
-Example ini secrets file:
-
-```ini {title="secrets.ini"}
+```ini {title="Example moonraker.secrets ini file"}
 # /home/pi/printer_data/moonraker.secrets
 
 [mqtt_credentials]
@@ -3014,9 +3012,7 @@ token: long_token_string
 
 ```
 
-Example json secrets file:
-
-```json {title="secrets.json"}
+```json {title="Example moonraker.secrets json file"}
 {
     "mqtt_credentials": {
         "username": "mqtt_user",
