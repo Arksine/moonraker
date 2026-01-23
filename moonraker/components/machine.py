@@ -1679,7 +1679,7 @@ class OpenRCCliProvider(BaseProvider):
         svcs = list(self.available_services.keys())
         try:
             for svc in svcs:
-                resp: str = await self.shell_cmd.exec_cmd("rc-service -C {svc} status")
+                resp: str = await self.shell_cmd.exec_cmd(f"rc-service -C {svc} status")
                 active_state = resp[11:]
                 new_state: Dict[str, str] = {
                     'active_state': active_state,
