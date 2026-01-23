@@ -184,8 +184,8 @@ with system services such as systemd.
 provider: systemd_dbus
 #   The provider implementation used to collect system service information
 #   and run service actions (ie: start, restart, stop).  This can be "none",
-#   "supervisord_cli", "systemd_dbus", or "systemd_cli".  If the provider is
-#   set to "none" service action APIs will be disabled.
+#   "supervisord_cli", "systemd_dbus", "systemd_cli", or "openrc_cli".  If
+#   the provider is set to "none" service action APIs will be disabled.
 #   The default is systemd_dbus.
 shutdown_action: poweroff
 #   Determines the action Moonraker will take when a shutdown is requested.
