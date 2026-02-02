@@ -420,8 +420,8 @@ class FileManager:
         from_i = web_request.get_int('from_i', 0)
         to_i = web_request.get_int('to_i', 2**32)
         metadata = web_request.get_boolean('metadata', False)
-        flist = self.get_file_list(root, list_format=True, metadata=metadata)[from_i: to_i]
-        return cast(List[Dict[str, Any]], flist)
+        flist = cast(List[Dict[str, Any]], self.get_file_list(root, list_format=True, metadata=metadata)[from_i: to_i])
+        return flist
 
     async def _handle_metadata_request(self,
                                        web_request: WebRequest
