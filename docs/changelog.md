@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog].
 
 ## [Unreleased]
 
+### Changed
+- **machine**: Support standard reboot and shutdown commands
+
+### Added
+- **metadata**: Auto-detect forks of PrusaSlicer.
+
 ## [0.10.0] - 2026-01-21
 
 ### Changed
