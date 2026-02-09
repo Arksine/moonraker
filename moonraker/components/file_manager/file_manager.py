@@ -417,8 +417,11 @@ class FileManager:
                                        web_request: WebRequest
                                        ) -> List[Dict[str, Any]]:
         root = web_request.get_str('root', "gcodes")
-        flist = self.get_file_list(root, list_format=True)
-        return cast(List[Dict[str, Any]], flist)
+        from_i = web_request.get_int('from_i', 0)
+        to_i = web_request.get_int('to_i', 2**32)
+        metadata = web_request.get_boolean('metadata', False)
+        flist = cast(List[Dict[str, Any]], self.get_file_list(root, list_format=True, metadata=metadata)[from_i: to_i])
+        return flist
 
     async def _handle_metadata_request(self,
                                        web_request: WebRequest
@@ -979,7 +982,8 @@ class FileManager:
 
     def get_file_list(self,
                       root: str,
-                      list_format: bool = False
+                      list_format: bool = False,
+                      metadata: bool = False,
                       ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         # Use os.walk find files in sd path and subdirs
         filelist: Dict[str, Any] = {}
@@ -1014,7 +1018,10 @@ class FileManager:
                 if not os.path.exists(full_path):
                     continue
                 fname = full_path[len(path) + 1:]
-                finfo = self.get_path_info(full_path, root)
+                if metadata:
+                    finfo = self.get_file_metadata(full_path) 
+                else:
+                    finfo = self.get_path_info(full_path, root)
                 filelist[fname] = finfo
         if list_format:
             flist: List[Dict[str, Any]] = []
