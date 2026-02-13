@@ -196,6 +196,20 @@ class UserInfo:
     def as_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
 
+@dataclasses.dataclass
+class OAuth2Record:
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: Optional[str]
+    expires_in: int
+    interval: int
+    provider: str
+    created_time: float = dataclasses.field(default_factory=time.time)
+
+    def as_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
 @dataclasses.dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
