@@ -217,7 +217,12 @@ class ExtPahoClient(paho_mqtt.Client):
                 if not self.suppress_exceptions:
                     raise
 
-        self._sock = sock or self._create_socket()  # type: ignore
+        if sock is None:
+            self._sock = self._create_socket()  # type: ignore
+        elif self._ssl:
+            self._sock = self._ssl_wrap_socket(sock)
+        else:
+            self._sock = sock  # type: ignore
 
         self._sock.setblocking(False)  # type: ignore[attr-defined]
         self._registered_write = False
