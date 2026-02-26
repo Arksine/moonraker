@@ -66,6 +66,7 @@ class SpoolManager:
         self.is_closing: bool = False
         self.spool_id: Optional[int] = None
         self.spool_data: Optional[Dict[str, Any]] = None
+        self._macro_variables: Optional[set] = None
         self._error_logged: bool = False
         self._highest_epos: float = 0
         self._last_epos: float = 0
@@ -108,6 +109,9 @@ class SpoolManager:
     def _register_listeners(self):
         self.server.register_event_handler(
             "server:klippy_ready", self._handle_klippy_ready
+        )
+        self.server.register_event_handler(
+            "server:klippy_disconnect", self._handle_klippy_disconnect
         )
 
     def _register_endpoints(self):
@@ -276,9 +280,24 @@ class SpoolManager:
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
+        try:
+            obj_list = await self.klippy_apis.get_object_list()
+            macro_key = f"gcode_macro {KLIPPER_MACRO}"
+            if macro_key in obj_list:
+                result = await self.klippy_apis.query_objects(
+                    {macro_key: None}
+                )
+                self._macro_variables = set(
+                    result.get(macro_key, {}).keys()
+                )
+        except Exception:
+            self._macro_variables = None
         if self.spool_data is not None:
             variables = self._extract_spool_variables(self.spool_data)
             await self._push_klipper_variables(variables)
+
+    def _handle_klippy_disconnect(self) -> None:
+        self._macro_variables = None
 
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
@@ -479,7 +498,11 @@ class SpoolManager:
     async def _push_klipper_variables(
         self, variables: Dict[str, Any]
     ) -> None:
+        if self._macro_variables is None:
+            return
         for var_name, value in variables.items():
+            if var_name not in self._macro_variables:
+                continue
             if isinstance(value, str):
                 safe = value.replace("'", "").replace('"', "")
                 gcode = (
