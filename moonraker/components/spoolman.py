@@ -35,6 +35,20 @@ if TYPE_CHECKING:
 
 DB_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spoolman.spool_id"
+KLIPPER_MACRO = "SPOOLMAN"
+SPOOL_VARS_DEFAULT: Dict[str, Any] = {
+    "spool_id": -1,
+    "filament_name": "",
+    "material": "",
+    "vendor": "",
+    "color": "",
+    "extruder_temp": 0,
+    "bed_temp": 0,
+    "diameter": 0.0,
+    "density": 0.0,
+    "remaining_weight": 0.0,
+    "filament_weight": 0.0,
+}
 
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
@@ -51,6 +65,7 @@ class SpoolManager:
         self.reconnect_delay: float = 2.
         self.is_closing: bool = False
         self.spool_id: Optional[int] = None
+        self.spool_data: Optional[Dict[str, Any]] = None
         self._error_logged: bool = False
         self._highest_epos: float = 0
         self._last_epos: float = 0
@@ -207,6 +222,14 @@ class SpoolManager:
             if payload.get("id") == self.spool_id:
                 self.pending_reports.pop(self.spool_id, None)
                 self.set_active_spool(None)
+        elif self.spool_id is not None and event.get("type") == "updated":
+            payload = event.get("payload", {})
+            if payload.get("id") == self.spool_id:
+                self.spool_data = payload
+                variables = self._extract_spool_variables(payload)
+                self.eventloop.create_task(
+                    self._push_klipper_variables(variables)
+                )
 
     def _cancel_spool_check_task(self) -> None:
         if self.spool_check_task is None or self.spool_check_task.done():
@@ -228,6 +251,9 @@ class SpoolManager:
                 logging.info(f"Attempt to check spool status failed: {err_msg}")
             else:
                 logging.info(f"Found Spool ID {self.spool_id} on spoolman instance")
+                self.spool_data = cast(dict, response.json())
+                variables = self._extract_spool_variables(self.spool_data)
+                await self._push_klipper_variables(variables)
         self.spool_check_task = None
 
     def connected(self) -> bool:
@@ -250,6 +276,9 @@ class SpoolManager:
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
+        if self.spool_data is not None:
+            variables = self._extract_spool_variables(self.spool_data)
+            await self._push_klipper_variables(variables)
 
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
@@ -292,6 +321,7 @@ class SpoolManager:
             "spoolman:active_spool_set", {"spool_id": spool_id}
         )
         logging.info(f"Setting active spool to: {spool_id}")
+        self.eventloop.create_task(self._update_klipper_spool_data())
 
     async def report_extrusion(self, eventtime: float) -> float:
         if not self.ws_connected:
@@ -409,6 +439,62 @@ class SpoolManager:
             "spoolman:spoolman_status_changed",
             {"spoolman_connected": self.ws_connected}
         )
+
+    def _extract_spool_variables(
+        self, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        filament: Dict[str, Any] = data.get("filament") or {}
+        vendor: Dict[str, Any] = filament.get("vendor") or {}
+        return {
+            "spool_id": data.get("id", -1),
+            "filament_name": filament.get("name") or "",
+            "material": filament.get("material") or "",
+            "vendor": vendor.get("name") or "",
+            "color": filament.get("color_hex") or "",
+            "extruder_temp": filament.get("settings_extruder_temp") or 0,
+            "bed_temp": filament.get("settings_bed_temp") or 0,
+            "diameter": filament.get("diameter") or 0,
+            "density": filament.get("density") or 0,
+            "remaining_weight": data.get("remaining_weight") or 0,
+            "filament_weight": filament.get("weight") or 0,
+        }
+
+    async def _update_klipper_spool_data(self) -> None:
+        if self.spool_id is None:
+            self.spool_data = None
+            await self._push_klipper_variables(SPOOL_VARS_DEFAULT)
+            return
+        try:
+            response = await self.http_client.get(
+                f"{self.spoolman_url}/v1/spool/{self.spool_id}",
+                connect_timeout=1., request_timeout=2.
+            )
+            if not response.has_error():
+                self.spool_data = cast(dict, response.json())
+                variables = self._extract_spool_variables(self.spool_data)
+                await self._push_klipper_variables(variables)
+        except Exception:
+            pass
+
+    async def _push_klipper_variables(
+        self, variables: Dict[str, Any]
+    ) -> None:
+        for var_name, value in variables.items():
+            if isinstance(value, str):
+                safe = value.replace("'", "").replace('"', "")
+                gcode = (
+                    f"SET_GCODE_VARIABLE MACRO={KLIPPER_MACRO} "
+                    f"VARIABLE={var_name} VALUE=\"'{safe}'\""
+                )
+            else:
+                gcode = (
+                    f"SET_GCODE_VARIABLE MACRO={KLIPPER_MACRO} "
+                    f"VARIABLE={var_name} VALUE={value}"
+                )
+            try:
+                await self.klippy_apis.run_gcode(gcode)
+            except Exception:
+                pass
 
     async def close(self):
         self.is_closing = True
