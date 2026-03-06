@@ -558,7 +558,7 @@ class Authorization:
             hashed_pass = hashlib.pbkdf2_hmac(
                 'sha256', password.encode(), salt, HASH_ITER).hex()
             action = "user_logged_in"
-            if hashed_pass != user_info.password:
+            if source != "ldap" and hashed_pass != user_info.password:
                 raise self.server.error("Invalid Password")
         jwt_secret_hex: Optional[str] = user_info.jwt_secret
         if jwt_secret_hex is None:
