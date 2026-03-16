@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 DB_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spoolman.spool_id"
+TOOL_SPOOL_MAP_KEY = "spoolman.tool_spool_map"
 
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
@@ -50,17 +51,27 @@ class SpoolManager:
         self.ws_connected: bool = False
         self.reconnect_delay: float = 2.
         self.is_closing: bool = False
-        self.spool_id: Optional[int] = None
         self._error_logged: bool = False
-        self._highest_epos: float = 0
+        # Per-tool spool mapping: tool_index -> spool_id
+        self._tool_spool_map: Dict[int, Optional[int]] = {}
+        # Per-tool extrusion tracking watermarks
+        self._highest_epos: Dict[int, float] = {}
         self._last_epos: float = 0
         self._current_extruder: str = "extruder"
+        # Extruder name -> tool index mapping
+        self._extruder_to_tool: Dict[str, int] = {}
+        self._current_tool: int = 0
         self.spool_history = HistoryFieldData(
             "spool_ids", "spoolman", "Spool IDs used", "collect",
             reset_callback=self._on_history_reset
         )
+        self.tool_spool_history = HistoryFieldData(
+            "tool_spool_map", "spoolman", "Tool-spool assignments", "collect",
+            reset_callback=self._on_tool_spool_history_reset
+        )
         history: History = self.server.lookup_component("history")
         history.register_auxiliary_field(self.spool_history)
+        history.register_auxiliary_field(self.tool_spool_history)
         self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.http_client: HttpClient = self.server.lookup_component("http_client")
         self.database: MoonrakerDatabase = self.server.lookup_component("database")
@@ -72,6 +83,11 @@ class SpoolManager:
         self.server.register_remote_method(
             "spoolman_set_active_spool", self.set_active_spool
         )
+
+    @property
+    def spool_id(self) -> Optional[int]:
+        """Backward-compatible property: returns the spool for tool 0."""
+        return self._tool_spool_map.get(0)
 
     def _get_spoolman_urls(self, config: ConfigHelper) -> None:
         orig_url = config.get('server')
@@ -117,11 +133,43 @@ class SpoolManager:
             return []
         return [self.spool_id]
 
+    def _on_tool_spool_history_reset(self) -> List[Dict[str, Any]]:
+        entries = []
+        for tool, sid in self._tool_spool_map.items():
+            if sid is not None:
+                entries.append({"tool": tool, "spool_id": sid})
+        return entries
+
     async def component_init(self) -> None:
-        self.spool_id = await self.database.get_item(
-            DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
+        # Try loading new tool_spool_map format first
+        stored_map: Optional[Dict[str, Any]] = await self.database.get_item(
+            DB_NAMESPACE, TOOL_SPOOL_MAP_KEY, None
         )
+        if stored_map is not None:
+            self._tool_spool_map = {
+                int(k): v for k, v in stored_map.items()
+            }
+        else:
+            # Migrate from legacy single spool_id
+            legacy_id: Optional[int] = await self.database.get_item(
+                DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
+            )
+            if legacy_id is not None:
+                self._tool_spool_map = {0: legacy_id}
+            else:
+                self._tool_spool_map = {}
+            # Write new format to DB
+            self._save_tool_spool_map()
         self.connection_task = self.eventloop.create_task(self._connect_websocket())
+
+    def _save_tool_spool_map(self) -> None:
+        """Persist tool_spool_map to DB. Also writes legacy key for tool 0."""
+        db_map = {str(k): v for k, v in self._tool_spool_map.items()}
+        self.database.insert_item(DB_NAMESPACE, TOOL_SPOOL_MAP_KEY, db_map)
+        # Write legacy key for rollback safety
+        self.database.insert_item(
+            DB_NAMESPACE, ACTIVE_SPOOL_KEY, self._tool_spool_map.get(0)
+        )
 
     async def _connect_websocket(self) -> None:
         log_connect: bool = True
@@ -164,15 +212,19 @@ class SpoolManager:
                 self.server.add_log_rollover_item(
                     "spoolman_connect", "Connected to Spoolman Spool Manager"
                 )
-                if self.spool_id is not None:
+                if self._has_any_spool():
                     self._cancel_spool_check_task()
-                    coro = self._check_spool_deleted()
+                    coro = self._check_spools_deleted()
                     self.spool_check_task = self.eventloop.create_task(coro)
                 self._send_status_notification()
                 await self._read_messages()
                 log_connect = True
             if not self.is_closing:
                 await asyncio.sleep(self.reconnect_delay)
+
+    def _has_any_spool(self) -> bool:
+        """Check if any tool has a spool assigned."""
+        return any(v is not None for v in self._tool_spool_map.values())
 
     async def _read_messages(self) -> None:
         message: Union[str, bytes, None]
@@ -202,32 +254,46 @@ class SpoolManager:
         event: Dict[str, Any] = jsonw.loads(message)
         if event.get("resource") != "spool":
             return
-        if self.spool_id is not None and event.get("type") == "deleted":
+        if event.get("type") == "deleted":
             payload: Dict[str, Any] = event.get("payload", {})
-            if payload.get("id") == self.spool_id:
-                self.pending_reports.pop(self.spool_id, None)
-                self.set_active_spool(None)
+            deleted_id = payload.get("id")
+            if deleted_id is not None:
+                # Check all tools for the deleted spool
+                for tool, sid in list(self._tool_spool_map.items()):
+                    if sid == deleted_id:
+                        self.pending_reports.pop(deleted_id, None)
+                        self.set_active_spool(None, tool=tool)
 
     def _cancel_spool_check_task(self) -> None:
         if self.spool_check_task is None or self.spool_check_task.done():
             return
         self.spool_check_task.cancel()
 
-    async def _check_spool_deleted(self) -> None:
-        if self.spool_id is not None:
+    async def _check_spools_deleted(self) -> None:
+        """Check all assigned spools for deletion on Spoolman."""
+        for tool, sid in list(self._tool_spool_map.items()):
+            if sid is None:
+                continue
             response = await self.http_client.get(
-                f"{self.spoolman_url}/v1/spool/{self.spool_id}",
+                f"{self.spoolman_url}/v1/spool/{sid}",
                 connect_timeout=1., request_timeout=2.
             )
             if response.status_code == 404:
-                logging.info(f"Spool ID {self.spool_id} not found, setting to None")
-                self.pending_reports.pop(self.spool_id, None)
-                self.set_active_spool(None)
+                logging.info(
+                    f"Spool ID {sid} (tool {tool}) not found, setting to None"
+                )
+                self.pending_reports.pop(sid, None)
+                self.set_active_spool(None, tool=tool)
             elif response.has_error():
                 err_msg = self._get_response_error(response)
-                logging.info(f"Attempt to check spool status failed: {err_msg}")
+                logging.info(
+                    f"Attempt to check spool status for tool {tool} "
+                    f"failed: {err_msg}"
+                )
             else:
-                logging.info(f"Found Spool ID {self.spool_id} on spoolman instance")
+                logging.info(
+                    f"Found Spool ID {sid} (tool {tool}) on spoolman instance"
+                )
         self.spool_check_task = None
 
     def connected(self) -> bool:
@@ -238,18 +304,115 @@ class SpoolManager:
 
     async def _handle_klippy_ready(self) -> None:
         result: Dict[str, Dict[str, Any]]
+        # Discover tools
+        await self._discover_tools()
+        # Subscribe to toolhead for position and extruder tracking
         result = await self.klippy_apis.subscribe_objects(
             {"toolhead": ["position", "extruder"]}, self._handle_status_update, {}
         )
         toolhead = result.get("toolhead", {})
         self._current_extruder = toolhead.get("extruder", "extruder")
+        self._current_tool = self._extruder_to_tool.get(
+            self._current_extruder, 0
+        )
         initial_e_pos = toolhead.get("position", [None]*4)[3]
         logging.debug(f"Initial epos: {initial_e_pos}")
         if initial_e_pos is not None:
-            self._highest_epos = initial_e_pos
+            self._highest_epos[self._current_tool] = initial_e_pos
+            self._last_epos = initial_e_pos
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
+
+    async def _discover_tools(self) -> None:
+        """Discover tool-to-extruder mapping from Klipper objects."""
+        self._extruder_to_tool = {}
+        try:
+            obj_list: List[str] = await self.klippy_apis.get_object_list()
+        except Exception:
+            logging.info("Spoolman: unable to get object list, using defaults")
+            self._extruder_to_tool = {"extruder": 0}
+            return
+        if "toolchanger" in obj_list:
+            await self._discover_toolchanger_tools(obj_list)
+        else:
+            self._discover_extruder_tools(obj_list)
+        if not self._extruder_to_tool:
+            self._extruder_to_tool = {"extruder": 0}
+        logging.info(
+            f"Spoolman tool discovery: {self._extruder_to_tool}"
+        )
+
+    async def _discover_toolchanger_tools(
+        self, obj_list: List[str]
+    ) -> None:
+        """Discover tools via klipper_toolchanger plugin."""
+        try:
+            tc_result = await self.klippy_apis.query_objects(
+                {"toolchanger": None}
+            )
+            tc_data = tc_result.get("toolchanger", {})
+            tool_names = tc_data.get("tool_names", [])
+            tool_numbers = tc_data.get("tool_numbers", [])
+        except Exception:
+            logging.info(
+                "Spoolman: failed to query toolchanger, falling back"
+            )
+            self._discover_extruder_tools(obj_list)
+            return
+        if not tool_names or not tool_numbers:
+            logging.info(
+                "Spoolman: toolchanger has no tools, falling back"
+            )
+            self._discover_extruder_tools(obj_list)
+            return
+        # Query each tool object for its extruder field
+        # tool_names already contains full object names like "tool T0"
+        for name, number in zip(tool_names, tool_numbers):
+            tool_obj_name = name
+            if tool_obj_name not in obj_list:
+                continue
+            try:
+                tool_result = await self.klippy_apis.query_objects(
+                    {tool_obj_name: ["extruder"]}
+                )
+                tool_data = tool_result.get(tool_obj_name, {})
+                extruder = tool_data.get("extruder")
+                if extruder:
+                    tool_num = int(number)
+                    self._extruder_to_tool[extruder] = tool_num
+            except Exception:
+                logging.debug(
+                    f"Spoolman: failed to query tool '{name}'"
+                )
+        # Subscribe to toolchanger for runtime tool_number tracking
+        try:
+            await self.klippy_apis.subscribe_objects(
+                {"toolchanger": ["tool_number"]},
+                self._handle_toolchanger_update, {}
+            )
+        except Exception:
+            logging.debug("Spoolman: failed to subscribe to toolchanger")
+
+    def _handle_toolchanger_update(
+        self, status: Dict[str, Any], _: float
+    ) -> None:
+        """Handle toolchanger status updates for tool_number tracking."""
+        tc = status.get("toolchanger")
+        if tc is None:
+            return
+        tool_number = tc.get("tool_number")
+        if tool_number is not None:
+            self._current_tool = int(tool_number)
+
+    def _discover_extruder_tools(self, obj_list: List[str]) -> None:
+        """Fall back to parsing extruder names for tool mapping."""
+        for obj_name in obj_list:
+            if obj_name == "extruder":
+                self._extruder_to_tool["extruder"] = 0
+            elif obj_name.startswith("extruder") and obj_name[8:].isdigit():
+                idx = int(obj_name[8:])
+                self._extruder_to_tool[obj_name] = idx
 
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
@@ -262,16 +425,27 @@ class SpoolManager:
         toolhead: Optional[Dict[str, Any]] = status.get("toolhead")
         if toolhead is None:
             return
-        epos: float = toolhead.get("position", [0, 0, 0, self._highest_epos])[3]
+        cur_tool = self._current_tool
+        epos: float = toolhead.get(
+            "position",
+            [0, 0, 0, self._highest_epos.get(cur_tool, 0)]
+        )[3]
         self._last_epos = epos
         extr = toolhead.get("extruder", self._current_extruder)
         if extr != self._current_extruder:
-            self._highest_epos = epos
+            # Extruder changed — resolve new tool
+            new_tool = self._extruder_to_tool.get(extr, self._current_tool)
+            self._highest_epos[new_tool] = epos
             self._current_extruder = extr
-        elif epos > self._highest_epos:
-            if self.spool_id is not None:
-                self._add_extrusion(self.spool_id, epos - self._highest_epos)
-            self._highest_epos = epos
+            self._current_tool = new_tool
+        elif epos > self._highest_epos.get(cur_tool, 0):
+            # Extrusion happened — attribute to current tool's spool
+            tool_spool = self._tool_spool_map.get(cur_tool)
+            if tool_spool is not None:
+                self._add_extrusion(
+                    tool_spool, epos - self._highest_epos.get(cur_tool, 0)
+                )
+            self._highest_epos[cur_tool] = epos
 
     def _add_extrusion(self, spool_id: int, used_length: float) -> None:
         if spool_id in self.pending_reports:
@@ -279,19 +453,35 @@ class SpoolManager:
         else:
             self.pending_reports[spool_id] = used_length
 
-    def set_active_spool(self, spool_id: Union[int, None]) -> None:
+    def set_active_spool(
+        self, spool_id: Union[int, None], tool: int = 0
+    ) -> None:
         assert spool_id is None or isinstance(spool_id, int)
-        if self.spool_id == spool_id:
-            logging.info(f"Spool ID already set to: {spool_id}")
+        current = self._tool_spool_map.get(tool)
+        if current == spool_id:
+            logging.info(
+                f"Spool ID already set to {spool_id} for tool {tool}"
+            )
             return
+        # Update history trackers
         self.spool_history.tracker.update(spool_id)
-        self.spool_id = spool_id
-        self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
-        self._highest_epos = self._last_epos
-        self.server.send_event(
-            "spoolman:active_spool_set", {"spool_id": spool_id}
+        self.tool_spool_history.tracker.update(
+            {"tool": tool, "spool_id": spool_id}
         )
-        logging.info(f"Setting active spool to: {spool_id}")
+        if spool_id is not None:
+            self._tool_spool_map[tool] = spool_id
+        else:
+            self._tool_spool_map.pop(tool, None)
+        self._save_tool_spool_map()
+        # Reset epos watermark for this tool
+        self._highest_epos[tool] = self._last_epos
+        self.server.send_event(
+            "spoolman:active_spool_set",
+            {"spool_id": spool_id, "tool": tool}
+        )
+        logging.info(
+            f"Setting active spool to {spool_id} for tool {tool}"
+        )
 
     async def report_extrusion(self, eventtime: float) -> float:
         if not self.ws_connected:
@@ -315,9 +505,14 @@ class SpoolManager:
                     # Since the spool is deleted we can remove any pending reports
                     # added while waiting for the request
                     self.pending_reports.pop(spool_id, None)
-                    if spool_id == self.spool_id:
-                        logging.info(f"Spool ID {spool_id} not found, setting to None")
-                        self.set_active_spool(None)
+                    # Find and clear any tools using this deleted spool
+                    for tool, sid in list(self._tool_spool_map.items()):
+                        if sid == spool_id:
+                            logging.info(
+                                f"Spool ID {spool_id} not found, "
+                                f"clearing tool {tool}"
+                            )
+                            self.set_active_spool(None, tool=tool)
                 else:
                     if not self._error_logged:
                         error_msg = self._get_response_error(response)
@@ -335,8 +530,14 @@ class SpoolManager:
     async def _handle_spool_id_request(self, web_request: WebRequest):
         if web_request.get_request_type() == RequestType.POST:
             spool_id = web_request.get_int("spool_id", None)
-            self.set_active_spool(spool_id)
-        # For GET requests we will simply return the spool_id
+            tool = web_request.get_int("tool", 0)
+            self.set_active_spool(spool_id, tool=tool)
+        else:
+            tool = web_request.get_int("tool", None)
+        # For GET requests (or after POST), return spool info
+        if tool is not None:
+            return {"spool_id": self._tool_spool_map.get(tool)}
+        # No tool specified: legacy response (tool 0)
         return {"spool_id": self.spool_id}
 
     async def _proxy_spoolman_request(self, web_request: WebRequest):
@@ -398,10 +599,13 @@ class SpoolManager:
             {"spool_id": sid, "filament_used": used} for sid, used in
             self.pending_reports.items()
         ]
+        # Build tool_spool_map with int keys for JSON response
+        tool_map: Dict[int, Optional[int]] = dict(self._tool_spool_map)
         return {
             "spoolman_connected": self.ws_connected,
             "pending_reports": pending,
-            "spool_id": self.spool_id
+            "spool_id": self.spool_id,
+            "tool_spool_map": tool_map,
         }
 
     def _send_status_notification(self) -> None:
