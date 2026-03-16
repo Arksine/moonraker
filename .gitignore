@@ -18,3 +18,7 @@ share
 .mypy_cache
 .pdm-build
 .pytest_cache
+
+# Sometimes uv lock generates the version file and places it in
+# the repo.  We don't want to commit this, so ignore it
+moonraker/__version__.py

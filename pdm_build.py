@@ -69,6 +69,8 @@ def pdm_build_initialize(context: Context) -> None:
         rinfo_path.write_text(rinfo_data)
         scripts_path: pathlib.Path = context.root.joinpath("scripts")
         scripts_dest: pathlib.Path = pkg_path.joinpath("scripts")
+        if scripts_dest.is_dir():
+            shutil.rmtree(str(scripts_dest))
         scripts_dest.mkdir()
         for item in scripts_path.iterdir():
             if item.name in ("__pycache__", "python_wheels"):

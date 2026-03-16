@@ -47,6 +47,15 @@ repository = "https://github.com/Arksine/moonraker"
 documentation = "https://moonraker.readthedocs.io"
 changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 
+[dependency-groups]
+dev = ["pre-commit", "mypy", "ruff", "build"]
+docs = [
+    "mkdocs-material==9.5.50",
+    "pymdown-extensions~=10.14.1",
+    "compact_tables",
+    "pymdown_extras"
+]
+
 [project.optional-dependencies]
 msgspec = ["msgspec>=0.18.4 ; python_version>='3.8'"]
 uvloop = ["uvloop>=0.17.0"]
@@ -54,7 +63,16 @@ speedups = [
     "msgspec>=0.18.4 ; python_version>='3.8'",
     "uvloop>=0.17.0"
 ]
-dev = ["pre-commit", "build", "mypy", "ruff", "twine"]
+
+[tool.uv]
+extra-build-variables = { zeroconf = { SKIP_CYTHON = "1" } }
+
+[tool.uv.sources]
+compact_tables = { git = "https://github.com/Arksine/markdown-compact-tables", tag = "v1.1.0" }
+pymdown_extras = { path = "./docs/pymdown-extras" }
+
+[tool.uv.dependency-groups]
+docs = {requires-python = ">=3.9"}
 
 [tool.pdm.version]
 source = "scm"
@@ -71,5 +89,5 @@ custom-hook = "pdm_build.py"
 moonraker = "moonraker.server:main"
 
 [build-system]
-requires = ["pdm-backend<=2.4.4"]
+requires = ["pdm-backend<=2.4.7"]
 build-backend = "pdm.backend"
