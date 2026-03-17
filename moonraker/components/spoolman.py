@@ -333,77 +333,12 @@ class SpoolManager:
             logging.info("Spoolman: unable to get object list, using defaults")
             self._extruder_to_tool = {"extruder": 0}
             return
-        if "toolchanger" in obj_list:
-            await self._discover_toolchanger_tools(obj_list)
-        else:
-            self._discover_extruder_tools(obj_list)
+        self._discover_extruder_tools(obj_list)
         if not self._extruder_to_tool:
             self._extruder_to_tool = {"extruder": 0}
         logging.info(
             f"Spoolman tool discovery: {self._extruder_to_tool}"
         )
-
-    async def _discover_toolchanger_tools(
-        self, obj_list: List[str]
-    ) -> None:
-        """Discover tools via klipper_toolchanger plugin."""
-        try:
-            tc_result = await self.klippy_apis.query_objects(
-                {"toolchanger": None}
-            )
-            tc_data = tc_result.get("toolchanger", {})
-            tool_names = tc_data.get("tool_names", [])
-            tool_numbers = tc_data.get("tool_numbers", [])
-        except Exception:
-            logging.info(
-                "Spoolman: failed to query toolchanger, falling back"
-            )
-            self._discover_extruder_tools(obj_list)
-            return
-        if not tool_names or not tool_numbers:
-            logging.info(
-                "Spoolman: toolchanger has no tools, falling back"
-            )
-            self._discover_extruder_tools(obj_list)
-            return
-        # Query each tool object for its extruder field
-        # tool_names already contains full object names like "tool T0"
-        for name, number in zip(tool_names, tool_numbers):
-            tool_obj_name = name
-            if tool_obj_name not in obj_list:
-                continue
-            try:
-                tool_result = await self.klippy_apis.query_objects(
-                    {tool_obj_name: ["extruder"]}
-                )
-                tool_data = tool_result.get(tool_obj_name, {})
-                extruder = tool_data.get("extruder")
-                if extruder:
-                    tool_num = int(number)
-                    self._extruder_to_tool[extruder] = tool_num
-            except Exception:
-                logging.debug(
-                    f"Spoolman: failed to query tool '{name}'"
-                )
-        # Subscribe to toolchanger for runtime tool_number tracking
-        try:
-            await self.klippy_apis.subscribe_objects(
-                {"toolchanger": ["tool_number"]},
-                self._handle_toolchanger_update, {}
-            )
-        except Exception:
-            logging.debug("Spoolman: failed to subscribe to toolchanger")
-
-    def _handle_toolchanger_update(
-        self, status: Dict[str, Any], _: float
-    ) -> None:
-        """Handle toolchanger status updates for tool_number tracking."""
-        tc = status.get("toolchanger")
-        if tc is None:
-            return
-        tool_number = tc.get("tool_number")
-        if tool_number is not None:
-            self._current_tool = int(tool_number)
 
     def _discover_extruder_tools(self, obj_list: List[str]) -> None:
         """Fall back to parsing extruder names for tool mapping."""
@@ -454,9 +389,27 @@ class SpoolManager:
             self.pending_reports[spool_id] = used_length
 
     def set_active_spool(
-        self, spool_id: Union[int, None], tool: int = 0
+        self,
+        spool_id: Union[int, None],
+        tool: Union[int, None] = None
     ) -> None:
         assert spool_id is None or isinstance(spool_id, int)
+        if tool is not None:
+            self._set_tool_spool(spool_id, tool)
+        else:
+            # No tool specified: apply to all tracked tools for backward
+            # compatibility with existing workflows that call
+            # set_active_spool() without a tool parameter.
+            if self._tool_spool_map:
+                for t in list(self._tool_spool_map.keys()):
+                    self._set_tool_spool(spool_id, t)
+            else:
+                # No tools tracked yet, default to tool 0
+                self._set_tool_spool(spool_id, 0)
+
+    def _set_tool_spool(
+        self, spool_id: Union[int, None], tool: int
+    ) -> None:
         current = self._tool_spool_map.get(tool)
         if current == spool_id:
             logging.info(
@@ -530,9 +483,12 @@ class SpoolManager:
     async def _handle_spool_id_request(self, web_request: WebRequest):
         if web_request.get_request_type() == RequestType.POST:
             spool_id = web_request.get_int("spool_id", None)
-            tool = web_request.get_int("tool", 0)
+            tool_val = web_request.get("tool", None)
+            tool = int(tool_val) if tool_val is not None else None
             self.set_active_spool(spool_id, tool=tool)
-            return {"spool_id": self._tool_spool_map.get(tool)}
+            # Return tool 0 for legacy compat when tool not specified
+            return_tool = tool if tool is not None else 0
+            return {"spool_id": self._tool_spool_map.get(return_tool)}
         # GET request
         tool_val = web_request.get("tool", None)
         if tool_val is not None:

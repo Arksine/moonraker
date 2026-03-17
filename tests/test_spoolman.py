@@ -176,10 +176,22 @@ class TestSetActiveSpool:
         sm.set_active_spool(15, tool=0)
         sm.database.insert_item.assert_called()
 
-    def test_default_tool_is_zero(self):
+    def test_no_tool_defaults_to_tool_0_when_empty(self):
         sm = _make_spoolman()
         sm.set_active_spool(3)
         assert sm._tool_spool_map == {0: 3}
+
+    def test_no_tool_sets_all_tracked_tools(self):
+        sm = _make_spoolman()
+        sm._tool_spool_map = {0: 5, 1: 10}
+        sm.set_active_spool(99)
+        assert sm._tool_spool_map == {0: 99, 1: 99}
+
+    def test_no_tool_clears_all_tracked_tools(self):
+        sm = _make_spoolman()
+        sm._tool_spool_map = {0: 5, 1: 10}
+        sm.set_active_spool(None)
+        assert sm._tool_spool_map == {}
 
     def test_resets_epos_watermark(self):
         sm = _make_spoolman()
@@ -465,11 +477,19 @@ class TestHandleSpoolIdRequest:
         assert result == {"spool_id": 42}
 
     @pytest.mark.asyncio
-    async def test_post_default_tool_zero(self):
+    async def test_post_no_tool_defaults_to_tool_0_when_empty(self):
         sm = _make_spoolman()
         wr = _make_web_request("POST", {"spool_id": 42})
         await sm._handle_spool_id_request(wr)
         assert sm._tool_spool_map[0] == 42
+
+    @pytest.mark.asyncio
+    async def test_post_no_tool_sets_all_tracked_tools(self):
+        sm = _make_spoolman()
+        sm._tool_spool_map = {0: 5, 1: 10}
+        wr = _make_web_request("POST", {"spool_id": 42})
+        await sm._handle_spool_id_request(wr)
+        assert sm._tool_spool_map == {0: 42, 1: 42}
 
     @pytest.mark.asyncio
     async def test_post_clear_spool(self):
