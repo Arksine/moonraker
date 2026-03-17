@@ -1,6 +1,6 @@
 # Python dependencies for Moonraker
 --find-links=python_wheels
-tornado>=6.2.0, <=6.5.4
+tornado>=6.2.0,<=6.5.5
 pyserial==3.4
 pillow>=9.5.0, <=12.1.0
 streaming-form-data>=1.11.0, <=1.19.1
