@@ -325,7 +325,8 @@ class AppDeploy(BaseDeploy):
             'channel_invalid': self.channel_invalid,
             'is_valid': self._is_valid,
             'configured_type': str(self.type),
-            'info_tags': self.info_tags
+            'info_tags': self.info_tags,
+            'path': str(self.path)
         }
 
     def get_persistent_data(self) -> Dict[str, Any]:
