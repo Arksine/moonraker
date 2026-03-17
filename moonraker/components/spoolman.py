@@ -532,10 +532,11 @@ class SpoolManager:
             spool_id = web_request.get_int("spool_id", None)
             tool = web_request.get_int("tool", 0)
             self.set_active_spool(spool_id, tool=tool)
-        else:
-            tool = web_request.get_int("tool", None)
-        # For GET requests (or after POST), return spool info
-        if tool is not None:
+            return {"spool_id": self._tool_spool_map.get(tool)}
+        # GET request
+        tool_val = web_request.get("tool", None)
+        if tool_val is not None:
+            tool = int(tool_val)
             return {"spool_id": self._tool_spool_map.get(tool)}
         # No tool specified: legacy response (tool 0)
         return {"spool_id": self.spool_id}
