@@ -50,10 +50,10 @@ changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 [dependency-groups]
 dev = ["pre-commit", "mypy", "ruff", "build"]
 docs = [
-    "mkdocs-material==9.5.50",
-    "pymdown-extensions~=10.14.1",
+    "mkdocs-material==9.7.5",
+    "pymdown-extensions~=10.21.0",
     "compact_tables",
-    "pymdown_extras"
+    "pymdown_extras",
 ]
 
 [project.optional-dependencies]
