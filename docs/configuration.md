@@ -3077,19 +3077,20 @@ domain: switch
 
 ### `[notifier]`
 
-Enables the notification service. Multiple "notifiers" may be configured,
-each with their own section, ie: `[notifier my_discord_server]`,
+Enables the notification service. It is possible to configure multiple 
+notifiers with their own section, for example: `[notifier my_discord_server]`, 
 `[notifier my_phone]`.
 
-All notifiers require an url for a service to be set up. Moonraker depends on
-[Apprise](https://github.com/caronc/apprise) to emit notifications.
-Available services and their corresponding at urls may be found on the
-[Apprise Wiki](https://github.com/caronc/apprise/wiki).
+All notifiers require an `url` for a notification service to be set up. 
+Moonraker uses the [Apprise](https://github.com/caronc/apprise) tool/package 
+locally to emit notifications. So Moonraker can send Notfictions to any 
+service that is [supported by Apprise](https://github.com/caronc/apprise#productivity-based-notifications). 
 
+#### Properties:
 ```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
-[notifier telegram]
+[notifier my_telegram_notifier]
 url: tgram://{bottoken}/{ChatID}
 #   The url for your notifier. This URL accepts Jinja2 templates,
 #   so you can use [secrets] if you want.  This parameter must be
@@ -3142,7 +3143,7 @@ this section receives a list of "arguments" passed to the event.  For
 those familiar with Python this list is known as "variable arguments".
 Currently the notifier only supports two kinds of events: those
 triggered by a change in the job state and those triggered from a remote
-method call frm a `gcode_macro`.
+method call from a `gcode_macro`.
 
 For `remote method` events the `event_args` field will always be
 an empty list.  For `job state` events the `event_args` field will
@@ -3184,8 +3185,8 @@ attach: http://192.168.1.100/webcam/?action=snapshot
 ```
 
 #### Notifying from Klipper
-It is possible to invoke your notifiers from the Klippy host, this can be done
-with a gcode_macro, such as:
+It is possible to invoke your notifiers from the Klippy host, this can be done with a `gcode_macro`, such as:
+
 ```ini {title="Klipper Config Example"}
 # printer.cfg
 
