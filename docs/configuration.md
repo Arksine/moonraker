@@ -3086,6 +3086,51 @@ library to emit notifications.  As such, the Apprise
 [documentation](https://appriseit.com/services/)
 should be consulted to determine the format of the notifier's `url` option.
 
+/// Note
+The Apprise library is actively developed and frequently adds new notification
+services. When at least one notifier has been configured `moonraker.log` will
+report the currently installed version of Apprise.  Alternatively Moonraker's
+[pyproject.toml](https://github.com/Arksine/moonraker/blob/master/pyproject.toml)
+can be be referenced to determine the latest version of Apprise that should be
+installed. For example:
+
+```toml
+[project]
+name = "moonraker"
+dynamic = ["version"]
+description = "API Server for Klipper"
+authors = [
+    {name = "Eric Callahan", email = "arksine.code@gmail.com"},
+]
+dependencies = [
+    "tornado>=6.2.0,<=6.5.5",
+    "pyserial==3.4",
+    "pillow>=9.5.0, <=12.1.0",
+    "streaming-form-data>=1.11.0, <=1.19.1",
+    "distro==1.9.0",
+    "inotify-simple==2.0.1",
+    "libnacl==2.1.0",
+    "paho-mqtt==2.1.0",
+    "zeroconf>=0.131.0, <=0.148.0",
+    "preprocess-cancellation==0.2.1",
+    "jinja2==3.1.6",
+    "dbus-fast>=2.21.3, <=3.1.2",
+    "apprise>=1.9.3, <=1.9.8",
+    "ldap3==2.9.1",
+    "python-periphery==2.4.1",
+    "importlib_metadata>=6.7.0, <=8.7.1",
+]
+...
+```
+From the above we can see that Moonraker pins Apprise to a maximum version
+of 1.9.8 at the time of this writing.  Keep in mind that EOL versions of Python
+may not be able to update to the latest version of Apprise.  As of the time of
+this writing all Python versions below 3.10 have reached End Of Life status.
+
+If the latest pinned version does not support your desired service create a feature
+request on Moonraker's issue tracker to bump the version of the Apprise package.
+///
+
 ```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
