@@ -12,7 +12,7 @@ zeroconf>=0.131.0, <=0.148.0
 preprocess-cancellation==0.2.1
 jinja2==3.1.6
 dbus-fast>=2.21.3, <=3.1.2
-apprise>=1.9.3, <=1.9.6
+apprise>=1.9.3,<=1.9.8
 ldap3==2.9.1
 python-periphery==2.4.1
 importlib_metadata>=6.7.0, <=8.7.1
