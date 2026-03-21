@@ -3077,34 +3077,35 @@ domain: switch
 
 ### `[notifier]`
 
-Enables the notification service. Multiple "notifiers" may be configured,
-each with their own section, ie: `[notifier my_discord_server]`,
-`[notifier my_phone]`.
+Enables push notification services. Multiple "notifiers" may be configured,
+each with their own section in the format of `[notifier <name>]`, ie:
+`[notifier my_discord_server]` or`[notifier my_phone]`.
 
-All notifiers require an url for a service to be set up. Moonraker depends on
-[Apprise](https://github.com/caronc/apprise) to emit notifications.
-Available services and their corresponding at urls may be found on the
-[Apprise Wiki](https://github.com/caronc/apprise/wiki).
+Moonraker leverages the [Apprise](https://github.com/caronc/apprise) Python
+library to emit notifications.  As such, the Apprise
+[documentation](https://appriseit.com/services/)
+should be consulted to determine the format of the notifier's `url` option.
 
 ```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
-[notifier telegram]
-url: tgram://{bottoken}/{ChatID}
-#   The url for your notifier. This URL accepts Jinja2 templates,
-#   so you can use [secrets] if you want.  This parameter must be
-#   provided.
+[notifier notification_name]
+url: service://credentials/direction/?parameter=value
+#   The url for the notifier. See the Apprise documentation for notification
+#   service options and url formatting. This option accepts Jinja2 templates with
+#   support for [secrets]. This parameter must be provided.
 events: *
-#   The events this notifier should trigger to. '*' means all events.
-#   You can use multiple events, comma separated.
-#   Valid events:
+#   The events that will trigger a notification. '*' means all events.
+#   This option may include multiple comma separated events.
+#   Valid printer events:
 #      started
 #      complete
 #      error
 #      cancelled
 #      paused
 #      resumed
-#   This parameter must be provided.
+#   This option may also be set to "gcode" if the notifier should only push
+#   "gcode_macro" notifications sent from Klipper. This parameter must be provided.
 body: "Your printer status has changed to {event_name}"
 #   The body of the notification. This option accepts Jinja2 templates, where
 #   the template is passed a context containing the following fields:
@@ -3131,9 +3132,9 @@ attach:
 #   will receive the same context as the "body" and "title" options.  The default
 #   is no attachment will be sent with the notification.
 #
-#   Note: Attachments are not available for all notification services, you can
-#   check if it's supported on the Apprise Wiki.  Be aware that links to items
-#   hosted on your local network can only be viewed within that network.
+#   Note: Attachments are not available for all notification services, refer to
+#   the Apprise documentation for details. Be aware that links to items hosted on
+#   your local network can only be viewed within that network.
 ```
 
 /// Tip
@@ -3142,7 +3143,7 @@ this section receives a list of "arguments" passed to the event.  For
 those familiar with Python this list is known as "variable arguments".
 Currently the notifier only supports two kinds of events: those
 triggered by a change in the job state and those triggered from a remote
-method call frm a `gcode_macro`.
+method call from a `gcode_macro`.
 
 For `remote method` events the `event_args` field will always be
 an empty list.  For `job state` events the `event_args` field will
@@ -3155,7 +3156,8 @@ The `job state` is a dict that contains the values reported by
 Klipper's [print_stats](printer_objects.md#print_stats) object.
 ///
 
-#### An example:
+#### Notifier Examples
+
 ```ini {title="Moonraker Config Example"}
 # moonraker.conf
 
