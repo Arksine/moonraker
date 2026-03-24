@@ -285,6 +285,10 @@ GET /server/files/metadata?filename=tools/drill.gcode
 | `filament_change_count` |   int    | The number of filament changes in the print.                 |
 | `filament_weight_total` |  float   | The total weight of filament used in grams.                  |
 | `filament_weights`      | [float]  | List of weights in grams used by each tool in the print.     |
+| `printer_vendor`        |  string  | The vendor name of the associated printer.                   |
+| `printer_model`         |  string  | The model of the associated printer.                         |
+| `printer_variant`       |  string  | The variant of the associated printer.                       |
+| `profile_version`       |  string  | The version of the profile configured in the slicer.         |
 | `mmu_print`             |   int    | Identifies a multimaterial print with single extruder.       |
 | `referenced_tools`      |  [int]   | List of tool numbers used in the print.                      |
 | `thumbnails`            | [object] | A list of `Thumbnail Info` objects.                          |
