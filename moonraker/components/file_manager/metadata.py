@@ -118,7 +118,7 @@ def regex_find_string(pattern: str, data: str) -> Optional[str]:
     pattern = pattern.replace(r"(%S)", r"(.*)")
     match = re.search(pattern, data)
     if match:
-        return match.group(1).strip('"')
+        return match.group(1).replace('"', '')
     return None
 
 def regex_find_min_float(pattern: str, data: str) -> Optional[float]:
