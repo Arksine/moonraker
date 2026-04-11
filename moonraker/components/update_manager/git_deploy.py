@@ -37,6 +37,7 @@ class GitDeploy(AppDeploy):
         self._configure_dependencies(config)
         self._configure_managed_services(config)
         self.origin: str = config.get('origin')
+        self.dev_mode: bool = config.getboolean('dev_mode', False)
         self.moved_origin: Optional[str] = config.get('moved_origin', None)
         self.primary_branch = config.get("primary_branch", "master")
         pinned_commit = config.get("pinned_commit", None)
@@ -50,7 +51,7 @@ class GitDeploy(AppDeploy):
                 )
         self.repo = GitRepo(
             self.cmd_helper, self.path, self.name, self.origin, self.moved_origin,
-            self.primary_branch, self.channel, pinned_commit
+            self.primary_branch, self.channel, pinned_commit, self.dev_mode
         )
 
     async def initialize(self) -> Dict[str, Any]:
@@ -212,7 +213,8 @@ class GitRepo:
         moved_origin_url: Optional[str],
         primary_branch: str,
         channel: Channel,
-        pinned_commit: Optional[str]
+        pinned_commit: Optional[str],
+        dev_mode: Optional[bool]
     ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -246,6 +248,7 @@ class GitRepo:
         self.fetch_input_recd: bool = False
         self.channel = channel
         self.pinned_commit = pinned_commit
+        self.dev_mode = dev_mode
         self.is_shallow = False
 
     async def restore_state(self, storage: Dict[str, Any]) -> None:
@@ -283,6 +286,8 @@ class GitRepo:
         self.pinned_commit_valid: bool = storage.get('pinned_commit_valid', True)
         if not await self._detect_git_dir():
             self.valid_git_repo = False
+        if self.dev_mode is None:
+            self.dev_mode = storage.get('dev_mode', False)
         self._check_warnings()
 
     def get_persistent_data(self) -> Dict[str, Any]:
@@ -310,7 +315,8 @@ class GitRepo:
             'corrupt': self.repo_corrupt,
             'modified_files': self.modified_files,
             'untracked_files': self.untracked_files,
-            'pinned_commit_valid': self.pinned_commit_valid
+            'pinned_commit_valid': self.pinned_commit_valid,
+            'dev_mode': self.dev_mode
         }
 
     async def refresh_repo_state(self, need_fetch: bool = True) -> None:
@@ -327,6 +333,32 @@ class GitRepo:
             await self._check_repo_status()
             self._verify_repo()
             await self._find_current_branch()
+
+            if self.dev_mode and self.git_remote != "?":
+                try:
+                    # get current remote url
+                    current_remote_url = await self.remote(
+                        f"get-url {self.git_remote}",
+                        True)
+                    current_remote_url = current_remote_url.strip()
+
+                    # check with origin_url
+                    if current_remote_url != self.origin_url:
+                        logging.info(
+                            f"git Repo URL mismatch{self.alias}\n"
+                            f"current: {current_remote_url}\n"
+                            f"target:  {self.origin_url}\n"
+                            f"updating remote url..."
+                        )
+                        # set url in dev
+                        await self.remote(
+                            f"set-url {self.git_remote} {self.origin_url}",
+                            True)
+                    else:
+                        logging.debug(f"git remote url is up to date {self.alias}")
+
+                except Exception as e:
+                    logging.error(f"failed to check/update remote URL: {e}")
 
             # Fetch the upstream url.  If the repo has been moved,
             # set the new url
@@ -698,7 +730,8 @@ class GitRepo:
             f"Is Shallow: {self.is_shallow}\n"
             f"Commits Behind Count: {self.commits_behind_count}\n"
             f"Diverged: {self.diverged}\n"
-            f"Pinned Commit: {self.pinned_commit}"
+            f"Pinned Commit: {self.pinned_commit}\n"
+            f"dev_mode: {self.dev_mode}"
             f"{warnings}"
         )
 
