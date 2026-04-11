@@ -46,6 +46,16 @@ class NetDeploy(AppDeploy):
             self._configure_managed_services(config)
         self.repo = config.get('repo').strip().strip("/")
         self.owner, self.project_name = self.repo.split("/", 1)
+
+        self.enable_mirror = config.getboolean('enable_mirror', False)
+        self.mirror_url = config.get('mirror_url', "")
+        self.mirror_latest_template = config.get(
+            'mirror_latest_template', "{base_url}/LatestRelease/release"
+        )
+        self.mirror_tag_template = config.get(
+            'mirror_tag_template', "{base_url}/{tag}/release"
+        )
+
         self.asset_name: Optional[str] = None
         self.persistent_files: List[str] = []
         self.warnings: List[str] = []
@@ -91,6 +101,13 @@ class NetDeploy(AppDeploy):
         self._is_fallback = False
         eventloop = self.server.get_event_loop()
         self.warnings.clear()
+
+        # mirror override
+        if self.enable_mirror:
+            self._is_valid = True
+            self._is_fallback = True
+            return
+
         repo_parent = source_info.find_git_repo(self.path)
         homedir = pathlib.Path("~").expanduser()
         if not self._path_writable:
@@ -242,16 +259,42 @@ class NetDeploy(AppDeploy):
                 self.log_info("Invalid Installation, aborting remote refresh")
                 return {}
             repo = self.repo
-        if tag is not None:
-            resource = f"repos/{repo}/releases/tags/{tag}"
-        elif self.channel == Channel.STABLE:
-            resource = f"repos/{repo}/releases/latest"
+
+        # mirror enable
+        if self.enable_mirror:
+            try:
+                if tag is not None:
+                    # Rendering rollback / Specific version URL
+                    resource = self.mirror_tag_template.format(
+                        base_url=self.mirror_url,
+                        tag=tag
+                    )
+                else:
+                    # Render Latest Version URL
+                    resource = self.mirror_latest_template.format(
+                        base_url=self.mirror_url
+                    )
+            except KeyError as e:
+                self.log_info(f"Mirror template error: missing key {e}")
+                return {}
         else:
-            resource = f"repos/{repo}/releases?per_page=1"
+            if tag is not None:
+                resource = f"repos/{repo}/releases/tags/{tag}"
+            elif self.channel == Channel.STABLE:
+                resource = f"repos/{repo}/releases/latest"
+            else:
+                resource = f"repos/{repo}/releases?per_page=1"
+
+        # init http client
         client = self.cmd_helper.get_http_client()
-        resp = await client.github_api_request(
+
+        resp = await client.request_json(
             resource, attempts=3, retry_pause_time=.5
         )
+        # resp = await client.github_api_request(
+        #     resource, attempts=3, retry_pause_time=.5
+        # )
+
         release: Union[List[Any], Dict[str, Any]] = {}
         if resp.status_code == 304:
             if resp.content:
@@ -318,7 +361,11 @@ class NetDeploy(AppDeploy):
             f"Download Size: {size}\n"
             f"Content Type: {content_type}\n"
             f"Rollback Version: {self.rollback_version}\n"
-            f"Rollback Repo: {self.rollback_repo}"
+            f"Rollback Repo: {self.rollback_repo}\n"
+            f"enable_mirror: {self.enable_mirror}\n"
+            f"mirror_url: {self.mirror_url}\n"
+            f"mirror_latest_template: {self.mirror_latest_template}\n"
+            f"mirror_tag_template: {self.mirror_tag_template}\n"
             f"{warn_str}"
         )
 
