@@ -242,6 +242,21 @@ system_deps = {
         "python3-libcamera; vendor == 'raspberry-pi' and distro_version >= '11'",
         "curl", "build-essential"
     ],
+    "opensuse-leap": [
+        "python3-virtualenv", "python3-devel", "libopenjp2-7", "libsodium-devel",
+        "zlib-ng-compat-devel", "libjpeg8-devel", "PackageKit", "wireless-tools",
+        "python3-libcamera", "curl", "unzip", "libsodium26",
+    ],
+    "opensuse-slowroll": [
+        "python3-virtualenv", "python3-devel", "libopenjp2-7", "libsodium-devel",
+        "zlib-ng-compat-devel", "libjpeg8-devel", "PackageKit", "wireless-tools",
+        "python3-libcamera", "curl", "unzip", "libsodium26",
+    ],
+    "opensuse-tumbleweed": [
+        "python3-virtualenv", "python3-devel", "libopenjp2-7", "libsodium-devel",
+        "zlib-ng-compat-devel", "libjpeg8-devel", "PackageKit", "wireless-tools",
+        "python3-libcamera", "curl", "unzip", "libsodium26",
+    ],
 }
 # *** SYSTEM DEPENDENCIES END ***
 parser = SysDepsParser()
@@ -278,12 +293,21 @@ install_packages()
     report_status "Installing Moonraker System Packages..."
     echo "Linux Distribution: ${DISTRIBUTION} ${DISTRO_VERSION}"
     echo "Packages: ${PACKAGES}"
-    # Update system package info
-    report_status "Running apt-get update..."
-    sudo apt-get update --allow-releaseinfo-change
+    if [[ "${DISTRIBUTION}" == "debian" ]]; then
+        # Update system package info
+        report_status "Running apt-get update..."
+        sudo apt-get update --allow-releaseinfo-change
 
-    # Install desired packages
-    sudo apt-get install --yes ${PACKAGES}
+        # Install desired packages
+        sudo apt-get install --yes ${PACKAGES}
+    elif [[ "${DISTRIBUTION}" == "opensuse-leap" ]]; then
+        # Update system package info
+        report_status "Running zypper ref..."
+        sudo zypper ref -s
+
+        # Install desired packages
+        sudo zypper -n install ${PACKAGES}
+    fi
 }
 
 # Step 4: Create python virtual environment
