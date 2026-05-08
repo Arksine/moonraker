@@ -323,6 +323,18 @@ class BaseSlicer(metaclass=SlicerType):
     def parse_filament_weights(self) -> Optional[List[float]]:
         return None
 
+    def parse_printer_vendor(self) -> Optional[str]:
+        return None
+
+    def parse_printer_model(self) -> Optional[str]:
+        return None
+
+    def parse_printer_variant(self) -> Optional[str]:
+        return None
+
+    def parse_profile_version(self) -> Optional[str]:
+        return None
+
     def parse_thumbnails(self) -> Optional[List[Dict[str, Any]]]:
         parsed_matches: List[Dict[str, Any]] = []
         has_miniature: bool = False
@@ -620,6 +632,18 @@ class PrusaSlicer(BaseSlicer):
         if res is not None:
             return res
         return regex_find_int(r"; total filament change = (%D)", self.config_data)
+
+    def parse_printer_vendor(self) -> Optional[str]:
+        return regex_find_string(r'; printer_vendor = (%S)', self.footer_data)
+
+    def parse_printer_model(self) -> Optional[str]:
+        return regex_find_string(r'; printer_model = (%S)', self.footer_data)
+
+    def parse_printer_variant(self) -> Optional[str]:
+        return regex_find_string(r'; printer_variant = (%S)', self.footer_data)
+
+    def parse_profile_version(self) -> Optional[str]:
+        return regex_find_string(r'; profile_version = (%S)', self.footer_data)
 
 class Slic3rPE(PrusaSlicer):
     @classmethod

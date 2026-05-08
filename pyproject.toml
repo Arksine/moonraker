@@ -6,9 +6,9 @@ authors = [
     {name = "Eric Callahan", email = "arksine.code@gmail.com"},
 ]
 dependencies = [
-    "tornado>=6.2.0, <=6.5.4",
+    "tornado>=6.2.0,<=6.5.5",
     "pyserial==3.4",
-    "pillow>=9.5.0, <=12.1.0",
+    "pillow>=9.5.0,<=12.2.0",
     "streaming-form-data>=1.11.0, <=1.19.1",
     "distro==1.9.0",
     "inotify-simple==2.0.1",
@@ -18,10 +18,10 @@ dependencies = [
     "preprocess-cancellation==0.2.1",
     "jinja2==3.1.6",
     "dbus-fast>=2.21.3, <=3.1.2",
-    "apprise>=1.9.3, <=1.9.6",
+    "apprise>=1.9.3,<=1.9.8",
     "ldap3==2.9.1",
     "python-periphery==2.4.1",
-    "importlib_metadata>=6.7.0, <=8.7.1"
+    "importlib_metadata>=6.7.0, <=8.7.1",
 ]
 requires-python = ">=3.7"
 readme = "README.md"
@@ -47,6 +47,15 @@ repository = "https://github.com/Arksine/moonraker"
 documentation = "https://moonraker.readthedocs.io"
 changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 
+[dependency-groups]
+dev = ["pre-commit", "mypy", "ruff", "build"]
+docs = [
+    "mkdocs-material==9.7.5",
+    "pymdown-extensions~=10.21.0",
+    "compact_tables",
+    "pymdown_extras",
+]
+
 [project.optional-dependencies]
 msgspec = ["msgspec>=0.18.4 ; python_version>='3.8'"]
 uvloop = ["uvloop>=0.17.0"]
@@ -54,7 +63,16 @@ speedups = [
     "msgspec>=0.18.4 ; python_version>='3.8'",
     "uvloop>=0.17.0"
 ]
-dev = ["pre-commit", "build", "mypy", "ruff", "twine"]
+
+[tool.uv]
+extra-build-variables = { zeroconf = { SKIP_CYTHON = "1" } }
+
+[tool.uv.sources]
+compact_tables = { git = "https://github.com/Arksine/markdown-compact-tables", tag = "v1.1.0" }
+pymdown_extras = { path = "./docs/pymdown-extras" }
+
+[tool.uv.dependency-groups]
+docs = {requires-python = ">=3.9"}
 
 [tool.pdm.version]
 source = "scm"
@@ -71,5 +89,5 @@ custom-hook = "pdm_build.py"
 moonraker = "moonraker.server:main"
 
 [build-system]
-requires = ["pdm-backend<=2.4.4"]
+requires = ["pdm-backend<=2.4.7"]
 build-backend = "pdm.backend"
