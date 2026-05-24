@@ -3576,11 +3576,11 @@ history_field_max_current:
   report_maximum=false
 ```
 
-### `[spoolman]` and `[filaman]`
+### `[spoolman]`
 
-Enables integration with the [Spoolman](https://github.com/Donkie/Spoolman) or [FilaMan](https://www.filaman.app)
-filament manager. Moonraker will automatically send filament usage updates to
-the Spoolman or FilaMan database.
+Enables integration with the
+[Spoolman](https://github.com/Donkie/Spoolman) filament manager. Moonraker will
+automatically send filament usage updates to the Spoolman database.
 
 Front ends can also utilize this config to provide a built-in management tool.
 
@@ -3595,16 +3595,32 @@ sync_rate: 5
 #   Spoolman server.  The default is 5.
 ```
 
+### `[filaman]`
+
+Enables integration with the [FilaMan](https://www.filaman.app) filament
+manager. Moonraker will automatically send filament usage updates to the
+FilaMan database.
+
+Front ends can also utilize this config to provide a built-in management tool.
+
 
 ```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
 [filaman]
 server: http://192.168.1.50:8000
+#   Base URL to the FilaMan instance. This parameter must be provided.
 api_key: uak.123.xxxxxxxxxxxxxxxxxxxxx
+#   Optional API key for authenticating requests to FilaMan.
 sync_rate: 5
+#   The interval, in seconds, between spool usage sync requests.
+#   The default is 5.
 default_density_g_cm3: 1.24
+#   Fallback material density in g/cm^3 used if a spool's filament has
+#   no density set. The default is 1.24 (PLA).
 default_diameter_mm: 1.75
+#   Fallback filament diameter in mm used if a spool's filament has no
+#   diameter set. The default is 1.75.
 ```
 
 #### Setting the active spool from Klipper

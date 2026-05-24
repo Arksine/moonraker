@@ -32,6 +32,7 @@ LEGACY_ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
 DEFAULT_PLA_DENSITY_G_CM3 = 1.24
 DEFAULT_FILAMENT_DIAMETER_MM = 1.75
+CONSUMPTION_PATH_RE = re.compile(r"^/spools/\d+/consumptions$")
 
 
 class FilaManManager:
@@ -67,7 +68,6 @@ class FilaManManager:
 
         self.api_connected: bool = False
         self.spool_id: Optional[int] = None
-        self._highest_epos: float = 0.0
         self._last_epos: float = 0.0
         self._current_extruder: str = "extruder"
 
@@ -164,7 +164,9 @@ class FilaManManager:
             self.server.register_notification(event_name)
 
     def _register_listeners(self) -> None:
-        self.server.register_event_handler("server:klippy_ready", self._handle_klippy_ready)
+        self.server.register_event_handler(
+            "server:klippy_ready", self._handle_klippy_ready
+        )
 
     def _register_endpoints(self) -> None:
         endpoint_prefixes = ["/server/filaman", "/server/spoolman"]
@@ -201,7 +203,9 @@ class FilaManManager:
         return [self.spool_id]
 
     async def component_init(self) -> None:
-        self.spool_id = await self.database.get_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, None)
+        self.spool_id = await self.database.get_item(
+            DB_NAMESPACE, ACTIVE_SPOOL_KEY, None
+        )
         if self.spool_id is None:
             self.spool_id = await self.database.get_item(
                 DB_NAMESPACE,
@@ -209,20 +213,28 @@ class FilaManManager:
                 None,
             )
             if self.spool_id is not None:
-                self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, self.spool_id)
+                self.database.insert_item(
+                    DB_NAMESPACE, ACTIVE_SPOOL_KEY, self.spool_id
+                )
 
         self.report_timer.start()
         self.connection_task = self.eventloop.create_task(self._availability_loop())
 
         if self.spool_id is not None:
             self._cancel_spool_check_task()
-            self.spool_check_task = self.eventloop.create_task(self._check_spool_deleted())
+            self.spool_check_task = self.eventloop.create_task(
+                self._check_spool_deleted()
+            )
 
     async def _availability_loop(self) -> None:
         while not self.is_closing:
             await self._check_api_available()
             if not self.is_closing:
-                delay = self.connected_check_delay if self.api_connected else self.reconnect_delay
+                delay = (
+                    self.connected_check_delay
+                    if self.api_connected
+                    else self.reconnect_delay
+                )
                 await asyncio.sleep(delay)
 
     async def _check_api_available(self) -> None:
@@ -260,7 +272,7 @@ class FilaManManager:
         initial_e_pos = toolhead.get("position", [None] * 4)[3]
         logging.debug(f"Initial epos: {initial_e_pos}")
         if initial_e_pos is not None:
-            self._highest_epos = initial_e_pos
+            self._last_epos = initial_e_pos
         else:
             logging.error("FilaMan integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
@@ -270,16 +282,17 @@ class FilaManManager:
         if toolhead is None:
             return
 
-        epos: float = toolhead.get("position", [0, 0, 0, self._highest_epos])[3]
-        self._last_epos = epos
+        epos: float = toolhead.get("position", [0, 0, 0, self._last_epos])[3]
         extr = toolhead.get("extruder", self._current_extruder)
         if extr != self._current_extruder:
-            self._highest_epos = epos
             self._current_extruder = extr
-        elif epos > self._highest_epos:
-            if self.spool_id is not None:
-                self._add_extrusion(self.spool_id, epos - self._highest_epos)
-            self._highest_epos = epos
+            self._last_epos = epos
+            return
+
+        epos_delta = epos - self._last_epos
+        if epos_delta > 0 and self.spool_id is not None:
+            self._add_extrusion(self.spool_id, epos_delta)
+        self._last_epos = epos
 
     def _add_extrusion(self, spool_id: int, used_length_mm: float) -> None:
         if spool_id in self.pending_reports:
@@ -346,15 +359,15 @@ class FilaManManager:
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
         self.database.insert_item(DB_NAMESPACE, LEGACY_ACTIVE_SPOOL_KEY, spool_id)
 
-        self._highest_epos = self._last_epos
-
         payload = {"spool_id": spool_id}
         self.server.send_event("filaman:active_spool_set", payload)
         self.server.send_event("spoolman:active_spool_set", payload)
 
         if spool_id is not None:
             self._cancel_spool_check_task()
-            self.spool_check_task = self.eventloop.create_task(self._check_spool_deleted())
+            self.spool_check_task = self.eventloop.create_task(
+                self._check_spool_deleted()
+            )
 
         logging.info(f"Setting active spool to: {spool_id}")
 
@@ -373,7 +386,9 @@ class FilaManManager:
                     self.set_active_spool(None)
                 elif response.has_error():
                     err_msg = self._get_response_error(response)
-                    self._set_last_error(f"Attempt to check spool status failed: {err_msg}")
+                    self._set_last_error(
+                        f"Attempt to check spool status failed: {err_msg}"
+                    )
                 else:
                     self._mark_success()
         finally:
@@ -386,7 +401,9 @@ class FilaManManager:
             return
         self.spool_check_task.cancel()
 
-    async def _fetch_spool(self, spool_id: int) -> Tuple[Optional[Dict[str, Any]], HttpResponse]:
+    async def _fetch_spool(
+        self, spool_id: int
+    ) -> Tuple[Optional[Dict[str, Any]], HttpResponse]:
         response = await self._request(
             method="GET",
             url=f"{self.api_url}/spools/{spool_id}",
@@ -400,7 +417,9 @@ class FilaManManager:
             return payload, response
         return None, response
 
-    def _resolve_material_values(self, spool_data: Dict[str, Any]) -> Tuple[float, float]:
+    def _resolve_material_values(
+        self, spool_data: Dict[str, Any]
+    ) -> Tuple[float, float]:
         filament = spool_data.get("filament")
         if not isinstance(filament, dict):
             filament = {}
@@ -458,7 +477,9 @@ class FilaManManager:
         used_weight_g = self._length_to_weight_g(used_length_mm, density, diameter)
         return -used_weight_g, False, False
 
-    async def _report_spool_usage(self, spool_id: int, used_length_mm: float) -> Tuple[bool, bool]:
+    async def _report_spool_usage(
+        self, spool_id: int, used_length_mm: float
+    ) -> Tuple[bool, bool]:
         delta_weight_g, should_retry, not_found = await self._build_delta_from_length(
             spool_id,
             used_length_mm,
@@ -501,7 +522,9 @@ class FilaManManager:
             logging.debug(
                 f"Sending spool usage: ID: {spool_id}, Length: {used_length_mm:.3f}mm"
             )
-            success, should_retry = await self._report_spool_usage(spool_id, used_length_mm)
+            success, should_retry = await self._report_spool_usage(
+                spool_id, used_length_mm
+            )
             if not success and should_retry:
                 self._add_extrusion(spool_id, used_length_mm)
 
@@ -515,9 +538,9 @@ class FilaManManager:
 
     def _normalize_proxy_path(self, path: str) -> str:
         if path.startswith("/api/v1"):
-            suffix = path[len("/api/v1") :]
+            suffix = path[len("/api/v1"):]
         elif path.startswith("/v1"):
-            suffix = path[len("/v1") :]
+            suffix = path[len("/v1"):]
         elif path.startswith("/"):
             suffix = path
         else:
@@ -529,13 +552,22 @@ class FilaManManager:
         if suffix == "/spool":
             return "/spools"
         if suffix.startswith("/spool/"):
-            return "/spools/" + suffix[len("/spool/") :]
+            return "/spools/" + suffix[len("/spool/"):]
         if suffix == "/filament":
             return "/filaments"
         if suffix.startswith("/filament/"):
-            return "/filaments/" + suffix[len("/filament/") :]
+            return "/filaments/" + suffix[len("/filament/"):]
 
         return suffix
+
+    def _is_allowed_proxy_request(self, method: str, path_suffix: str) -> bool:
+        if method == "GET":
+            return path_suffix.startswith("/spools") or path_suffix.startswith(
+                "/filaments"
+            )
+        if method == "POST":
+            return CONSUMPTION_PATH_RE.match(path_suffix) is not None
+        return False
 
     async def _map_legacy_use_request(
         self,
@@ -548,7 +580,9 @@ class FilaManManager:
             return method, path_suffix, body
 
         if method not in {"PUT", "POST"}:
-            raise self.server.error("Invalid HTTP method for '/use', expected PUT or POST")
+            raise self.server.error(
+                "Invalid HTTP method for '/use', expected PUT or POST"
+            )
         if not isinstance(body, dict):
             raise self.server.error("Legacy '/use' requests require a JSON body")
         if "use_length" not in body:
@@ -569,10 +603,16 @@ class FilaManManager:
         )
         if delta_weight_g is None:
             if should_retry:
-                raise self.server.error("Unable to fetch spool metadata for use_length mapping")
+                raise self.server.error(
+                    "Unable to fetch spool metadata for use_length mapping"
+                )
             raise self.server.error(f"Spool id {spool_id} was not found", 404)
 
-        return "POST", f"/spools/{spool_id}/consumptions", {"delta_weight_g": delta_weight_g}
+        return (
+            "POST",
+            f"/spools/{spool_id}/consumptions",
+            {"delta_weight_g": delta_weight_g},
+        )
 
     async def _proxy_filaman_request(self, web_request: WebRequest) -> Dict[str, Any]:
         method = web_request.get_str("request_method").upper()
@@ -592,6 +632,10 @@ class FilaManManager:
             path_suffix,
             body,
         )
+        if not self._is_allowed_proxy_request(method, path_suffix):
+            raise self.server.error(
+                f"Proxy request not permitted: {method} {path_suffix}", 403
+            )
 
         normalized_query: Optional[str] = None
         if query is not None:
