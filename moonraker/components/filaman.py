@@ -347,7 +347,9 @@ class FilaManManager:
         )
 
     def set_active_spool(self, spool_id: Union[int, None]) -> None:
-        if spool_id is not None and not isinstance(spool_id, int):
+        if isinstance(spool_id, bool) or (
+            spool_id is not None and not isinstance(spool_id, int)
+        ):
             raise self.server.error("spool_id must be an integer or None")
         if self.spool_id == spool_id:
             logging.info(f"Spool ID already set to: {spool_id}")
@@ -532,6 +534,13 @@ class FilaManManager:
 
     async def _handle_spool_id_request(self, web_request: WebRequest) -> Dict[str, Any]:
         if web_request.get_request_type() == RequestType.POST:
+            if "spool_id" not in web_request.get_args():
+                raise self.server.error("Missing required argument: spool_id")
+
+            raw_spool_id = web_request.get_args().get("spool_id")
+            if isinstance(raw_spool_id, bool):
+                raise self.server.error("spool_id must be an integer or None")
+
             spool_id = web_request.get_int("spool_id", None)
             self.set_active_spool(spool_id)
         return {"spool_id": self.spool_id}
