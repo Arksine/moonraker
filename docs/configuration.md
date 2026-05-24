@@ -3609,10 +3609,17 @@ default_diameter_mm: 1.75
 
 #### Setting the active spool from Klipper
 
-The `spoolman/FilaMan` module registers the `spoolman_set_active_spool` remote method
-with Klipper.  This method may be used to set the active spool ID, or clear it,
-using gcode macros.  For example, the following could be added to Klipper's
-`printer.cfg`:
+The `spoolman` module registers the `spoolman_set_active_spool` remote method
+with Klipper, while the `filaman` module registers both
+`filaman_set_active_spool` and the compatibility alias
+`spoolman_set_active_spool`.
+
+When using `[filaman]`, prefer `filaman_set_active_spool` in new macros.
+The `spoolman_set_active_spool` alias is available for compatibility with
+existing spoolman-oriented macros and front ends.
+
+These methods may be used to set the active spool ID, or clear it, using gcode
+macros.  For example, the following could be added to Klipper's `printer.cfg`:
 
 ```ini {title="Klipper Config Example"}
 # printer.cfg
@@ -3622,9 +3629,9 @@ gcode:
   {% if params.ID %}
     {% set id = params.ID|int %}
     {action_call_remote_method(
-       "spoolman_set_active_spool",
+       "filaman_set_active_spool",
        spool_id=id
-    )}
+     )}
   {% else %}
     {action_respond_info("Parameter 'ID' is required")}
   {% endif %}
@@ -3632,7 +3639,7 @@ gcode:
 [gcode_macro CLEAR_ACTIVE_SPOOL]
 gcode:
   {action_call_remote_method(
-    "spoolman_set_active_spool",
+    "filaman_set_active_spool",
     spool_id=None
   )}
 ```

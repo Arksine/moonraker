@@ -43,6 +43,7 @@ class FilaManManager:
         self.api_key: Optional[str] = config.get("api_key", default=None)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
         self.reconnect_delay: float = 2.0
+        self.connected_check_delay: float = 30.0
 
         self.default_density_g_cm3 = self._get_float_option(
             config,
@@ -221,7 +222,8 @@ class FilaManManager:
         while not self.is_closing:
             await self._check_api_available()
             if not self.is_closing:
-                await asyncio.sleep(self.reconnect_delay)
+                delay = self.connected_check_delay if self.api_connected else self.reconnect_delay
+                await asyncio.sleep(delay)
 
     async def _check_api_available(self) -> None:
         response = await self._request(
@@ -332,7 +334,8 @@ class FilaManManager:
         )
 
     def set_active_spool(self, spool_id: Union[int, None]) -> None:
-        assert spool_id is None or isinstance(spool_id, int)
+        if spool_id is not None and not isinstance(spool_id, int):
+            raise self.server.error("spool_id must be an integer or None")
         if self.spool_id == spool_id:
             logging.info(f"Spool ID already set to: {spool_id}")
             return
@@ -356,24 +359,27 @@ class FilaManManager:
         logging.info(f"Setting active spool to: {spool_id}")
 
     async def _check_spool_deleted(self) -> None:
-        if self.spool_id is not None:
-            response = await self._request(
-                method="GET",
-                url=f"{self.api_url}/spools/{self.spool_id}",
-                connect_timeout=2.0,
-                request_timeout=4.0,
-            )
-            if response.status_code == 404:
-                logging.info(f"Spool ID {self.spool_id} not found, setting to None")
-                self.pending_reports.pop(self.spool_id, None)
-                self.set_active_spool(None)
-            elif response.has_error():
-                err_msg = self._get_response_error(response)
-                self._set_last_error(f"Attempt to check spool status failed: {err_msg}")
-            else:
-                self._mark_success()
-
-        self.spool_check_task = None
+        try:
+            if self.spool_id is not None:
+                response = await self._request(
+                    method="GET",
+                    url=f"{self.api_url}/spools/{self.spool_id}",
+                    connect_timeout=2.0,
+                    request_timeout=4.0,
+                )
+                if response.status_code == 404:
+                    logging.info(f"Spool ID {self.spool_id} not found, setting to None")
+                    self.pending_reports.pop(self.spool_id, None)
+                    self.set_active_spool(None)
+                elif response.has_error():
+                    err_msg = self._get_response_error(response)
+                    self._set_last_error(f"Attempt to check spool status failed: {err_msg}")
+                else:
+                    self._mark_success()
+        finally:
+            current_task = asyncio.current_task()
+            if self.spool_check_task is current_task:
+                self.spool_check_task = None
 
     def _cancel_spool_check_task(self) -> None:
         if self.spool_check_task is None or self.spool_check_task.done():
@@ -587,7 +593,13 @@ class FilaManManager:
             body,
         )
 
-        query_suffix = f"?{query}" if query is not None else ""
+        normalized_query: Optional[str] = None
+        if query is not None:
+            normalized_query = query.lstrip("?").strip()
+            if normalized_query == "":
+                normalized_query = None
+
+        query_suffix = f"?{normalized_query}" if normalized_query is not None else ""
         full_url = f"{self.api_url}{path_suffix}{query_suffix}"
 
         logging.debug(f"Proxying {method} request to {full_url}")
@@ -663,7 +675,9 @@ class FilaManManager:
         try:
             await asyncio.wait_for(self.connection_task, 2.0)
         except asyncio.TimeoutError:
-            pass
+            self.connection_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.connection_task
 
 
 def load_component(config: ConfigHelper) -> FilaManManager:
