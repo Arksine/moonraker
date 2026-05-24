@@ -3576,11 +3576,11 @@ history_field_max_current:
   report_maximum=false
 ```
 
-### `[spoolman]`
+### `[spoolman]` and `[filaman]`
 
-Enables integration with the [Spoolman](https://github.com/Donkie/Spoolman)
+Enables integration with the [Spoolman](https://github.com/Donkie/Spoolman) or [FilaMan](https://www.filaman.app)
 filament manager. Moonraker will automatically send filament usage updates to
-the Spoolman database.
+the Spoolman or FilaMan database.
 
 Front ends can also utilize this config to provide a built-in management tool.
 
@@ -3595,9 +3595,21 @@ sync_rate: 5
 #   Spoolman server.  The default is 5.
 ```
 
+
+```ini {title="Moonraker Config Specification"}
+# moonraker.conf
+
+[filaman]
+server: http://192.168.1.50:8000
+api_key: uak.123.xxxxxxxxxxxxxxxxxxxxx
+sync_rate: 5
+default_density_g_cm3: 1.24
+default_diameter_mm: 1.75
+```
+
 #### Setting the active spool from Klipper
 
-The `spoolman` module registers the `spoolman_set_active_spool` remote method
+The `spoolman/FilaMan` module registers the `spoolman_set_active_spool` remote method
 with Klipper.  This method may be used to set the active spool ID, or clear it,
 using gcode macros.  For example, the following could be added to Klipper's
 `printer.cfg`:
