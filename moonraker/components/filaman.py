@@ -484,7 +484,9 @@ class FilaManManager:
         if cached is not None:
             density, diameter, cached_at = cached
             if now - cached_at < SPOOL_METADATA_CACHE_TTL:
-                used_weight_g = self._length_to_weight_g(used_length_mm, density, diameter)
+                used_weight_g = self._length_to_weight_g(
+                    used_length_mm, density, diameter
+                )
                 return -used_weight_g, False, False
 
         spool_data, response = await self._fetch_spool(spool_id)
