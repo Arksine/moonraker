@@ -32,6 +32,7 @@ LEGACY_ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
 DEFAULT_PLA_DENSITY_G_CM3 = 1.24
 DEFAULT_FILAMENT_DIAMETER_MM = 1.75
+SPOOL_METADATA_CACHE_TTL = 300.0
 CONSUMPTION_PATH_RE = re.compile(r"^/spools/\d+/consumptions$")
 
 
@@ -74,6 +75,7 @@ class FilaManManager:
         self._error_logged: bool = False
         self._last_error: Optional[str] = None
         self._last_success_at: Optional[str] = None
+        self._spool_metadata_cache: Dict[int, Tuple[float, float, float]] = {}
 
         self.spool_history = HistoryFieldData(
             "spool_ids",
@@ -154,14 +156,30 @@ class FilaManManager:
         self.api_url = f"{base}{api_path}"
 
     def _register_notifications(self) -> None:
-        self._register_notification_safe("filaman:active_spool_set")
-        self._register_notification_safe("filaman:filaman_status_changed")
-        self._register_notification_safe("spoolman:active_spool_set")
-        self._register_notification_safe("spoolman:spoolman_status_changed")
+        self._register_notification_safe(
+            "filaman:active_spool_set",
+            notify_name="filaman_active_spool_set",
+        )
+        self._register_notification_safe(
+            "filaman:filaman_status_changed",
+            notify_name="filaman_status_changed",
+        )
+        self._register_notification_safe(
+            "spoolman:active_spool_set",
+            notify_name="active_spool_set",
+        )
+        self._register_notification_safe(
+            "spoolman:spoolman_status_changed",
+            notify_name="spoolman_status_changed",
+        )
 
-    def _register_notification_safe(self, event_name: str) -> None:
+    def _register_notification_safe(
+        self,
+        event_name: str,
+        notify_name: Optional[str] = None,
+    ) -> None:
         with contextlib.suppress(Exception):
-            self.server.register_notification(event_name)
+            self.server.register_notification(event_name, notify_name=notify_name)
 
     def _register_listeners(self) -> None:
         self.server.register_event_handler(
@@ -213,7 +231,7 @@ class FilaManManager:
                 None,
             )
             if self.spool_id is not None:
-                self.database.insert_item(
+                await self.database.insert_item(
                     DB_NAMESPACE, ACTIVE_SPOOL_KEY, self.spool_id
                 )
 
@@ -346,7 +364,7 @@ class FilaManManager:
             request_timeout=request_timeout,
         )
 
-    def set_active_spool(self, spool_id: Union[int, None]) -> None:
+    async def set_active_spool(self, spool_id: Union[int, None]) -> None:
         if isinstance(spool_id, bool) or (
             spool_id is not None and not isinstance(spool_id, int)
         ):
@@ -358,8 +376,8 @@ class FilaManManager:
         self.spool_history.tracker.update(spool_id)
         self.spool_id = spool_id
 
-        self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
-        self.database.insert_item(DB_NAMESPACE, LEGACY_ACTIVE_SPOOL_KEY, spool_id)
+        await self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
+        await self.database.insert_item(DB_NAMESPACE, LEGACY_ACTIVE_SPOOL_KEY, spool_id)
 
         payload = {"spool_id": spool_id}
         self.server.send_event("filaman:active_spool_set", payload)
@@ -385,7 +403,7 @@ class FilaManManager:
                 if response.status_code == 404:
                     logging.info(f"Spool ID {self.spool_id} not found, setting to None")
                     self.pending_reports.pop(self.spool_id, None)
-                    self.set_active_spool(None)
+                    await self.set_active_spool(None)
                 elif response.has_error():
                     err_msg = self._get_response_error(response)
                     self._set_last_error(
@@ -461,12 +479,21 @@ class FilaManManager:
         spool_id: int,
         used_length_mm: float,
     ) -> Tuple[Optional[float], bool, bool]:
+        now = self.eventloop.get_loop_time()
+        cached = self._spool_metadata_cache.get(spool_id)
+        if cached is not None:
+            density, diameter, cached_at = cached
+            if now - cached_at < SPOOL_METADATA_CACHE_TTL:
+                used_weight_g = self._length_to_weight_g(used_length_mm, density, diameter)
+                return -used_weight_g, False, False
+
         spool_data, response = await self._fetch_spool(spool_id)
         if spool_data is None:
             if response.status_code == 404:
                 if spool_id == self.spool_id:
                     logging.info(f"Spool ID {spool_id} not found, setting to None")
-                    self.set_active_spool(None)
+                    await self.set_active_spool(None)
+                self._spool_metadata_cache.pop(spool_id, None)
                 return None, False, True
 
             err_msg = self._get_response_error(response)
@@ -476,6 +503,7 @@ class FilaManManager:
             return None, True, False
 
         density, diameter = self._resolve_material_values(spool_data)
+        self._spool_metadata_cache[spool_id] = (density, diameter, now)
         used_weight_g = self._length_to_weight_g(used_length_mm, density, diameter)
         return -used_weight_g, False, False
 
@@ -500,7 +528,7 @@ class FilaManManager:
             if response.status_code == 404:
                 if spool_id == self.spool_id:
                     logging.info(f"Spool ID {spool_id} not found, setting to None")
-                    self.set_active_spool(None)
+                    await self.set_active_spool(None)
                 return False, False
 
             err_msg = self._get_response_error(response)
@@ -542,7 +570,7 @@ class FilaManManager:
                 raise self.server.error("spool_id must be an integer or None")
 
             spool_id = web_request.get_int("spool_id", None)
-            self.set_active_spool(spool_id)
+            await self.set_active_spool(spool_id)
         return {"spool_id": self.spool_id}
 
     def _normalize_proxy_path(self, path: str) -> str:
@@ -571,8 +599,10 @@ class FilaManManager:
 
     def _is_allowed_proxy_request(self, method: str, path_suffix: str) -> bool:
         if method == "GET":
-            return path_suffix.startswith("/spools") or path_suffix.startswith(
-                "/filaments"
+            return (
+                path_suffix in {"/info", "/v1/info"}
+                or path_suffix.startswith("/spools")
+                or path_suffix.startswith("/filaments")
             )
         if method == "POST":
             return CONSUMPTION_PATH_RE.match(path_suffix) is not None
