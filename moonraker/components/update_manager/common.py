@@ -33,7 +33,6 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
         "managed_services": "moonraker"
     },
     "klipper": {
-        "moved_origin": "https://github.com/kevinoconnor/klipper.git",
         "origin": "https://github.com/Klipper3d/klipper.git",
         "requirements": "scripts/klippy-requirements.txt",
         "venv_args": "-p python3",
@@ -42,7 +41,8 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
-OPTION_OVERRIDES = ("channel", "pinned_commit", "refresh_interval", "report_anomalies")
+OPTION_OVERRIDES = ("channel", "pinned_commit", "refresh_interval", "report_anomalies",
+                    "origin", "dev_mode")
 
 class AppType(ExtendedEnum):
     NONE = 1
