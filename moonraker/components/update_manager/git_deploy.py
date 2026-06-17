@@ -472,7 +472,7 @@ class GitRepo:
     async def _find_current_branch(self) -> None:
         # Populate list of current branches
         blist = await self.list_branches()
-        current_branch = ""
+        current_branch = "?"
         self.branches = []
         for branch in blist:
             branch = branch.strip()
@@ -718,6 +718,8 @@ class GitRepo:
             self.repo_anomalies.append(
                 f"Pinned Commit {self.pinned_commit} does not exist"
             )
+        if not self.valid_git_repo:
+            self.repo_warnings.append("No git repo detected at configured path")
         if self.repo_corrupt:
             self.repo_warnings.append("Repo is corrupt")
         if self.git_branch == "?":
@@ -726,19 +728,19 @@ class GitRepo:
             self.repo_warnings.append(
                 f"Failed to detect tracking remote for branch {self.git_branch}"
             )
-        if self.upstream_url == "?":
-            self.repo_warnings.append("Failed to detect repo url")
-            return
-        upstream_url = self.upstream_url.lower()
-        if upstream_url[-4:] != ".git":
-            upstream_url += ".git"
-        if upstream_url != self.origin_url.lower():
-            self.repo_anomalies.append(f"Unofficial remote url: {self.upstream_url}")
-        if self.git_branch != self.primary_branch or self.git_remote != "origin":
+        elif self.git_branch != self.primary_branch or self.git_remote != "origin":
             self.repo_anomalies.append(
                 "Repo not on official remote/branch, expected: "
                 f"origin/{self.primary_branch}, detected: "
                 f"{self.git_remote}/{self.git_branch}")
+        if self.upstream_url == "?":
+            self.repo_warnings.append("Failed to detect repo url")
+        else:
+            upstream_url = self.upstream_url.lower()
+            if upstream_url[-4:] != ".git":
+                upstream_url += ".git"
+            if upstream_url != self.origin_url.lower():
+                self.repo_anomalies.append(f"Unofficial remote url: {self.upstream_url}")
         if self.untracked_files:
             self.repo_anomalies.append(
                 f"Repo has untracked source files: {self.untracked_files}"
