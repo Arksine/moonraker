@@ -1042,6 +1042,7 @@ class GitRepo:
         anomalies = self.repo_anomalies if rpt_anomalies else []
         return {
             'detected_type': "git_repo",
+            'repo_detected': self.valid_git_repo,
             'remote_alias': self.git_remote,
             'branch': self.git_branch,
             'owner': self.git_owner,
