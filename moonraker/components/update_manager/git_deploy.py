@@ -484,9 +484,18 @@ class GitRepo:
             if branch[0] == "(":
                 continue
             self.branches.append(branch)
-        if current_branch.startswith("(HEAD detached"):
+        if current_branch.startswith("("):
+            # A detached HEAD is rendered by git as either
+            # "(HEAD detached at <ref>)" or "(no branch)" (rebase in progress,
+            # some tag checkouts, older git).  Neither is a real branch, so the
+            # branch.<name>.remote tracking lookup must be skipped -- it would
+            # build the invalid key "branch.(no branch).remote".  A remote and
+            # branch are recovered only when git spells them out in the ref;
+            # otherwise the previously tracked values (if any) are kept.
             self.head_detached = True
-            ref_name = current_branch.split()[-1][:-1]
+            ref_name = ""
+            if current_branch.startswith("(HEAD detached"):
+                ref_name = current_branch.split()[-1][:-1]
             remote_list = (await self.remote()).splitlines()
             for remote in remote_list:
                 remote = remote.strip()
