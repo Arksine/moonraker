@@ -2157,14 +2157,26 @@ report_anomalies: True
 
 #### Git Repo Configuration
 
-/// Note
-Git repos must have at least one tag for Moonraker to identify its
+/// note | Repo Requirements
+Git Repos have must meet the following requirements for Moonraker to
+successfully perform updates:
+
+- Repos must have at least one remote configured, which should typically
+be named `origin`.
+- Repos must be checked out on a local branch.  Typically the branch will
+be named `master` or `main`, however this isn't required.  When Moonraker
+is launched with [debug features](./installation.md/#command-line-usage)
+enabled this requirement is relaxed, as it is possible to update a detached
+HEAD when the reference is a named remote branch (ie: `origin/dev-branch`).
+-  At least one tag is necessary for Moonraker to identify the software
 version.  The tag may be lightweight or annotated.  The tag must be in
 semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
-integer values.  For example, a repos first tag might be `v0.0.1`.
+integer values.  For example, a repos first tag might be `v0.0.1`.  This
+is a hard requirement for `stable` and `beta` updates.  Moonraker can
+perform updates on the `dev` channel when a tag is not available, however
+front ends may disable update controls when version information is
+not reported by Moonraker.
 
-Moonraker can update repos without tags, however front ends may disable
-update controls when version information is not reported by Moonraker.
 ///
 
 ```ini {title="Moonraker Config Specification"}

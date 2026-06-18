@@ -8,11 +8,25 @@ The format is based on [Keep a Changelog].
 
 ### Changed
 - **machine**: Support standard reboot and shutdown commands
+- **build**: Switch to uv for project management
+- **build**: Bump tornado to version 6.5.5
+- **build**: Bump apprise to version 1.9.8
+- **build**: Bump pillow to version 12.2.0
+- **assets**: Clarify welcome message on landing page
+- **git_deploy**: Refactor git repo status refresh
 
 ### Added
 - **metadata**: Auto-detect forks of PrusaSlicer.
 - **metadata**: Add `printer_vendor`, `printer_model`, `printer_variant`,
   and `profile_version` parsing for PrusaSlicer derivatives.
+- **git_deploy**: Add a `repo_detected` field for git repos in the status
+  API response
+
+### Fixed
+- **mqtt**: Fixed TLS for version 2.0+ paho mqtt clients
+- **authorization**: Only perform password authentication on locally
+  created users
+- **git_deploy**:  Detect a detached HEAD state when no branches are available.
 
 ## [0.10.0] - 2026-01-21
 
