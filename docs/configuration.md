@@ -347,6 +347,11 @@ subscriptions:
 #   announcements.  All items specified here are added in addition to
 #   "moonraker" and "klipper", which are always subscribed to.  The default
 #   is no additional subscriptions.
+enable_moonlight: True
+#   When set to true Moonraker will connect to the Moonlight repository on
+#   GitHub to retrieve announcement feeds.  When set to False attempts to
+#   retrieve feeds from Moonlight will be aborted, which may be useful for
+#   instances that do no have access to the internet.  The default is True.
 dev_mode: False
 #   A developer option that fetches RSS announcements from a local folder when
 #   set to True. The default behavior is for Moonraker to retrieve announcements

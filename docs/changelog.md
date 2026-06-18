@@ -21,6 +21,9 @@ The format is based on [Keep a Changelog].
   and `profile_version` parsing for PrusaSlicer derivatives.
 - **git_deploy**: Add a `repo_detected` field for git repos in the status
   API response
+- **announcements**:  Add the `enable_moonlight` configuration option that
+  may be used to enable/disable requests to retrieve announcement feeds from
+  the Moonlight GitHub repository.
 
 ### Fixed
 - **mqtt**: Fixed TLS for version 2.0+ paho mqtt clients
