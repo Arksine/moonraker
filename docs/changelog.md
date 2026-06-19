@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog].
 ### Changed
 - **machine**: Support standard reboot and shutdown commands
 - **build**: Switch to uv for project management
-- **build**: Bump tornado to version 6.5.5
+- **build**: Bump tornado to version 6.5.6
 - **build**: Bump apprise to version 1.9.8
 - **build**: Bump pillow to version 12.2.0
 - **assets**: Clarify welcome message on landing page
