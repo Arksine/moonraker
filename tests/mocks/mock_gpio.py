@@ -114,7 +114,7 @@ class MockLine:
             self.is_event = False
             if default_vals is not None:
                 if version > (1, 2):
-                    logging.warn("default_vals is deprecated in gpiod 1.3+")
+                    logging.warning("default_vals is deprecated in gpiod 1.3+")
                 self.value = default_vals[0]
             elif default_val is not None:
                 if version < (1, 3):
