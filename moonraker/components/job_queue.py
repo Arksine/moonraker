@@ -7,8 +7,12 @@
 from __future__ import annotations
 import asyncio
 import time
+from pathlib import Path
 import logging
+
+from moonraker.components.history import set_pending_job_id
 from ..common import JobEvent, RequestType
+from uuid import uuid4
 
 # Annotation imports
 from typing import (
@@ -19,6 +23,9 @@ from typing import (
     List,
     Union,
 )
+
+
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest, UserInfo
@@ -26,6 +33,21 @@ if TYPE_CHECKING:
     from .file_manager.file_manager import FileManager
     from .job_state import JobState
 
+
+PENDING_JOB_ID_PATH = Path("/tmp/pending_job_id")
+def set_pending_job_id(job_id: str):
+    global PENDING_JOB_ID
+    with open("/tmp/pending_job_id", "w") as f:
+        f.write(job_id)
+
+def get_pending_job_id():
+    if PENDING_JOB_ID_PATH.exists():
+        with open("/tmp/pending_job_id", "r") as f:
+            return f.read().strip()
+    return None
+
+def clear_pending_job_id():
+    PENDING_JOB_ID_PATH.unlink(True)
 class JobQueue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -136,6 +158,7 @@ class JobQueue:
                         raise self.server.error(
                             "Queue State Changed during Transition Gcode")
                 self._set_queue_state("starting")
+                set_pending_job_id(uid)
                 await kapis.start_print(
                     filename, wait_klippy_started=True, user=job.user
                 )
@@ -334,7 +357,7 @@ class JobQueue:
 class QueuedJob:
     def __init__(self, filename: str, user: Optional[UserInfo] = None) -> None:
         self.filename = filename
-        self.job_id = f"{id(self):016X}"
+        self.job_id = str(uuid4())
         self.time_added = time.time()
         self._user = user
 
