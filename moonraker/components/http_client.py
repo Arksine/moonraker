@@ -214,7 +214,7 @@ class HttpClient:
                 resp_hdrs['X-Ratelimit-Reset'])
         return resp
 
-    async def request_json(
+    async def http_api_request(
         self,
         resource: str,
         attempts: int = 1,
@@ -236,7 +236,10 @@ class HttpClient:
         if limit_reset_time and limit_remaining == 0:
             if time.time() < limit_reset_time:
                 reset_str = time.ctime(limit_reset_time)
-                raise Exception(f"Rate Limit Reached for {url}\nReset at: {reset_str}")
+                raise self.server.error(
+                    f"Rate Limit Reached\n"
+                    f"Request: {url}\n"
+                    f"Reset at: {reset_str}")
 
         request_headers = {"Accept": "application/json"}
         if is_github:

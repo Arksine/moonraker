@@ -263,7 +263,7 @@ class NetDeploy(AppDeploy):
                 self.log_info("Invalid Installation, aborting remote refresh")
                 return {}
             repo = self.repo
-
+        
         # mirror enable
         if self.enable_mirror:
             try:
@@ -292,12 +292,14 @@ class NetDeploy(AppDeploy):
         # init http client
         client = self.cmd_helper.get_http_client()
 
-        resp = await client.request_json(
-            resource, attempts=3, retry_pause_time=.5
-        )
-        # resp = await client.github_api_request(
-        #     resource, attempts=3, retry_pause_time=.5
-        # )
+        if self.enable_mirror:
+            resp = await client.http_api_request(
+                resource, attempts=3, retry_pause_time=.5
+            )
+        else:
+            resp = await client.github_api_request(
+                resource, attempts=3, retry_pause_time=.5
+            )
 
         release: Union[List[Any], Dict[str, Any]] = {}
         if resp.status_code == 304:
