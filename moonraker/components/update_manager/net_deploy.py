@@ -263,7 +263,7 @@ class NetDeploy(AppDeploy):
                 self.log_info("Invalid Installation, aborting remote refresh")
                 return {}
             repo = self.repo
-        
+
         # mirror enable
         if self.enable_mirror:
             try:
