@@ -59,7 +59,8 @@ GET /server/info
 | `components`             | [string] | A list of Moonraker components that are currently        |
 |                          |          | loaded.                                                  |^
 | `failed_components`      | [string] | A list of Moonraker components that failed to load.      |
-| `registered_directories` | [string] | A list "roots" registered with Moonraker's file manager. |
+| `registered_directories` | [string] | A list of "roots" registered with Moonraker's file       |
+|                          |          | manager.                                                 |^
 | `warnings`               | [string] | A list of warning messages describing errors encountered |
 |                          |          | during initialization or regular operation.              |^
 | `websocket_count`        |   int    | The number of currently active websocket connections.    |
