@@ -513,42 +513,43 @@ class NetDeploy(AppDeploy):
                 self.cmd_helper.on_download_progress
             )
 
-            # get signature asc file
-            sig_url = f"{dl_url}.asc"
-            sig_file = tempdir.joinpath(temp_download_file.name + ".asc")
+            if self.enable_mirror:
+                # get signature asc file
+                sig_url = f"{dl_url}.asc"
+                sig_file = tempdir.joinpath(temp_download_file.name + ".asc")
 
-            try:
-                await client.download_file(
-                    sig_url,
-                    "text/plain",
-                    sig_file,
-                    -1,
-                    self.cmd_helper.on_download_progress
-                )
-
-            except Exception:
-                raise self.server.error(f"signature not found {sig_url}")
-
-            self.notify_status("Verifying signature...")
-
-            verifier = GPGTool()
-
-            try:
-                ok = verifier.verify_with_keychain(
-                    owner=self.owner,
-                    project_name=self.project_name,
-                    sig_file=sig_file,
-                    data_file=temp_download_file,
-                )
-
-                if not ok:
-                    raise self.server.error(
-                        f"{self.prefix}Signature verification failed"
+                try:
+                    await client.download_file(
+                        sig_url,
+                        "text/plain",
+                        sig_file,
+                        -1,
+                        self.cmd_helper.on_download_progress
                     )
-                else:
-                    self.notify_status("signature Verifyed")
-            finally:
-                verifier.cleanup()
+
+                except Exception:
+                    raise self.server.error(f"signature not found {sig_url}")
+
+                self.notify_status("Verifying signature...")
+
+                verifier = GPGTool()
+
+                try:
+                    ok = verifier.verify_with_keychain(
+                        owner=self.owner,
+                        project_name=self.project_name,
+                        sig_file=sig_file,
+                        data_file=temp_download_file,
+                    )
+
+                    if not ok:
+                        raise self.server.error(
+                            f"{self.prefix}Signature verification failed"
+                        )
+                    else:
+                        self.notify_status("signature Verifyed")
+                finally:
+                    verifier.cleanup()
 
             self.notify_status(
                 f"Download Complete, extracting release to '{self.path}'"
