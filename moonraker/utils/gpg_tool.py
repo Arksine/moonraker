@@ -39,9 +39,9 @@ class GPGTool:
         res = subprocess.run(cmd, capture_output=True, text=True)
 
         return res.returncode == 0, res.stderr
-    
+
     def verify_with_keychain(self, owner: str, project_name: str,
-                              sig_file: Path, data_file: Path) -> bool:
+                            sig_file: Path, data_file: Path) -> bool:
         key_file = (
             self.get_moonraker_root()
             / "keychain"
@@ -56,6 +56,6 @@ class GPGTool:
 
         ok, _ = self.verify(sig_file, data_file)
         return True if ok else False
-    
+
     def cleanup(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)

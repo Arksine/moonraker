@@ -522,13 +522,13 @@ class NetDeploy(AppDeploy):
                     sig_url,
                     "text/plain",
                     sig_file,
-                    -1,
+                    None,
                     self.cmd_helper.on_download_progress
                 )
 
             except Exception:
                 raise self.server.error(f"signature not found {sig_url}")
-                
+
             self.notify_status("Verifying signature...")
 
             verifier = GPGTool()
