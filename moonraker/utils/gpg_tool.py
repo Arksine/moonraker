@@ -41,7 +41,7 @@ class GPGTool:
         return res.returncode == 0, res.stderr
 
     def verify_with_keychain(self, owner: str, project_name: str,
-                            sig_file: Path, data_file: Path) -> bool:
+                             sig_file: Path, data_file: Path) -> bool:
         key_file = (
             self.get_moonraker_root()
             / "keychain"
