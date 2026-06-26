@@ -14,6 +14,7 @@ from .app_deploy import AppDeploy
 from .common import Channel, AppType
 from ...utils import source_info
 from ...utils import json_wrapper as jsonw
+from ...utils.gpg_tool import GPGTool
 
 # Annotation imports
 from typing import (
@@ -222,7 +223,7 @@ class NetDeploy(AppDeploy):
             fm.add_reserved_path(f"update_manager {self.name}", self.path)
         await self._validate_release_info()
         if self.version == "?":
-            self.version = storage.get("version", "?")
+            self.version = storage.get("version", "v0.0.0")
         self.remote_version = storage.get('remote_version', "?")
         self.rollback_version = storage.get('rollback_version', self.version)
         self.rollback_repo = storage.get(
@@ -338,16 +339,27 @@ class NetDeploy(AppDeploy):
         result = await self._fetch_github_version()
         if not result:
             return
+
         self.remote_version = result.get('name', "?")
-        assets: List[Dict[str, Any]] = result.get("assets", [{}])
-        release_asset: Dict[str, Any] = assets[0] if assets else {}
-        if self.asset_name is not None:
-            for asset in assets:
-                if asset.get("name", "") == self.asset_name:
-                    release_asset = asset
-                    break
-            else:
-                logging.info(f"Asset '{self.asset_name}' not found")
+
+        assets: List[Dict[str, Any]] = result.get("assets") or []
+        if not assets:
+            logging.info("No assets found in release")
+            return
+
+        release_asset: Dict[str, Any] = {}
+
+        target_name = f"{self.project_name}.zip"
+
+        for asset in assets:
+            if asset.get("name") == target_name:
+                release_asset = asset
+                break
+
+        if not release_asset:
+            logging.info(f"Asset '{target_name}' not found")
+            return
+
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
@@ -500,6 +512,44 @@ class NetDeploy(AppDeploy):
                 dl_url, content_type, temp_download_file, size,
                 self.cmd_helper.on_download_progress
             )
+
+            # get signature asc file
+            sig_url = f"{dl_url}.asc"
+            sig_file = tempdir.joinpath(temp_download_file.name + ".asc")
+
+            try:
+                await client.download_file(
+                    sig_url,
+                    "text/plain",
+                    sig_file,
+                    None,
+                    self.cmd_helper.on_download_progress
+                )
+
+            except Exception:
+                raise self.server.error(f"signature not found {sig_url}")
+                
+            self.notify_status("Verifying signature...")
+
+            verifier = GPGTool()
+
+            try:
+                ok = verifier.verify_with_keychain(
+                    owner=self.owner,
+                    project_name=self.project_name,
+                    sig_file=sig_file,
+                    data_file=temp_download_file,
+                )
+
+                if not ok:
+                    raise self.server.error(
+                        f"{self.prefix}Signature verification failed"
+                    )
+                else:
+                    self.notify_status("signature Verifyed")
+            finally:
+                verifier.cleanup()
+
             self.notify_status(
                 f"Download Complete, extracting release to '{self.path}'"
             )
