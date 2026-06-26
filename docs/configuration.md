@@ -2196,7 +2196,10 @@ type: git_repo
 #   This parameter must be provided.
 channel: dev
 #   The update channel.  May be set to stable, beta, or dev.
-#   The default is dev.
+#   The default is dev.  A detached HEAD, such as a checkout pinned
+#   directly to a tag, is reported as not updatable; return the repo to a
+#   branch (attached) to update it.  The exception is debug mode, where a
+#   detached HEAD can update when its ref is a remote branch.
 refresh_interval:
 #   This overrides the refresh_interval set in the primary [update_manager]
 #   section.
