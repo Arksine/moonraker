@@ -522,7 +522,7 @@ class NetDeploy(AppDeploy):
                     sig_url,
                     "text/plain",
                     sig_file,
-                    None,
+                    -1,
                     self.cmd_helper.on_download_progress
                 )
 
