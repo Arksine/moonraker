@@ -101,6 +101,7 @@ class NetDeploy(AppDeploy):
         self._is_fallback = False
         eventloop = self.server.get_event_loop()
         self.warnings.clear()
+        self.anomalies.clear()
 
         # mirror override
         if self.enable_mirror:
