@@ -50,10 +50,10 @@ class NetDeploy(AppDeploy):
         self.enable_mirror = config.getboolean('enable_mirror', False)
         self.mirror_url = config.get('mirror_url', "")
         self.mirror_latest_template = config.get(
-            'mirror_latest_template', "{base_url}/LatestRelease/release"
+            'mirror_latest_template', "LatestRelease/release"
         )
         self.mirror_tag_template = config.get(
-            'mirror_tag_template', "{base_url}/{tag}/release"
+            'mirror_tag_template', "{tag}/release"
         )
 
         self.asset_name: Optional[str] = None
@@ -266,18 +266,26 @@ class NetDeploy(AppDeploy):
 
         # mirror enable
         if self.enable_mirror:
+
             try:
                 if tag is not None:
                     # Rendering rollback / Specific version URL
-                    resource = self.mirror_tag_template.format(
-                        base_url=self.mirror_url,
+                    mirror_tag_release = self.mirror_tag_template.format(
                         tag=tag
                     )
-                else:
-                    # Render Latest Version URL
-                    resource = self.mirror_latest_template.format(
-                        base_url=self.mirror_url
+
+                    # tag version
+                    resource = (
+                        f"{self.mirror_url.rstrip('/')}/"
+                        f"{mirror_tag_release.lstrip('/')}"
                     )
+                else:
+                    # latest release
+                    resource = (
+                        f"{self.mirror_url.rstrip('/')}/"
+                        f"{self.mirror_latest_template.lstrip('/')}"
+                    )
+
             except KeyError as e:
                 self.log_info(f"Mirror template error: missing key {e}")
                 return {}
