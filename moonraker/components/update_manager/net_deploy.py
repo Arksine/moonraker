@@ -584,14 +584,33 @@ class NetDeploy(AppDeploy):
     async def rollback(self) -> bool:
         if self.rollback_version == "?" or self.rollback_repo == "?":
             raise self.server.error("Incomplete Rollback Data", False)
+
         if self.rollback_version == self.version:
             return False
+
         result = await self._fetch_github_version(
-            self.rollback_repo, self.rollback_version
+            self.rollback_repo,
+            self.rollback_version
         )
+
         if not result:
             raise self.server.error("Failed to retrieve release asset data")
-        release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
+
+        assets: List[Dict[str, Any]] = result.get("assets") or []
+        if not assets:
+            raise self.server.error("No assets found in rollback release")
+
+        target_name = f"{self.project_name}.zip"
+
+        release_asset: Dict[str, Any] = {}
+        for asset in assets:
+            if asset.get("name") == target_name:
+                release_asset = asset
+                break
+
+        if not release_asset:
+            raise self.server.error(f"Asset '{target_name}' not found")
+
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
