@@ -9,6 +9,7 @@ import asyncio
 import base64
 import uuid
 import hashlib
+import hmac
 import secrets
 import os
 import time
@@ -703,7 +704,7 @@ class Authorization:
     def validate_api_key(self, api_key: str) -> UserInfo:
         if not self.enable_api_key:
             raise self.server.error("API Key authentication is disabled", 401)
-        if api_key and api_key == self.api_key:
+        if api_key and self.api_key and hmac.compare_digest(api_key, self.api_key):
             return self.users[API_USER]
         raise self.server.error("Invalid API Key", 401)
 
@@ -875,7 +876,7 @@ class Authorization:
         # Check API Key Header
         if self.enable_api_key:
             key: Optional[str] = request.headers.get("X-Api-Key")
-            if key and key == self.api_key:
+            if key and self.api_key and hmac.compare_digest(key, self.api_key):
                 return self.users[API_USER]
 
         # If the force_logins option is enabled and at least one user is created
