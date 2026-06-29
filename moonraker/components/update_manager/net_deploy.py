@@ -14,6 +14,7 @@ from .app_deploy import AppDeploy
 from .common import Channel, AppType
 from ...utils import source_info
 from ...utils import json_wrapper as jsonw
+from ...utils.gpg_tool import GPGTool
 
 # Annotation imports
 from typing import (
@@ -46,6 +47,16 @@ class NetDeploy(AppDeploy):
             self._configure_managed_services(config)
         self.repo = config.get('repo').strip().strip("/")
         self.owner, self.project_name = self.repo.split("/", 1)
+
+        self.enable_mirror = config.getboolean('enable_mirror', False)
+        self.mirror_url = config.get('mirror_url', "")
+        self.mirror_latest_template = config.get(
+            'mirror_latest_template', "LatestRelease/release"
+        )
+        self.mirror_tag_template = config.get(
+            'mirror_tag_template', "{tag}/release"
+        )
+
         self.asset_name: Optional[str] = None
         self.persistent_files: List[str] = []
         self.warnings: List[str] = []
@@ -91,6 +102,18 @@ class NetDeploy(AppDeploy):
         self._is_fallback = False
         eventloop = self.server.get_event_loop()
         self.warnings.clear()
+        self.anomalies.clear()
+
+        # mirror override
+        if self.enable_mirror:
+            self._is_valid = True
+            self._is_fallback = True
+
+            self.anomalies.append(
+                f"Mirror url: {self.mirror_url}"
+            )
+            return
+
         repo_parent = source_info.find_git_repo(self.path)
         homedir = pathlib.Path("~").expanduser()
         if not self._path_writable:
@@ -200,7 +223,7 @@ class NetDeploy(AppDeploy):
             fm.add_reserved_path(f"update_manager {self.name}", self.path)
         await self._validate_release_info()
         if self.version == "?":
-            self.version = storage.get("version", "?")
+            self.version = storage.get("version", "v0.0.0")
         self.remote_version = storage.get('remote_version', "?")
         self.rollback_version = storage.get('rollback_version', self.version)
         self.rollback_repo = storage.get(
@@ -242,16 +265,52 @@ class NetDeploy(AppDeploy):
                 self.log_info("Invalid Installation, aborting remote refresh")
                 return {}
             repo = self.repo
-        if tag is not None:
-            resource = f"repos/{repo}/releases/tags/{tag}"
-        elif self.channel == Channel.STABLE:
-            resource = f"repos/{repo}/releases/latest"
+
+        # mirror enable
+        if self.enable_mirror:
+
+            try:
+                if tag is not None:
+                    # Rendering rollback / Specific version URL
+                    mirror_tag_release = self.mirror_tag_template.format(
+                        tag=tag
+                    )
+
+                    # tag version
+                    resource = (
+                        f"{self.mirror_url.rstrip('/')}/"
+                        f"{mirror_tag_release.lstrip('/')}"
+                    )
+                else:
+                    # latest release
+                    resource = (
+                        f"{self.mirror_url.rstrip('/')}/"
+                        f"{self.mirror_latest_template.lstrip('/')}"
+                    )
+
+            except KeyError as e:
+                self.log_info(f"Mirror template error: missing key {e}")
+                return {}
         else:
-            resource = f"repos/{repo}/releases?per_page=1"
+            if tag is not None:
+                resource = f"repos/{repo}/releases/tags/{tag}"
+            elif self.channel == Channel.STABLE:
+                resource = f"repos/{repo}/releases/latest"
+            else:
+                resource = f"repos/{repo}/releases?per_page=1"
+
+        # init http client
         client = self.cmd_helper.get_http_client()
-        resp = await client.github_api_request(
-            resource, attempts=3, retry_pause_time=.5
-        )
+
+        if self.enable_mirror:
+            resp = await client.http_api_request(
+                resource, attempts=3, retry_pause_time=.5
+            )
+        else:
+            resp = await client.github_api_request(
+                resource, attempts=3, retry_pause_time=.5
+            )
+
         release: Union[List[Any], Dict[str, Any]] = {}
         if resp.status_code == 304:
             if resp.content:
@@ -280,16 +339,27 @@ class NetDeploy(AppDeploy):
         result = await self._fetch_github_version()
         if not result:
             return
+
         self.remote_version = result.get('name', "?")
-        assets: List[Dict[str, Any]] = result.get("assets", [{}])
-        release_asset: Dict[str, Any] = assets[0] if assets else {}
-        if self.asset_name is not None:
-            for asset in assets:
-                if asset.get("name", "") == self.asset_name:
-                    release_asset = asset
-                    break
-            else:
-                logging.info(f"Asset '{self.asset_name}' not found")
+
+        assets: List[Dict[str, Any]] = result.get("assets") or []
+        if not assets:
+            logging.info("No assets found in release")
+            return
+
+        release_asset: Dict[str, Any] = {}
+
+        target_name = f"{self.project_name}.zip"
+
+        for asset in assets:
+            if asset.get("name") == target_name:
+                release_asset = asset
+                break
+
+        if not release_asset:
+            logging.info(f"Asset '{target_name}' not found")
+            return
+
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
@@ -318,7 +388,11 @@ class NetDeploy(AppDeploy):
             f"Download Size: {size}\n"
             f"Content Type: {content_type}\n"
             f"Rollback Version: {self.rollback_version}\n"
-            f"Rollback Repo: {self.rollback_repo}"
+            f"Rollback Repo: {self.rollback_repo}\n"
+            f"enable_mirror: {self.enable_mirror}\n"
+            f"mirror_url: {self.mirror_url}\n"
+            f"mirror_latest_template: {self.mirror_latest_template}\n"
+            f"mirror_tag_template: {self.mirror_tag_template}\n"
             f"{warn_str}"
         )
 
@@ -438,6 +512,45 @@ class NetDeploy(AppDeploy):
                 dl_url, content_type, temp_download_file, size,
                 self.cmd_helper.on_download_progress
             )
+
+            if self.enable_mirror:
+                # get signature asc file
+                sig_url = f"{dl_url}.asc"
+                sig_file = tempdir.joinpath(temp_download_file.name + ".asc")
+
+                try:
+                    await client.download_file(
+                        sig_url,
+                        "text/plain",
+                        sig_file,
+                        -1,
+                        self.cmd_helper.on_download_progress
+                    )
+
+                except Exception:
+                    raise self.server.error(f"signature not found {sig_url}")
+
+                self.notify_status("Verifying signature...")
+
+                verifier = GPGTool()
+
+                try:
+                    ok = verifier.verify_with_keychain(
+                        owner=self.owner,
+                        project_name=self.project_name,
+                        sig_file=sig_file,
+                        data_file=temp_download_file,
+                    )
+
+                    if not ok:
+                        raise self.server.error(
+                            f"{self.prefix}Signature verification failed"
+                        )
+                    else:
+                        self.notify_status("signature Verifyed")
+                finally:
+                    verifier.cleanup()
+
             self.notify_status(
                 f"Download Complete, extracting release to '{self.path}'"
             )
@@ -471,14 +584,33 @@ class NetDeploy(AppDeploy):
     async def rollback(self) -> bool:
         if self.rollback_version == "?" or self.rollback_repo == "?":
             raise self.server.error("Incomplete Rollback Data", False)
+
         if self.rollback_version == self.version:
             return False
+
         result = await self._fetch_github_version(
-            self.rollback_repo, self.rollback_version
+            self.rollback_repo,
+            self.rollback_version
         )
+
         if not result:
             raise self.server.error("Failed to retrieve release asset data")
-        release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
+
+        assets: List[Dict[str, Any]] = result.get("assets") or []
+        if not assets:
+            raise self.server.error("No assets found in rollback release")
+
+        target_name = f"{self.project_name}.zip"
+
+        release_asset: Dict[str, Any] = {}
+        for asset in assets:
+            if asset.get("name") == target_name:
+                release_asset = asset
+                break
+
+        if not release_asset:
+            raise self.server.error(f"Asset '{target_name}' not found")
+
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
