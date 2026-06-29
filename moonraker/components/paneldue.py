@@ -284,7 +284,7 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            script = line[line_index+1:cs_index]
+            script = line[line_index+1:cs_index].strip()
         else:
             script = line
         # Execute the gcode.  Check for special RRF gcodes that
@@ -293,7 +293,8 @@ class PanelDue:
         cmd = parts[0].strip()
         if cmd in ["M23", "M30", "M32", "M36", "M37", "M98"]:
             arg = script[len(cmd):].strip()
-            parts = [cmd, arg]
+            if arg:
+                parts = [cmd, arg]
 
         # Check for commands that query state and require immediate response
         if cmd in self.direct_gcodes:
