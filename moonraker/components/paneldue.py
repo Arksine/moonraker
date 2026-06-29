@@ -299,6 +299,8 @@ class PanelDue:
         if cmd in self.direct_gcodes:
             params: Dict[str, Any] = {}
             for p in parts[1:]:
+                if not p:
+                    continue
                 if p[0] not in "PSR":
                     params["arg_p"] = p.strip(" \"\t\n")
                     continue
