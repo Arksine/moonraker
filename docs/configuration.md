@@ -3595,9 +3595,9 @@ history_field_max_current:
 
 ### `[spoolman]`
 
-Enables integration with the [Spoolman](https://github.com/Donkie/Spoolman)
-filament manager. Moonraker will automatically send filament usage updates to
-the Spoolman database.
+Enables integration with the
+[Spoolman](https://github.com/Donkie/Spoolman) filament manager. Moonraker will
+automatically send filament usage updates to the Spoolman database.
 
 Front ends can also utilize this config to provide a built-in management tool.
 
@@ -3612,12 +3612,47 @@ sync_rate: 5
 #   Spoolman server.  The default is 5.
 ```
 
+### `[filaman]`
+
+Enables integration with the [FilaMan](https://www.filaman.app) filament
+manager. Moonraker will automatically send filament usage updates to the
+FilaMan database.
+
+Front ends can also utilize this config to provide a built-in management tool.
+
+
+```ini {title="Moonraker Config Specification"}
+# moonraker.conf
+
+[filaman]
+server: http://192.168.1.50:8000
+#   Base URL to the FilaMan instance. This parameter must be provided.
+api_key: uak.123.xxxxxxxxxxxxxxxxxxxxx
+#   Optional API key for authenticating requests to FilaMan.
+sync_rate: 5
+#   The interval, in seconds, between spool usage sync requests.
+#   The default is 5.
+default_density_g_cm3: 1.24
+#   Fallback material density in g/cm^3 used if a spool's filament has
+#   no density set. The default is 1.24 (PLA).
+default_diameter_mm: 1.75
+#   Fallback filament diameter in mm used if a spool's filament has no
+#   diameter set. The default is 1.75.
+```
+
 #### Setting the active spool from Klipper
 
 The `spoolman` module registers the `spoolman_set_active_spool` remote method
-with Klipper.  This method may be used to set the active spool ID, or clear it,
-using gcode macros.  For example, the following could be added to Klipper's
-`printer.cfg`:
+with Klipper, while the `filaman` module registers both
+`filaman_set_active_spool` and the compatibility alias
+`spoolman_set_active_spool`.
+
+When using `[filaman]`, prefer `filaman_set_active_spool` in new macros.
+The `spoolman_set_active_spool` alias is available for compatibility with
+existing spoolman-oriented macros and front ends.
+
+These methods may be used to set the active spool ID, or clear it, using gcode
+macros.  For example, the following could be added to Klipper's `printer.cfg`:
 
 ```ini {title="Klipper Config Example"}
 # printer.cfg
@@ -3627,9 +3662,9 @@ gcode:
   {% if params.ID %}
     {% set id = params.ID|int %}
     {action_call_remote_method(
-       "spoolman_set_active_spool",
+       "filaman_set_active_spool",
        spool_id=id
-    )}
+     )}
   {% else %}
     {action_respond_info("Parameter 'ID' is required")}
   {% endif %}
@@ -3637,7 +3672,7 @@ gcode:
 [gcode_macro CLEAR_ACTIVE_SPOOL]
 gcode:
   {action_call_remote_method(
-    "spoolman_set_active_spool",
+    "filaman_set_active_spool",
     spool_id=None
   )}
 ```
