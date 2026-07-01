@@ -9,8 +9,10 @@ import asyncio
 import logging
 import re
 import contextlib
+import urllib.parse
 import tornado.websocket as tornado_ws
 from tornado import version_info as tornado_version
+from tornado.httpclient import HTTPRequest as TornadoHTTPRequest
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
 from typing import (
@@ -83,6 +85,20 @@ class SpoolManager:
         scheme = url_match["scheme"] or "http"
         host = url_match["host"].rstrip("/")
         ws_scheme = "wss" if scheme == "https" else "ws"
+        # Extract Basic Auth credentials from URL if present (e.g. user:pass@host)
+        parsed = urllib.parse.urlsplit(f"{scheme}://{host}")
+        self._basic_auth_user: Optional[str] = parsed.username or None
+        self._basic_auth_pass: Optional[str] = parsed.password or None
+        if self._basic_auth_user:
+            # Rebuild host without credentials
+            clean_host = parsed.hostname
+            if parsed.port:
+                clean_host = f"{clean_host}:{parsed.port}"
+            host = clean_host
+        logging.info(
+            f"Spoolman basic_auth_user={self._basic_auth_user!r}, "
+            f"host={host}"
+        )
         self.spoolman_url = f"{scheme}://{host}/api"
         self.ws_url = f"{ws_scheme}://{host}/api/v1/spool"
 
@@ -131,9 +147,21 @@ class SpoolManager:
                 logging.info(f"Connecting To Spoolman: {self.ws_url}")
                 log_connect = False
             try:
+                if self._basic_auth_user is not None:
+                    import base64
+                    creds = base64.b64encode(
+                        f"{self._basic_auth_user}:{self._basic_auth_pass}".encode()
+                    ).decode()
+                    ws_req: Union[str, TornadoHTTPRequest] = TornadoHTTPRequest(
+                        self.ws_url,
+                        connect_timeout=5.,
+                        headers={"Authorization": f"Basic {creds}"}
+                    )
+                else:
+                    ws_req = self.ws_url
                 self.spoolman_ws = await tornado_ws.websocket_connect(
-                    self.ws_url,
-                    connect_timeout=5.,
+                    ws_req,
+                    connect_timeout=None if self._basic_auth_user else 5.,
                     ping_interval=None if tornado_version < (6, 5) else 20.
                 )
                 setattr(self.spoolman_ws, "on_ping", self._on_ws_ping)
@@ -217,7 +245,9 @@ class SpoolManager:
         if self.spool_id is not None:
             response = await self.http_client.get(
                 f"{self.spoolman_url}/v1/spool/{self.spool_id}",
-                connect_timeout=1., request_timeout=2.
+                connect_timeout=1., request_timeout=2.,
+                basic_auth_user=self._basic_auth_user,
+                basic_auth_pass=self._basic_auth_pass
             )
             if response.status_code == 404:
                 logging.info(f"Spool ID {self.spool_id} not found, setting to None")
@@ -308,7 +338,9 @@ class SpoolManager:
             response = await self.http_client.request(
                 method="PUT",
                 url=f"{self.spoolman_url}/v1/spool/{spool_id}/use",
-                body={"use_length": used_length}
+                body={"use_length": used_length},
+                basic_auth_user=self._basic_auth_user,
+                basic_auth_pass=self._basic_auth_pass
             )
             if response.has_error():
                 if response.status_code == 404:
@@ -370,6 +402,8 @@ class SpoolManager:
             method=method,
             url=full_url,
             body=body,
+            basic_auth_user=self._basic_auth_user,
+            basic_auth_pass=self._basic_auth_pass
         )
         if not use_v2_response:
             response.raise_for_status()
