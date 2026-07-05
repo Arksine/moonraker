@@ -9,6 +9,7 @@ import asyncio
 import base64
 import uuid
 import hashlib
+import hmac
 import secrets
 import os
 import time
@@ -490,7 +491,7 @@ class Authorization:
         salt = bytes.fromhex(user_info.salt)
         hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', password.encode(), salt, HASH_ITER).hex()
-        if hashed_pass != user_info.password:
+        if not hmac.compare_digest(hashed_pass, user_info.password):
             raise self.server.error("Invalid Password")
         new_hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', new_pass.encode(), salt, HASH_ITER).hex()
@@ -558,7 +559,7 @@ class Authorization:
                 salt = bytes.fromhex(user_info.salt)
                 hashed_pass = hashlib.pbkdf2_hmac(
                     'sha256', password.encode(), salt, HASH_ITER).hex()
-                if hashed_pass != user_info.password:
+                if not hmac.compare_digest(hashed_pass, user_info.password):
                     raise self.server.error("Invalid Password")
         jwt_secret_hex: Optional[str] = user_info.jwt_secret
         if jwt_secret_hex is None:
@@ -703,7 +704,7 @@ class Authorization:
     def validate_api_key(self, api_key: str) -> UserInfo:
         if not self.enable_api_key:
             raise self.server.error("API Key authentication is disabled", 401)
-        if api_key and api_key == self.api_key:
+        if api_key and hmac.compare_digest(api_key, self.api_key):
             return self.users[API_USER]
         raise self.server.error("Invalid API Key", 401)
 
@@ -875,7 +876,7 @@ class Authorization:
         # Check API Key Header
         if self.enable_api_key:
             key: Optional[str] = request.headers.get("X-Api-Key")
-            if key and key == self.api_key:
+            if key and hmac.compare_digest(key, self.api_key):
                 return self.users[API_USER]
 
         # If the force_logins option is enabled and at least one user is created
