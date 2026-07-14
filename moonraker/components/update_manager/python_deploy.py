@@ -137,7 +137,7 @@ class PythonDeploy(AppDeploy):
             self.current_sha = vcs_info["commit_id"]
             self.repo_url = direct_url_data["url"]
         except KeyError:
-            self._add_warning("Failed to retrive direct_url vcs info")
+            self._add_warning("Failed to retrieve direct_url vcs info")
             return
         if not self._match_repo_url():
             self._add_warning(f"Invalid repo url: {self.repo_url}")
@@ -177,20 +177,20 @@ class PythonDeploy(AppDeploy):
         return ""
 
     def _update_current_version(self, package_info: PackageInfo) -> bool:
-        pkg_verson = ""
+        pkg_version = ""
         release_info = package_info.release_info
         metadata = package_info.metadata
         if release_info is not None:
             if self.current_sha == "?":
                 self.current_sha = release_info.get("commit_sha", "?")
             self.git_version = GitVersion(release_info.get("git_version", "?"))
-            pkg_verson = release_info.get("package_version", "")
+            pkg_version = release_info.get("package_version", "")
         if "Version" in metadata:
-            pkg_verson = metadata["Version"]
-        if not pkg_verson:
+            pkg_version = metadata["Version"]
+        if not pkg_version:
             self._add_warning("Failed to detect package version")
             return False
-        self.current_version = PyVersion(pkg_verson)
+        self.current_version = PyVersion(pkg_version)
         if not self.current_version.is_valid_version():
             self._add_warning("Failed to parse package version")
             return False
@@ -250,15 +250,19 @@ class PythonDeploy(AppDeploy):
 
     async def _refresh_pip(self) -> None:
         # Perform a dry-run install to see if an update is available.
-        # Curently this is the most reliable way to fetch the latest
+        # Currently this is the most reliable way to fetch the latest
         # version from an index, as we can't assume configurations
         # will use PyPI.
         self.log_info("Requesting package info via PIP...")
         norm_name = normalize_project_name(self.project_name)
         assert self.pip_cmd is not None
-        pip_args = f"install -U --quiet --dry-run --no-deps --report - {norm_name}"
+        pip_args = "install -U --quiet"
+        if self.channel == Channel.BETA:
+            pip_args = f"{pip_args} --pre"
+        pip_args = f"{pip_args} --dry-run --no-deps --report - {norm_name}"
         pip_exec = pip_utils.AsyncPipExecutor(self.pip_cmd, self.server)
-        resp = await pip_exec.call_pip_with_response(pip_args)
+        await self._update_pip(pip_exec)
+        resp = await pip_exec.call_pip_with_response(pip_args, timeout=1200.)
         data: Dict[str, Any] = json_wrapper.loads(resp)
         install_data: List[Dict[str, Any]] = data.get("install", [])
         if not install_data:
@@ -354,6 +358,8 @@ class PythonDeploy(AppDeploy):
         if self.source == PackageSource.PIP:
             # We can't depend on the SHA being available for PyPI packages,
             # so we must compare versions
+            if self.channel == Channel.BETA:
+                pip_args = f"{pip_args} --pre"
             pip_args = f"{pip_args} {project_name}"
             if rollback:
                 pip_args += f"=={self.rollback_ref}"

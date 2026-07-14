@@ -97,7 +97,7 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
         if cb is not None:
             if isinstance(data, str):
                 data = data.encode()
-            lines = data.split(b'\n')
+            lines = cast(bytes, data).split(b'\n')
             lines[0] = self.pending_data[data_idx] + lines[0]
             self.pending_data[data_idx] = lines.pop()
             for line in lines:
@@ -238,6 +238,7 @@ class ShellCommand:
             self.factory.add_running_command(self)
             attempts = max(1, attempts)
             stdin: Optional[bytes] = None
+            stdout = stderr = b""
             if proc_input is not None:
                 stdin = proc_input.encode()
             while attempts > 0:
@@ -345,6 +346,7 @@ class ShellCommand:
 class ShellCommandFactory:
     error = ShellCommandError
     def __init__(self, config: ConfigHelper) -> None:
+        self.eventloop = config.get_server().get_event_loop()
         self.running_commands: Set[ShellCommand] = set()
 
     def add_running_command(self, cmd: ShellCommand) -> None:
@@ -393,6 +395,7 @@ class ShellCommandFactory:
             self, cmd, callback, std_err_callback, env, log_stderr, cwd
         )
         attempts = max(1, attempts)
+
         async def _wrapper() -> None:
             for _ in range(attempts):
                 if await scmd.run(
@@ -403,7 +406,7 @@ class ShellCommandFactory:
             else:
                 ret_code = scmd.get_return_code()
                 raise ShellCommandError(f"Error running command {cmd}", ret_code)
-        return asyncio.create_task(_wrapper())
+        return self.eventloop.create_task(_wrapper())
 
     def exec_cmd(
         self,
@@ -427,7 +430,7 @@ class ShellCommandFactory:
             timeout, attempts, log_complete, sig_idx,
             proc_input, success_codes
         )
-        return asyncio.create_task(coro)
+        return self.eventloop.create_task(coro)
 
     async def close(self) -> None:
         for cmd in self.running_commands:

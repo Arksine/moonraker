@@ -124,10 +124,10 @@ class PrimaryRouter(MutableRouter):
         server = config.get_server()
         max_ws_conns = config.getint('max_websocket_connections', MAX_WS_CONNS_DEFAULT)
         self.verbose_logging = server.is_verbose_enabled()
+        tornado_ver = tornado.version_info
         app_args: Dict[str, Any] = {
             'serve_traceback': self.verbose_logging,
-            'websocket_ping_interval': 10,
-            'websocket_ping_timeout': 30,
+            'websocket_ping_interval': None if tornado_ver < (6, 5) else 10.,
             'server': server,
             'max_websocket_connections': max_ws_conns,
             'log_function': self.log_request
@@ -231,6 +231,7 @@ class MoonrakerApp:
         mimetypes.add_type('text/plain', '.cfg')
 
         # Set up HTTP routing.  Our "mutable_router" wraps a Tornado Application
+        logging.info(f"Detected Tornado Version {tornado.version}")
         self.mutable_router = PrimaryRouter(config)
         for (ptrn, hdlr) in (
             (home_pattern, WelcomeHandler),
@@ -763,7 +764,7 @@ class RPCHandler(AuthorizedRequestHandler, APITransport):
 
 class FileRequestHandler(AuthorizedFileHandler):
     def set_extra_headers(self, path: str) -> None:
-        # The call below shold never return an empty string,
+        # The call below should never return an empty string,
         # as the path should have already been validated to be
         # a file
         assert isinstance(self.absolute_path, str)

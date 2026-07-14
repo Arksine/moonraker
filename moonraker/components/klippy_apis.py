@@ -133,7 +133,7 @@ class KlippyAPI(APITransport):
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
-        # Doing so will result in "wait_started" blocking for the specifed
+        # Doing so will result in "wait_started" blocking for the specified
         # timeout (default 20s) and returning False.
         # XXX - validate that file is on disk
         if filename[0] == '/':
@@ -178,7 +178,7 @@ class KlippyAPI(APITransport):
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
-        # Doing so will result in "wait_started" blocking for the specifed
+        # Doing so will result in "wait_started" blocking for the specified
         # timeout (default 20s) and returning False.
         if wait_klippy_started:
             await self.klippy.wait_started()

@@ -9,6 +9,7 @@
         "packagekit",
         "wireless-tools; distro_id != 'ubuntu' or distro_version <= '24.04'",
         "iw; distro_id == 'ubuntu' and distro_version >= '24.10'",
+        "python3-libcamera; vendor == 'raspberry-pi' and distro_version >= '11'",
         "curl",
         "build-essential"
     ]

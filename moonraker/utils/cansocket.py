@@ -70,7 +70,7 @@ class CanSocket:
         self.input_buffer = b""
         self.output_packets: List[bytes] = []
         self.input_busy = False
-        self.output_busy = False
+        self.send_task: asyncio.Task | None = None
         self.closed = True
         try:
             self.cansock.bind((interface,))
@@ -139,10 +139,9 @@ class CanSocket:
                 packet = struct.pack(
                     CAN_FMT, can_id, length, pkt_data)
                 self.output_packets.append(packet)
-        if self.output_busy:
+        if self.send_task is not None:
             return
-        self.output_busy = True
-        asyncio.create_task(self._do_can_send())
+        self.send_task = asyncio.create_task(self._do_can_send())
 
     async def _do_can_send(self):
         while self.output_packets:
@@ -153,7 +152,7 @@ class CanSocket:
                 logging.info("Socket Write Error, closing")
                 self.close()
                 break
-        self.output_busy = False
+        self.send_task = None
 
     def close(self):
         if self.closed:

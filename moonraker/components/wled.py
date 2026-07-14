@@ -327,7 +327,7 @@ class StripSerial(Strip):
     def __init__(self, name: str, config: ConfigHelper) -> None:
         super().__init__(name, config)
         # Read the serial information (requires wled 0.13 2108250 or greater)
-        self.serial = async_serial.AsyncSerialConnection(config, 115200)
+        self.serial = async_serial.AsyncSerialConnection.from_config(config, 115200)
         self.enabled: bool = True
         self.serial_task: Optional[asyncio.Task] = None
         self.pending_response: Optional[asyncio.Future] = None
@@ -349,7 +349,7 @@ class StripSerial(Strip):
                 try:
                     data = jsonw.loads(line.strip())
                 except jsonw.JSONDecodeError:
-                    logging.debug(f"Recieved Serial Data: {line!r}")
+                    logging.debug(f"Received Serial Data: {line!r}")
                 else:
                     if (
                         self.pending_response is not None and

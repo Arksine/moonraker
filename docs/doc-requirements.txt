@@ -1,4 +1,4 @@
-mkdocs-material==9.5.50
-pymdown-extensions~=10.14.1
+mkdocs-material==9.7.5
+pymdown-extensions~=10.21.0
 compact_tables@git+https://github.com/Arksine/markdown-compact-tables@v1.1.0
 ./docs/pymdown-extras

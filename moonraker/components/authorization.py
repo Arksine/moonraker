@@ -450,7 +450,7 @@ class Authorization:
                 }
         elif req_type == RequestType.POST:
             # Create User
-            return await self._login_jwt_user(web_request, create=True)
+            return await self._login_jwt_user(web_request, new_user_request=True)
         elif req_type == RequestType.DELETE:
             # Delete User
             return await self._delete_jwt_user(web_request)
@@ -502,35 +502,39 @@ class Authorization:
         }
 
     async def _login_jwt_user(
-        self, web_request: WebRequest, create: bool = False
+        self, web_request: WebRequest, new_user_request: bool = False
     ) -> Dict[str, Any]:
         username: str = web_request.get_str('username')
         password: str = web_request.get_str('password')
-        source: str = web_request.get_str(
-            'source', self.default_source
-        ).lower()
+        source: str = web_request.get_str('source', self.default_source).lower()
         if source not in AUTH_SOURCES:
             raise self.server.error(f"Invalid 'source': {source}")
-        user_info: UserInfo
         if username in RESERVED_USERS:
-            raise self.server.error(
-                f"Invalid Request for user {username}")
+            raise self.server.error(f"Invalid Request for user {username}")
+        user_info: UserInfo
+        is_local_user = source == "moonraker"
+        need_create = new_user_request
         if source == "ldap":
-            if create:
-                raise self.server.error("Cannot Create LDAP User")
+            if new_user_request:
+                raise self.server.error("Invalid Request to create new LDAP User")
             if self.ldap is None:
                 raise self.server.error(
                     "LDAP authentication not available", 401
                 )
             await self.ldap.authenticate_ldap_user(username, password)
-            if username not in self.users:
-                create = True
-        if create:
+            need_create = username not in self.users
+        if need_create:
             if username in self.users:
                 raise self.server.error(f"User {username} already exists")
-            salt = secrets.token_bytes(32)
-            hashed_pass = hashlib.pbkdf2_hmac(
-                'sha256', password.encode(), salt, HASH_ITER).hex()
+            if is_local_user:
+                # only generate a hashed password when local authentication
+                # is required
+                salt = secrets.token_bytes(32)
+                hashed_pass = hashlib.pbkdf2_hmac(
+                    'sha256', password.encode(), salt, HASH_ITER).hex()
+            else:
+                salt = b""
+                hashed_pass = ""
             user_info = UserInfo(
                 username=username,
                 password=hashed_pass,
@@ -539,11 +543,6 @@ class Authorization:
             )
             self.users[username] = user_info
             await self._sync_user(username)
-            action = "user_created"
-            if source == "ldap":
-                # Dont notify user created
-                action = "user_logged_in"
-                create = False
         else:
             if username not in self.users:
                 raise self.server.error(f"Unregistered User: {username}")
@@ -554,12 +553,13 @@ class Authorization:
                     f"Moonraker cannot authenticate user '{username}', must "
                     f"specify source '{auth_src}'", 401
                 )
-            salt = bytes.fromhex(user_info.salt)
-            hashed_pass = hashlib.pbkdf2_hmac(
-                'sha256', password.encode(), salt, HASH_ITER).hex()
-            action = "user_logged_in"
-            if hashed_pass != user_info.password:
-                raise self.server.error("Invalid Password")
+            if is_local_user:
+                # Only local users require password authentication
+                salt = bytes.fromhex(user_info.salt)
+                hashed_pass = hashlib.pbkdf2_hmac(
+                    'sha256', password.encode(), salt, HASH_ITER).hex()
+                if hashed_pass != user_info.password:
+                    raise self.server.error("Invalid Password")
         jwt_secret_hex: Optional[str] = user_info.jwt_secret
         if jwt_secret_hex is None:
             private_key = Signer()
@@ -579,12 +579,12 @@ class Authorization:
             username, jwk_id, private_key, token_type="refresh",
             exp_time=datetime.timedelta(days=self.login_timeout))
         conn = web_request.get_client_connection()
-        if create:
+        if new_user_request:
             event_loop = self.server.get_event_loop()
             event_loop.delay_callback(
-                .005, self.server.send_event,
-                "authorization:user_created",
-                {'username': username})
+                .005, self.server.send_event, "authorization:user_created",
+                {'username': username}
+            )
         elif conn is not None:
             conn.user_info = user_info
         return {
@@ -592,7 +592,7 @@ class Authorization:
             'token': token,
             'source': user_info.source,
             'refresh_token': refresh_token,
-            'action': action
+            'action': "user_created" if new_user_request else "user_logged_in"
         }
 
     async def _delete_jwt_user(self, web_request: WebRequest) -> Dict[str, str]:

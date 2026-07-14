@@ -33,6 +33,7 @@ class Notifier:
         self.events: Dict[str, List[NotifierInstance]] = {}
         prefix_sections = config.get_prefix_sections("notifier")
         self.register_remote_actions()
+        logging.info(f"Loading notifiers, Apprise version {apprise.__version__}")
         for section in prefix_sections:
             cfg = config[section]
             try:

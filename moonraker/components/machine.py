@@ -74,6 +74,7 @@ SERVICE_PROPERTIES = [
     "User"
 ]
 USB_IDS_URL = "http://www.linux-usb.org/usb.ids"
+HAS_SYSCTL = shutil.which("systemctl", os.F_OK) is not None
 
 class Machine:
     def __init__(self, config: ConfigHelper) -> None:
@@ -228,7 +229,7 @@ class Machine:
             if self.server.is_verbose_enabled():
                 logging.exception("Failed to import libcamera")
             self.server.add_log_rollover_item(
-                "libcamera", "Module libcamera unavailble, import failed"
+                "libcamera", "Module libcamera unavailable, import failed"
             )
             return None
 
@@ -853,7 +854,7 @@ class Machine:
             if resp.etag is not None:
                 usb_id_req_info["etag"] = resp.etag
             if resp.last_modified is not None:
-                usb_id_req_info["last_modifed"] = resp.last_modified
+                usb_id_req_info["last_modified"] = resp.last_modified
             await db.insert_item("moonraker", "usb_id_req_info", usb_id_req_info)
             # Write file
             logging.info("Writing usb.ids file...")
@@ -932,17 +933,12 @@ class Machine:
 class BaseProvider:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.shutdown_action = config.get("shutdown_action", "poweroff")
-        self.shutdown_action = self.shutdown_action.lower()
-        if self.shutdown_action not in ["halt", "poweroff"]:
-            raise config.error(
-                "Section [machine], Option 'shutdown_action':"
-                f"Invalid value '{self.shutdown_action}', must be "
-                "'halt' or 'poweroff'"
-            )
+        shutdown_choices = ["halt", "poweroff"]
+        self.shutdown_action = config.getchoice(
+            "shutdown_action", shutdown_choices, "poweroff", force_lowercase=True
+        )
         self.available_services: Dict[str, Dict[str, str]] = {}
-        self.shell_cmd: SCMDComp = self.server.load_component(
-            config, 'shell_command')
+        self.shell_cmd: SCMDComp = self.server.load_component(config, 'shell_command')
 
     async def initialize(self) -> None:
         pass
@@ -952,10 +948,13 @@ class BaseProvider:
         return await machine.exec_sudo_command(command)
 
     async def shutdown(self) -> None:
-        await self._exec_sudo_command(f"systemctl {self.shutdown_action}")
+        act = self.shutdown_action
+        cmd = f"systemctl {act}" if HAS_SYSCTL else act
+        await self._exec_sudo_command(cmd)
 
     async def reboot(self) -> None:
-        await self._exec_sudo_command("systemctl reboot")
+        cmd = "systemctl reboot" if HAS_SYSCTL else "reboot"
+        await self._exec_sudo_command(cmd)
 
     async def do_service_action(self,
                                 action: str,
@@ -1195,7 +1194,7 @@ class SystemdDbusProvider(BaseProvider):
                 "sessions are open."
             )
         try:
-            # Get the login manaager interface
+            # Get the login manager interface
             self.login_mgr = await self.dbus_mgr.get_interface(
                 "org.freedesktop.login1",
                 "/org/freedesktop/login1",
@@ -1806,7 +1805,7 @@ class InstallValidator:
             raise ValidationError(
                 "Moonraker requires sudo permission to update the system "
                 "service. Please check your notifications for further "
-                "intructions."
+                "instructions."
             )
         self._sudo_requested = False
         svc_dest = pathlib.Path(props["FragmentPath"])

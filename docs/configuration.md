@@ -347,6 +347,11 @@ subscriptions:
 #   announcements.  All items specified here are added in addition to
 #   "moonraker" and "klipper", which are always subscribed to.  The default
 #   is no additional subscriptions.
+enable_moonlight: True
+#   When set to true Moonraker will connect to the Moonlight repository on
+#   GitHub to retrieve announcement feeds.  When set to False attempts to
+#   retrieve feeds from Moonlight will be aborted, which may be useful for
+#   instances that do no have access to the internet.  The default is True.
 dev_mode: False
 #   A developer option that fetches RSS announcements from a local folder when
 #   set to True. The default behavior is for Moonraker to retrieve announcements
@@ -611,6 +616,16 @@ user_filter: (&(objectClass=user)(cn=USERNAME))
 #   Jinja2 Templates, see the [secrets] section for details.
 #   The default is empty, which will change the lookup query depending on
 #   is_active_directory.
+membership_attribute: memberOf
+#   The name of the attribute that contains a list of groups the user is
+#   a member of.  Can be "memberOf" or "isMemberOf".  Default is "memberOf".
+check_dn_case: True
+#   Determines whether or not DN comparisons performed by Moonraker are
+#   case sensitive.  Currently this applies to the 'group_dn' when it is
+#   configured.  Default is True.
+#   Note:  This option does NOT apply to LDAP search operations.  The LDAP
+#   spec states that DN comparisons should not be case sensitive, however it
+#   is possible for server and/or administrator to override this behavior.
 ```
 
 ### `[octoprint_compat]`
@@ -773,6 +788,15 @@ bound_services:
 #   is "off", all bound services will be stopped after device initialization.
 #
 #   The default is no services are bound to the device.
+restrict_action_processing: True
+#   When set to True, this option will skip "action" processing when Moonraker
+#   detects a change in state triggered by an external source (ie: toggled
+#   by pressing a switch on the device or through another application).  Actions
+#   are post trigger events, such as restarting Klippy and controlling a bound
+#   service. When set to False actions are processed for all detected changes in
+#   state.  Note that Moonraker can only detect external changes for devices
+#   that receive asynchronous updates (Klipper and MQTT) or devices that support
+#   polling and have the 'poll_interval' option set. The default is True.
 ```
 
 /// Note
@@ -992,6 +1016,10 @@ port:
 output_id:
 #   For power strips, the socket index to use. Default is 0 which indicates the
 #   device is not a power strip.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1023,6 +1051,10 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Tasmota device supports
 #   more than one output.  Default is 1.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Note
@@ -1067,6 +1099,10 @@ password:
 output_id:
 #   The output_id (or relay id) to use if the Shelly device supports
 #   more than one output.  Default is 1.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Note
@@ -1112,7 +1148,10 @@ password:
 #   The password for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. The
 #   default is no password.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 ####  Home Assistant Configuration (HTTP)
@@ -1142,7 +1181,10 @@ status_delay: 1.0
 #   on/off and requesting its current status.  This is a workaround used
 #   to validate that Home Assistant has successfully toggled the device,
 #   as the API is currently broken on their end.  Default is 1 second.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1180,7 +1222,10 @@ password:
 output_id:
 #   The name of a programmed output, virtual input or virtual
 #   output in the loxone configuration.  The default is no output id.
-#
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 #### MQTT Device Configuration
@@ -1215,14 +1260,17 @@ state_topic:
 #  The mqtt topic to subscribe to for state updates.  This parameter must be
 #  provided.
 state_response_template:
-#  A template used to parse the payload received with the state topic.  A
-#  "payload" variable is provided the template's context.  This template
-#  must resolve to "on" or "off".  For example:
+#  A template used to parse the payload received with the state topic.  The
+#  template's context will include  "payload", "last_request", and
+#  "response_count" variables. This template must resolve to "on", "off" or
+#  "discard".  For example:
 #    {% set resp = payload|fromjson %}
 #    {resp["POWER"]}
 #  The above example assumes a json response is received, with a "POWER" field
 #  that set to either "ON" or "OFF".  The resolved response will always be
-#  trimmed of whitespace and converted to lowercase. The default is the payload.
+#  trimmed of whitespace and converted to lowercase.  See the "Discarding
+#  Responses" section below for details on how to discard unwanted responses.
+#  The default is to render the contents the payload directly.
 state_timeout:
 #  The amount of time (in seconds) to wait for the state topic to receive an
 #  update. If the timeout expires the device revert to an "error" state.  This
@@ -1284,6 +1332,41 @@ state_response_template:
 # not necessary to query after a command
 query_after_command: False
 ```
+
+##### Discarding Responses
+
+Some devices may publish a response prior executing a power request, then
+publish an additional response after.  The context provided to the
+`state_response_template` includes two variables in addition to the `payload`
+that can be used to discard undesirable responses:
+
+- `last_request`: The name of the last requested action, will be `refresh`,
+  `power_on`, `power_off`.  Will be an empty string in the scenario where an
+  update is published outside of a request from Moonraker.
+- `response_count`: The number of responses received since Moonraker last
+  requested an action from the MQTT device.
+
+An example using the above variables to discard a response may look like the
+following:
+
+```ini {title="Moonraker Config Example"}
+# moonraker.conf
+
+# Example configuration for ing with Tasmota firmware over mqtt
+[power mqtt_plug]
+type: mqtt
+state_response_template:
+  # Discard the first response for power on and power off requests
+  {% if response_count == 1 and last_request.startswith("power_") %}
+    discard
+  {% else %}
+    # render the payload of the second response for power requests, and the
+    # first response for refresh requests or updates published as a result
+    # of actions taken outside of Moonraker.
+    {payload|lower}
+  {% endif %}
+```
+
 ####  SmartThings (HTTP)
 
 /// attention | Important
@@ -1307,6 +1390,10 @@ token:
 #   must be provided.
 device:
 #   The Device guid of the switch to control. This parameter must be provided.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 Example:
@@ -1402,7 +1489,10 @@ device_type: light
 #   If device_type is set to light, the device_id should be the light id,
 #   and if the device_type is group, the device_id should be the group id.
 #   The default is "light".
-
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 #### USB (uhubctl) devices
@@ -1425,6 +1515,10 @@ port:
 #  Port of the USB device to control.  The port corresponds to the "-p"
 #  option of "ububctl".  When omitted no port is provided to the uhubctl
 #  command.
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 /// Tip
@@ -1483,7 +1577,10 @@ response_template:
 #   template should always render to "on" or "off" based on the response.  See
 #   the following section for details on the fields provided to the Jinja2
 #   context.  This parameter must be provided.
-
+poll_interval:
+#   A float indicating the number of seconds between each status request when
+#   polling the device.  The minimum value is 1.0 seconds.  When this option
+#   is omitted polling is disabled.
 ```
 
 ###### The template context
@@ -1853,6 +1950,28 @@ empty, if any jobs exist in the queue then the next job on the
 queue will be loaded.
 ///
 
+#### External Power Events
+
+Many switches are capable of operation outside of Moonraker's scope. When these
+devices are toggled by an external source their state may become inconsistent
+with Moonraker's internal state.  Some device types, such as `mqtt` and
+`klipper_device`, receive status updates asynchronously, avoiding consistency
+issues.  Consistency with other devices may be resolved by configuring the
+`poll_interval` option, which enables device status polling.
+
+When an external state change is detected, Moonraker updates its internal state and
+notifies all connected clients.  By default Moonraker will not run any post
+event actions, such as restarting Klippy or managing bound services, when devices
+are toggled outside of Moonraker.  This behavior may be overridden per device by
+setting the `restrict_action_processing` option to `False`.
+
+/// Note
+
+External events do not apply to `gpio` and `rf` devices.  When a gpio
+is configured Moonraker retains exclusive control over it.  RF devices
+are not capable of receiving status updates.
+
+///
 
 ### `[update_manager]`
 This enables moonraker's update manager.  Note that updates can only be
@@ -2034,18 +2153,35 @@ info_tags:
 #   Frontends may use these tags to perform additional actions or display
 #   information, see your extension documentation for details on configuration.
 #   The default is an empty list.
+report_anomalies: True
+#   When set to True all detected anomalies are reported to front-ends.  When
+#   set to False anomalies are logged but not reported. For a typical frontend
+#   this can be used to silence messages when it anomalies are expected. The
+#   default is True.
 ```
 
 #### Git Repo Configuration
 
-/// Note
-Git repos must have at least one tag for Moonraker to identify its
+/// note | Repo Requirements
+Git Repos have must meet the following requirements for Moonraker to
+successfully perform updates:
+
+- Repos must have at least one remote configured, which should typically
+be named `origin`.
+- Repos must be checked out on a local branch.  Typically the branch will
+be named `master` or `main`, however this isn't required.  When Moonraker
+is launched with [debug features](./installation.md/#command-line-usage)
+enabled this requirement is relaxed, as it is possible to update a detached
+HEAD when the reference is a named remote branch (ie: `origin/dev-branch`).
+-  At least one tag is necessary for Moonraker to identify the software
 version.  The tag may be lightweight or annotated.  The tag must be in
 semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
-integer values.  For example, a repos first tag might be `v0.0.1`.
+integer values.  For example, a repos first tag might be `v0.0.1`.  This
+is a hard requirement for `stable` and `beta` updates.  Moonraker can
+perform updates on the `dev` channel when a tag is not available, however
+front ends may disable update controls when version information is
+not reported by Moonraker.
 
-Moonraker can update repos without tags, however front ends may disable
-update controls when version information is not reported by Moonraker.
 ///
 
 ```ini {title="Moonraker Config Specification"}
@@ -2172,6 +2308,11 @@ pinned_commit:
 #   specify the complete hash, however abbreviated hashes with a minimum of
 #   8 characters are accepted.  The "pinned_commit" overrides the update
 #   behavior set by the "channel" option.  The default is no pinned commit.
+report_anomalies: True
+#   When set to True all detected anomalies are reported to front-ends.  When
+#   set to False anomalies are logged but not reported. For a typical frontend
+#   this can be used to silence messages when it anomalies are expected. The
+#   default is True.
 ```
 
 /// Note
@@ -2233,6 +2374,7 @@ enable_node_updates:
 is_system_service: True
 managed_services:
 info_tags:
+report_anomalies: True
 #   See the git_repo type documentation for detailed descriptions of the above
 #   options.
 ```
@@ -2878,9 +3020,7 @@ For a typical single instance installation this resolves to
 `$HOME/printer_data/moonraker.secrets`. This may be a symbolic link.
 ///
 
-Example ini secrets file:
-
-```ini {title="secrets.ini"}
+```ini {title="Example moonraker.secrets ini file"}
 # /home/pi/printer_data/moonraker.secrets
 
 [mqtt_credentials]
@@ -2892,9 +3032,7 @@ token: long_token_string
 
 ```
 
-Example json secrets file:
-
-```json {title="secrets.json"}
+```json {title="Example moonraker.secrets json file"}
 {
     "mqtt_credentials": {
         "username": "mqtt_user",
@@ -2959,34 +3097,80 @@ domain: switch
 
 ### `[notifier]`
 
-Enables the notification service. Multiple "notifiers" may be configured,
-each with their own section, ie: `[notifier my_discord_server]`,
-`[notifier my_phone]`.
+Enables push notification services. Multiple "notifiers" may be configured,
+each with their own section in the format of `[notifier <name>]`, ie:
+`[notifier my_discord_server]` or`[notifier my_phone]`.
 
-All notifiers require an url for a service to be set up. Moonraker depends on
-[Apprise](https://github.com/caronc/apprise) to emit notifications.
-Available services and their corresponding at urls may be found on the
-[Apprise Wiki](https://github.com/caronc/apprise/wiki).
+Moonraker leverages the [Apprise](https://github.com/caronc/apprise) Python
+library to emit notifications.  As such, the Apprise
+[documentation](https://appriseit.com/services/)
+should be consulted to determine the format of the notifier's `url` option.
+
+/// Note
+The Apprise library is actively developed and frequently adds new notification
+services. When at least one notifier has been configured `moonraker.log` will
+report the currently installed version of Apprise.  Alternatively Moonraker's
+[pyproject.toml](https://github.com/Arksine/moonraker/blob/master/pyproject.toml)
+can be be referenced to determine the latest version of Apprise that should be
+installed. For example:
+
+```toml
+[project]
+name = "moonraker"
+dynamic = ["version"]
+description = "API Server for Klipper"
+authors = [
+    {name = "Eric Callahan", email = "arksine.code@gmail.com"},
+]
+dependencies = [
+    "tornado>=6.2.0,<=6.5.5",
+    "pyserial==3.4",
+    "pillow>=9.5.0, <=12.1.0",
+    "streaming-form-data>=1.11.0, <=1.19.1",
+    "distro==1.9.0",
+    "inotify-simple==2.0.1",
+    "libnacl==2.1.0",
+    "paho-mqtt==2.1.0",
+    "zeroconf>=0.131.0, <=0.148.0",
+    "preprocess-cancellation==0.2.1",
+    "jinja2==3.1.6",
+    "dbus-fast>=2.21.3, <=3.1.2",
+    "apprise>=1.9.3, <=1.9.8",
+    "ldap3==2.9.1",
+    "python-periphery==2.4.1",
+    "importlib_metadata>=6.7.0, <=8.7.1",
+]
+...
+```
+From the above we can see that Moonraker pins Apprise to a maximum version
+of 1.9.8 at the time of this writing.  Keep in mind that EOL versions of Python
+may not be able to update to the latest version of Apprise.  As of the time of
+this writing all Python versions below 3.10 have reached End Of Life status.
+
+If the latest pinned version does not support your desired service create a feature
+request on Moonraker's issue tracker to bump the version of the Apprise package.
+///
 
 ```ini {title="Moonraker Config Specification"}
 # moonraker.conf
 
-[notifier telegram]
-url: tgram://{bottoken}/{ChatID}
-#   The url for your notifier. This URL accepts Jinja2 templates,
-#   so you can use [secrets] if you want.  This parameter must be
-#   provided.
+[notifier notification_name]
+url: service://credentials/direction/?parameter=value
+#   The url for the notifier. See the Apprise documentation for notification
+#   service options and url formatting. This option accepts Jinja2 templates with
+#   support for [secrets]. This parameter must be provided.
 events: *
-#   The events this notifier should trigger to. '*' means all events.
-#   You can use multiple events, comma separated.
-#   Valid events:
+#   The events that will trigger a notification. '*' means all events.
+#   This option may include multiple comma separated events.
+#   Valid printer events:
 #      started
 #      complete
 #      error
 #      cancelled
 #      paused
 #      resumed
-#   This parameter must be provided.
+#   This option may also be set to "gcode" if the notifier should only push
+#   "gcode_macro" notifications sent from Klipper. This parameter must be provided.
 body: "Your printer status has changed to {event_name}"
 #   The body of the notification. This option accepts Jinja2 templates, where
 #   the template is passed a context containing the following fields:
@@ -3013,9 +3197,9 @@ attach:
 #   will receive the same context as the "body" and "title" options.  The default
 #   is no attachment will be sent with the notification.
 #
-#   Note: Attachments are not available for all notification services, you can
-#   check if it's supported on the Apprise Wiki.  Be aware that links to items
-#   hosted on your local network can only be viewed within that network.
+#   Note: Attachments are not available for all notification services, refer to
+#   the Apprise documentation for details. Be aware that links to items hosted on
+#   your local network can only be viewed within that network.
 ```
 
 /// Tip
@@ -3024,7 +3208,7 @@ this section receives a list of "arguments" passed to the event.  For
 those familiar with Python this list is known as "variable arguments".
 Currently the notifier only supports two kinds of events: those
 triggered by a change in the job state and those triggered from a remote
-method call frm a `gcode_macro`.
+method call from a `gcode_macro`.
 
 For `remote method` events the `event_args` field will always be
 an empty list.  For `job state` events the `event_args` field will
@@ -3037,7 +3221,8 @@ The `job state` is a dict that contains the values reported by
 Klipper's [print_stats](printer_objects.md#print_stats) object.
 ///
 
-#### An example:
+#### Notifier Examples
+
 ```ini {title="Moonraker Config Example"}
 # moonraker.conf
 

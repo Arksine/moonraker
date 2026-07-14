@@ -12,10 +12,11 @@ import tomllib
 import json
 import ast
 from io import StringIO, TextIOBase
-from typing import Dict, List, Iterator
+from typing import Dict, List, Iterator, Any
 
 MAX_LINE_LENGTH = 88
 SCRIPTS_PATH = pathlib.Path(__file__).parent
+DOCS_PATH = SCRIPTS_PATH.parent.joinpath("docs")
 INST_PKG_HEADER = "# *** AUTO GENERATED OS PACKAGE SCRIPT START ***"
 INST_PKG_FOOTER = "# *** AUTO GENERATED OS PACKAGE SCRIPT END ***"
 DEPS_HEADER = "# *** SYSTEM DEPENDENCIES START ***"
@@ -129,6 +130,28 @@ def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: List[str]) -> bool:
         req_list.append(requirement)
     return set(new_reqs) != set(req_list)
 
+def process_requirement_sources(reqs: List[str], data: Dict[str, Any]) -> List[str]:
+    try:
+        sources: Dict[str, Any] = data["tool"]["uv"]["sources"]
+    except KeyError:
+        return reqs
+    new_reqs: List[str] = []
+    for req in reqs:
+        src_info = sources.get(req, None)
+        if src_info is not None:
+            if "path" in src_info:
+                # replace named requirement with path
+                req = src_info["path"]
+            elif "git" in src_info:
+                url = src_info["git"]
+                req = f"{req}@git+{url}"
+                if "tag" in src_info:
+                    tag = src_info["tag"]
+                    req = f"{req}@{tag}"
+        new_reqs.append(req)
+    return new_reqs
+
+
 def sync_requirements() -> int:
     ret: int = 0
     src_path = SCRIPTS_PATH.parent
@@ -158,18 +181,30 @@ def sync_requirements() -> int:
             for requirement in speedup_deps:
                 req_file.write(f"{requirement}\n")
     else:
-        print("Speedup sequirements match")
+        print("Speedup requirements match")
     # sync dev dependencies
     dev_reqs_path = SCRIPTS_PATH.joinpath("moonraker-dev-reqs.txt")
-    dev_deps = optional_deps["dev"]
+    dev_deps = data["dependency-groups"]["dev"]
     if check_reqs_changed(dev_reqs_path, dev_deps):
         print("Syncing dev requirements")
         ret = 1
-        with dev_reqs_path.open("r+") as req_file:
+        with dev_reqs_path.open("w+") as req_file:
             for requirement in dev_deps:
                 req_file.write(f"{requirement}\n")
     else:
         print("Dev requirements match")
+    # sync doc dependencies
+    doc_reqs_path = DOCS_PATH.joinpath("doc-requirements.txt")
+    doc_deps = data["dependency-groups"]["docs"]
+    doc_deps = process_requirement_sources(doc_deps, data)
+    if check_reqs_changed(doc_reqs_path, doc_deps):
+        print("Syncing documenation requirements")
+        ret = 1
+        with doc_reqs_path.open("w+") as req_file:
+            for requirement in doc_deps:
+                req_file.write(f"{requirement}\n")
+    else:
+        print("Doc requirements match")
     return ret
 
 def main() -> int:

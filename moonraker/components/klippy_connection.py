@@ -93,7 +93,7 @@ class KlippyConnection:
         self._state.set_message("Klippy Disconnected")
         self.subscriptions: Dict[APITransport, Subscription] = {}
         self.subscription_cache: Dict[str, Dict[str, Any]] = {}
-        # Setup remote methods accessable to Klippy.  Note that all
+        # Setup remote methods accessible to Klippy.  Note that all
         # registered remote methods should be of the notification type,
         # they do not return a response to Klippy after execution
         self.pending_requests: Dict[int, KlippyRequest] = {}

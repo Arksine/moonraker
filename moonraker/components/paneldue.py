@@ -92,7 +92,7 @@ class PanelDue:
             self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
         self.non_trivial_keys = config.getlist('non_trivial_keys', ["Klipper state"])
-        self.ser_conn = async_serial.AsyncSerialConnection(config)
+        self.ser_conn = async_serial.AsyncSerialConnection.from_config(config)
         logging.info("PanelDue Configured")
 
         # Register server events
@@ -110,7 +110,7 @@ class PanelDue:
         )
         self.server.register_remote_method("paneldue_beep", self.paneldue_beep)
 
-        # These commands are directly executued on the server and do not to
+        # These commands are directly executed on the server and do not to
         # make a request to Klippy
         self.direct_gcodes: Dict[str, FlexCallback] = {
             'M20': self._run_paneldue_M20,
@@ -284,7 +284,7 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            script = line[line_index+1:cs_index]
+            script = line[line_index+1:cs_index].strip()
         else:
             script = line
         # Execute the gcode.  Check for special RRF gcodes that
@@ -293,7 +293,8 @@ class PanelDue:
         cmd = parts[0].strip()
         if cmd in ["M23", "M30", "M32", "M36", "M37", "M98"]:
             arg = script[len(cmd):].strip()
-            parts = [cmd, arg]
+            if arg:
+                parts = [cmd, arg]
 
         # Check for commands that query state and require immediate response
         if cmd in self.direct_gcodes:

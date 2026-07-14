@@ -130,7 +130,7 @@ class DbusManager:
                              interface_names: List[str]
                              ) -> List[ProxyInterface]:
         if self.bus is None:
-            raise self.server.error("Bus not avaialable")
+            raise self.server.error("Bus not available")
         interfaces: List[ProxyInterface] = []
         introspection = await self.bus.introspect(bus_name, bus_path)
         proxy_obj = self.bus.get_proxy_object(bus_name, bus_path,

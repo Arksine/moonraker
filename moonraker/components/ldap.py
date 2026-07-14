@@ -10,6 +10,7 @@ import asyncio
 import logging
 import ldap3
 from ldap3.core.exceptions import LDAPExceptionError
+from ldap3.utils.conv import escape_filter_chars
 
 # Annotation imports
 from typing import (
@@ -21,12 +22,18 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ldap3.abstract.entry import Entry
 
+VALID_MEMBERSHIP_ATTRS = ["memberOf", "isMemberOf"]
+
 class MoonrakerLDAP:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.ldap_host = config.get('ldap_host')
         self.ldap_port = config.getint("ldap_port", None)
         self.ldap_secure = config.getboolean("ldap_secure", False)
+        self.membership_attr = config.getchoice(
+            "membership_attribute", VALID_MEMBERSHIP_ATTRS, "memberOf"
+        )
+        self.check_dn_case = config.getboolean("check_dn_case", True)
         base_dn_template = config.gettemplate('base_dn')
         self.base_dn = base_dn_template.render()
         self.group_dn: Optional[str] = None
@@ -57,14 +64,14 @@ class MoonrakerLDAP:
                 )
         self.lock = asyncio.Lock()
 
-    async def authenticate_ldap_user(self, username, password) -> None:
+    async def authenticate_ldap_user(self, username: str, password: str) -> None:
         eventloop = self.server.get_event_loop()
         async with self.lock:
             await eventloop.run_in_thread(
                 self._perform_ldap_auth, username, password
             )
 
-    def _perform_ldap_auth(self, username, password) -> None:
+    def _perform_ldap_auth(self, username: str, password: str) -> None:
         server = ldap3.Server(
             self.ldap_host, self.ldap_port, use_ssl=self.ldap_secure,
             connect_timeout=10.
@@ -75,18 +82,19 @@ class MoonrakerLDAP:
             "auto_bind": ldap3.AUTO_BIND_NO_TLS,
         }
         attr_name = "sAMAccountName" if self.active_directory else "uid"
-        ldfilt = f"(&(objectClass=Person)({attr_name}={username}))"
+        escaped_user = escape_filter_chars(username)
+        ldfilt = f"(&(objectClass=Person)({attr_name}={escaped_user}))"
         if self.user_filter:
-            ldfilt = self.user_filter.replace("USERNAME", username)
+            ldfilt = self.user_filter.replace("USERNAME", escaped_user)
         try:
             with ldap3.Connection(server, **conn_args) as conn:
+                search_attrs = None if self.group_dn is None else [self.membership_attr]
                 ret = conn.search(
-                    self.base_dn, ldfilt, attributes=["memberOf"]
+                    self.base_dn, ldfilt, attributes=search_attrs
                 )
                 if not ret:
-                    raise self.server.error(
-                        f"LDAP User '{username}' Not Found", 401
-                    )
+                    logging.info(f"LDAP User '{username}' Not Found")
+                    raise self.server.error("Unauthorized", 401)
                 user: Entry = conn.entries[0]
                 rebind_success = conn.rebind(user.entry_dn, password)
             if not rebind_success:
@@ -104,24 +112,34 @@ class MoonrakerLDAP:
             elif self._validate_group(username, user):
                 return
         except LDAPExceptionError:
-            err_msg = "LDAP authentication failed"
+            logging.exception("LDAP authentication failed")
         else:
-            err_msg = "Invalid LDAP Username or Password"
-        raise self.server.error(err_msg, 401)
+            logging.info("Invalid LDAP Username or Password")
+        raise self.server.error("Unauthorized", 401)
 
     def _validate_group(self, username: str, user: Entry) -> bool:
         if self.group_dn is None:
             logging.debug(f"LDAP User {username} login successful")
             return True
-        if not hasattr(user, "memberOf"):
+        member_attr = getattr(user, self.membership_attr, None)
+        if member_attr is None:
+            logging.info(
+                f"Membership attribute {self.membership_attr} not present "
+                "in user entry"
+            )
             return False
-        for group in user.memberOf.values:
-            if group == self.group_dn:
-                logging.debug(
-                    f"LDAP User {username} group match success, "
-                    "login successful"
-                )
-                return True
+        groups: list[str] = getattr(member_attr, "values", [])
+        req_dn = self.group_dn
+        logging.debug(f"Required Group DN: {req_dn}, User Group DNs: {groups}")
+        if not self.check_dn_case:
+            groups = [grp.lower() for grp in groups]
+            req_dn = req_dn.lower()
+        if req_dn in groups:
+            logging.debug(
+                f"LDAP User {username} group match success, login successful"
+            )
+            return True
+        logging.info(f"User '{username}' is not a member of configured group_dn.")
         return False
 
 

@@ -40,6 +40,12 @@ VCIO_PATH = "/dev/vcio"
 STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
+HWMON_ROOT_PATH = "/sys/class/hwmon/"
+HWMON_PLATFORMS = {
+    "coretemp": "Intel",
+    "k10temp": "AMD",
+    "cpu_thermal": "Raspberry Pi"
+}
 CPU_STAT_PATH = "/proc/stat"
 MEM_AVAIL_PATH = "/proc/meminfo"
 STAT_UPDATE_TIME = 1.
@@ -74,7 +80,7 @@ class ProcStats:
         else:
             logging.info("Unable to find 'vcgencmd', throttle checking "
                          "disabled")
-        self.temp_file = pathlib.Path(TEMPERATURE_PATH)
+        self.temp_file = pathlib.Path(self._get_cpu_thermal_file())
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
         self.cpu_stats_file = pathlib.Path(CPU_STAT_PATH)
@@ -294,6 +300,24 @@ class ProcStats:
                 self.last_cpu_stats[name] = (cpu_sum, cpu_idle)
         except Exception:
             pass
+
+    def _get_cpu_thermal_file(self) -> str:
+        if os.path.isdir(HWMON_ROOT_PATH):
+            for hwmon in os.scandir(HWMON_ROOT_PATH):
+                if not hwmon.is_dir():
+                    continue
+                hwmon_name = pathlib.Path(hwmon.path + "/name")
+                try:
+                    name = hwmon_name.read_text().strip()
+                    if name in HWMON_PLATFORMS:
+                        pf = HWMON_PLATFORMS[name]
+                        logging.info(f"Monitoring temperature for {pf} CPU")
+                        return hwmon.path + "/temp1_input"
+                except Exception:
+                    pass
+
+        logging.info("Monitoring temperature using default thermal zone")
+        return TEMPERATURE_PATH
 
     def _format_stats(self, stats: Dict[str, Any]) -> str:
         return f"System Time: {stats['time']:2f}, " \

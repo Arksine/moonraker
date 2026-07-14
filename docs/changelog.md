@@ -7,6 +7,33 @@ The format is based on [Keep a Changelog].
 ## [Unreleased]
 
 ### Changed
+- **machine**: Support standard reboot and shutdown commands
+- **build**: Switch to uv for project management
+- **build**: Bump tornado to version 6.5.6
+- **build**: Bump apprise to version 1.9.8
+- **build**: Bump pillow to version 12.2.0
+- **assets**: Clarify welcome message on landing page
+- **git_deploy**: Refactor git repo status refresh
+
+### Added
+- **metadata**: Auto-detect forks of PrusaSlicer.
+- **metadata**: Add `printer_vendor`, `printer_model`, `printer_variant`,
+  and `profile_version` parsing for PrusaSlicer derivatives.
+- **git_deploy**: Add a `repo_detected` field for git repos in the status
+  API response
+- **announcements**:  Add the `enable_moonlight` configuration option that
+  may be used to enable/disable requests to retrieve announcement feeds from
+  the Moonlight GitHub repository.
+
+### Fixed
+- **mqtt**: Fixed TLS for version 2.0+ paho mqtt clients
+- **authorization**: Only perform password authentication on locally
+  created users
+- **git_deploy**:  Detect a detached HEAD state when no branches are available.
+
+## [0.10.0] - 2026-01-21
+
+### Changed
 - **data_store**: Store multi-line gcode commands in a single entry.
 - **dbus_manager**: Replace unmaintained `dbus-next` requirement with
   `dbus-fast`.
@@ -31,18 +58,36 @@ The format is based on [Keep a Changelog].
   should use the new endpoint, however it may be desirable to also
   support the deprecated `full` and `client` endpoints for compatibility
   with older API versions.
-- **build**: Bump PDM-Backend to 2.4.3.
-- **build**: Bump Apprise to 1.9.2
-- **build**: Bump Tornado to 6.4.2
+- **simplyprint**: Improve job progress calculation.
+- **build**: Bump PDM-Backend to 2.4.4.
+- **build**: Bump Apprise to 1.9.6
+- **build**: Bump Tornado to 6.5.4
 - **build**: Bump Streaming-form-data to 1.19.1
-- **build**: Bump Jinja2 to 3.1.5
+- **build**: Bump Jinja2 to 3.1.6
+- **build**: Bump dbus-fast to 3.1.2
+- **build**: Bump pillow to 12.1.0
+- **build**: Bump inotify-simple to 2.0.1
+- **build**: Bump paho-mqtt to 2.1.0
+- **build**: Bump zeroconf to 0.148.0
+- **build**: bump importlib_metadata to 8.7.1
+- **metadata**: Export `filament_name` and `filament_type` values as arrays
+  when more than one value is present.
 
 ### Fixed
-- **python_deploy**: fix "dev" channel updates for GitHub sources.
-- **python_deploy**: fix release rollbacks.
+- **python_deploy**: Fix "dev" channel updates for GitHub sources.
+- **python_deploy**: Fix release rollbacks.
+- **python_deploy**: Fix support for PyPI beta updates.
 - **mqtt**: Publish the result of the Klipper status subscription request.
   This fixes issues with MQTT clients missing the initial status updates
   after Klippy restarts.
+- **eventloop**:  Fixed a condition where the garbage collector may
+  prematurely cancel background tasks.
+- **spoolman**: Use the default websocket ping timeout.  Disable pinging for
+  versions of Tornado prior to 6.5.0.
+- **application**: Disable pinging for versions of Tornado prior to 6.5.0.
+- **system_deploy**: Handle the "package_severity" bits for Info Enum objects.
+- **spoolman**: Fix filament tracking for MMU devices.
+- **ldap**: Fix filter injection vulnerability.
 
 ### Added
 - **application**: Verify that a filename is present when parsing the
@@ -63,9 +108,27 @@ The format is based on [Keep a Changelog].
 - **python_deploy**: Add support for updating python packages with
   "extras" installed.
 - **update_manager**:  Add support for updating `executable` binaries.
+- **update_manager**:  Added a `report_anomalies` option for git, web, and zip
+  types.
+- **git_deploy**: Add support for relative `gitdir` file paths.
 - **analysis**: Initial support for gcode file time analysis using
   [Klipper Estimator](https://github.com/Annex-Engineering/klipper_estimator).
-
+- **power**: Added the ability to discard unwanted responses for MQTT
+  power devices.
+- **power**: Added `poll_interval` option for HTTP (and all derivatives),
+  TPLink Smartplug, and uhubctl devices.  When set Moonraker will poll device
+  status.
+- **power**: Added `restrict_action_processing` option.  When set to `False`,
+  post toggle actions such as restarting Klippy and controlling bound services
+  are run when an external power event is detected.
+- **simplyprint**:  Forward `exclude_object` status data from Klipper.
+- **td1**: Add support for interfacing with [TD-1](https://ajax-3d.com/) devices.
+- **metadata**:  Add generic support for most PrusaSlicer forks.
+- **proc_stats**:  Add support for x86-64 (Intel and AMD) temperature sensors.
+- **ldap**:  Add support for servers such as OpenDJ that use the `isMemberOf`
+  virtual attribute to report group membership.
+- **ldap**:  Add `check_dn_case` option to disable case-sensitive group DN
+  comparisons if desired.
 
 ## [0.9.3] - 2024-09-05
 
@@ -283,7 +346,8 @@ The format is based on [Keep a Changelog].
 [api_changes.md]: api_changes.md
 
 <!-- Versions -->
-[unreleased]: https://github.com/Arksine/moonraker/compare/v0.9.3...HEAD
+[unreleased]: https://github.com/Arksine/moonraker/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Arksine/moonraker/compare/v0.9.3...v0.10.0
 [0.9.3]: https://github.com/Arksine/moonraker/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/Arksine/moonraker/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/Arksine/moonraker/compare/v0.9.0...v0.9.1

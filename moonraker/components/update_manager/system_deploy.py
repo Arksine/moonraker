@@ -245,7 +245,7 @@ class PackageKitProvider(BasePackageProvider):
             "org.freedesktop.packagekit.system-update",
             "The Update Manager will fail to update packages"
         )
-        # Fetch the PackageKit DBus Inteface
+        # Fetch the PackageKit DBus Interface
         self.pkgkit = await self.dbus_mgr.get_interface(
             "org.freedesktop.PackageKit",
             "/org/freedesktop/PackageKit",
@@ -391,7 +391,10 @@ class PackageKitTransaction:
                            package_id: str,
                            summary: str
                            ) -> None:
-        info = PkEnum.Info.from_index(info_code)
+        info = PkEnum.Info.from_index(info_code & 0xFFFF)
+        severity = PkEnum.Info.from_index((info_code >> 16) & 0xFFFF)
+        if info == PkEnum.Info.UNKNOWN:
+            info = severity
         if self._role in self.GET_PKG_ROLES:
             pkg_data = {
                 'package_id': package_id,

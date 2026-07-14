@@ -302,8 +302,8 @@ class Server:
             raise self.error(
                 f"Component {component_name} previously failed to load", 500
             )
+        full_name = f"moonraker.components.{component_name}"
         try:
-            full_name = f"moonraker.components.{component_name}"
             module = importlib.import_module(full_name)
             # Server components use the [server] section for configuration
             if component_name not in SERVER_COMPONENTS:
@@ -314,7 +314,11 @@ class Server:
             component = load_func(config)
         except Exception as e:
             ucomps: List[str] = self.app_args.get("unofficial_components", [])
-            if isinstance(e, ModuleNotFoundError) and component_name not in ucomps:
+            if (
+                isinstance(e, ModuleNotFoundError) and
+                full_name != e.name and
+                component_name not in ucomps
+            ):
                 if self.try_pip_recovery(e.name or "unknown"):
                     return self.load_component(config, component_name, default)
             msg = f"Unable to load component: ({component_name})"
@@ -342,9 +346,9 @@ class Server:
         logging.info("Checking Pip Version...")
         try:
             pipver = pip_exec.get_pip_version()
-            if pip_utils.check_pip_needs_update(pipver):
+            if pipver.needs_pip_update:
                 cur_ver = pipver.pip_version_string
-                new_ver = ".".join([str(part) for part in pip_utils.MIN_PIP_VERSION])
+                new_ver = pipver.max_pip_version_string
                 logging.info(f"Updating Pip from {cur_ver} to {new_ver}...")
                 pip_exec.update_pip()
         except Exception:
@@ -627,6 +631,13 @@ def main(from_package: bool = True) -> None:
         help="disable logging to a file"
     )
     parser.add_argument(
+        "-s", "--structured-logging",
+        action='store_const',
+        const=True,
+        default=get_env_bool("MOONRAKER_STRUCTURED_LOGGING"),
+        help="Enable structured file logging"
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action='store_const',
         const=True,
@@ -691,7 +702,8 @@ def main(from_package: bool = True) -> None:
         "is_backup_config": False,
         "is_python_package": from_package,
         "instance_uuid": instance_uuid,
-        "unix_socket_path": unix_sock
+        "unix_socket_path": unix_sock,
+        "structured_logging": cmd_line_args.structured_logging
     }
 
     # Setup Logging
