@@ -347,6 +347,11 @@ subscriptions:
 #   announcements.  All items specified here are added in addition to
 #   "moonraker" and "klipper", which are always subscribed to.  The default
 #   is no additional subscriptions.
+enable_moonlight: True
+#   When set to true Moonraker will connect to the Moonlight repository on
+#   GitHub to retrieve announcement feeds.  When set to False attempts to
+#   retrieve feeds from Moonlight will be aborted, which may be useful for
+#   instances that do no have access to the internet.  The default is True.
 dev_mode: False
 #   A developer option that fetches RSS announcements from a local folder when
 #   set to True. The default behavior is for Moonraker to retrieve announcements
@@ -2157,14 +2162,26 @@ report_anomalies: True
 
 #### Git Repo Configuration
 
-/// Note
-Git repos must have at least one tag for Moonraker to identify its
+/// note | Repo Requirements
+Git Repos have must meet the following requirements for Moonraker to
+successfully perform updates:
+
+- Repos must have at least one remote configured, which should typically
+be named `origin`.
+- Repos must be checked out on a local branch.  Typically the branch will
+be named `master` or `main`, however this isn't required.  When Moonraker
+is launched with [debug features](./installation.md/#command-line-usage)
+enabled this requirement is relaxed, as it is possible to update a detached
+HEAD when the reference is a named remote branch (ie: `origin/dev-branch`).
+-  At least one tag is necessary for Moonraker to identify the software
 version.  The tag may be lightweight or annotated.  The tag must be in
 semantic version format, `vX.Y.Z`, where X, Y, and Z are all unsigned
-integer values.  For example, a repos first tag might be `v0.0.1`.
+integer values.  For example, a repos first tag might be `v0.0.1`.  This
+is a hard requirement for `stable` and `beta` updates.  Moonraker can
+perform updates on the `dev` channel when a tag is not available, however
+front ends may disable update controls when version information is
+not reported by Moonraker.
 
-Moonraker can update repos without tags, however front ends may disable
-update controls when version information is not reported by Moonraker.
 ///
 
 ```ini {title="Moonraker Config Specification"}

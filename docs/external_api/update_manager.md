@@ -77,6 +77,7 @@ The `refresh` parameter is deprecated.  Front end developers should use the
             "rollback_version": "v0.7.1-360",
             "current_hash": "ecfad5cff15fff1d82cb9bdc64d6b548ed53dfaf",
             "remote_hash": "ecfad5cff15fff1d82cb9bdc64d6b548ed53dfaf",
+            "repo_detected": true,
             "is_dirty": false,
             "detached": true,
             "commits_behind": [],
@@ -139,6 +140,7 @@ The `refresh` parameter is deprecated.  Front end developers should use the
             "rollback_version": "v0.9.1-340",
             "current_hash": "4c8d24ae03eadf3fc5a28efb1209ce810251d02d",
             "remote_hash": "e3cbe7ea3663a8cd10207a9aecc4e5458aeb1f1f",
+            "repo_detected": true,
             "is_dirty": false,
             "detached": false,
             "commits_behind": [
@@ -259,6 +261,8 @@ The `refresh` parameter is deprecated.  Front end developers should use the
 | `branch`               |  string  | The name of the current git branch.                      |
 | `repo_name`            |  string  | The name of the remote repo as detected from the remote  |
 |                        |          | URL.                                                     |^
+| `repo_detected`        |   bool   | Set to `true` when Moonraker successfully identifies     |
+|                        |          | the configured path as a git repo.                       |^
 | `is_dirty`             |   bool   | Set to `true` if the repo is "dirty", ie: if one or      |
 |                        |          | more files in the repo have been modified.               |^
 | `corrupt`              |   bool   | Set to `true` if the repo is corrupt.  This indicates    |
