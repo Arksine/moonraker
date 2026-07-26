@@ -7,6 +7,7 @@
 from __future__ import annotations
 import sys
 import copy
+import logging
 import pathlib
 from ...common import ExtendedEnum
 from ...utils import source_info
@@ -42,7 +43,39 @@ BASE_CONFIG: Dict[str, Dict[str, str]] = {
     }
 }
 
-OPTION_OVERRIDES = ("channel", "pinned_commit", "refresh_interval", "report_anomalies")
+# Options a user may override in [update_manager moonraker|klipper].
+#
+# 'origin', 'moved_origin', 'primary_branch' and 'managed_services' are part
+# of this set in the Core One fork.  Upstream ignores them for the two base
+# apps, which silently breaks tracking a fork of Klipper: the repo is checked
+# against the hardcoded Klipper3d origin on 'master', so a valid fork on its
+# own remote/branch is permanently reported as "Repo not on official
+# remote/branch" + "Unofficial remote url", and repo.checkout() targets a
+# branch that does not exist.  Honouring the configured values -- exactly as
+# every non-base git_repo section already does -- fixes all of that.  The
+# defaults in BASE_CONFIG still apply when the options are absent.
+OPTION_OVERRIDES = (
+    "channel", "pinned_commit", "refresh_interval", "report_anomalies",
+    "origin", "moved_origin", "primary_branch", "managed_services"
+)
+
+# Options that the base "moonraker" and "klipper" updaters always derive
+# themselves (from source_info / the klippy connection / BASE_CONFIG) rather
+# than from the user's [update_manager moonraker|klipper] section.  Such a
+# section is still commonly written with the full git_repo option set --
+# every other git_repo section requires it -- but here the values are
+# ignored.  Because the base configuration is built as a *supplemental*
+# ConfigHelper (read_supplemental_dict, which starts with an empty 'parsed'
+# map), nothing ever consumes these options on the tracked helper, so
+# ConfigHelper.validate_config() reports each one as an unparsed option and
+# warns that it will become a startup error in the future.  Consume them
+# explicitly so legitimate configurations don't trip that escalation, while
+# genuinely unknown options (typos) keep warning as intended.
+AUTODETECTED_OPTIONS = (
+    "type", "path", "env", "virtualenv", "venv_args", "requirements",
+    "system_dependencies", "install_script", "pip_environment_variables",
+    "enable_node_updates", "is_system_service", "info_tags", "persistent_files"
+)
 
 class AppType(ExtendedEnum):
     NONE = 1
@@ -110,4 +143,16 @@ def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
         for opt in OPTION_OVERRIDES:
             if app_cfg.has_option(opt):
                 base_cfg[app_name][opt] = app_cfg.get(opt)
+        # Consume auto-detected options on the tracked ConfigHelper.  Their
+        # values are not applied -- this only keeps validate_config() from
+        # flagging them as unparsed.  See AUTODETECTED_OPTIONS.
+        ignored = [opt for opt in AUTODETECTED_OPTIONS if app_cfg.has_option(opt)]
+        for opt in ignored:
+            app_cfg.get(opt, None)
+        if ignored:
+            logging.info(
+                f"[{override_section}]: the following options are auto-detected "
+                f"for the '{app_name}' updater and their configured values are "
+                f"ignored: {', '.join(ignored)}"
+            )
     return config.read_supplemental_dict(base_cfg)
