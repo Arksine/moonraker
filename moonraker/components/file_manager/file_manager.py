@@ -2492,9 +2492,70 @@ class MetadataStorage:
                 self.mddb.pop(new_fname, None)
             return False
 
+        prev_base = os.path.splitext(os.path.basename(prev_fname))[0]
+        new_base, new_ext = os.path.splitext(os.path.basename(new_fname))
+        if prev_base != new_base and new_ext in VALID_GCODE_EXTS:
+            # Thumbnails are named after the file that produced them, so a
+            # change to the name invalidates every path in the record.
+            # Discard it and let the caller rescan, which writes thumbnails
+            # named after the new file.  Only the name is compared, as a
+            # change limited to the extension leaves the thumbnails
+            # correctly named.  The destination must be a gcode file,
+            # otherwise no rescan would follow and the file would be left
+            # with no metadata at all.
+            stale = self._move_ufp_thumbnail(prev_fname, new_fname, metadata)
+            self.metadata.pop(new_fname, None)
+            self.mddb.pop(prev_fname, None)
+            self.mddb.pop(new_fname, None)
+            # Remove the previous thumbnails before returning.  The rescan
+            # writes to the same folder, so it must not race with them.
+            self._remove_thumbs({prev_fname: stale})
+            return False
+
         self.metadata[new_fname] = metadata
         self.mddb.move_batch([prev_fname], [new_fname])
         return self._move_thumbnails([(prev_fname, new_fname, metadata)])
+
+    def _move_ufp_thumbnail(
+        self, prev_fname: str, new_fname: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        # Thumbnails extracted from a ufp archive are stored without a
+        # dimension suffix.  The archive is removed after extraction, so a
+        # rescan can only recover the image if it is renamed to match the
+        # new file name.  Returns the metadata to be removed, less the
+        # image moved here, which must not be reaped along with the rest.
+        prev_base = os.path.splitext(os.path.basename(prev_fname))[0]
+        new_base = os.path.splitext(os.path.basename(new_fname))[0]
+        rel_path = os.path.join(".thumbs", f"{prev_base}.png")
+        thumbs: List[Dict[str, Any]] = metadata.get("thumbnails", [])
+        if not any(t.get("relative_path", None) == rel_path for t in thumbs):
+            return metadata
+        prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
+        new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
+        thumb_path = os.path.join(prev_dir, rel_path)
+        new_path = os.path.join(new_dir, ".thumbs", f"{new_base}.png")
+        if not os.path.isfile(thumb_path):
+            return metadata
+        try:
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            shutil.move(thumb_path, new_path)
+        except Exception:
+            logging.exception(
+                f"Error moving thumb from {thumb_path} to {new_path}"
+            )
+            # A partial copy would be parsed as the new file's thumbnail
+            with contextlib.suppress(OSError):
+                if os.path.isfile(new_path):
+                    os.remove(new_path)
+        # Exclude the image from the removal either way.  It belongs to the
+        # new file when the move succeeded, and when it failed the copy left
+        # behind is the only one, as the archive it came from was removed
+        # after extraction.
+        moved = dict(metadata)
+        moved["thumbnails"] = [
+            t for t in thumbs if t.get("relative_path", None) != rel_path
+        ]
+        return moved
 
     async def _move_thumbnails(
         self, records: List[Tuple[str, str, Dict[str, Any]]]
