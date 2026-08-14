@@ -495,16 +495,20 @@ class PrusaSlicer(BaseSlicer):
         return self.layer_height
 
     def parse_object_height(self) -> Optional[float]:
-        matches = re.findall(
-            r";BEFORE_LAYER_CHANGE\n(?:.*\n)?;(\d+\.?\d*)", self.footer_data)
+        height = regex_find_float(r"; max_z_height: (%F)", self.header_data)
+        if height is None:
+            height = regex_find_float(
+                r"; max_z_height: (%F)", self.footer_data
+            )
+        if height is not None:
+            return height
+        matches = regex_find_floats(
+            r";(?:BEFORE_)?LAYER_CHANGE\r?\n(?:.*\r?\n)?;\s*"
+            r"(?:Z:\s*)?(%F)", self.footer_data
+        )
         if matches:
-            try:
-                matches = [float(m) for m in matches]
-            except Exception:
-                pass
-            else:
-                return max(matches)
-        return regex_find_max_float(r"G1\sZ(%F)\sF", self.footer_data)
+            return max(matches)
+        return None
 
     def parse_filament_total(self) -> Optional[float]:
         line = regex_find_string(r'filament\sused\s\[mm\]\s=\s(%S)\n', self.config_data)
