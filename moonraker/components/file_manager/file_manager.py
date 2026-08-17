@@ -417,7 +417,8 @@ class FileManager:
                                        web_request: WebRequest
                                        ) -> List[Dict[str, Any]]:
         root = web_request.get_str('root', "gcodes")
-        flist = self.get_file_list(root, list_format=True)
+        flist = await self.event_loop.run_in_thread(
+            self.get_file_list, root, True)
         return cast(List[Dict[str, Any]], flist)
 
     async def _handle_metadata_request(self,
@@ -498,7 +499,8 @@ class FileManager:
         if req_type == RequestType.GET:
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
-            dir_info = self._list_directory(dir_path, root, is_extended)
+            dir_info = await self.event_loop.run_in_thread(
+                self._list_directory, dir_path, root, is_extended)
             return dir_info
         async with self.sync_lock:
             self.check_reserved_path(dir_path, True)
