@@ -1532,15 +1532,18 @@ class InotifyNode:
                 f"delete_{item_type}", root, item_path)
         self.pending_deleted_children.clear()
 
-    def scan_node(self,
-                  visited_dirs: Set[Tuple[int, int]] = set()
-                  ) -> List[asyncio.Event]:
+    def scan_node(
+        self, visited_dirs: Optional[Set[Tuple[int, int]]] = None
+    ) -> List[asyncio.Event]:
+        if visited_dirs is None:
+            visited_dirs = set()
         dir_path = self.get_path()
         st = os.stat(dir_path)
-        if st in visited_dirs:
+        key = (st.st_dev, st.st_ino)
+        if key in visited_dirs:
             return []
         metadata_events: List[asyncio.Event] = []
-        visited_dirs.add((st.st_dev, st.st_ino))
+        visited_dirs.add(key)
         for fname in os.listdir(dir_path):
             item_path = os.path.join(dir_path, fname)
             if os.path.isdir(item_path):
