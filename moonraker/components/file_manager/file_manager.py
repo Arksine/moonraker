@@ -750,13 +750,14 @@ class FileManager:
                 f"Directory does not exist ({path})")
         self.check_reserved_path(path, False)
         flist: Dict[str, Any] = {'dirs': [], 'files': []}
+        dir_ctx = self._build_dir_context(path)
         with os.scandir(path) as dir_entries:
             for entry in dir_entries:
                 try:
                     fstat = entry.stat()
                 except OSError:
                     continue
-                path_info = self._entry_path_info(entry, fstat, root)
+                path_info = self._entry_path_info(entry, fstat, root, dir_ctx)
                 if entry.is_dir():
                     path_info['dirname'] = entry.name
                     flist['dirs'].append(path_info)
@@ -815,12 +816,65 @@ class FileManager:
             'permissions': permissions
         }
 
+    def _build_dir_context(self, dir_path: StrOrPath) -> Dict[str, Any]:
+        # Precompute the containment state shared by every non-symlink
+        # entry of a directory, so listings do not need to resolve()
+        # and walk reserved path ancestors for each file.
+        parent = pathlib.Path(dir_path).resolve()
+        reserved_perm: Optional[str] = None
+        for res_path, can_read in self.reserved_paths.values():
+            if res_path == parent or res_path in parent.parents:
+                if not can_read:
+                    reserved_perm = ""
+                    break
+                reserved_perm = "r"
+        prefix = str(parent)
+        if not prefix.endswith(os.sep):
+            prefix += os.sep
+        return {
+            "in_git": ".git" in parent.parts,
+            "reserved_perm": reserved_perm,
+            "prefix": prefix,
+            "reserved_children": {
+                str(res_path): can_read
+                for (res_path, can_read) in self.reserved_paths.values()
+            }
+        }
+
     def _entry_path_info(
-        self, entry: os.DirEntry[str], fstat: os.stat_result, root: str
+        self,
+        entry: os.DirEntry[str],
+        fstat: os.stat_result,
+        root: str,
+        dir_ctx: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         # Equivalent to get_path_info() for an entry produced by a
         # scandir walk, reusing the stat result and file type info
         # already gathered rather than issuing per-file stat calls.
+        if dir_ctx is not None and not entry.is_symlink():
+            # A non-symlink entry resolves to its parent's resolved
+            # path plus its own name, so ancestor containment is
+            # inherited from the directory context.  Only an exact
+            # match against a reserved path remains per entry.
+            if dir_ctx["in_git"] or entry.name == ".git":
+                permissions = ""
+            else:
+                permissions = "rw"
+                if root not in self.full_access_roots:
+                    permissions = "r"
+                res_perm = dir_ctx["reserved_perm"]
+                can_read = dir_ctx["reserved_children"].get(
+                    dir_ctx["prefix"] + entry.name
+                )
+                if res_perm == "" or can_read is False:
+                    permissions = ""
+                elif res_perm is not None or can_read is not None:
+                    permissions = "r"
+            return {
+                'modified': fstat.st_mtime,
+                'size': fstat.st_size,
+                'permissions': permissions
+            }
         real_path = pathlib.Path(entry.path).resolve()
         if ".git" in real_path.parts:
             permissions = ""
@@ -1031,6 +1085,7 @@ class FileManager:
             except OSError:
                 continue
             with dir_entries:
+                dir_ctx = self._build_dir_context(dir_path)
                 for entry in dir_entries:
                     if entry.is_dir():
                         try:
@@ -1058,7 +1113,7 @@ class FileManager:
                             continue
                         fname = entry.path[len(path) + 1:]
                         filelist[fname] = self._entry_path_info(
-                            entry, fstat, root)
+                            entry, fstat, root, dir_ctx)
         if list_format:
             flist: List[Dict[str, Any]] = []
             for fname in sorted(filelist, key=str.lower):
@@ -1594,6 +1649,10 @@ class InotifyNode:
         visited_dirs.add(key)
         fm = self.iobsvr.file_manager
         is_gcodes_root = self.get_root() == "gcodes"
+        dir_ctx = (
+            fm._build_dir_context(dir_path)
+            if is_gcodes_root else None
+        )
         with os.scandir(dir_path) as dir_entries:
             for entry in dir_entries:
                 if entry.is_dir():
@@ -1611,7 +1670,8 @@ class InotifyNode:
                         fstat = entry.stat()
                     except OSError:
                         continue
-                    path_info = fm._entry_path_info(entry, fstat, "gcodes")
+                    path_info = fm._entry_path_info(
+                        entry, fstat, "gcodes", dir_ctx)
                     mevt = self.iobsvr.parse_gcode_metadata(
                         entry.path, path_info)
                     metadata_events.append(mevt)
