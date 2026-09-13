@@ -188,7 +188,19 @@ GET /server/history/list?limit=50&start=50&since=1&before=5&order=asc
 |                     | job was in progress.                                  |^
 | `interrupted`       | Moonraker was abruptly terminated while the job was   |
 |                     | in progress.                                          |^
+| `server_exit`       | Moonraker exited normally while the job was in        |
+|                     | progress.                                             |^
 { #job-history-status-desc } Job Status
+
+//// note
+When Moonraker restarts and reconnects to Klipper while the same job is
+still printing, an `interrupted` or `server_exit` job is re-adopted.  Its
+status returns to `in_progress` and the job is finished normally when the
+print ends.  The `end_time`, durations and `filament_used` reported for a
+re-adopted job cover the entire job, as Klipper's `print_stats` counters
+are not affected by a Moonraker restart.  Auxiliary field values for a
+re-adopted job only cover the period after Moonraker reconnected.
+////
 
 ///
 ## Get job totals
