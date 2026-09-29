@@ -572,13 +572,27 @@ class PrusaSlicer(BaseSlicer):
             return None
 
     def parse_referenced_tools(self) -> Optional[List[int]]:
-        tools = regex_find_strings(
-            r";\sreferenced_tools\s=\s(%S)", ",;", self.config_data
+        if re.search(r";\sreferenced_tools\s=", self.config_data):
+            tools = regex_find_strings(
+                r";\sreferenced_tools\s=\s(%S)", ",;", self.config_data
+            )
+            try:
+                return [int(t) for t in tools]
+            except ValueError:
+                return None
+
+        filaments = regex_find_strings(
+            r";\sfilament:\s(%S)", ",;", self.header_data
         )
         try:
-            return [int(t) for t in tools]
+            filament_ids = [int(f) for f in filaments]
         except ValueError:
             return None
+
+        if any(f < 1 for f in filament_ids):
+            return None
+
+        return [f - 1 for f in filament_ids]
 
     def parse_mmu_print(self) -> Optional[int]:
         return regex_find_int(
