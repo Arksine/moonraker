@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog].
   directly.
 
 ### Fixed
+- **metadata**: Parse OrcaSlicer object height from `max_z_height` metadata.
 - **mqtt**: Fixed TLS for version 2.0+ paho mqtt clients
 - **authorization**: Only perform password authentication on locally
   created users
