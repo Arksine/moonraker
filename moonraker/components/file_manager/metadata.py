@@ -739,6 +739,14 @@ class BambuStudio(PrusaSlicer):
     def parse_layer_count(self) -> Optional[int]:
         return regex_find_int(r"; total layer number: (%D)", self.config_data)
 
+class QIDIStudio(BambuStudio):
+    @classmethod
+    def identify(cls, data: str) -> Tuple[str, str] | None:
+        match = re.search(r"; QIDIStudio\s+([^\r\n]+)", data)
+        if match is not None:
+            return "QIDIStudio", match.group(1)
+        return None
+
 class Cura(BaseSlicer):
     @classmethod
     def identify(cls, data: str) -> Tuple[str, str] | None:
