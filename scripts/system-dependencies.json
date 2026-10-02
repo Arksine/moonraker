@@ -4,6 +4,7 @@
         "python3-dev",
         "libopenjp2-7",
         "libsodium-dev",
+        "libffi-dev",
         "zlib1g-dev",
         "libjpeg-dev",
         "packagekit",
