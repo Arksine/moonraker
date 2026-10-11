@@ -1326,6 +1326,26 @@ def run_gcode_processors(
             reload_slicer_data = True
     return finished_procs, reload_slicer_data
 
+# Fallback chamber-temperature scan for slicers whose parser reports none
+# (added locally; re-apply after a Moonraker update). First positive value wins.
+CHAMBER_FALLBACK_PATTERNS = (
+    r"^[ \t]*M19[1]\s+S([0-9]*\.?[0-9]+)",                # M191 S<temp>
+    r"^[ \t]*M141\s+S([0-9]*\.?[0-9]+)",                  # M141 S<temp>
+    r"^[ \t]*SET_HEATER_TEMPERATURE\s+HEATER=\w*chamber\w*\s+TARGET=([0-9]*\.?[0-9]+)",
+    r"^[ \t]*[A-Za-z_][A-Za-z0-9_]*\s.*\bCHAMBER(?:_TEMP(?:ERATURE)?)?=([0-9]*\.?[0-9]+)",
+)
+
+def find_chamber_temp_fallback(data: str) -> Optional[float]:
+    best = None  # (position, value): earliest match across patterns
+    for pat in CHAMBER_FALLBACK_PATTERNS:
+        for m in re.finditer(pat, data, re.MULTILINE | re.IGNORECASE):
+            val = float(m.group(1))
+            if val > 0:
+                if best is None or m.start() < best[0]:
+                    best = (m.start(), val)
+                break
+    return None if best is None else best[1]
+
 def extract_metadata(
     file_path: str, processors: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
@@ -1343,6 +1363,10 @@ def extract_metadata(
     metadata["slicer"] = slicer.slicer_name
     metadata["slicer_version"] = slicer.slicer_version
     metadata.update(slicer.run_parsers())
+    if not metadata.get("chamber_temp"):
+        chamber = find_chamber_temp_fallback(slicer.header_data)
+        if chamber is not None:
+            metadata["chamber_temp"] = chamber
     return metadata
 
 def extract_ufp(ufp_path: str, dest_path: str) -> None:
