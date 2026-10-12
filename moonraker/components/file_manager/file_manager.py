@@ -17,6 +17,7 @@ import time
 import math
 import shlex
 import contextlib
+from stat import S_ISLNK
 from copy import deepcopy
 from inotify_simple import INotify
 from inotify_simple import flags as iFlags
@@ -35,6 +36,7 @@ from typing import (
     List,
     Set,
     Coroutine,
+    Collection,
     Awaitable,
     Callable,
     TypeVar,
@@ -790,17 +792,41 @@ class FileManager:
             if raise_error:
                 raise
             return {"modified": 0, "size": 0, "permissions": ""}
+        # Only roots with write access care if the path is a symlinked file
+        linked_file = (
+            root in self.full_access_roots and
+            path.is_symlink() and path.is_file()
+        )
+        return self._build_path_info(root, real_path, fstat, linked_file)
+
+    def _build_path_info(
+        self,
+        root: str,
+        real_path: pathlib.Path,
+        fstat: os.stat_result,
+        linked_file: bool,
+        parents: Optional[Collection[pathlib.Path]] = None
+    ) -> Dict[str, Any]:
+        """
+        Build the info dict for a path whose resolved location and stat
+        result are already known.
+
+        Callers that process many entries from the same directory can resolve
+        the directory once and pass `directory / name` as `real_path`, along
+        with a precomputed `parents` collection (ex: a set containing the
+        directory and its ancestors).  This avoids a resolve() and the
+        regeneration of the parents sequence for every entry.
+        """
+        if parents is None:
+            parents = real_path.parents
         if ".git" in real_path.parts:
             permissions = ""
         else:
             permissions = "rw"
-            if (
-                root not in self.full_access_roots or
-                (path.is_symlink() and path.is_file())
-            ):
+            if root not in self.full_access_roots or linked_file:
                 permissions = "r"
             for name, (res_path, can_read) in self.reserved_paths.items():
-                if (res_path == real_path or res_path in real_path.parents):
+                if res_path == real_path or res_path in parents:
                     if not can_read:
                         permissions = ""
                         break
@@ -991,31 +1017,55 @@ class FileManager:
         logging.info(f"Updating File List <{root}>...")
         st = os.stat(path)
         visited_dirs = {(st.st_dev, st.st_ino)}
+        is_gcodes = root == 'gcodes'
+        prefix_len = len(path) + 1
         for dir_path, dir_names, files in os.walk(path, followlinks=True):
             scan_dirs: List[str] = []
             # Filter out directories that have already been visited. This
             # prevents infinite recursion "followlinks" is set to True
             for dname in dir_names:
                 full_path = os.path.join(dir_path, dname)
-                if not os.path.exists(full_path):
+                try:
+                    st = os.stat(full_path)
+                except OSError:
+                    # Broken symlink or removed during the walk
                     continue
-                st = os.stat(full_path)
                 key = (st.st_dev, st.st_ino)
                 if key not in visited_dirs:
                     visited_dirs.add(key)
                     if not self.check_reserved_path(full_path, False, False):
                         scan_dirs.append(dname)
             dir_names[:] = scan_dirs
+            if not files:
+                continue
+            # Every entry in `files` shares the same parent.  Resolve it once
+            # rather than resolving the full path of each individual file.
+            real_dir = pathlib.Path(dir_path).resolve()
+            dir_parents = {real_dir, *real_dir.parents}
             for name in files:
-                ext = os.path.splitext(name)[-1].lower()
-                if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
-                    continue
+                if is_gcodes:
+                    ext = os.path.splitext(name)[-1].lower()
+                    if ext not in VALID_GCODE_EXTS:
+                        continue
                 full_path = os.path.join(dir_path, name)
-                if not os.path.exists(full_path):
+                try:
+                    fstat = os.lstat(full_path)
+                except OSError:
                     continue
-                fname = full_path[len(path) + 1:]
-                finfo = self.get_path_info(full_path, root)
-                filelist[fname] = finfo
+                if S_ISLNK(fstat.st_mode):
+                    # A symlink can resolve anywhere and its stat differs
+                    # from its lstat, so take the full path.  Skip broken
+                    # links.
+                    if not os.path.exists(full_path):
+                        continue
+                    finfo = self.get_path_info(full_path, root)
+                else:
+                    # Not a link: lstat() == stat() and the resolved path
+                    # is simply the resolved parent plus the file name.
+                    finfo = self._build_path_info(
+                        root, real_dir / name, fstat, False, dir_parents
+                    )
+                filelist[full_path[prefix_len:]] = finfo
         if list_format:
             flist: List[Dict[str, Any]] = []
             for fname in sorted(filelist, key=str.lower):
