@@ -503,7 +503,7 @@ class KlippyConnection:
             err_str = ", ".join([f"[{o}]" for o in self._missing_reqs])
             logging.info(
                 f"\nWarning, unable to detect the following printer "
-                f"objects:\n{err_str}\nPlease add the the above sections "
+                f"objects:\n{err_str}\nPlease add the above sections "
                 f"to printer.cfg for full Moonraker functionality.")
         if "virtual_sdcard" not in self._missing_reqs:
             # Update the gcode path

@@ -285,7 +285,7 @@ class AppDeploy(BaseDeploy):
         # Fall back on install script if configured
         if self.install_script is None:
             return []
-        # Open install file file and read
+        # Open install file and read
         inst_path: pathlib.Path = self.install_script
         if not inst_path.is_file():
             self.log_info(f"Failed to open install script: {inst_path}")

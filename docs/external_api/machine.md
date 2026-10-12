@@ -996,7 +996,7 @@ GET /machine/peripherals/serial
 | `path_by_hardware` | string | A symbolic link to the device based on its physical         |
 |                    | \| null         | connection, ie: usb port.  Will be `null` if no             |^
 |                    |         | matching link exists.                                       |^
-| `path_by_id`       | string | A symbolic link the the device based on its reported IDs.   |
+| `path_by_id`       | string | A symbolic link to the device based on its reported IDs.     |
 |                    | \| null         | Will be `null` if no matching link exists.                  |^
 | `usb_location`     | string | An identifier derived from the reported usb bus and .       |
 |                    | \| null         | device numbers Can be used to match results from            |^
@@ -1354,7 +1354,7 @@ GET /machine/peripherals/video
 | `path_by_hardware` |  string  | A symbolic link to the device based on its physical      |
 |                    | \| null  | connection, ie: usb port.. Will be  `null` if no         |^
 |                    |          | matching link exists.                                    |^
-| `path_by_id`       |  string  | A symbolic link the the device based on its reported     |
+| `path_by_id`       |  string  | A symbolic link to the device based on its reported      |
 |                    | \| null  | ID. Will be  `null` if no matching link exists.          |^
 | `usb_location`     |  string  | An identifier derived from the reported usb bus and      |
 |                    | \| null  | device numbers. Will be `null` for non-usb devices.      |^

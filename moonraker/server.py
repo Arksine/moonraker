@@ -726,7 +726,7 @@ def main(from_package: bool = True) -> None:
         estatus = asyncio.run(launch_server(log_manager, app_args))
         if estatus is not None:
             break
-        # Since we are running outside of the the server
+        # Since we are running outside of the server
         # it is ok to use a blocking sleep here
         time.sleep(.5)
         logging.info("Attempting Server Restart...")

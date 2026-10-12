@@ -182,7 +182,7 @@ documentation for details.
 ### `[machine]`
 
 The `machine` section provides configuration for Moonraker's machine component, which
-is responsible for for collecting "machine" (ie: PC, SBC, etc) data and communicating
+is responsible for collecting "machine" (ie: PC, SBC, etc) data and communicating
 with system services such as systemd.
 
 ```ini {title="Moonraker Config Specification"}
@@ -1001,7 +1001,7 @@ off_code:
 TPLink has removed access to the local API for some of its Kasa devices
 in recent firmware releases.  As such, it is possible that Moonraker
 will be unable to communicate with your device.  While TPLink claims that
-they will provide a new local API, they have have not done so as of
+they will provide a new local API, they have not done so as of
 December 22nd, 2021.
 See [this TPLink forum post](https://community.tp-link.com/en/smart-home/forum/topic/239364)
 and [this Home Assistant Alert](https://alerts.home-assistant.io/#tplink.markdown)
@@ -1098,7 +1098,7 @@ address:
 user:
 #   A user name to use for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details.  If no password
-#   is set the the default is no user, otherwise the default is "admin".
+#   is set the default is no user, otherwise the default is "admin".
 password:
 #   The password to use for request authentication.  This option accepts
 #   Jinja2 Templates, see the [secrets] section for details. The default is no
@@ -1917,7 +1917,7 @@ gcode:
 To power on a device after an upload, `queue_gcode_uploads: True` must
 be set in the `[file_manager]`, `load_on_startup: True` must be set in
 `[job_queue]` and `one_when_job_queued: True` must be set in `[power dev_name]`,
-where "dev_name" the the name of your power device.  For example:
+where "dev_name" is the name of your power device.  For example:
 
 ```ini {title="Moonraker Config Example"}
 # moonraker.conf
@@ -2214,7 +2214,7 @@ path:
 #     path: ~/service_name
 origin:
 #   The full git URL of the "origin" remote for the repository.  This can
-#   be be viewed by navigating to your repository and running:
+#   be viewed by navigating to your repository and running:
 #     git remote -v
 #   This parameter must be provided.
 primary_branch:
@@ -2592,7 +2592,7 @@ Enables an MQTT Client.  When configured most of Moonraker's APIs are available
 by publishing JSON-RPC requests to `{instance_name}/moonraker/api/request`.
 Responses will be published to `{instance_name}/moonraker/api/response`. See
 the [API Documentation](./external_api/introduction.md#json-rpc-api-overview)
-for details on on JSON-RPC.
+for details on JSON-RPC.
 
 It is also possible for other components within Moonraker to use MQTT to
 publish and subscribe to topics.
@@ -3115,7 +3115,7 @@ The Apprise library is actively developed and frequently adds new notification
 services. When at least one notifier has been configured `moonraker.log` will
 report the currently installed version of Apprise.  Alternatively Moonraker's
 [pyproject.toml](https://github.com/Arksine/moonraker/blob/master/pyproject.toml)
-can be be referenced to determine the latest version of Apprise that should be
+can be referenced to determine the latest version of Apprise that should be
 installed. For example:
 
 ```toml
