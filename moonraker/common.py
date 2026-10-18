@@ -423,12 +423,14 @@ class BaseRemoteConnection(APITransport):
         api_key: Optional[str] = None
     ) -> None:
         auth: AuthComp = self.server.lookup_component("authorization", None)
-        if auth is None:
-            return
-        if token is not None:
-            self.user_info = auth.validate_jwt(token)
-        elif api_key is not None and self.user_info is None:
-            self.user_info = auth.validate_api_key(api_key)
+        uinfo: UserInfo | None = None
+        if auth is not None:
+            if token is not None:
+                uinfo = auth.validate_jwt(token)
+            elif api_key is not None:
+                uinfo = auth.validate_api_key(api_key)
+        if uinfo is not None:
+            self.user_info = uinfo
         elif self._need_auth:
             raise self.server.error("Unauthorized", 401)
 

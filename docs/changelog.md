@@ -7,12 +7,54 @@ The format is based on [Keep a Changelog].
 ## [Unreleased]
 
 ### Changed
+- **authorization**: Revert API Key checking to previous behavior.  When
+  API key authentication is disabled fall back to trusted user authentication.
+
+## [0.11.0] - 2026-08-25
+
+### Changed
+- **build**: Switch to uv for project management
+- **build**: Drop packaging support for EOL versions of python (3.7, 3.8, 3.9).
+  This change does not impact the minimum version when running from source.
+- **build**: Bump tornado to version 6.5.8
+- **build**: Bump apprise to version 1.13.0
+- **build**: Bump pillow to version 12.3.0
+- **build**: Bump streaming-form-data to version 2.1.0
+- **build**: Bump zeroconf to version 0.150.0
+- **build**: Bump dbus-fast to version 5.0.22
+- **build**: Bump importlib_metadata to version 9.0.0
+- **build**: Bump mkdocs-material to version 9.7.7 (docs requirement)
+- **build**: Bump pymdown-extensions to version 11.0.2 (docs requirement)
+- **build**: Bump pdm-backend to 2.4.9
 - **machine**: Support standard reboot and shutdown commands
+- **assets**: Clarify welcome message on landing page
+- **git_deploy**: Refactor git repo status refresh
+- **Authorization**:  Failed API Key comparisons now return a 401 status code.
+  Previously failed comparisons would proceed to Trusted Client auth.
+- **Websockets**:  Failed JWT and API Key authentication attempts will now
+  revoke "trusted client" authorization if present.
 
 ### Added
 - **metadata**: Auto-detect forks of PrusaSlicer.
 - **metadata**: Add `printer_vendor`, `printer_model`, `printer_variant`,
   and `profile_version` parsing for PrusaSlicer derivatives.
+- **git_deploy**: Add a `repo_detected` field for git repos in the status
+  API response
+- **announcements**:  Add the `enable_moonlight` configuration option that
+  may be used to enable/disable requests to retrieve announcement feeds from
+  the Moonlight GitHub repository.
+- **application**: Added a `use_xheaders` option that may be set to False to
+  disable X-Header IP parsing for instances intended to be exclusively accessed
+  directly.
+
+### Fixed
+- **mqtt**: Fixed TLS for version 2.0+ paho mqtt clients
+- **authorization**: Only perform password authentication on locally
+  created users
+- **git_deploy**:  Detect a detached HEAD state when no branches are available.
+- **authorization**:  Trusted Client authorization now validates both the forwarded
+  IP address and the proxy IP address when applicable.
+- **Authorization**:  Constant time comparisons are now used to validate credentials.
 
 ## [0.10.0] - 2026-01-21
 
@@ -329,7 +371,8 @@ The format is based on [Keep a Changelog].
 [api_changes.md]: api_changes.md
 
 <!-- Versions -->
-[unreleased]: https://github.com/Arksine/moonraker/compare/v0.10.0...HEAD
+[unreleased]: https://github.com/Arksine/moonraker/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Arksine/moonraker/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Arksine/moonraker/compare/v0.9.3...v0.10.0
 [0.9.3]: https://github.com/Arksine/moonraker/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/Arksine/moonraker/compare/v0.9.1...v0.9.2

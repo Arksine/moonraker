@@ -16,10 +16,12 @@ import datetime
 import ipaddress
 import re
 import socket
+import hmac
 import logging
 from tornado.web import HTTPError
 from libnacl.sign import Signer, Verifier
 from ..utils import json_wrapper as jsonw
+from ..utils import parse_ip_address, get_proxy_ip
 from ..common import RequestType, TransportType, SqlTableDefinition, UserInfo
 
 # Annotation imports
@@ -58,6 +60,7 @@ def base64url_decode(data: str) -> bytes:
 
 ONESHOT_TIMEOUT = 5
 TRUSTED_CONNECTION_TIMEOUT = 3600
+PROXY_CLEAR_INTERVAL = 7200
 FQDN_CACHE_TIMEOUT = 84000
 PRUNE_CHECK_TIME = 300.
 
@@ -154,6 +157,8 @@ class Authorization:
         self.issuer = f"http://{hi['hostname']}:{hi['port']}"
         self.public_jwks: Dict[str, Dict[str, Any]] = {}
         self.trusted_users: Dict[IPAddr, Dict[str, Any]] = {}
+        self.trusted_proxies: List[IPAddr] = []
+        self.last_proxy_clear_time: float = time.time()
         self.oneshot_tokens: Dict[str, OneshotToken] = {}
 
         # Get allowed cors domains
@@ -490,7 +495,7 @@ class Authorization:
         salt = bytes.fromhex(user_info.salt)
         hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', password.encode(), salt, HASH_ITER).hex()
-        if hashed_pass != user_info.password:
+        if not hmac.compare_digest(hashed_pass, user_info.password):
             raise self.server.error("Invalid Password")
         new_hashed_pass = hashlib.pbkdf2_hmac(
             'sha256', new_pass.encode(), salt, HASH_ITER).hex()
@@ -558,7 +563,7 @@ class Authorization:
                 salt = bytes.fromhex(user_info.salt)
                 hashed_pass = hashlib.pbkdf2_hmac(
                     'sha256', password.encode(), salt, HASH_ITER).hex()
-                if hashed_pass != user_info.password:
+                if not hmac.compare_digest(hashed_pass, user_info.password):
                     raise self.server.error("Invalid Password")
         jwt_secret_hex: Optional[str] = user_info.jwt_secret
         if jwt_secret_hex is None:
@@ -700,12 +705,18 @@ class Authorization:
             ) from e
         return user_info
 
-    def validate_api_key(self, api_key: str) -> UserInfo:
+    def validate_api_key(self, api_key: str) -> UserInfo | None:
         if not self.enable_api_key:
-            raise self.server.error("API Key authentication is disabled", 401)
-        if api_key and api_key == self.api_key:
+            logging.debug("API Key received when API Key authentication is disabled")
+            return None
+        if not api_key.strip():
+            return None
+        if hmac.compare_digest(api_key, self.api_key):
             return self.users[API_USER]
         raise self.server.error("Invalid API Key", 401)
+
+    def is_api_key_enabled(self) -> bool:
+        return self.enable_api_key
 
     def _load_private_key(self, secret: str) -> Signer:
         try:
@@ -748,6 +759,10 @@ class Authorization:
                 domain: str = fqdn_info["domain"]
                 self.fqdn_cache.pop(ip, None)
                 logging.info(f"Cached FQDN Expired, IP: {ip}, domain: {domain}")
+        if cur_time - self.last_proxy_clear_time >= PROXY_CLEAR_INTERVAL:
+            # Clear trusted proxies every 2 hours
+            self.last_proxy_clear_time = cur_time
+            self.trusted_proxies.clear()
         return eventtime + PRUNE_CHECK_TIME
 
     def _oneshot_token_expire_handler(self, token):
@@ -847,6 +862,14 @@ class Authorization:
             return False
         return self.failed_logins.get(ip_addr, 0) >= self.max_logins
 
+    async def _check_trusted_proxy(self, ip: IPAddr) -> None:
+        if ip in self.trusted_proxies:
+            return
+        if await self._check_authorized_ip(ip):
+            self.trusted_proxies.append(ip)
+            return
+        raise HTTPError(401, f"Proxy address {ip} not trusted")
+
     async def authenticate_request(
         self, request: HTTPServerRequest, auth_required: bool = True
     ) -> Optional[UserInfo]:
@@ -858,14 +881,8 @@ class Authorization:
         if jwt_user is not None:
             return jwt_user
 
-        try:
-            ip = ipaddress.ip_address(request.remote_ip)  # type: ignore
-        except ValueError:
-            logging.exception(
-                f"Unable to Create IP Address {request.remote_ip}")
-            ip = None
-
         # Check oneshot access token
+        ip = parse_ip_address(request.remote_ip, True)
         ost: Optional[List[bytes]] = request.arguments.get('token', None)
         if ost is not None:
             ost_user = self._check_oneshot_token(ost[-1].decode(), ip)
@@ -873,10 +890,16 @@ class Authorization:
                 return ost_user
 
         # Check API Key Header
-        if self.enable_api_key:
-            key: Optional[str] = request.headers.get("X-Api-Key")
-            if key and key == self.api_key:
-                return self.users[API_USER]
+        key = request.headers.get("X-Api-Key")
+        if key:
+            try:
+                api_key_user = self.validate_api_key(key)
+            except self.server.error as e:
+                raise HTTPError(401, str(e)) from e
+            else:
+                if api_key_user is not None:
+                    return api_key_user
+
 
         # If the force_logins option is enabled and at least one user is created
         # then trusted user authentication is disabled
@@ -889,6 +912,13 @@ class Authorization:
         # then it is acceptable to return None
         trusted_user = await self._check_trusted_connection(ip)
         if trusted_user is not None:
+            # If the request is proxied make sure that the proxy is trusted
+            proxy_ip_str = get_proxy_ip(request)
+            orig_ip: IPAddr | None = None
+            if proxy_ip_str != request.remote_ip:
+                orig_ip = parse_ip_address(proxy_ip_str, True)
+            if auth_required and orig_ip is not None:
+                await self._check_trusted_proxy(orig_ip)
             return trusted_user
         if not auth_required:
             return None

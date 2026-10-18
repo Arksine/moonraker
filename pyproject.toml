@@ -6,24 +6,24 @@ authors = [
     {name = "Eric Callahan", email = "arksine.code@gmail.com"},
 ]
 dependencies = [
-    "tornado>=6.2.0,<=6.5.5",
+    "tornado>=6.2.0,<=6.5.8",
     "pyserial==3.4",
-    "pillow>=9.5.0,<=12.2.0",
-    "streaming-form-data>=1.11.0, <=1.19.1",
+    "pillow>=9.5.0,<=12.3.0",
+    "streaming-form-data>=1.11.0, <=2.1.0",
     "distro==1.9.0",
     "inotify-simple==2.0.1",
     "libnacl==2.1.0",
     "paho-mqtt==2.1.0",
-    "zeroconf>=0.131.0, <=0.148.0",
+    "zeroconf>=0.131.0, <=0.150.0",
     "preprocess-cancellation==0.2.1",
     "jinja2==3.1.6",
-    "dbus-fast>=2.21.3, <=3.1.2",
-    "apprise>=1.9.3,<=1.9.8",
+    "dbus-fast>=2.21.3, <=5.0.22",
+    "apprise>=1.9.3,<=1.13.0",
     "ldap3==2.9.1",
     "python-periphery==2.4.1",
-    "importlib_metadata>=6.7.0, <=8.7.1",
+    "importlib_metadata>=6.7.0, <=9.0.0",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "GPL-3.0-only"}
 keywords = ["klipper", "3D printing", "server", "moonraker"]
@@ -31,9 +31,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -50,8 +47,8 @@ changelog = "https://moonraker.readthedocs.io/en/latest/changelog/"
 [dependency-groups]
 dev = ["pre-commit", "mypy", "ruff", "build"]
 docs = [
-    "mkdocs-material==9.7.5",
-    "pymdown-extensions~=10.21.0",
+    "mkdocs-material==9.7.7",
+    "pymdown-extensions~=11.0.0",
     "compact_tables",
     "pymdown_extras",
 ]
@@ -89,5 +86,5 @@ custom-hook = "pdm_build.py"
 moonraker = "moonraker.server:main"
 
 [build-system]
-requires = ["pdm-backend<=2.4.7"]
+requires = ["pdm-backend<=2.4.9"]
 build-backend = "pdm.backend"

@@ -2,9 +2,20 @@
 
 This document provides a guide on how to install Moonraker on a Debian
 based Linux Distributions.  Other linux distributions may work, however
-they may need a custom install script.  Moonraker requires Python 3.7 or
-greater, verify that your distribution's Python 3 packages meet this
-requirement.
+they may need a custom install script.  Running Moonraker from source
+requires Python 3.7 or greater, verify that your distribution's Python 3
+packages meet this requirement.  The packaged version of Moonraker
+is available for
+[supported versions of Python](https://devguide.python.org/versions/).
+As of the time of this writing, the minimum supported version of Python
+is 3.10.
+
+/// warning
+While Moonraker retains compatibility with EOL versions of Python back
+to 3.7 it is strongly recommended to use a currently supported version.
+Several of Moonraker's dependencies do not support EOL versions of Python
+and updates often include fixes to critical security vulnerabilities.
+///
 
 ## Installing Klipper
 

@@ -15,7 +15,7 @@ from ..common import (
     BaseRemoteConnection,
     TransportType,
 )
-from ..utils import ServerError, parse_ip_address
+from ..utils import ServerError, parse_ip_address, check_request_proxied
 
 # Annotation imports
 from typing import (
@@ -236,7 +236,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
 
     def initialize(self) -> None:
         self.on_create(self.settings['server'])
-        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
+        self._ip_addr = parse_ip_address(self.request.remote_ip)
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.cors_allowed: bool = False
 
@@ -256,12 +256,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         self.set_nodelay(True)
         self._connected_time = self.eventloop.get_loop_time()
         agent = self.request.headers.get("User-Agent", "")
-        is_proxy = False
-        if (
-            "X-Forwarded-For" in self.request.headers or
-            "X-Real-Ip" in self.request.headers
-        ):
-            is_proxy = True
+        is_proxy = check_request_proxied(self.request)
         logging.info(f"Websocket Opened: ID: {self.uid}, "
                      f"Proxied: {is_proxy}, "
                      f"User Agent: {agent}, "
@@ -348,7 +343,7 @@ class BridgeSocket(WebSocketHandler):
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.eventloop = self.server.get_event_loop()
         self.uid = id(self)
-        self._ip_addr = parse_ip_address(self.request.remote_ip or "")
+        self._ip_addr = parse_ip_address(self.request.remote_ip)
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.is_closed = False
         self.klippy_writer: Optional[asyncio.StreamWriter] = None
@@ -369,12 +364,7 @@ class BridgeSocket(WebSocketHandler):
         self.set_nodelay(True)
         self._connected_time = self.eventloop.get_loop_time()
         agent = self.request.headers.get("User-Agent", "")
-        is_proxy = False
-        if (
-            "X-Forwarded-For" in self.request.headers or
-            "X-Real-Ip" in self.request.headers
-        ):
-            is_proxy = True
+        is_proxy = check_request_proxied(self.request)
         logging.info(f"Bridge Socket Opened: ID: {self.uid}, "
                      f"Proxied: {is_proxy}, "
                      f"User Agent: {agent}, "

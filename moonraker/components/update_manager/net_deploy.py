@@ -280,7 +280,7 @@ class NetDeploy(AppDeploy):
         result = await self._fetch_github_version()
         if not result:
             return
-        self.remote_version = result.get('name', "?")
+        self.remote_version = result.get("tag_name", result.get("name")) or "?"
         assets: List[Dict[str, Any]] = result.get("assets", [{}])
         release_asset: Dict[str, Any] = assets[0] if assets else {}
         if self.asset_name is not None:
