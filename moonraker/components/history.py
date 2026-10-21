@@ -28,6 +28,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    import sqlite3
     from ..confighelper import ConfigHelper
     from ..common import WebRequest, UserInfo
     from .database import MoonrakerDatabase as DBComp
@@ -47,6 +48,13 @@ BASE_TOTALS = {
 }
 HIST_TABLE = "job_history"
 TOTALS_TABLE = "job_totals"
+# Statuses a job may hold after Moonraker exits mid-print.  When Moonraker
+# reconnects to a Klipper instance that is still running that job, the
+# job is re-adopted and finished normally.
+READOPT_STATUSES = ("interrupted", "server_exit")
+# Maximum difference, in seconds, between a stored job's start time and
+# the start time implied by print_stats for the job to be re-adopted.
+READOPT_START_TOLERANCE = 120.
 
 def _create_totals_list(
     job_totals: Dict[str, Any],
@@ -205,6 +213,8 @@ class History:
             "server:klippy_disconnect", self._handle_disconnect)
         self.server.register_event_handler(
             "server:klippy_shutdown", self._handle_shutdown)
+        self.server.register_event_handler(
+            "server:klippy_ready", self._handle_klippy_ready)
         self.server.register_event_handler(
             "job_state:state_changed", self._on_job_state_changed)
         self.server.register_event_handler(
@@ -407,15 +417,131 @@ class History:
         last_ps = jstate.get_last_stats()
         await self.finish_job("klippy_disconnect", last_ps)
 
+    async def _handle_klippy_ready(self) -> None:
+        # When Moonraker restarts during a print Klipper keeps printing,
+        # but the JobState component does not emit a "started" event
+        # for a job that is already running.  Without intervention the
+        # job's history entry remains "interrupted" (or "server_exit")
+        # and the print finishes with no record of its completion.
+        if self.current_job is not None:
+            return
+        jstate: JobState = self.server.lookup_component("job_state")
+        last_ps = jstate.get_last_stats()
+        if last_ps.get("state") not in ("printing", "paused"):
+            return
+        await self.readopt_job()
+
+    async def readopt_job(self) -> None:
+        """
+        Re-adopt the most recent job orphaned by a Moonraker exit if
+        print_stats indicates that Klipper is still running that job.
+
+        The job's entry already has the correct filename, start time,
+        user and metadata, so it is set back to "in_progress" and
+        installed as the current job.  Klipper's print_stats counters
+        are not reset by a Moonraker restart, so the entry is finished
+        normally, with durations and filament covering the entire job.
+        """
+        async with self.request_lock:
+            if self.current_job is not None:
+                return
+            # Re-read the stats under the lock, a state change may have
+            # been processed while waiting for it
+            jstate: JobState = self.server.lookup_component("job_state")
+            pstats = jstate.get_last_stats()
+            state: str = pstats.get("state", "")
+            if state not in ("printing", "paused"):
+                return
+            filename: str = pstats.get("filename", "")
+            total_duration: float = pstats.get("total_duration", 0.)
+            placeholders = ",".join("?" * len(READOPT_STATUSES))
+            cursor = await self.history_table.execute(
+                f"SELECT * FROM {HIST_TABLE} WHERE instance_id = ? "
+                f"AND status IN ({placeholders}) ORDER BY job_id DESC LIMIT 1",
+                ("default", *READOPT_STATUSES)
+            )
+            result = await cursor.fetchone()
+            if result is None:
+                logging.info(
+                    f"Klipper is {state} '{filename}', no history entry "
+                    "is available to re-adopt"
+                )
+                return
+            job_data = dict(result)
+            row_id: int = job_data["job_id"]
+            job_id = f"{row_id:06X}"
+            if job_data["filename"] != filename:
+                logging.info(
+                    f"History Job {job_id} not re-adopted, filename "
+                    f"'{job_data['filename']}' does not match "
+                    f"'{filename}' reported by Klipper"
+                )
+                return
+            # Reject entries for a previous job that printed the same file.
+            # Klipper's total_duration never decreases within a job, and the
+            # entry's start time must agree with the start print_stats implies.
+            if total_duration < job_data["total_duration"]:
+                logging.info(
+                    f"History Job {job_id} not re-adopted, Klipper reports a "
+                    f"total duration of {total_duration:.0f} seconds, less "
+                    f"than the {job_data['total_duration']:.0f} recorded"
+                )
+                return
+            expected_start = time.time() - total_duration
+            start_diff = abs(job_data["start_time"] - expected_start)
+            if start_diff > READOPT_START_TOLERANCE:
+                logging.info(
+                    f"History Job {job_id} not re-adopted, start time "
+                    f"differs from Klipper's by {start_diff:.0f} seconds"
+                )
+                return
+            job = PrinterJob(job_data)
+            job_totals = self.job_totals
+            if job.status == "server_exit":
+                # The exit handler accumulated this job's totals as they
+                # stood at the restart.  Retract them so the job is counted
+                # once, when it finishes.  Auxiliary totals are not
+                # retracted, as their trackers are reset below and the
+                # values reported at completion only cover the remainder.
+                job_totals = self._retract_job_totals(job)
+            job.status = "in_progress"
+            job.end_time = None
+            self._reset_aux_tracking(job)
+            values = self._get_job_values(job, row_id)
+            job_placeholders = ",".join("?" * len(values))
+            totals_list = _create_totals_list(job_totals, self.aux_totals)
+
+            def _write_job_and_totals(conn: sqlite3.Connection) -> None:
+                # Both statements run in one database callback, so nothing
+                # can commit between them.  An exit before the commit leaves
+                # the entry "server_exit" with its totals intact.
+                conn.execute(
+                    f"REPLACE INTO {HIST_TABLE} VALUES({job_placeholders})", values
+                )
+                conn.executemany(
+                    f"REPLACE INTO {TOTALS_TABLE} VALUES(?, ?, ?, ?, ?)",
+                    totals_list
+                )
+            async with self.history_table as tx:
+                await tx.queue_callback(_write_job_and_totals)
+            self.job_totals = job_totals
+            self.current_job = job
+            self.current_job_id = row_id
+            self.job_user = job.user
+            # A pause or resume may have been processed during the writes
+            self.job_paused = jstate.get_last_stats().get("state") == "paused"
+            logging.info(
+                f"History Job Re-adopted - Id: {job_id}, File: {filename}, "
+                f"Started: {total_duration:.0f} seconds ago"
+            )
+
     async def add_job(self, job: PrinterJob) -> None:
         async with self.request_lock:
             self.current_job = job
             self.current_job_id = None
             self.current_job.user = self.job_user
             self.grab_job_metadata()
-            for field in self.auxiliary_fields:
-                field.tracker.reset()
-            self.current_job.set_aux_data(self.auxiliary_fields)
+            self._reset_aux_tracking(self.current_job)
             new_id = await self.save_job(job, None)
             if new_id is None:
                 logging.info(f"Error saving job, filename '{job.filename}'")
@@ -428,8 +554,13 @@ class History:
             )
             self.send_history_event("added")
 
-    async def save_job(self, job: PrinterJob, job_id: Optional[int]) -> Optional[int]:
-        values: List[Any] = [
+    def _reset_aux_tracking(self, job: PrinterJob) -> None:
+        for field in self.auxiliary_fields:
+            field.tracker.reset()
+        job.set_aux_data(self.auxiliary_fields)
+
+    def _get_job_values(self, job: PrinterJob, job_id: Optional[int]) -> List[Any]:
+        return [
             job_id,
             job.user,
             job.filename,
@@ -443,6 +574,9 @@ class History:
             job.auxiliary_data,
             "default"
         ]
+
+    async def save_job(self, job: PrinterJob, job_id: Optional[int]) -> Optional[int]:
+        values = self._get_job_values(job, job_id)
         placeholders = ",".join("?" * len(values))
         async with self.history_table as tx:
             cursor = await tx.execute(
@@ -549,6 +683,22 @@ class History:
             await tx.executemany(
                 f"REPLACE INTO {TOTALS_TABLE} VALUES(?, ?, ?, ?, ?)", totals_list
             )
+
+    def _retract_job_totals(self, job: PrinterJob) -> Totals:
+        # Returns a copy of the job totals with this job's contribution
+        # removed.  The longest_* maxima are not retracted, a maximum cannot
+        # be un-maximized.  They are re-maximized when the job finishes.
+        totals = dict(self.job_totals)
+        retractions: List[Tuple[str, Union[int, float]]] = [
+            ("total_jobs", 1),
+            ("total_time", job.total_duration),
+            ("total_print_time", job.print_duration),
+            ("total_filament_used", job.filament_used)
+        ]
+        for field, val in retractions:
+            # Clamp at zero in case totals were reset before re-adoption
+            totals[field] = max(0, totals[field] - val)
+        return totals
 
     def _accumulate_total(self, field: str, val: Union[int, float]) -> None:
         self.job_totals[field] += val
