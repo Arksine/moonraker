@@ -593,13 +593,13 @@ class KlippyConnection:
                 self._state = new_state
         for conn, sub in self.subscriptions.items():
             conn_status: Dict[str, Any] = {}
-            for name, fields in sub.items():
-                if name in status:
-                    val: Dict[str, Any] = dict(status[name])
-                    if fields is not None:
-                        val = {k: v for k, v in val.items() if k in fields}
-                    if val:
-                        conn_status[name] = val
+            for name in sub.keys() & status.keys():
+                fields = sub[name]
+                val: Dict[str, Any] = dict(status[name])
+                if fields is not None:
+                    val = {k: v for k, v in val.items() if k in fields}
+                if val:
+                    conn_status[name] = val
             conn.send_status(conn_status, eventtime)
 
     async def request(self, web_request: WebRequest) -> Any:
