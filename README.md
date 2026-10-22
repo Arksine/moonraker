@@ -1,7 +1,7 @@
 
 #  Moonraker - API Web Server for Klipper
 
-Moonraker is a Python 3 based web server that exposes APIs with which
+Moonraker is a Python 3 based web server that exposes APIs which
 client applications may use to interact with the 3D printing firmware
 [Klipper](https://github.com/KevinOConnor/klipper). Communication between
 the Klippy host and Moonraker is done over a Unix Domain Socket.  Tornado
@@ -16,8 +16,8 @@ Note that Moonraker does not come bundled with a client, you will need to
 install one.  The following clients are currently available:
 
 - [Mainsail](https://github.com/mainsail-crew/mainsail) by [Mainsail-Crew](https://github.com/mainsail-crew)
-- [Fluidd](https://github.com/fluidd-core/fluidd) by Cadriel
-- [KlipperScreen](https://github.com/jordanruthe/KlipperScreen) by jordanruthe
+- [Fluidd](https://github.com/fluidd-core/fluidd)
+- [KlipperScreen](https://github.com/jordanruthe/KlipperScreen)
 - [mooncord](https://github.com/eliteSchwein/mooncord) by eliteSchwein
 
 ### Raspberry Pi Images
