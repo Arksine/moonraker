@@ -112,7 +112,8 @@ class Machine:
             "none": BaseProvider,
             "systemd_cli": SystemdCliProvider,
             "systemd_dbus": SystemdDbusProvider,
-            "supervisord_cli": SupervisordCliProvider
+            "supervisord_cli": SupervisordCliProvider,
+            "openrc_cli": OpenRCCliProvider
         }
         self.provider_type = config.get('provider', 'systemd_dbus')
         pclass = providers.get(self.provider_type)
@@ -247,7 +248,8 @@ class Machine:
         return (
             service in self._allowed_services or
             re.match(r"moonraker[_-]?\d*", service) is not None or
-            re.match(r"klipper[_-]?\d*", service) is not None
+            re.match(r"klipper[_-]?\d*", service) is not None or
+            re.match(r"kalico[_-]?\d*", service) is not None
         )
 
     def validation_enabled(self) -> bool:
@@ -1605,6 +1607,106 @@ class SupervisordCliProvider(BaseProvider):
             return service_info
         service_info["properties"] = dict(spv_config[section_name])
         return service_info
+
+
+class OpenRCCliProvider(BaseProvider):
+    def __init__(self, config: ConfigHelper) -> None:
+        self.server = config.get_server()
+        self.shutdown_action = config.get("shutdown_action", "poweroff")
+        self.shutdown_action = self.shutdown_action.lower()
+        if self.shutdown_action not in ["halt", "poweroff"]:
+            raise config.error(
+                "Section [machine], Option 'shutdown_action':"
+                f"Invalid value '{self.shutdown_action}', must be "
+                "'halt' or 'poweroff'"
+            )
+        self.available_services: Dict[str, Dict[str, str]] = {}
+        self.shell_cmd: SCMDComp = self.server.load_component(
+            config, 'shell_command')
+
+    async def initialize(self) -> None:
+        await self._detect_active_services()
+        if self.available_services:
+            await self._update_service_status(0, notify=True)
+            pstats: ProcStats = self.server.lookup_component('proc_stats')
+            pstats.register_stat_callback(self._update_service_status)
+
+    async def _exec_sudo_command(self, command: str):
+        machine: Machine = self.server.lookup_component("machine")
+        return await machine.exec_sudo_command(command)
+
+    async def shutdown(self) -> None:
+        await self._exec_sudo_command(f"{self.shutdown_action}")
+
+    async def reboot(self) -> None:
+        await self._exec_sudo_command("reboot")
+
+    async def do_service_action(self,
+                                action: str,
+                                service_name: str
+                                ) -> None:
+        await self._exec_sudo_command(f"rc-service -C {service_name} {action}")
+
+    async def check_virt_status(self) -> Dict[str, Any]:
+        return {
+            'virt_type': "unknown",
+            'virt_identifier': "unknown"
+        }
+
+    async def _detect_active_services(self) -> None:
+        machine: Machine = self.server.lookup_component("machine")
+        try:
+            resp: str = await self.shell_cmd.exec_cmd("rc-status -Cs")
+            lines = resp.split('\n')
+            services = [line.split()[0].strip() for line in lines]
+        except Exception:
+            services = []
+        for svc in services:
+            if machine.is_service_allowed(svc):
+                self.available_services[svc] = {
+                    'active_state': "unknown",
+                    'sub_state': "unknown"
+                }
+
+    async def _update_service_status(self,
+                                     sequence: int,
+                                     notify: bool = True
+                                     ) -> None:
+        if sequence % 2:
+            # Update every other sequence
+            return
+        svcs = list(self.available_services.keys())
+        try:
+            for svc in svcs:
+                resp: str = await self.shell_cmd.exec_cmd(f"rc-service -C {svc} status")
+                active_state = resp[11:]
+                new_state: Dict[str, str] = {
+                    'active_state': active_state,
+                    'sub_state': "unknown"
+                }
+                if self.available_services[svc] != new_state:
+                    self.available_services[svc] = new_state
+                    if notify:
+                        self.server.send_event(
+                            "machine:service_state_changed",
+                            {svc: new_state})
+        except Exception:
+            logging.exception("Error processing service state update")
+
+    def is_service_available(self, service: str) -> bool:
+        return service in self.available_services
+
+    def get_available_services(self) -> Dict[str, Dict[str, str]]:
+        return self.available_services
+
+    async def extract_service_info(
+        self,
+        service_name: str,
+        pid: int,
+        properties: Optional[List[str]] = None,
+        raw: bool = False
+    ) -> Dict[str, Any]:
+        return {}
 
 
 # Install validation
