@@ -392,7 +392,7 @@ The `refresh` parameter is deprecated.  Front end developers should use the
 |                       |                | package's metadata.                                       |^
 | `current_hash`        |     string     | The hash of the commit used to build the current version  |
 |                       |                | of the package.  A placeholder of `not-specified` is used |^
-|                       |                | when the the current hash is not provided in the package  |^
+|                       |                | when the current hash is not provided in the package      |^
 |                       |                | metadata.                                                 |^
 | `remote_hash`         |     string     | The hash of the latest update available. A placeholder of |
 |                       |                | `update-available` is used when the remote hash is not    |^

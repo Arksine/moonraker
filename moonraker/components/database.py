@@ -1290,7 +1290,7 @@ class SqliteProvider(Thread):
     def register_table(self, table_def: SqlTableDefinition) -> None:
         if self.is_alive():
             raise self.server.error(
-                "Table registration must occur during during init."
+                "Table registration must occur during init."
             )
         if table_def.name in self._tables:
             logging.info(f"Found registered table {table_def.name}")

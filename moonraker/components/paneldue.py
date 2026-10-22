@@ -404,7 +404,7 @@ class PanelDue:
         return cmd
 
     def _prepare_M290(self, args: List[str]) -> str:
-        # args should in in the format Z0.02
+        # args should be in the format Z0.02
         offset = args[0][1:].strip()
         return f"SET_GCODE_OFFSET Z_ADJUST={offset} MOVE=1"
 

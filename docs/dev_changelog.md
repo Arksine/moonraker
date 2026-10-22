@@ -59,7 +59,7 @@
 - Python 3 support has been added.
 - API Key management has moved from Klippy to Moonraker
 - File Management has moved from Klippy to Moonraker. All static files are now
-  located in the the `/server/files` root path:
+  located in the `/server/files` root path:
   - klippy.log - `/server/files/klippy.log`
   - moonraker.log - `/server/files/moonraker.log`
   - gcode files - `/server/files/gcodes/(.*)`
@@ -136,7 +136,7 @@
   printer.cfg accordingly
 - Static files no longer served by the API server.  As a result, there is
   no `web_path` option in `[remote_api]`.
-- The server process now now forwards logging requests back to the Klippy
+- The server process now forwards logging requests back to the Klippy
   Host, thus all logging is done in klippy.log.  The temporary endpoint serving
   klippy_server.log has been removed.
 - `/printer/info` now includes two additional keys:
@@ -281,7 +281,7 @@
     `location` object in javascript.  Instead it returns CPU information.
   - `GET /printer/objects` is no longer used to accommodate multiple request
     types by modifying the "Accept" headers.  Each request has been broken
-    down in their their own endpoints:
+    down in their own endpoints:
     - `GET /printer/objects` returns all available printer objects that may
       be queried
     - `GET /printer/status?gcode=gcode_position,speed&toolhead` returns the

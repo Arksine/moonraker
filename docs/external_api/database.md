@@ -283,7 +283,7 @@ DELETE /server/database/item?namespace={namespace}&key={key}
 
 ## Compact Database
 
-Compacts and defragments the the sqlite database using the `VACUUM` command.
+Compacts and defragments the sqlite database using the `VACUUM` command.
 This endpoint cannot be requested when Klipper is printing.
 
 ```{.http .apirequest title="HTTP Request"}

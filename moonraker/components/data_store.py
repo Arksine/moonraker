@@ -1,4 +1,4 @@
-# Klipper data logging and storage storage
+# Klipper data logging and storage
 #
 # Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
 #

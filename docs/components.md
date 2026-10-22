@@ -144,7 +144,7 @@ If `default` is not provided a `ServerError` will be raised.
 #### *Server.load_component(config, component_name, default=Sentinel)*
 
 Attempts to load an uninitialized component and returns the result.  It is
-only valid to call this within a a component's `__init__()` method, and
+only valid to call this within a component's `__init__()` method, and
 should only be necessary if one optional component relies on another.  Core components will always be loaded before optional components, thus an optional
 component may always call
 [lookup_component()](#serverlookup_componentcomponent_name-defaultsentinel)

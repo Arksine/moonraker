@@ -479,7 +479,7 @@ for generating RSS feeds from GitHub issues using GitHub's REST API. These
 RSS feeds are hosted on GitHub Pages, for example Moonraker's feed may be found
 [here](https://arksine.github.io/moonlight/assets/moonraker.xml). By
 centralizing GitHub API queries in `moonlight` we are able to poll multiple
-repos without running into API rate limit issues. Moonlight has has a workflow
+repos without running into API rate limit issues. Moonlight has a workflow
 that checks all registered repos for new announcements every 30 minutes.  In
 theory it would be able to check for announcements in up to 500 repos before
 exceeding GitHub's API rate limit.
