@@ -417,7 +417,8 @@ class FileManager:
                                        web_request: WebRequest
                                        ) -> List[Dict[str, Any]]:
         root = web_request.get_str('root', "gcodes")
-        flist = self.get_file_list(root, list_format=True)
+        flist = await self.event_loop.run_in_thread(
+            self.get_file_list, root, True)
         return cast(List[Dict[str, Any]], flist)
 
     async def _handle_metadata_request(self,
@@ -498,7 +499,8 @@ class FileManager:
         if req_type == RequestType.GET:
             is_extended = web_request.get_boolean('extended', False)
             # Get list of files and subdirectories for this target
-            dir_info = self._list_directory(dir_path, root, is_extended)
+            dir_info = await self.event_loop.run_in_thread(
+                self._list_directory, dir_path, root, is_extended)
             return dir_info
         async with self.sync_lock:
             self.check_reserved_path(dir_path, True)
@@ -748,28 +750,31 @@ class FileManager:
                 f"Directory does not exist ({path})")
         self.check_reserved_path(path, False)
         flist: Dict[str, Any] = {'dirs': [], 'files': []}
-        for fname in os.listdir(path):
-            full_path = os.path.join(path, fname)
-            if not os.path.exists(full_path):
-                continue
-            path_info = self.get_path_info(full_path, root)
-            if os.path.isdir(full_path):
-                path_info['dirname'] = fname
-                flist['dirs'].append(path_info)
-            elif os.path.isfile(full_path):
-                path_info['filename'] = fname
-                # Check to see if a filelist update is necessary
-                ext = os.path.splitext(fname)[-1].lower()
-                if (
-                    root == "gcodes" and
-                    ext in VALID_GCODE_EXTS and
-                    is_extended
-                ):
-                    rel_path = self.get_relative_path(root, full_path)
-                    metadata: Dict[str, Any] = self.gcode_metadata.get(
-                        rel_path, {})
-                    path_info.update(metadata)
-                flist['files'].append(path_info)
+        dir_ctx = self._build_dir_context(path)
+        with os.scandir(path) as dir_entries:
+            for entry in dir_entries:
+                try:
+                    fstat = entry.stat()
+                except OSError:
+                    continue
+                path_info = self._entry_path_info(entry, fstat, root, dir_ctx)
+                if entry.is_dir():
+                    path_info['dirname'] = entry.name
+                    flist['dirs'].append(path_info)
+                elif entry.is_file():
+                    path_info['filename'] = entry.name
+                    # Check to see if a filelist update is necessary
+                    ext = os.path.splitext(entry.name)[-1].lower()
+                    if (
+                        root == "gcodes" and
+                        ext in VALID_GCODE_EXTS and
+                        is_extended
+                    ):
+                        rel_path = self.get_relative_path(root, entry.path)
+                        metadata: Dict[str, Any] = self.gcode_metadata.get(
+                            rel_path, {})
+                        path_info.update(metadata)
+                    flist['files'].append(path_info)
         usage = shutil.disk_usage(path)
         flist['disk_usage'] = usage._asdict()
         flist['root_info'] = {
@@ -797,6 +802,87 @@ class FileManager:
             if (
                 root not in self.full_access_roots or
                 (path.is_symlink() and path.is_file())
+            ):
+                permissions = "r"
+            for name, (res_path, can_read) in self.reserved_paths.items():
+                if (res_path == real_path or res_path in real_path.parents):
+                    if not can_read:
+                        permissions = ""
+                        break
+                    permissions = "r"
+        return {
+            'modified': fstat.st_mtime,
+            'size': fstat.st_size,
+            'permissions': permissions
+        }
+
+    def _build_dir_context(self, dir_path: StrOrPath) -> Dict[str, Any]:
+        # Precompute the containment state shared by every non-symlink
+        # entry of a directory, so listings do not need to resolve()
+        # and walk reserved path ancestors for each file.
+        parent = pathlib.Path(dir_path).resolve()
+        reserved_perm: Optional[str] = None
+        for res_path, can_read in self.reserved_paths.values():
+            if res_path == parent or res_path in parent.parents:
+                if not can_read:
+                    reserved_perm = ""
+                    break
+                reserved_perm = "r"
+        prefix = str(parent)
+        if not prefix.endswith(os.sep):
+            prefix += os.sep
+        return {
+            "in_git": ".git" in parent.parts,
+            "reserved_perm": reserved_perm,
+            "prefix": prefix,
+            "reserved_children": {
+                str(res_path): can_read
+                for (res_path, can_read) in self.reserved_paths.values()
+            }
+        }
+
+    def _entry_path_info(
+        self,
+        entry: os.DirEntry[str],
+        fstat: os.stat_result,
+        root: str,
+        dir_ctx: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        # Equivalent to get_path_info() for an entry produced by a
+        # scandir walk, reusing the stat result and file type info
+        # already gathered rather than issuing per-file stat calls.
+        if dir_ctx is not None and not entry.is_symlink():
+            # A non-symlink entry resolves to its parent's resolved
+            # path plus its own name, so ancestor containment is
+            # inherited from the directory context.  Only an exact
+            # match against a reserved path remains per entry.
+            if dir_ctx["in_git"] or entry.name == ".git":
+                permissions = ""
+            else:
+                permissions = "rw"
+                if root not in self.full_access_roots:
+                    permissions = "r"
+                res_perm = dir_ctx["reserved_perm"]
+                can_read = dir_ctx["reserved_children"].get(
+                    dir_ctx["prefix"] + entry.name
+                )
+                if res_perm == "" or can_read is False:
+                    permissions = ""
+                elif res_perm is not None or can_read is not None:
+                    permissions = "r"
+            return {
+                'modified': fstat.st_mtime,
+                'size': fstat.st_size,
+                'permissions': permissions
+            }
+        real_path = pathlib.Path(entry.path).resolve()
+        if ".git" in real_path.parts:
+            permissions = ""
+        else:
+            permissions = "rw"
+            if (
+                root not in self.full_access_roots or
+                (entry.is_symlink() and entry.is_file())
             ):
                 permissions = "r"
             for name, (res_path, can_read) in self.reserved_paths.items():
@@ -991,31 +1077,43 @@ class FileManager:
         logging.info(f"Updating File List <{root}>...")
         st = os.stat(path)
         visited_dirs = {(st.st_dev, st.st_ino)}
-        for dir_path, dir_names, files in os.walk(path, followlinks=True):
-            scan_dirs: List[str] = []
-            # Filter out directories that have already been visited. This
-            # prevents infinite recursion "followlinks" is set to True
-            for dname in dir_names:
-                full_path = os.path.join(dir_path, dname)
-                if not os.path.exists(full_path):
-                    continue
-                st = os.stat(full_path)
-                key = (st.st_dev, st.st_ino)
-                if key not in visited_dirs:
-                    visited_dirs.add(key)
-                    if not self.check_reserved_path(full_path, False, False):
-                        scan_dirs.append(dname)
-            dir_names[:] = scan_dirs
-            for name in files:
-                ext = os.path.splitext(name)[-1].lower()
-                if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
-                    continue
-                full_path = os.path.join(dir_path, name)
-                if not os.path.exists(full_path):
-                    continue
-                fname = full_path[len(path) + 1:]
-                finfo = self.get_path_info(full_path, root)
-                filelist[fname] = finfo
+        dir_stack: List[str] = [path]
+        while dir_stack:
+            dir_path = dir_stack.pop()
+            try:
+                dir_entries = os.scandir(dir_path)
+            except OSError:
+                continue
+            with dir_entries:
+                dir_ctx = self._build_dir_context(dir_path)
+                for entry in dir_entries:
+                    if entry.is_dir():
+                        try:
+                            dstat = entry.stat()
+                        except OSError:
+                            continue
+                        # Skip directories that have already been visited.
+                        # This prevents infinite recursion, as symlinked
+                        # directories are followed.
+                        key = (dstat.st_dev, dstat.st_ino)
+                        if key in visited_dirs:
+                            continue
+                        visited_dirs.add(key)
+                        if not self.check_reserved_path(
+                            entry.path, False, False
+                        ):
+                            dir_stack.append(entry.path)
+                    elif entry.is_file():
+                        ext = os.path.splitext(entry.name)[-1].lower()
+                        if root == 'gcodes' and ext not in VALID_GCODE_EXTS:
+                            continue
+                        try:
+                            fstat = entry.stat()
+                        except OSError:
+                            continue
+                        fname = entry.path[len(path) + 1:]
+                        filelist[fname] = self._entry_path_info(
+                            entry, fstat, root, dir_ctx)
         if list_format:
             flist: List[Dict[str, Any]] = []
             for fname in sorted(filelist, key=str.lower):
@@ -1356,17 +1454,22 @@ class BaseFileSystemObserver:
             else:
                 self.gcode_metadata.remove_file_metadata(rel_path)
 
-    def parse_gcode_metadata(self, file_path: str) -> asyncio.Event:
+    def parse_gcode_metadata(
+        self, file_path: str, path_info: Optional[Dict[str, Any]] = None
+    ) -> asyncio.Event:
         rel_path = self.file_manager.get_relative_path("gcodes", file_path)
         ext = os.path.splitext(rel_path)[-1].lower()
-        try:
-            path_info = self.file_manager.get_path_info(file_path, "gcodes")
-        except Exception:
-            path_info = {}
-        if (
-            ext not in VALID_GCODE_EXTS or
-            path_info.get('size', 0) == 0
-        ):
+        if ext not in VALID_GCODE_EXTS:
+            evt = asyncio.Event()
+            evt.set()
+            return evt
+        if path_info is None:
+            try:
+                path_info = self.file_manager.get_path_info(
+                    file_path, "gcodes")
+            except Exception:
+                path_info = {}
+        if path_info.get('size', 0) == 0:
             evt = asyncio.Event()
             evt.set()
             return evt
@@ -1532,27 +1635,46 @@ class InotifyNode:
                 f"delete_{item_type}", root, item_path)
         self.pending_deleted_children.clear()
 
-    def scan_node(self,
-                  visited_dirs: Set[Tuple[int, int]] = set()
-                  ) -> List[asyncio.Event]:
+    def scan_node(
+        self, visited_dirs: Optional[Set[Tuple[int, int]]] = None
+    ) -> List[asyncio.Event]:
+        if visited_dirs is None:
+            visited_dirs = set()
         dir_path = self.get_path()
         st = os.stat(dir_path)
-        if st in visited_dirs:
+        key = (st.st_dev, st.st_ino)
+        if key in visited_dirs:
             return []
         metadata_events: List[asyncio.Event] = []
-        visited_dirs.add((st.st_dev, st.st_ino))
-        for fname in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, fname)
-            if os.path.isdir(item_path):
-                fm = self.iobsvr.file_manager
-                if fm.check_reserved_path(item_path, True, False):
-                    continue
-                new_child = self.create_child_node(fname, False)
-                if new_child is not None:
-                    metadata_events.extend(new_child.scan_node(visited_dirs))
-            elif os.path.isfile(item_path) and self.get_root() == "gcodes":
-                mevt = self.iobsvr.parse_gcode_metadata(item_path)
-                metadata_events.append(mevt)
+        visited_dirs.add(key)
+        fm = self.iobsvr.file_manager
+        is_gcodes_root = self.get_root() == "gcodes"
+        dir_ctx = (
+            fm._build_dir_context(dir_path)
+            if is_gcodes_root else None
+        )
+        with os.scandir(dir_path) as dir_entries:
+            for entry in dir_entries:
+                if entry.is_dir():
+                    if fm.check_reserved_path(entry.path, True, False):
+                        continue
+                    new_child = self.create_child_node(entry.name, False)
+                    if new_child is not None:
+                        metadata_events.extend(
+                            new_child.scan_node(visited_dirs))
+                elif entry.is_file() and is_gcodes_root:
+                    ext = os.path.splitext(entry.name)[-1].lower()
+                    if ext not in VALID_GCODE_EXTS:
+                        continue
+                    try:
+                        fstat = entry.stat()
+                    except OSError:
+                        continue
+                    path_info = fm._entry_path_info(
+                        entry, fstat, "gcodes", dir_ctx)
+                    mevt = self.iobsvr.parse_gcode_metadata(
+                        entry.path, path_info)
+                    metadata_events.append(mevt)
         return metadata_events
 
     def move_child_node(
