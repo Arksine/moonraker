@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .websockets import WebsocketManager
+    from .klippy_connection import KlippyConnection
     STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
@@ -53,6 +54,7 @@ REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
 WATCHDOG_REFRESH_TIME = 2.
 REPORT_BLOCKED_TIME = 4.
+CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
 
 THROTTLED_FLAGS = {
     1: "Under-Voltage Detected",
@@ -93,6 +95,9 @@ class ProcStats:
         )
         self.server.register_notification("proc_stats:proc_stat_update")
         self.proc_stat_queue: Deque[Dict[str, Any]] = deque(maxlen=30)
+        self.klippy_stat_queue: Deque[Dict[str, Any]] = deque(maxlen=30)
+        # (pid, start_time, cpu_seconds, sample_time) of the last klippy sample
+        self.last_klippy_proc: Optional[Tuple[int, int, float, float]] = None
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
         self.throttle_check_lock = asyncio.Lock()
@@ -124,6 +129,7 @@ class ProcStats:
         websocket_count = wsm.get_count()
         return {
             'moonraker_stats': list(self.proc_stat_queue),
+            'klippy_stats': list(self.klippy_stat_queue),
             'throttled_state': ts,
             'cpu_temp': cpu_temp,
             'network': self.last_net_stats,
@@ -150,9 +156,14 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
-        cpu_temp, mem, mem_units, net = (
-            await self.event_loop.run_in_thread(self._read_system_files)
+        kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
+        klippy_pid = kconn.peer_credentials.get("process_id")
+        cpu_temp, mem, mem_units, net, klippy_proc = (
+            await self.event_loop.run_in_thread(
+                self._read_system_files, klippy_pid
+            )
         )
+        klippy_result = self._update_klippy_stats(update_time, klippy_proc)
         for dev in net:
             bytes_sec = 0.
             if dev in self.last_net_stats:
@@ -174,6 +185,7 @@ class ProcStats:
         websocket_count = wsm.get_count()
         self.server.send_event("proc_stats:proc_stat_update", {
             'moonraker_stats': result,
+            'klippy_stats': klippy_result,
             'cpu_temp': cpu_temp,
             'network': net,
             'system_cpu_usage': self.cpu_usage,
@@ -216,13 +228,66 @@ class ProcStats:
                     pass
         return ret
 
-    def _read_system_files(self) -> Tuple:
+    def _read_system_files(self, klippy_pid: Optional[int]) -> Tuple:
         mem, units = self._get_memory_usage()
         temp = self._get_cpu_temperature()
         net_stats = self._get_net_stats()
         self._update_cpu_stats()
         self._update_system_memory()
-        return temp, mem, units, net_stats
+        klippy_proc = self._read_klippy_proc(klippy_pid)
+        return temp, mem, units, net_stats, klippy_proc
+
+    def _read_klippy_proc(
+        self, pid: Optional[int]
+    ) -> Optional[Tuple[int, int, float, Optional[int]]]:
+        # Returns (pid, start_time, cpu_seconds, rss_kb).  VmRSS from
+        # /proc/<pid>/status is used rather than smaps_rollup, as reading
+        # smaps_rollup walks every mapping of the target process.
+        if pid is None:
+            return None
+        try:
+            stat = pathlib.Path(f"/proc/{pid}/stat").read_text()
+            # The command name may contain spaces, fields follow the last ')'
+            fields = stat[stat.rindex(")") + 2:].split()
+            cpu_secs = (int(fields[11]) + int(fields[12])) / CLOCK_TICKS
+            start_time = int(fields[19])
+        except Exception:
+            return None
+        rss: Optional[int] = None
+        try:
+            status = pathlib.Path(f"/proc/{pid}/status").read_text()
+            rss_match = re.search(r"VmRSS:\s+(\d+)\s+kB", status)
+            if rss_match is not None:
+                rss = int(rss_match.group(1))
+        except Exception:
+            pass
+        return pid, start_time, cpu_secs, rss
+
+    def _update_klippy_stats(
+        self,
+        eventtime: float,
+        klippy_proc: Optional[Tuple[int, int, float, Optional[int]]]
+    ) -> Optional[Dict[str, Any]]:
+        if klippy_proc is None:
+            self.last_klippy_proc = None
+            return None
+        pid, start_time, cpu_secs, rss = klippy_proc
+        last = self.last_klippy_proc
+        self.last_klippy_proc = (pid, start_time, cpu_secs, eventtime)
+        # A new process (pid change or pid reuse) has no CPU baseline yet
+        if last is None or last[:2] != (pid, start_time):
+            return None
+        time_diff = eventtime - last[3]
+        if time_diff <= 0.:
+            return None
+        result = {
+            'time': time.time(),
+            'cpu_usage': round((cpu_secs - last[2]) / time_diff * 100, 2),
+            'memory': rss,
+            'mem_units': "kB" if rss is not None else None
+        }
+        self.klippy_stat_queue.append(result)
+        return result
 
     def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
         try:

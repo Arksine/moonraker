@@ -521,6 +521,12 @@ notify_proc_stat_update
                 "memory": 23636,
                 "mem_units": "kB"
             },
+            "klippy_stats": {
+                "time": 1615837812.0894485,
+                "cpu_usage": 10.87,
+                "memory": 108576,
+                "mem_units": "kB"
+            },
             "cpu_temp": 44.008,
             "network": {
                 "lo": {
@@ -555,7 +561,10 @@ notify_proc_stat_update
 | --- | :----: | -------------------------------------------------------------- |
 | 0   | object | A [proc stats response](./machine.md#proc-stats-response-spec) |
 |     |        | object.  The `throttled_state` and `system_uptime` fields are  |^
-|     |        | omitted from the notification.                                 |^
+|     |        | omitted from the notification.  The `moonraker_stats` and      |^
+|     |        | `klippy_stats` fields contain only the latest sample rather    |^
+|     |        | than an array.  `klippy_stats` will be `null` when no Klippy   |^
+|     |        | sample is available for this update.                           |^
 
 ///
 

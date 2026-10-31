@@ -532,6 +532,20 @@ GET /machine/proc_stats
             "mem_units": "kB"
         }
     ],
+    "klippy_stats": [
+        {
+            "time": 1626612666.850762,
+            "cpu_usage": 11.04,
+            "memory": 108576,
+            "mem_units": "kB"
+        },
+        {
+            "time": 1626612667.8521401,
+            "cpu_usage": 10.87,
+            "memory": 108580,
+            "mem_units": "kB"
+        }
+    ],
     "throttled_state": {
         "bits": 0,
         "flags": []
@@ -572,6 +586,13 @@ GET /machine/proc_stats
 |                         |                | Moonraker process stats are sampled roughly every second.         |^
 |                         |                | The maximum size of the queue is 30 samples.                      |^
 |                         |                | #moonraker-proc-stat-spec                                         |+
+| `klippy_stats`          |    [object]    | An array of `Moonraker Stats` objects describing the connected    |
+|                         |                | Klippy process, sampled alongside `moonraker_stats` into a queue  |^
+|                         |                | of the same size.  Samples are only collected while Klippy is     |^
+|                         |                | connected and its process ID is known; the queue is not cleared   |^
+|                         |                | when Klippy restarts.  Memory is the process's `VmRSS`.  Will be  |^
+|                         |                | an empty array if no samples are available.                       |^
+|                         |                | #moonraker-proc-stat-spec                                         |+
 | `throttled_state`       | object \| null | An `Throttled State` object containing details about the CPU's    |
 |                         |                | throttled state.  This information is only available on Raspberry |^
 |                         |                | Pi hosts, on other hardware this value will be `null`.            |^
@@ -596,8 +617,9 @@ GET /machine/proc_stats
 | Field       |      Type      | Description                                                         |
 | ----------- | :------------: | ------------------------------------------------------------------- |
 | `time`      |     float      | The Unix time, in seconds, the sample was taken.                    |
-| `cpu_usage` |     float      | The CPU usage of the moonraker process at this sample.              |
-| `memory`    |  int \| null   | The memory usage of the moonraker process at this sample.  This     |
+| `cpu_usage` |     float      | The CPU usage of the process at this sample, as a percentage of     |
+|             |                | one CPU core.                                                       |^
+| `memory`    |  int \| null   | The memory usage of the process at this sample.  This               |
 |             |                | should always be in kilobytes.  The `mem_units` field may be used   |^
 |             |                | to validate. Will be `null` if memory information is not available. |^
 | `mem_units` | string \| null | The memory units reported.  Should always be `kB`.  Will be `null`  |
