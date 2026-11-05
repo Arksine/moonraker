@@ -247,6 +247,10 @@ class SpoolManager:
         logging.debug(f"Initial epos: {initial_e_pos}")
         if initial_e_pos is not None:
             self._highest_epos = initial_e_pos
+            # A Klipper restart resets the E position. Without this,
+            # set_active_spool() copies the stale pre-restart value into
+            # _highest_epos and no extrusion is tracked until E exceeds it.
+            self._last_epos = initial_e_pos
         else:
             logging.error("Spoolman integration unable to subscribe to epos")
             raise self.server.error("Unable to subscribe to e position")
