@@ -384,6 +384,7 @@ class MQTTClient(APITransport):
         self.connect_evt: asyncio.Event = asyncio.Event()
         self.disconnect_evt: Optional[asyncio.Event] = None
         self.connect_task: Optional[asyncio.Task] = None
+        self.reconnect_allowed: bool = True
         self.subscribed_topics: SubscribedDict = {}
         self.pending_responses: List[asyncio.Future] = []
         self.pending_acks: Dict[int, asyncio.Future] = {}
@@ -529,6 +530,7 @@ class MQTTClient(APITransport):
                 err_str = paho_mqtt.connack_string(reason_code)
             else:
                 err_str = reason_code.getName()
+            self.reconnect_allowed = False
             self.server.set_failed_component("mqtt")
             self.server.add_warning(f"MQTT Connection Failed: {err_str}")
 
@@ -540,13 +542,15 @@ class MQTTClient(APITransport):
                        ) -> None:
         if self.disconnect_evt is not None:
             self.disconnect_evt.set()
-        elif self.is_connected():
-            # The server connection was dropped, attempt to reconnect
+        elif self.reconnect_allowed:
+            # The server connection was dropped, attempt to reconnect.  This may
+            # occur before a CONNACK is received, while not yet connected.
             logging.info("MQTT Server Disconnected, reason: "
                          f"{paho_mqtt.error_string(reason_code)}")
             if self.connect_task is None:
                 self.connect_task = self.eventloop.create_task(self._do_reconnect())
-            self.server.send_event("mqtt:disconnected")
+            if self.is_connected():
+                self.server.send_event("mqtt:disconnected")
         self.connect_evt.clear()
 
     def _on_publish(self,
@@ -594,6 +598,8 @@ class MQTTClient(APITransport):
                 sock = await self.eventloop.create_socket_connection(
                     (self.address, self.port), timeout=10
                 )
+                # Set before reconnect(), TLS wrapping detaches this socket
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
                 self.client.reconnect(sock)
             except asyncio.CancelledError:
                 raise
@@ -602,7 +608,6 @@ class MQTTClient(APITransport):
                     logging.exception("MQTT Connection Error")
                     last_err = e
                 continue
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
             break
         self.connect_task = None
 
@@ -843,6 +848,7 @@ class MQTTClient(APITransport):
         return self.instance_name
 
     async def close(self) -> None:
+        self.reconnect_allowed = False
         if self.status_update_timer is not None:
             self.status_update_timer.stop()
         if self.connect_task is not None:
