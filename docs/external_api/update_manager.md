@@ -508,8 +508,8 @@ refresh.
 *Added in API Version 1.5.0*
 
 Upgrade to the most recent release of the requested software.
-If an update is requested while a print is in progress then this
-request will return an error.
+If an update is requested while a print is in progress or paused then
+this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/upgrade
@@ -551,6 +551,8 @@ Content-Type: application/json
 On occasion a git command may fail resulting in a repo in a
 dirty or invalid state.  This endpoint may be used to attempt
 to recover a git repo that is dirty, broken, or corrupt.
+If a recovery is requested while a print is in progress or paused then
+this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/recover
@@ -599,6 +601,9 @@ Content-Type: application/json
 
 ## Rollback to the previous version
 
+If a rollback is requested while a print is in progress or paused then
+this request will return an error.
+
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/rollback
 Content-Type: application/json
@@ -638,6 +643,9 @@ following order:
 - Klipper
 - Moonraker
 
+If an update is requested while a print is in progress or paused then
+this request will return an error.
+
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/full
 ```
@@ -660,8 +668,8 @@ POST /machine/update/full
 *[Upgrade](#perform-an-upgrade) endpoint.*
 
 Upgrades to the latest version of Moonraker and restarts
-the service. If an update is requested while a print is in progress then
-this request will return an error.
+the service. If an update is requested while a print is in progress or
+paused then this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/moonraker
@@ -685,8 +693,8 @@ POST /machine/update/moonraker
 *[Upgrade](#perform-an-upgrade) endpoint.*
 
 Upgrades to the latest version of Klipper and restarts
-the service. If an update is requested while a print is in progress
-then this request will return an error.
+the service. If an update is requested while a print is in progress or
+paused then this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/klipper
@@ -709,8 +717,8 @@ POST /machine/update/klipper
 *[Upgrade](#perform-an-upgrade) endpoint.*
 
 Update to the most recent release of the requested software.
-If an update is requested while a print is in progress then this
-request will return an error.
+If an update is requested while a print is in progress or paused then
+this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/client
@@ -753,7 +761,7 @@ Content-Type: application/json
 *[Upgrade](#perform-an-upgrade) endpoint.*
 
 Upgrades system packages.  If an update is requested while a print is
-in progress then this request will return an error.
+in progress or paused then this request will return an error.
 
 ```{.http .apirequest title="HTTP Request"}
 POST /machine/update/system

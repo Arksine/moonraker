@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from ..database import MoonrakerDatabase as DBComp
     from ..database import NamespaceWrapper
     from ..machine import Machine
+    from ..job_state import JobState
     from ..http_client import HttpClient
     from ...eventloop import FlexTimer
     JsonType = Union[List[Any], Dict[str, Any]]
@@ -300,9 +301,21 @@ class UpdateManager:
             self.cmd_helper.notify_update_refreshed()
         return eventtime + UPDATE_REFRESH_INTERVAL
 
+    def _get_active_job_state(self) -> Optional[str]:
+        # Returns "printing" or "paused" while a job is in progress, otherwise
+        # None.  KlippyConnection.is_printing() only reports "printing", but a
+        # paused job (PAUSE, M600, filament runout) is destroyed just as surely
+        # by the repo reset and service restart these requests perform.
+        if not self.kconn.is_ready():
+            return None
+        job_state: JobState = self.server.lookup_component("job_state")
+        state = job_state.get_last_stats().get("state", "")
+        return state if state in ("printing", "paused") else None
+
     async def _handle_update_request(self, web_request: WebRequest) -> str:
-        if self.kconn.is_printing():
-            raise self.server.error("Update Refused: Klippy is printing", 503)
+        job_state = self._get_active_job_state()
+        if job_state is not None:
+            raise self.server.error(f"Update Refused: Klippy is {job_state}", 503)
         app: str = web_request.get_endpoint().split("/")[-1]
         if app in ("upgrade", "client"):
             app_name = web_request.get_str("name", None)
@@ -327,6 +340,9 @@ class UpdateManager:
         return "ok"
 
     async def _handle_full_update_request(self, web_request: WebRequest) -> str:
+        job_state = self._get_active_job_state()
+        if job_state is not None:
+            raise self.server.error(f"Update Refused: Klippy is {job_state}", 503)
         async with self.cmd_request_lock:
             app_name = ""
             self.cmd_helper.set_update_info("full", id(web_request), True)
@@ -470,9 +486,10 @@ class UpdateManager:
         return ret
 
     async def _handle_repo_recovery(self, web_request: WebRequest) -> str:
-        if self.kconn.is_printing():
+        job_state = self._get_active_job_state()
+        if job_state is not None:
             raise self.server.error(
-                "Recovery Attempt Refused: Klippy is printing")
+                f"Recovery Attempt Refused: Klippy is {job_state}")
         app: str = web_request.get_str('name')
         hard = web_request.get_boolean("hard", False)
         update_deps = web_request.get_boolean("update_deps", False)
@@ -496,8 +513,10 @@ class UpdateManager:
         return "ok"
 
     async def _handle_rollback(self, web_request: WebRequest) -> str:
-        if self.kconn.is_printing():
-            raise self.server.error("Rollback Attempt Refused: Klippy is printing")
+        job_state = self._get_active_job_state()
+        if job_state is not None:
+            raise self.server.error(
+                f"Rollback Attempt Refused: Klippy is {job_state}")
         app: str = web_request.get_str('name')
         updater = self.updaters.get(app, None)
         if updater is None:

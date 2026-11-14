@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog].
 - **authorization**: Revert API Key checking to previous behavior.  When
   API key authentication is disabled fall back to trusted user authentication.
 
+### Fixed
+- **update_manager**: Update, recovery and rollback requests are now refused
+  while a print is paused, not only while it is printing.  The deprecated
+  `/machine/update/full` endpoint now refuses while a print is in progress
+  or paused; previously it performed no print state check.
+
 ## [0.11.0] - 2026-08-25
 
 ### Changed
