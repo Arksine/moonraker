@@ -325,6 +325,14 @@ class NetDeploy(AppDeploy):
     def _extract_release(
         self, persist_dir: pathlib.Path, release_file: pathlib.Path
     ) -> None:
+        # Extract into a staging directory first, so a corrupt or truncated
+        # archive fails before the current installation is touched.
+        staging_dir = persist_dir.parent.joinpath(f"{self.name}_staging")
+        staging_dir.mkdir()
+        with zipfile.ZipFile(release_file) as zf:
+            for zip_entry in zf.filelist:
+                dest = pathlib.Path(zf.extract(zip_entry, str(staging_dir)))
+                dest.chmod((zip_entry.external_attr >> 16) & 0o777)
         if not persist_dir.exists():
             persist_dir.mkdir()
         if self.path.is_dir():
@@ -332,22 +340,17 @@ class NetDeploy(AppDeploy):
             for src_path in self.path.iterdir():
                 fname = src_path.name
                 if fname in self.persistent_files:
-                    dest_path = persist_dir.joinpath(fname)
-                    dest_dir = dest_path.parent
-                    dest_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(src_path), str(dest_path))
+                    shutil.move(str(src_path), str(persist_dir.joinpath(fname)))
             shutil.rmtree(self.path)
-        self.path.mkdir()
-        with zipfile.ZipFile(release_file) as zf:
-            for zip_entry in zf.filelist:
-                dest = pathlib.Path(zf.extract(zip_entry, str(self.path)))
-                dest.chmod((zip_entry.external_attr >> 16) & 0o777)
-        # Move temporary files back into
-        for src_path in persist_dir.iterdir():
-            dest_path = self.path.joinpath(src_path.name)
-            dest_dir = dest_path.parent
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src_path), str(dest_path))
+        try:
+            shutil.move(str(staging_dir), str(self.path))
+        finally:
+            # Return the persistent files even if installing the new release
+            # failed.  They are held in a temporary directory that is removed
+            # once the update completes.
+            self.path.mkdir(exist_ok=True)
+            for src_path in persist_dir.iterdir():
+                shutil.move(str(src_path), str(self.path.joinpath(src_path.name)))
 
     def _set_exec_perms(self, exec: pathlib.Path) -> None:
         req_perms = stat.S_IXUSR | stat.S_IXGRP
