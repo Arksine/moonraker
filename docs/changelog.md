@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog].
 - **authorization**: Revert API Key checking to previous behavior.  When
   API key authentication is disabled fall back to trusted user authentication.
 
+### Fixed
+- **update_manager**: Releases for `web` and `zip` types are extracted to a
+  staging directory before the existing installation is replaced.  A corrupt
+  or truncated archive no longer removes the installation, and files listed
+  in `persistent_files` are no longer lost when an update fails.
+
 ## [0.11.0] - 2026-08-25
 
 ### Changed
