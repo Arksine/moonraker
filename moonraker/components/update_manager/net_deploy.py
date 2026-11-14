@@ -8,6 +8,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 import zipfile
+import hashlib
 import logging
 import stat
 from .app_deploy import AppDeploy
@@ -56,6 +57,7 @@ class NetDeploy(AppDeploy):
         self.rollback_repo: str = "?"
         self.last_error: str = "?"
         self._dl_info: Tuple[str, str, int] = ("?", "?", 0)
+        self.dl_digest: str = ""
         self._is_fallback: bool = False
         self._is_prerelease: bool = False
         self._path_writable: bool = False
@@ -209,6 +211,7 @@ class NetDeploy(AppDeploy):
         self.last_error = storage.get('last_error', "")
         dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
         self.dl_info = cast(Tuple[str, str, int], tuple(dl_info))
+        self.dl_digest = storage.get("dl_digest", "")
         if not self.needs_refresh():
             self._log_app_info()
         return storage
@@ -221,6 +224,7 @@ class NetDeploy(AppDeploy):
             "rollback_version": self.rollback_version,
             "rollback_repo": self.rollback_repo,
             "dl_info": list(self.dl_info),
+            "dl_digest": self.dl_digest,
             "last_error": self.last_error
         })
         return storage
@@ -294,6 +298,7 @@ class NetDeploy(AppDeploy):
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
         self.dl_info = (dl_url, content_type, size)
+        self.dl_digest = release_asset.get("digest") or ""
         self._is_prerelease = result.get('prerelease', False)
 
     def _log_app_info(self):
@@ -321,6 +326,35 @@ class NetDeploy(AppDeploy):
             f"Rollback Repo: {self.rollback_repo}"
             f"{warn_str}"
         )
+
+    def _verify_download(
+        self, dl_file: pathlib.Path, size: int, digest: str
+    ) -> None:
+        # Validate the download before anything on disk is replaced.  The
+        # expected size and digest are reported by the GitHub API for each
+        # release asset.
+        actual_size = dl_file.stat().st_size
+        if size > 0 and actual_size != size:
+            raise self.server.error(
+                f"{self.prefix}Download size mismatch, expected {size} bytes, "
+                f"received {actual_size} bytes"
+            )
+        if not digest:
+            return
+        algo, _, expected = digest.partition(":")
+        if algo.lower() != "sha256" or not expected:
+            self.log_info(f"Unsupported release asset digest '{digest}', skipping")
+            return
+        hasher = hashlib.sha256()
+        with dl_file.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hasher.update(chunk)
+        if hasher.hexdigest() != expected.lower():
+            raise self.server.error(
+                f"{self.prefix}Download checksum mismatch, expected sha256 "
+                f"{expected.lower()}, received {hasher.hexdigest()}"
+            )
+        self.log_info(f"Verified download: {actual_size} bytes, sha256 {expected}")
 
     def _extract_release(
         self, persist_dir: pathlib.Path, release_file: pathlib.Path
@@ -393,7 +427,8 @@ class NetDeploy(AppDeploy):
         self,
         rollback_info: Optional[Tuple[str, str, int]] = None,
         is_recover: bool = False,
-        force_dep_update: bool = False
+        force_dep_update: bool = False,
+        expected_digest: Optional[str] = None
     ) -> bool:
         if not self._is_valid:
             raise self.server.error(
@@ -437,6 +472,11 @@ class NetDeploy(AppDeploy):
             await client.download_file(
                 dl_url, content_type, temp_download_file, size,
                 self.cmd_helper.on_download_progress
+            )
+            if expected_digest is None:
+                expected_digest = self.dl_digest
+            await event_loop.run_in_thread(
+                self._verify_download, temp_download_file, size, expected_digest
             )
             self.notify_status(
                 f"Download Complete, extracting release to '{self.path}'"
@@ -483,7 +523,8 @@ class NetDeploy(AppDeploy):
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
         dl_info = (dl_url, content_type, size)
-        return await self.update(dl_info)
+        digest: str = release_asset.get("digest") or ""
+        return await self.update(dl_info, expected_digest=digest)
 
     def get_update_status(self) -> Dict[str, Any]:
         status = super().get_update_status()

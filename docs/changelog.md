@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog].
 - **authorization**: Revert API Key checking to previous behavior.  When
   API key authentication is disabled fall back to trusted user authentication.
 
+### Added
+- **update_manager**: Downloaded release assets for `web`, `zip` and
+  `executable` types are verified before installation.  The file size must
+  match the size reported by GitHub, and when GitHub reports a `sha256`
+  digest for the asset the file's checksum must match it.
+
 ## [0.11.0] - 2026-08-25
 
 ### Changed
