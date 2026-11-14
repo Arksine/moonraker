@@ -26,9 +26,14 @@ if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
+    from .job_state import JobState
     Subscription = Dict[str, Optional[List[Any]]]
     SubCallback = Callable[[Dict[str, Dict[str, Any]], float], Optional[Coroutine]]
     _T = TypeVar("_T")
+
+# print_stats states in which a new print may be started.  Anything else,
+# including "paused" and states a future Klipper may add, refuses the start.
+PRINT_START_STATES = ("standby", "complete", "cancelled")
 
 INFO_ENDPOINT = "info"
 ESTOP_ENDPOINT = "emergency_stop"
@@ -124,6 +129,30 @@ class KlippyAPI(APITransport):
             GCODE_ENDPOINT, params, default)
         return result
 
+    def _check_print_start_allowed(self) -> None:
+        # Klippy's "SD busy" check only fires while a file is actively being
+        # printed.  A paused job is silently replaced by a new
+        # SDCARD_PRINT_FILE, so refuse unless the last reported state is one in
+        # which no job is in progress.
+        if not self.klippy.is_ready():
+            # Klippy cannot start a print in this state; let the request fail
+            # as it did before.
+            return
+        job_state: JobState = self.server.lookup_component("job_state")
+        state: str = job_state.get_last_stats().get("state", "")
+        if state in PRINT_START_STATES:
+            return
+        if state in ("printing", "paused"):
+            reason = f"Klippy is {state}"
+        elif state == "error":
+            reason = (
+                "the last print ended with an error; clear it with "
+                "SDCARD_RESET_FILE first"
+            )
+        else:
+            reason = f"unexpected print state '{state or 'unknown'}'"
+        raise self.server.error(f"Print Start Refused: {reason}")
+
     async def start_print(
         self,
         filename: str,
@@ -143,6 +172,7 @@ class KlippyAPI(APITransport):
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         if wait_klippy_started:
             await self.klippy.wait_started()
+        self._check_print_start_allowed()
         logging.info(f"Requesting Job Start, filename = {filename}")
         ret = await self.run_gcode(script)
         self.server.send_event("klippy_apis:job_start_complete", user)
