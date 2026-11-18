@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog].
 ### Changed
 - **authorization**: Revert API Key checking to previous behavior.  When
   API key authentication is disabled fall back to trusted user authentication.
+- **klippy_apis**: A print is only started while `print_stats` reports
+  `standby`, `complete` or `cancelled`.  Previously a print start while a job
+  was paused was accepted, and Klipper silently replaced the paused job.
 
 ## [0.11.0] - 2026-08-25
 

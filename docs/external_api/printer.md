@@ -610,6 +610,15 @@ POST /printer/print/start?filename=test_print.gcode
 |            |        |              | relative to the gcode folder.                       |^
 ///
 
+/// Note
+A print may only be started while the `print_stats` state is `standby`,
+`complete` or `cancelled`.  In any other state, including while a print is
+in progress or paused, the request is refused with an error.  An `error`
+state must be cleared first, for example with `SDCARD_RESET_FILE`.  The same
+check applies to every print start made by Moonraker, including the job
+queue and file uploads with `print=true`.
+///
+
 ```{.text .apiresponse title="Response"}
 "ok"
 ```
