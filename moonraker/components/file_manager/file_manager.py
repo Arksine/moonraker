@@ -335,9 +335,11 @@ class FileManager:
                     "Access to .git folders is forbidden", 403
                 )
             return True
+        req_parts = req_path.parts
         for name, (res_path, can_read) in self.reserved_paths.items():
+            res_parts = res_path.parts
             if (
-                (res_path == req_path or res_path in req_path.parents) and
+                req_parts[:len(res_parts)] == res_parts and
                 (need_write or not can_read)
             ):
                 if not raise_error:
@@ -799,8 +801,10 @@ class FileManager:
                 (path.is_symlink() and path.is_file())
             ):
                 permissions = "r"
+            real_parts = real_path.parts
             for name, (res_path, can_read) in self.reserved_paths.items():
-                if (res_path == real_path or res_path in real_path.parents):
+                res_parts = res_path.parts
+                if real_parts[:len(res_parts)] == res_parts:
                     if not can_read:
                         permissions = ""
                         break
