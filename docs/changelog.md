@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog].
 - **authorization**: Revert API Key checking to previous behavior.  When
   API key authentication is disabled fall back to trusted user authentication.
 
+### Fixed
+- **update_manager**: A `git_repo` recovery now persists the rollback state it
+  resets.  Previously the previous rollback target was restored at the next
+  restart, so a later rollback could reset to a commit recovered away from.
+
 ## [0.11.0] - 2026-08-25
 
 ### Changed

@@ -128,6 +128,10 @@ class GitDeploy(AppDeploy):
             await self.repo.reset(reset_ref)
             await self._update_repo_state()
         self.repo.set_rollback_state(None)
+        # _update_repo_state() saved before the rollback state was reset, so
+        # persist it now.  Otherwise the previous rollback target is restored
+        # at the next startup.
+        self._save_state()
 
         if self.repo.is_dirty() or not self._is_valid:
             raise self.server.error(
